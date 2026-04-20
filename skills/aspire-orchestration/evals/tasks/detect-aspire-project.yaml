@@ -8,15 +8,8 @@ tags:
 
 inputs:
   prompt: "Help me understand this project structure"
-  context:
-    files:
-      - path: "MyApp.AppHost/MyApp.AppHost.csproj"
-        content: |
-          <Project Sdk="Microsoft.NET.Sdk">
-            <Sdk Name="Aspire.AppHost.Sdk" Version="10.0.0" />
-          </Project>
-      - path: "aspire.config.json"
-        content: "{}"
+  files:
+    - path: "csharp-apphost"
 
 expected:
   output_contains:

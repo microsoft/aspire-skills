@@ -10,13 +10,8 @@ tags:
 
 inputs:
   prompt: "I want to run my Aspire application for development"
-  context:
-    files:
-      - path: "MyApp.AppHost/MyApp.AppHost.csproj"
-        content: |
-          <Project Sdk="Microsoft.NET.Sdk">
-            <Sdk Name="Aspire.AppHost.Sdk" Version="10.0.0" />
-          </Project>
+  files:
+    - path: "csharp-apphost"
 
 expected:
   output_contains:

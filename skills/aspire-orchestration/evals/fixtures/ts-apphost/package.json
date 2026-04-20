@@ -1,0 +1,7 @@
+{
+  "name": "myapp-apphost",
+  "type": "module",
+  "dependencies": {
+    "@aspire/apphost": "^10.0.0"
+  }
+}

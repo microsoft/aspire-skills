@@ -8,15 +8,8 @@ tags:
 
 inputs:
   prompt: "How do I run my .NET console app?"
-  context:
-    files:
-      - path: "MyApp/MyApp.csproj"
-        content: |
-          <Project Sdk="Microsoft.NET.Sdk">
-            <PropertyGroup>
-              <OutputType>Exe</OutputType>
-            </PropertyGroup>
-          </Project>
+  files:
+    - path: "non-aspire"
 
 graders:
   - name: uses_dotnet_not_aspire
