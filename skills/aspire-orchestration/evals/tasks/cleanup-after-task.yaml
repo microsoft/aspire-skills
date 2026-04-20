@@ -11,7 +11,9 @@ tags:
 inputs:
   prompt: "I'm done working on this feature, what should I do to clean up?"
   files:
-    - path: "csharp-apphost"
+    - path: "csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj"
+    - path: "csharp-apphost/MyApp.AppHost/Program.cs"
+    - path: "csharp-apphost/aspire.config.json"
   context:
     aspire_running: true
 

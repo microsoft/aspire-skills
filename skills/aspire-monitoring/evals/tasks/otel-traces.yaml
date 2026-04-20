@@ -9,7 +9,9 @@ tags:
 inputs:
   prompt: "I need to trace a request across my services to find the bottleneck"
   files:
-    - path: "csharp-apphost"
+    - path: "csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj"
+    - path: "csharp-apphost/MyApp.AppHost/Program.cs"
+    - path: "csharp-apphost/aspire.config.json"
   context:
     aspire_running: true
     environment: local

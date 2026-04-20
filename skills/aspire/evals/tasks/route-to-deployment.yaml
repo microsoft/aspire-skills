@@ -9,7 +9,9 @@ tags:
 inputs:
   prompt: "I'm ready to push my Aspire app to production on Azure"
   files:
-    - path: "csharp-apphost"
+    - path: "csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj"
+    - path: "csharp-apphost/MyApp.AppHost/Program.cs"
+    - path: "csharp-apphost/aspire.config.json"
 
 expected:
   output_contains:

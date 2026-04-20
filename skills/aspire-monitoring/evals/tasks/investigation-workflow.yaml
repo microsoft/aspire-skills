@@ -10,7 +10,9 @@ tags:
 inputs:
   prompt: "Something is wrong with my app, requests are failing"
   files:
-    - path: "csharp-apphost"
+    - path: "csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj"
+    - path: "csharp-apphost/MyApp.AppHost/Program.cs"
+    - path: "csharp-apphost/aspire.config.json"
   context:
     aspire_running: true
     environment: local

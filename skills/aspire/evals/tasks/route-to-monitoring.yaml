@@ -9,7 +9,9 @@ tags:
 inputs:
   prompt: "Something is wrong with my app, show me what's happening"
   files:
-    - path: "csharp-apphost"
+    - path: "csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj"
+    - path: "csharp-apphost/MyApp.AppHost/Program.cs"
+    - path: "csharp-apphost/aspire.config.json"
 
 expected:
   output_contains:

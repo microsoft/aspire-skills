@@ -9,7 +9,8 @@ tags:
 inputs:
   prompt: "How do I run my .NET console app?"
   files:
-    - path: "non-aspire"
+    - path: "non-aspire/MyApp/MyApp.csproj"
+    - path: "non-aspire/MyApp/Program.cs"
 
 graders:
   - name: uses_dotnet_not_aspire

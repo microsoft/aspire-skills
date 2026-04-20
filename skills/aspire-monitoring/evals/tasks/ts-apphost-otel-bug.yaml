@@ -13,7 +13,9 @@ inputs:
     I'm running a TypeScript AppHost and when I try 'aspire otel traces' I get:
     "No such host is known" for some *.dev.localhost URL
   files:
-    - path: "ts-apphost"
+    - path: "ts-apphost/apphost.ts"
+    - path: "ts-apphost/package.json"
+    - path: "ts-apphost/aspire.config.json"
 
 graders:
   - name: knows_bug

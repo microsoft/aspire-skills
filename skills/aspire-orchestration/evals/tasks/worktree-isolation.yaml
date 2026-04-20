@@ -9,7 +9,9 @@ tags:
 inputs:
   prompt: "I'm working in a git worktree and need to start the app"
   files:
-    - path: "csharp-apphost"
+    - path: "csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj"
+    - path: "csharp-apphost/MyApp.AppHost/Program.cs"
+    - path: "csharp-apphost/aspire.config.json"
   context:
     git_worktree: true
 

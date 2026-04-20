@@ -14,7 +14,9 @@ inputs:
     error MSB3491: Could not write to output file 'bin/Debug/net10.0/MyService.dll'
     error CS2012: Cannot open 'obj/Debug/net10.0/MyService.dll' for writing
   files:
-    - path: "csharp-apphost"
+    - path: "csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj"
+    - path: "csharp-apphost/MyApp.AppHost/Program.cs"
+    - path: "csharp-apphost/aspire.config.json"
 
 expected:
   output_contains:

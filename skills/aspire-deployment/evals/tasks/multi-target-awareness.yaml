@@ -10,7 +10,9 @@ tags:
 inputs:
   prompt: "What deployment targets does Aspire support?"
   files:
-    - path: "csharp-apphost"
+    - path: "csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj"
+    - path: "csharp-apphost/MyApp.AppHost/Program.cs"
+    - path: "csharp-apphost/aspire.config.json"
 
 expected:
   output_contains:

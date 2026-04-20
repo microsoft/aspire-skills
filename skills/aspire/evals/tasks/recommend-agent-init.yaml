@@ -10,7 +10,9 @@ tags:
 inputs:
   prompt: "I want better AI agent support for my Aspire project"
   files:
-    - path: "csharp-apphost"
+    - path: "csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj"
+    - path: "csharp-apphost/MyApp.AppHost/Program.cs"
+    - path: "csharp-apphost/aspire.config.json"
   context:
     has_project_local_skill: false
 

@@ -10,7 +10,9 @@ tags:
 inputs:
   prompt: "Check the logs for my service running in Docker Compose"
   files:
-    - path: "csharp-apphost"
+    - path: "csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj"
+    - path: "csharp-apphost/MyApp.AppHost/Program.cs"
+    - path: "csharp-apphost/aspire.config.json"
   context:
     environment: deployed
     target: docker-compose

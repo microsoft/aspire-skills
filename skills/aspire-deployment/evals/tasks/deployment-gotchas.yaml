@@ -10,7 +10,9 @@ tags:
 inputs:
   prompt: "My Aspire deploy seems to be building in Debug mode, is that normal?"
   files:
-    - path: "csharp-apphost"
+    - path: "csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj"
+    - path: "csharp-apphost/MyApp.AppHost/Program.cs"
+    - path: "csharp-apphost/aspire.config.json"
 
 expected:
   output_contains:

@@ -10,7 +10,9 @@ tags:
 inputs:
   prompt: "How do I check what's going on with my application?"
   files:
-    - path: "csharp-apphost"
+    - path: "csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj"
+    - path: "csharp-apphost/MyApp.AppHost/Program.cs"
+    - path: "csharp-apphost/aspire.config.json"
 
 graders:
   - name: explains_routing

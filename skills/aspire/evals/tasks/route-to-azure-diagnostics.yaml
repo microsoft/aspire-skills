@@ -9,7 +9,9 @@ tags:
 inputs:
   prompt: "My Aspire app is deployed to Azure and users are reporting errors. Help me investigate."
   files:
-    - path: "csharp-apphost"
+    - path: "csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj"
+    - path: "csharp-apphost/MyApp.AppHost/Program.cs"
+    - path: "csharp-apphost/aspire.config.json"
   context:
     environment: deployed
     target: azure
