@@ -56,6 +56,9 @@ See [detection.md](references/detection.md) for detailed fingerprinting.
 | Working in git worktree | `aspire start --isolated` | `aspire start` without isolation |
 | Running from AI agent | Add `--non-interactive` to all commands | Assuming interactive terminal |
 | Editing unfamiliar API | `aspire docs search <topic>` first | Guessing API shape |
+| C# AppHost API inspection | Use `dotnet-inspect` skill (if available) for local symbols | Guessing overloads or builder chains |
+| Adding custom dashboard/resource commands | `aspire docs search "custom resource commands"` first | Inventing `WithCommand` patterns without docs |
+| Installing Aspire support | Use `aspire add` or `aspire init` | ~~`dotnet workload install aspire`~~ (obsolete) |
 
 See [safety-guardrails.md](references/safety-guardrails.md) for detailed rules and recovery patterns.
 

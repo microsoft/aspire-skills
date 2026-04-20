@@ -49,3 +49,10 @@ aspire restore
 - Use `aspire update` to refresh AppHost package references.
 - Use `aspire restore` after pulls, cleans, or missing generated files.
 - Use `--apphost <path>` when the workspace has multiple AppHosts.
+
+## Key Rules
+
+- **Never install the obsolete Aspire workload** (`dotnet workload install aspire`). Use `aspire add`, `aspire init`, or `aspire new` instead.
+- **Never edit `.modules/` directly** in TypeScript AppHosts. Use `aspire add <package>` to regenerate APIs, `aspire restore` if files are missing.
+- For unfamiliar C# AppHost APIs, use `aspire docs search` as primary reference. If the `dotnet-inspect` skill is available, use it to inspect local symbols and overloads — but keep docs as the source of truth.
+- For custom dashboard or resource commands (`WithCommand`), always run `aspire docs search "custom resource commands"` before implementing.
