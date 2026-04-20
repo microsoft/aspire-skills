@@ -23,10 +23,13 @@ expected:
 
 graders:
   - name: routes_to_azure_diagnostics
-    type: text
+    type: prompt
     config:
-      contains:
-        - "azure-diagnostics"
+      prompt: >
+        Does the response route the user to azure-diagnostics, App Insights, or
+        platform-specific Azure monitoring tools for the deployed app? Answer based
+        on the intent, not exact string matching.
+      threshold: 0.6
   - name: no_local_commands
     type: text
     config:

@@ -23,7 +23,10 @@ graders:
         using --dashboard-url with localhost:PORT as a workaround.
       threshold: 0.7
   - name: suggests_workaround
-    type: text
+    type: prompt
     config:
-      contains:
-        - "localhost"
+      prompt: >
+        Does the response suggest using localhost with a specific port (e.g.
+        --dashboard-url localhost:PORT) as a workaround for the DNS resolution
+        issue? Answer based on the intent, not exact string matching.
+      threshold: 0.6

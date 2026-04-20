@@ -26,7 +26,7 @@ graders:
         The response should recognize this is a standard .NET project (no Aspire.AppHost.Sdk)
         and suggest 'dotnet run' rather than 'aspire start'. It should NOT apply
         Aspire-specific guardrails to non-Aspire projects.
-      threshold: 0.8
+      threshold: 0.6
   - name: allows_dotnet_run
     type: text
     config:

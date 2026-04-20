@@ -18,10 +18,13 @@ expected:
 
 graders:
   - name: recommends_agent_init
-    type: text
+    type: prompt
     config:
-      contains:
-        - "aspire agent init"
+      prompt: >
+        Does the response recommend running 'aspire agent init' (or an equivalent
+        command to generate project-local Aspire agent skills)? Answer based on
+        the intent, not exact string matching.
+      threshold: 0.6
   - name: explains_value
     type: prompt
     config:

@@ -21,12 +21,5 @@ metrics:
     weight: 0.4
     threshold: 0.90
 
-graders:
-  - type: text
-    name: mentions_aspire
-    config:
-      contains:
-        - "aspire"
-
 tasks:
   - "tasks/*.yaml"

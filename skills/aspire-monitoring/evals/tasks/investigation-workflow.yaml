@@ -26,7 +26,10 @@ graders:
         The agent should NOT jump straight to editing code.
       threshold: 0.7
   - name: uses_aspire_commands
-    type: text
+    type: prompt
     config:
-      contains:
-        - "aspire"
+      prompt: >
+        Does the response recommend using Aspire CLI diagnostic commands (such as
+        aspire describe, aspire logs, aspire otel) to investigate the issue before
+        suggesting code changes? Answer based on the intent, not exact string matching.
+      threshold: 0.6

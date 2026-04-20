@@ -22,10 +22,13 @@ expected:
 
 graders:
   - name: uses_resource_restart
-    type: text
+    type: prompt
     config:
-      contains:
-        - "aspire resource"
+      prompt: >
+        Does the response recommend using 'aspire resource restart' (or an equivalent
+        Aspire CLI hot-reload/restart command) to apply code changes while the app is
+        running? Answer based on the intent, not exact string matching.
+      threshold: 0.6
   - name: never_dotnet_build
     type: text
     config:

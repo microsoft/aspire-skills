@@ -18,10 +18,13 @@ expected:
 
 graders:
   - name: uses_otel_traces
-    type: text
+    type: prompt
     config:
-      contains:
-        - "aspire otel traces"
+      prompt: >
+        Does the response recommend using 'aspire otel traces' (or an equivalent
+        Aspire CLI distributed tracing command) for cross-service trace analysis?
+        Answer based on the intent, not exact string matching.
+      threshold: 0.6
   - name: structured_first
     type: prompt
     config:

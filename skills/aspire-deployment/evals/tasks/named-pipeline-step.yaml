@@ -15,10 +15,13 @@ expected:
 
 graders:
   - name: uses_aspire_do
-    type: text
+    type: prompt
     config:
-      contains:
-        - "aspire do"
+      prompt: >
+        Does the response recommend using 'aspire do' (or an equivalent Aspire CLI
+        command for running individual pipeline steps) rather than a full deployment?
+        Answer based on the intent, not exact string matching.
+      threshold: 0.6
   - name: not_full_deploy
     type: prompt
     config:

@@ -15,10 +15,13 @@ expected:
 
 graders:
   - name: uses_publish
-    type: text
+    type: prompt
     config:
-      contains:
-        - "aspire publish"
+      prompt: >
+        Does the response recommend using 'aspire publish' (or an equivalent Aspire CLI
+        artifact generation command) to generate deployment manifests without deploying?
+        Answer based on the intent, not exact string matching.
+      threshold: 0.6
   - name: distinguishes_publish_deploy
     type: prompt
     config:

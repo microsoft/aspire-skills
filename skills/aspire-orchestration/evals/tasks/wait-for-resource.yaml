@@ -23,10 +23,13 @@ expected:
 
 graders:
   - name: uses_aspire_wait
-    type: text
+    type: prompt
     config:
-      contains:
-        - "aspire wait"
+      prompt: >
+        Does the response recommend using 'aspire wait' (or an equivalent Aspire CLI
+        readiness-check command) to wait for a resource to become ready, rather than
+        manual HTTP polling? Answer based on the intent, not exact string matching.
+      threshold: 0.6
   - name: no_polling
     type: text
     config:

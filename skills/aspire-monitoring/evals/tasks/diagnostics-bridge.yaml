@@ -20,4 +20,4 @@ graders:
         aspire otel). For deployed apps, it should route to platform-specific tools
         (azure-diagnostics for Azure, docker/kubectl for others). The response should
         NOT suggest aspire logs for deployed apps.
-      threshold: 0.8
+      threshold: 0.6

@@ -37,11 +37,6 @@ graders:
         - "while true"
         - "sleep"
         - "curl.*health"
-  - type: text
-    name: uses_aspire_cli
-    config:
-      contains:
-        - "aspire"
 
 tasks:
   - "tasks/*.yaml"

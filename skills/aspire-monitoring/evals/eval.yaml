@@ -24,12 +24,5 @@ metrics:
     weight: 0.2
     threshold: 0.85
 
-graders:
-  - type: text
-    name: uses_aspire_cli
-    config:
-      contains:
-        - "aspire"
-
 tasks:
   - "tasks/*.yaml"

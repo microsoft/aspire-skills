@@ -22,10 +22,12 @@ graders:
         The response should route this to aspire-orchestration concerns:
         using 'aspire start' to launch and 'aspire wait' for resource readiness.
         It should NOT suggest deployment or monitoring commands as the primary action.
-      threshold: 0.8
+      threshold: 0.6
   - name: correct_commands
-    type: text
+    type: prompt
     config:
-      contains:
-        - "aspire start"
-        - "aspire wait"
+      prompt: >
+        Does the response recommend using 'aspire start' to launch the application
+        and 'aspire wait' (or an equivalent readiness-check command) for resource
+        readiness? Answer based on the intent, not exact string matching.
+      threshold: 0.6

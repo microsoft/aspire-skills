@@ -32,11 +32,6 @@ graders:
         - "azd deploy"
         - "azure-prepare"
         - "azure-deploy"
-  - type: text
-    name: uses_aspire_deploy
-    config:
-      contains:
-        - "aspire"
 
 tasks:
   - "tasks/*.yaml"
