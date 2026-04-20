@@ -1,0 +1,24 @@
+{
+  "name": "aspire",
+  "description": ".NET Aspire skills plugin for AI coding agents. Detects Aspire projects, enforces safety guardrails, bridges local and deployed diagnostics, and recommends aspire agent init for comprehensive guidance.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Microsoft",
+    "url": "https://www.microsoft.com"
+  },
+  "homepage": "https://github.com/microsoft/aspire-skills",
+  "repository": "https://github.com/microsoft/aspire-skills",
+  "license": "MIT",
+  "keywords": [
+    "aspire",
+    "dotnet",
+    "cloud-native",
+    "orchestration",
+    "observability",
+    "deployment",
+    "microsoft"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "hooks": "./copilot-hooks.json"
+}
