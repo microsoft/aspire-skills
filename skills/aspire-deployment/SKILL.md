@@ -19,17 +19,17 @@ metadata:
 
 # Aspire Deployment
 
-> Aspire deploys to **multiple targets** natively — no external tooling required.
-> No `azd`, `azure-prepare`, or `azure-deploy` needed.
+> Aspire handles deployment end-to-end for Azure targets — no `azd`, `azure-prepare`, or `azure-deploy` needed.
+> For Kubernetes, Aspire generates manifests natively; cluster apply uses `kubectl`.
 
 ## Supported Targets
 
-| Target | Method |
-|--------|--------|
-| Azure Container Apps | `aspire deploy` / `aspire publish` |
-| Azure App Service | `aspire deploy` / `aspire publish` |
-| Docker Compose | `aspire publish` |
-| Kubernetes | `aspire publish` → `kubectl apply` |
+| Target | Method | External Tool Needed? |
+|--------|--------|----------------------|
+| Azure Container Apps | `aspire deploy` / `aspire publish` | No |
+| Azure App Service | `aspire deploy` / `aspire publish` | No |
+| Docker Compose | `aspire publish` | Docker must be running |
+| Kubernetes | `aspire publish` → `kubectl apply` | Yes (`kubectl`) |
 
 ## Commands
 
@@ -68,9 +68,11 @@ metadata:
 | Get specific doc page | `aspire docs get <slug>` |
 | Set deployment secret | `aspire secret set <key> <value>` |
 | List secrets | `aspire secret list` |
-| Check CLI config | `aspire config info` |
+| Check CLI config | `aspire config list` |
 
 See [tools-and-config.md](references/tools-and-config.md) for full docs/secrets/config reference.
+
+> **Agent execution**: Append `--non-interactive` to `aspire deploy` and `aspire publish` to prevent prompts.
 
 ## Known Deployment Gotchas
 

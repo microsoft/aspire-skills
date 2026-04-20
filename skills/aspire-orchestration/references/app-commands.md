@@ -13,7 +13,8 @@ aspire stop
 - Use `aspire start` for normal background AppHost execution.
 - In git worktrees or when another local instance may already be running, use `aspire start --isolated`.
 - To restart after AppHost changes, rerun the same start command.
-- Use `aspire stop` only when the ask is explicitly to stop the app.
+- Use `aspire stop` when the task is complete or explicitly requested.
+- **For agent workflows**: always `aspire stop` at the end — leaving Aspire running causes port conflicts and file locks.
 - Avoid `aspire run` in agent workflows — it blocks the terminal.
 
 ### `aspire run` vs `aspire start`

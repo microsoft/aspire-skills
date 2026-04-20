@@ -6,7 +6,7 @@ Use this when the task is about inspecting app state, logs, traces, endpoints, o
 
 ```bash
 aspire describe
-aspire resources
+aspire ps --format Json
 aspire describe --apphost <path>
 aspire describe --apphost <path> --format Json
 ```
@@ -37,9 +37,9 @@ aspire export [resource]
 
 - Use `aspire export` for a portable handoff artifact for deeper analysis or offline inspection.
 
-## Production Monitoring Strategy
+## Production Monitoring Strategy (Azure)
 
-Aspire auto-configures Application Insights when `AddAzureApplicationInsights()` is used in the AppHost. Deployed apps export OpenTelemetry to App Insights automatically:
+Aspire auto-configures Application Insights when `AddAzureApplicationInsights()` is used in the AppHost. Deployed Azure apps export OpenTelemetry to App Insights automatically:
 
 - Request traces and dependency tracking
 - Exception logging
@@ -47,7 +47,9 @@ Aspire auto-configures Application Insights when `AddAzureApplicationInsights()`
 - Live Metrics stream
 - Application Map (service topology)
 
-No additional configuration needed — Aspire wires connection strings during deployment.
+No additional configuration needed for Azure — Aspire wires connection strings during deployment.
+
+> **Docker Compose / Kubernetes**: Auto-configured App Insights does not apply. These targets require platform-native observability (Prometheus, Grafana, ELK, etc.) unless the app is explicitly configured to export OTEL to an external collector.
 
 ## Deployed App Monitoring — Route by Target
 

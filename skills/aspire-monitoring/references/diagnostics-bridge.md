@@ -120,7 +120,7 @@ No additional configuration is needed — Aspire wires the connection string dur
 | Issue | Symptom | Workaround |
 |-------|---------|-----------|
 | TS AppHost DNS failure ([#15782](https://github.com/microsoft/aspire/issues/15782)) | `aspire otel` returns "No such host" for `*.dev.localhost` | Use `--dashboard-url localhost:PORT` directly |
-| Standalone dashboard ([#16236](https://github.com/microsoft/aspire/issues/16236)) | `aspire otel` fails without `--enable-api` on dashboard | Start dashboard with `aspire dashboard run --enable-api` |
+| Standalone dashboard ([#16236](https://github.com/microsoft/aspire/issues/16236)) | `aspire otel` fails without `--enable-api` on dashboard | ⚠️ Verify `aspire dashboard` command exists in your version — may require manual dashboard config |
 | `--isolated` mode telemetry ([#16107](https://github.com/microsoft/aspire/issues/16107)) | OTEL port not randomized in isolated mode | Avoid `--isolated` if telemetry is needed |
 
 ---

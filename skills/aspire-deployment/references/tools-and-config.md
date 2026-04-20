@@ -33,10 +33,9 @@ aspire config set <key> <value>
 aspire config get <key>
 aspire config list
 aspire config delete <key>
-aspire config info
 ```
 
-- Use `aspire config info` to see where settings come from and which config files are in play.
+- Use `aspire config list` to see current CLI configuration settings.
 
 ## Local Environment Recovery
 

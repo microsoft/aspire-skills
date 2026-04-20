@@ -86,7 +86,7 @@ See [safety-guardrails.md](references/safety-guardrails.md) for detailed rules a
 | Add integration | `aspire add <package>` |
 | Restore generated files | `aspire restore` |
 | Diagnose environment | `aspire doctor` |
-| Machine-readable output | Append `--format Json` to any command |
+| Machine-readable output | `--format Json` (supported: `ps`, `describe`, `start`) |
 
 ## Error Handling
 
@@ -101,6 +101,8 @@ See [safety-guardrails.md](references/safety-guardrails.md) for detailed rules a
 | `aspire wait` rejects name | Use `displayName` not `name` ([#15842](https://github.com/microsoft/aspire/issues/15842)) | Use `displayName` from `aspire ps --format Json` |
 | `aspire ps` hangs | AppHost on breakpoint ([#15576](https://github.com/microsoft/aspire/issues/15576)) | Use timeout, check AppHost process |
 | `aspire agent init` fails | Non-interactive terminal ([#16264](https://github.com/microsoft/aspire/issues/16264)) | Run from standard terminal |
+| Docker daemon unavailable | Container-backed resources fail to start | Start Docker Desktop, then `aspire start` |
+| Multiple AppHosts detected | Wrong AppHost targeted | Use `--apphost <path>` to specify explicitly |
 
 ## Handoff Rules
 

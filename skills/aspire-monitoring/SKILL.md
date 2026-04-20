@@ -4,7 +4,7 @@ description: >-
   **ANALYSIS SKILL** - Observe .NET Aspire applications: logs, traces, metrics, resource state,
   and telemetry export. Routes between local Aspire CLI diagnostics and deployed-app monitoring.
   USE FOR: aspire logs, aspire otel logs, aspire otel traces, aspire otel spans, aspire describe,
-  aspire export, aspire resources, dashboard, App Insights query, deployed app logs, production
+  aspire export, aspire ps, dashboard, App Insights query, deployed app logs, production
   monitoring, telemetry, distributed traces, resource health, container app logs.
   DO NOT USE FOR: starting or stopping apps (use aspire-orchestration), deployment or publishing
   (use aspire-deployment), Azure infrastructure provisioning (use azure-prepare), non-Aspire
@@ -61,13 +61,13 @@ When something is wrong, investigate before editing code:
 | `aspire otel spans` | Individual span detail | `aspire otel spans` |
 | `aspire otel logs --trace-id <id>` | Logs correlated to trace (⚠️ verify flag) | `aspire otel logs --trace-id abc123` |
 | `aspire describe` | Resource state, endpoints, health | `aspire describe --format Json` |
-| `aspire resources` | Resource list | `aspire resources` |
+| `aspire ps --format Json` | Resource list with state | `aspire ps --format Json` |
 | `aspire export` | Portable telemetry bundle | `aspire export` |
 
 ### Tips for Agents
 
 ```bash
-# ✅ Always use --format Json for machine parsing
+# ✅ Use --format Json for machine parsing (supported: ps, describe, start)
 aspire describe --format Json
 
 # ✅ Get endpoints from describe, not guessing ports
@@ -82,7 +82,7 @@ aspire describe --apphost ./src/MyApp.AppHost/
 | Issue | Symptom | Workaround |
 |-------|---------|-----------|
 | TS AppHost DNS failure ([#15782](https://github.com/microsoft/aspire/issues/15782)) | `aspire otel` "No such host" for `*.dev.localhost` | Use `--dashboard-url localhost:PORT` |
-| Standalone dashboard ([#16236](https://github.com/microsoft/aspire/issues/16236)) | `aspire otel` fails without `--enable-api` | Start dashboard with `aspire dashboard run --enable-api` |
+| Standalone dashboard ([#16236](https://github.com/microsoft/aspire/issues/16236)) | `aspire otel` fails without `--enable-api` | ⚠️ Verify `aspire dashboard` command exists in your version — may require manual dashboard config |
 | `--isolated` mode telemetry ([#16107](https://github.com/microsoft/aspire/issues/16107)) | OTEL port not randomized in isolated mode | Avoid `--isolated` if telemetry is needed |
 
 ## Why Aspire CLI Can't Do Remote Diagnostics

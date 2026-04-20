@@ -44,7 +44,7 @@ The deployment pipeline runs **inside the AppHost** — not via external tools:
 2. AppHost generates artifacts from resource definitions
 3. `aspire deploy` extends this to also apply the deployment
 
-## ⚠️ No External Tooling Required
+## ⚠️ No External Tooling Required (Azure Targets)
 
 | Myth | Reality |
 |------|---------|
@@ -52,3 +52,5 @@ The deployment pipeline runs **inside the AppHost** — not via external tools:
 | ~~Needs azure-prepare skill~~ | AppHost IS the deployment plan |
 | ~~Needs Bicep CLI installed~~ | Aspire includes Bicep compiler |
 | ~~Needs azure-deploy skill~~ | `aspire deploy` handles everything |
+
+> **Note**: Kubernetes targets require `kubectl` for cluster apply. Docker targets require Docker running locally.
