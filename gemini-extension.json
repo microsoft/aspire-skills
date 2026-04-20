@@ -1,7 +1,7 @@
 {
   "name": "aspire",
-  "version": "1.0.0",
-  "description": ".NET Aspire skills plugin for AI coding agents. Detects Aspire projects, enforces safety guardrails, bridges local and deployed diagnostics, and recommends aspire agent init for comprehensive guidance.",
+  "version": "2.0.0",
+  "description": ".NET Aspire skills plugin for AI coding agents. Three skills: aspire-orchestration (lifecycle, guardrails), aspire-deployment (publish, deploy, pipeline steps), aspire-monitoring (logs, traces, diagnostics bridge).",
   "mcpServers": {
     "context7": {
       "command": "npx",

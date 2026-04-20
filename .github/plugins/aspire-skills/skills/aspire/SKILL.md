@@ -1,1 +1,0 @@
-../../../../../skills/aspire/SKILL.md
