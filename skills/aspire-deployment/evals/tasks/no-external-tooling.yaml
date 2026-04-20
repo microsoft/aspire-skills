@@ -9,6 +9,8 @@ tags:
 
 inputs:
   prompt: "What tools do I need to deploy my Aspire app to Azure?"
+  files:
+    - path: "csharp-apphost"
 
 expected:
   output_contains:

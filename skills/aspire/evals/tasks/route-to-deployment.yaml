@@ -8,6 +8,8 @@ tags:
 
 inputs:
   prompt: "I'm ready to push my Aspire app to production on Azure"
+  files:
+    - path: "csharp-apphost"
 
 expected:
   output_contains:

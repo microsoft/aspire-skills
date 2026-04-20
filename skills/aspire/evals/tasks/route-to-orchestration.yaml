@@ -8,6 +8,8 @@ tags:
 
 inputs:
   prompt: "I need to start my Aspire app and wait for the database to be ready"
+  files:
+    - path: "csharp-apphost"
 
 expected:
   output_contains:

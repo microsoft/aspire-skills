@@ -9,6 +9,8 @@ tags:
 
 inputs:
   prompt: "My Aspire deploy seems to be building in Debug mode, is that normal?"
+  files:
+    - path: "csharp-apphost"
 
 expected:
   output_contains:

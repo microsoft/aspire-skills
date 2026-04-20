@@ -8,6 +8,8 @@ tags:
 
 inputs:
   prompt: "I just need to re-seed the database, not redeploy everything"
+  files:
+    - path: "csharp-apphost"
 
 expected:
   output_contains:

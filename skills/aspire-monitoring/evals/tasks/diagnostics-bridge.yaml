@@ -9,6 +9,8 @@ tags:
 
 inputs:
   prompt: "How do I check what's going on with my application?"
+  files:
+    - path: "csharp-apphost"
 
 graders:
   - name: explains_routing

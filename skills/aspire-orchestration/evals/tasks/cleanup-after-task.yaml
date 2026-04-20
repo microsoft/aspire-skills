@@ -10,6 +10,8 @@ tags:
 
 inputs:
   prompt: "I'm done working on this feature, what should I do to clean up?"
+  files:
+    - path: "csharp-apphost"
   context:
     aspire_running: true
 

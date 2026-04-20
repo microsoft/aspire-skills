@@ -13,6 +13,8 @@ inputs:
     I'm getting this error when trying to build:
     error MSB3491: Could not write to output file 'bin/Debug/net10.0/MyService.dll'
     error CS2012: Cannot open 'obj/Debug/net10.0/MyService.dll' for writing
+  files:
+    - path: "csharp-apphost"
 
 expected:
   output_contains:

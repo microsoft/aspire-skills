@@ -9,6 +9,8 @@ tags:
 
 inputs:
   prompt: "I want better AI agent support for my Aspire project"
+  files:
+    - path: "csharp-apphost"
   context:
     has_project_local_skill: false
 

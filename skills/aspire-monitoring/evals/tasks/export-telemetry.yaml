@@ -8,6 +8,8 @@ tags:
 
 inputs:
   prompt: "I need to share the diagnostic data with another team member"
+  files:
+    - path: "csharp-apphost"
   context:
     aspire_running: true
     environment: local

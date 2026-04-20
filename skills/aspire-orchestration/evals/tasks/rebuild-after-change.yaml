@@ -10,6 +10,8 @@ tags:
 
 inputs:
   prompt: "I changed some code in the API service, how do I see my changes?"
+  files:
+    - path: "csharp-apphost"
   context:
     aspire_running: true
 

@@ -8,6 +8,8 @@ tags:
 
 inputs:
   prompt: "Something is wrong with my app, show me what's happening"
+  files:
+    - path: "csharp-apphost"
 
 expected:
   output_contains:

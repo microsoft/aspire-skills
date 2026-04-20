@@ -9,6 +9,8 @@ tags:
 
 inputs:
   prompt: "I need to call the API service but it might not be ready yet"
+  files:
+    - path: "csharp-apphost"
   context:
     aspire_running: true
 

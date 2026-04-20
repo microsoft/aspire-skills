@@ -9,6 +9,8 @@ tags:
 
 inputs:
   prompt: "Something is wrong with my app, requests are failing"
+  files:
+    - path: "csharp-apphost"
   context:
     aspire_running: true
     environment: local
