@@ -25,7 +25,7 @@ graders:
   - name: recognizes_aspire_locks
     type: prompt
     config:
-      rubric: >
+      prompt: >
         The response should recognize that Aspire is holding file locks on the running
         project. It should NOT conclude the project is unbuildable. It should recommend
         either 'aspire stop' followed by rebuild, or 'aspire resource <name> restart'.

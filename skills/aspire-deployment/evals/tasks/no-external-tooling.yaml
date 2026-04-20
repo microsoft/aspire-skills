@@ -21,7 +21,7 @@ graders:
   - name: aspire_only
     type: prompt
     config:
-      rubric: >
+      prompt: >
         The response should explain that Aspire handles Azure deployment natively via
         'aspire deploy'. It should NOT suggest azd, azure-prepare, azure-deploy, or any
         external Azure tooling. The AppHost IS the deployment plan.

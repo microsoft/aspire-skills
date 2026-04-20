@@ -22,7 +22,7 @@ graders:
   - name: uses_dotnet_not_aspire
     type: prompt
     config:
-      rubric: >
+      prompt: >
         The response should recognize this is a standard .NET project (no Aspire.AppHost.Sdk)
         and suggest 'dotnet run' rather than 'aspire start'. It should NOT apply
         Aspire-specific guardrails to non-Aspire projects.

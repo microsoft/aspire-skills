@@ -17,7 +17,7 @@ graders:
   - name: knows_bug
     type: prompt
     config:
-      rubric: >
+      prompt: >
         The response should recognize this as a known issue with TypeScript AppHosts
         (issue #15782) where *.dev.localhost URLs don't resolve. It should suggest
         using --dashboard-url with localhost:PORT as a workaround.

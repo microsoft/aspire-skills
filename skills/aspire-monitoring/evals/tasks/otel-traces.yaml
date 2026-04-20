@@ -25,7 +25,7 @@ graders:
   - name: structured_first
     type: prompt
     config:
-      rubric: >
+      prompt: >
         The response should prefer structured telemetry (aspire otel traces) over
         raw console logs (aspire logs). It should recommend checking traces first
         for cross-service analysis, then logs for detail.

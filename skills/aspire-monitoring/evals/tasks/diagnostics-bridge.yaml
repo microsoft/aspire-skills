@@ -14,7 +14,7 @@ graders:
   - name: explains_routing
     type: prompt
     config:
-      rubric: >
+      prompt: >
         The response should ask or determine whether the app is running locally or deployed.
         For local apps, it should recommend aspire CLI commands (aspire describe, aspire logs,
         aspire otel). For deployed apps, it should route to platform-specific tools

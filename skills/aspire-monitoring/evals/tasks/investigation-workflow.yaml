@@ -17,7 +17,7 @@ graders:
   - name: investigates_first
     type: prompt
     config:
-      rubric: >
+      prompt: >
         The response should follow an investigation workflow before suggesting code changes:
         1. Check resource state with 'aspire describe'
         2. Check structured logs with 'aspire otel logs'

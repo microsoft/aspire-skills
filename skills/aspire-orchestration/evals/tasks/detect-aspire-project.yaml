@@ -27,7 +27,7 @@ graders:
   - name: identifies_aspire
     type: prompt
     config:
-      rubric: >
+      prompt: >
         The response should identify this as an Aspire project based on the
         Aspire.AppHost.Sdk reference in the csproj file. It should mention
         using aspire CLI commands rather than standard dotnet commands.

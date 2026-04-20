@@ -17,7 +17,7 @@ graders:
   - name: routes_to_deployment
     type: prompt
     config:
-      rubric: >
+      prompt: >
         The response should route this to aspire-deployment concerns:
         using 'aspire deploy' for production deployment. It should NOT suggest
         azd, azure-prepare, or azure-deploy.

@@ -25,7 +25,7 @@ graders:
   - name: knows_k8s_needs_kubectl
     type: prompt
     config:
-      rubric: >
+      prompt: >
         The response should mention that Aspire supports Azure Container Apps,
         Azure App Service, Docker Compose, and Kubernetes. It should note that
         Kubernetes requires kubectl for cluster apply while Azure targets are

@@ -18,7 +18,7 @@ graders:
   - name: routes_correctly
     type: prompt
     config:
-      rubric: >
+      prompt: >
         The response should route this to aspire-orchestration concerns:
         using 'aspire start' to launch and 'aspire wait' for resource readiness.
         It should NOT suggest deployment or monitoring commands as the primary action.

@@ -17,7 +17,7 @@ graders:
   - name: routes_to_monitoring
     type: prompt
     config:
-      rubric: >
+      prompt: >
         The response should route this to aspire-monitoring concerns: suggesting
         'aspire describe' for state, 'aspire otel logs' or 'aspire logs' for
         diagnostics. It should suggest investigation before code changes.

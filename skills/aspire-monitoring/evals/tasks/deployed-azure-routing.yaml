@@ -36,7 +36,7 @@ graders:
   - name: explains_why
     type: prompt
     config:
-      rubric: >
+      prompt: >
         The response should explain that Aspire CLI cannot connect to deployed apps
         (local backchannel only) and route to azure-diagnostics skill or App Insights.
       threshold: 0.7

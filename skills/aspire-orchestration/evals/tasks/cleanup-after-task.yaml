@@ -26,7 +26,7 @@ graders:
   - name: explains_cleanup
     type: prompt
     config:
-      rubric: >
+      prompt: >
         The response should recommend running 'aspire stop' and explain that
         leaving Aspire running causes port conflicts, file locks, and resource waste.
       threshold: 0.7

@@ -16,7 +16,7 @@ graders:
   - name: routes_to_azure_diagnostics
     type: prompt
     config:
-      rubric: >
+      prompt: >
         The response should recognize this is a deployed app and route to
         azure-diagnostics or platform-specific tools. It should explain that
         Aspire CLI cannot connect to deployed apps (local backchannel only).

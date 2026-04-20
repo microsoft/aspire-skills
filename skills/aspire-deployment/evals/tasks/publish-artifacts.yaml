@@ -22,7 +22,7 @@ graders:
   - name: distinguishes_publish_deploy
     type: prompt
     config:
-      rubric: >
+      prompt: >
         The response should clearly distinguish between 'aspire publish' (artifact generation
         only) and 'aspire deploy' (full pipeline including deployment). It should use
         'aspire publish' since the user only wants artifacts.

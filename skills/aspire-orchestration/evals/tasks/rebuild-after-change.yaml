@@ -34,7 +34,7 @@ graders:
   - name: mentions_file_locks
     type: prompt
     config:
-      rubric: >
+      prompt: >
         The response should mention that 'dotnet build' would cause file lock errors
         because Aspire holds locks on running projects. It should recommend using
         aspire resource <name> restart instead.

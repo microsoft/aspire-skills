@@ -22,7 +22,7 @@ graders:
   - name: not_full_deploy
     type: prompt
     config:
-      rubric: >
+      prompt: >
         The response should use 'aspire do seed-data' or similar named step command.
         It should NOT suggest a full 'aspire deploy' when the user only wants one step.
       threshold: 0.7

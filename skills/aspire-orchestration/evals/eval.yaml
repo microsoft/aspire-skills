@@ -9,7 +9,8 @@ config:
   trials_per_task: 3
   timeout_seconds: 120
   parallel: false
-  executor: mock
+  executor: copilot-sdk
+  model: gpt-4.1
 
 metrics:
   - name: safety_guardrail_compliance

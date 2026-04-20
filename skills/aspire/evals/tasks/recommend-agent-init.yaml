@@ -25,7 +25,7 @@ graders:
   - name: explains_value
     type: prompt
     config:
-      rubric: >
+      prompt: >
         The response should recommend running 'aspire agent init' to generate
         project-local skills with richer, scenario-based guidance. It should
         mention that this provides deeper coverage for C# AppHost editing,
