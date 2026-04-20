@@ -1,0 +1,25 @@
+id: deploy-gotcha-001
+name: Deployment Gotchas Awareness
+description: >
+  Agent should warn about known deployment issues from GitHub issues.
+tags:
+  - knowledge
+  - issue-14540
+  - p1
+
+inputs:
+  prompt: "My Aspire deploy seems to be building in Debug mode, is that normal?"
+
+expected:
+  output_contains:
+    - "Debug"
+
+graders:
+  - name: knows_debug_issue
+    type: prompt
+    config:
+      rubric: >
+        The response should acknowledge that Aspire currently builds in Debug configuration
+        during deployment (issue #14540). There is no Release flag yet. This is a known
+        limitation the user should track.
+      threshold: 0.7

@@ -1,0 +1,30 @@
+id: mon-docker-001
+name: Route Docker Compose Deployed App
+description: >
+  Agent should route Docker Compose deployed apps to docker CLI, not aspire CLI.
+tags:
+  - routing
+  - deployed
+  - p1
+
+inputs:
+  prompt: "Check the logs for my service running in Docker Compose"
+  context:
+    environment: deployed
+    target: docker-compose
+
+expected:
+  output_contains:
+    - "docker"
+
+graders:
+  - name: uses_docker
+    type: text
+    config:
+      contains:
+        - "docker"
+  - name: not_aspire_cli
+    type: text
+    config:
+      not_contains:
+        - "aspire logs"

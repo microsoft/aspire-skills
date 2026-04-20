@@ -1,0 +1,34 @@
+id: router-reject-001
+name: Reject Non-Aspire Projects
+description: >
+  Router should not apply Aspire-specific guidance to non-Aspire .NET projects.
+tags:
+  - routing
+  - p1
+
+inputs:
+  prompt: "How do I run my .NET console app?"
+  context:
+    files:
+      - path: "MyApp/MyApp.csproj"
+        content: |
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <OutputType>Exe</OutputType>
+            </PropertyGroup>
+          </Project>
+
+graders:
+  - name: uses_dotnet_not_aspire
+    type: prompt
+    config:
+      rubric: >
+        The response should recognize this is a standard .NET project (no Aspire.AppHost.Sdk)
+        and suggest 'dotnet run' rather than 'aspire start'. It should NOT apply
+        Aspire-specific guardrails to non-Aspire projects.
+      threshold: 0.8
+  - name: allows_dotnet_run
+    type: text
+    config:
+      contains:
+        - "dotnet run"

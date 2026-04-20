@@ -1,0 +1,31 @@
+id: router-orch-001
+name: Route Lifecycle Tasks to Orchestration
+description: >
+  Router should direct start/stop/wait/restart tasks to aspire-orchestration.
+tags:
+  - routing
+  - p0
+
+inputs:
+  prompt: "I need to start my Aspire app and wait for the database to be ready"
+
+expected:
+  output_contains:
+    - "aspire start"
+    - "aspire wait"
+
+graders:
+  - name: routes_correctly
+    type: prompt
+    config:
+      rubric: >
+        The response should route this to aspire-orchestration concerns:
+        using 'aspire start' to launch and 'aspire wait' for resource readiness.
+        It should NOT suggest deployment or monitoring commands as the primary action.
+      threshold: 0.8
+  - name: correct_commands
+    type: text
+    config:
+      contains:
+        - "aspire start"
+        - "aspire wait"

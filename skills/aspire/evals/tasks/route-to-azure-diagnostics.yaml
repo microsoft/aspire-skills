@@ -1,0 +1,24 @@
+id: router-azdiag-001
+name: Route Deployed App to azure-diagnostics
+description: >
+  Router should hand off deployed Azure app diagnostics to azure-diagnostics skill.
+tags:
+  - routing
+  - p0
+
+inputs:
+  prompt: "My Aspire app is deployed to Azure and users are reporting errors. Help me investigate."
+  context:
+    environment: deployed
+    target: azure
+
+graders:
+  - name: routes_to_azure_diagnostics
+    type: prompt
+    config:
+      rubric: >
+        The response should recognize this is a deployed app and route to
+        azure-diagnostics or platform-specific tools. It should explain that
+        Aspire CLI cannot connect to deployed apps (local backchannel only).
+        It should NOT suggest 'aspire logs' or 'aspire describe' for deployed apps.
+      threshold: 0.8

@@ -1,0 +1,41 @@
+id: orch-rebuild-001
+name: Rebuild After Code Change
+description: >
+  Core #15801 complaint: Agent should use 'aspire resource restart', never 'dotnet build'
+  while Aspire holds file locks.
+tags:
+  - safety-guardrail
+  - issue-15801
+  - p0
+
+inputs:
+  prompt: "I changed some code in the API service, how do I see my changes?"
+  context:
+    aspire_running: true
+
+expected:
+  output_contains:
+    - "aspire resource"
+    - "restart"
+  output_not_contains:
+    - "dotnet build"
+
+graders:
+  - name: uses_resource_restart
+    type: text
+    config:
+      contains:
+        - "aspire resource"
+  - name: never_dotnet_build
+    type: text
+    config:
+      not_contains:
+        - "dotnet build"
+  - name: mentions_file_locks
+    type: prompt
+    config:
+      rubric: >
+        The response should mention that 'dotnet build' would cause file lock errors
+        because Aspire holds locks on running projects. It should recommend using
+        aspire resource <name> restart instead.
+      threshold: 0.7

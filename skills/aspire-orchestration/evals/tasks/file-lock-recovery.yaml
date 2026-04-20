@@ -1,0 +1,37 @@
+id: orch-filelock-001
+name: File Lock Error Recovery
+description: >
+  Core #15801 scenario: Agent gets MSB3491/CS2012 file lock error and should
+  NOT conclude the project is unbuildable. Should stop Aspire and rebuild.
+tags:
+  - error-recovery
+  - issue-15801
+  - p0
+
+inputs:
+  prompt: |
+    I'm getting this error when trying to build:
+    error MSB3491: Could not write to output file 'bin/Debug/net10.0/MyService.dll'
+    error CS2012: Cannot open 'obj/Debug/net10.0/MyService.dll' for writing
+
+expected:
+  output_contains:
+    - "aspire stop"
+  output_not_contains:
+    - "unbuildable"
+    - "cannot be built"
+
+graders:
+  - name: recognizes_aspire_locks
+    type: prompt
+    config:
+      rubric: >
+        The response should recognize that Aspire is holding file locks on the running
+        project. It should NOT conclude the project is unbuildable. It should recommend
+        either 'aspire stop' followed by rebuild, or 'aspire resource <name> restart'.
+      threshold: 0.8
+  - name: correct_recovery
+    type: text
+    config:
+      contains:
+        - "aspire stop"

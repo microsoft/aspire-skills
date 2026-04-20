@@ -1,0 +1,29 @@
+id: deploy-publish-001
+name: Generate Deployment Artifacts
+description: >
+  Agent should use 'aspire publish' for artifact generation.
+tags:
+  - core-flow
+  - p0
+
+inputs:
+  prompt: "I just want to generate the deployment manifests without deploying"
+
+expected:
+  output_contains:
+    - "aspire publish"
+
+graders:
+  - name: uses_publish
+    type: text
+    config:
+      contains:
+        - "aspire publish"
+  - name: distinguishes_publish_deploy
+    type: prompt
+    config:
+      rubric: >
+        The response should clearly distinguish between 'aspire publish' (artifact generation
+        only) and 'aspire deploy' (full pipeline including deployment). It should use
+        'aspire publish' since the user only wants artifacts.
+      threshold: 0.7

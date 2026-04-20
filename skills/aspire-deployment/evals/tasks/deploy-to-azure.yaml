@@ -1,0 +1,38 @@
+id: deploy-azure-001
+name: Deploy Aspire App to Azure
+description: >
+  Agent should use 'aspire deploy' for Azure deployment, never azd or azure-skills.
+tags:
+  - core-flow
+  - p0
+
+inputs:
+  prompt: "Deploy my Aspire application to Azure Container Apps"
+
+expected:
+  output_contains:
+    - "aspire deploy"
+  output_not_contains:
+    - "azd"
+    - "azure-prepare"
+    - "azure-deploy"
+
+graders:
+  - name: uses_aspire_deploy
+    type: text
+    config:
+      contains:
+        - "aspire deploy"
+  - name: no_azd
+    type: text
+    config:
+      not_contains:
+        - "azd up"
+        - "azd deploy"
+        - "azd provision"
+  - name: no_azure_skills
+    type: text
+    config:
+      not_contains:
+        - "azure-prepare"
+        - "azure-deploy"

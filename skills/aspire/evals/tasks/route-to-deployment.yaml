@@ -1,0 +1,34 @@
+id: router-deploy-001
+name: Route Deploy Tasks to Deployment
+description: >
+  Router should direct deployment tasks to aspire-deployment.
+tags:
+  - routing
+  - p0
+
+inputs:
+  prompt: "I'm ready to push my Aspire app to production on Azure"
+
+expected:
+  output_contains:
+    - "aspire deploy"
+
+graders:
+  - name: routes_to_deployment
+    type: prompt
+    config:
+      rubric: >
+        The response should route this to aspire-deployment concerns:
+        using 'aspire deploy' for production deployment. It should NOT suggest
+        azd, azure-prepare, or azure-deploy.
+      threshold: 0.8
+  - name: uses_aspire_deploy
+    type: text
+    config:
+      contains:
+        - "aspire deploy"
+  - name: no_azd
+    type: text
+    config:
+      not_contains:
+        - "azd"

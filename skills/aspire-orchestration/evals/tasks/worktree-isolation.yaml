@@ -1,0 +1,25 @@
+id: orch-worktree-001
+name: Git Worktree Isolation
+description: >
+  Agent should use --isolated flag in git worktrees to avoid port conflicts.
+tags:
+  - best-practice
+  - p1
+
+inputs:
+  prompt: "I'm working in a git worktree and need to start the app"
+  context:
+    git_worktree: true
+
+expected:
+  output_contains:
+    - "--isolated"
+    - "aspire start"
+
+graders:
+  - name: uses_isolated
+    type: text
+    config:
+      contains:
+        - "--isolated"
+        - "aspire start"

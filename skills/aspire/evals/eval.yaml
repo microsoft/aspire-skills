@@ -1,0 +1,31 @@
+name: aspire-router-eval
+description: >
+  Evaluates the top-level aspire router skill for correct sub-skill routing.
+  Tests that prompts are directed to aspire-orchestration, aspire-deployment,
+  or aspire-monitoring based on intent.
+skill: aspire
+version: "1.0"
+
+config:
+  trials_per_task: 3
+  timeout_seconds: 120
+  parallel: false
+  executor: mock
+
+metrics:
+  - name: routing_accuracy
+    weight: 0.6
+    threshold: 0.95
+  - name: trigger_accuracy
+    weight: 0.4
+    threshold: 0.90
+
+graders:
+  - type: text
+    name: mentions_aspire
+    config:
+      contains:
+        - "aspire"
+
+tasks:
+  - "tasks/*.yaml"

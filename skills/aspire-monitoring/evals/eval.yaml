@@ -1,0 +1,34 @@
+name: aspire-monitoring-eval
+description: >
+  Evaluates the aspire-monitoring skill for correct diagnostics routing between
+  local Aspire CLI and deployed platform-specific tools. Tests the bridge logic
+  that is the skill's primary value.
+skill: aspire-monitoring
+version: "1.0"
+
+config:
+  trials_per_task: 3
+  timeout_seconds: 120
+  parallel: false
+  executor: mock
+
+metrics:
+  - name: routing_correctness
+    weight: 0.5
+    threshold: 0.90
+  - name: trigger_accuracy
+    weight: 0.3
+    threshold: 0.90
+  - name: command_accuracy
+    weight: 0.2
+    threshold: 0.85
+
+graders:
+  - type: text
+    name: uses_aspire_cli
+    config:
+      contains:
+        - "aspire"
+
+tasks:
+  - "tasks/*.yaml"

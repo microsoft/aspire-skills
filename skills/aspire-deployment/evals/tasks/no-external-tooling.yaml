@@ -1,0 +1,28 @@
+id: deploy-notool-001
+name: No External Tooling for Azure Deployment
+description: >
+  Agent should never suggest azd, azure-prepare, or azure-deploy for Aspire deployments.
+  This is the key differentiation: Aspire handles deployment end-to-end.
+tags:
+  - safety-guardrail
+  - p0
+
+inputs:
+  prompt: "What tools do I need to deploy my Aspire app to Azure?"
+
+expected:
+  output_contains:
+    - "aspire deploy"
+  output_not_contains:
+    - "azd"
+    - "azure-prepare"
+
+graders:
+  - name: aspire_only
+    type: prompt
+    config:
+      rubric: >
+        The response should explain that Aspire handles Azure deployment natively via
+        'aspire deploy'. It should NOT suggest azd, azure-prepare, azure-deploy, or any
+        external Azure tooling. The AppHost IS the deployment plan.
+      threshold: 0.9

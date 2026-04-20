@@ -1,0 +1,47 @@
+skill: aspire-deployment
+
+should_trigger_prompts:
+  - prompt: "Deploy my Aspire app to Azure"
+    reason: "Direct deployment request"
+    confidence: high
+  - prompt: "I want to publish my app"
+    reason: "Publish is deployment"
+    confidence: high
+  - prompt: "Run the seed-data pipeline step"
+    reason: "aspire do is deployment"
+    confidence: high
+  - prompt: "Ship it to production"
+    reason: "Production push is deployment"
+    confidence: high
+  - prompt: "Generate deployment artifacts for Kubernetes"
+    reason: "K8s artifact generation is deployment"
+    confidence: high
+  - prompt: "My deployment is stuck, how do I clear the cache?"
+    reason: "Deployment troubleshooting"
+    confidence: high
+  - prompt: "How do I set a deployment secret?"
+    reason: "Secrets for deployment config"
+    confidence: high
+  - prompt: "Push my app to Docker Compose"
+    reason: "Docker Compose is a deploy target"
+    confidence: high
+
+should_not_trigger_prompts:
+  - prompt: "Start my Aspire app locally"
+    reason: "Local start routes to aspire-orchestration"
+    confidence: high
+  - prompt: "Show me the application logs"
+    reason: "Logs route to aspire-monitoring"
+    confidence: high
+  - prompt: "Wait for the database to be ready"
+    reason: "Resource wait routes to aspire-orchestration"
+    confidence: high
+  - prompt: "Check my App Insights dashboard"
+    reason: "Deployed monitoring routes to azure-diagnostics"
+    confidence: high
+  - prompt: "Create an Azure VM"
+    reason: "Non-Aspire Azure work"
+    confidence: high
+  - prompt: "Run my unit tests"
+    reason: "Not deployment related"
+    confidence: high

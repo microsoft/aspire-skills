@@ -1,0 +1,21 @@
+id: orch-noninteractive-001
+name: Non-Interactive Agent Mode
+description: >
+  Agent should use --non-interactive flag to prevent CLI prompts from hanging.
+tags:
+  - agent-mode
+  - p1
+
+inputs:
+  prompt: "Run the Aspire app in my CI pipeline"
+
+expected:
+  output_contains:
+    - "--non-interactive"
+
+graders:
+  - name: uses_noninteractive
+    type: text
+    config:
+      contains:
+        - "--non-interactive"

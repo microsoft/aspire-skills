@@ -1,0 +1,32 @@
+id: mon-investigate-001
+name: Investigation Before Code Changes
+description: >
+  Agent should follow the investigation workflow: describe → otel → logs → traces
+  before suggesting code changes.
+tags:
+  - workflow
+  - p0
+
+inputs:
+  prompt: "Something is wrong with my app, requests are failing"
+  context:
+    aspire_running: true
+    environment: local
+
+graders:
+  - name: investigates_first
+    type: prompt
+    config:
+      rubric: >
+        The response should follow an investigation workflow before suggesting code changes:
+        1. Check resource state with 'aspire describe'
+        2. Check structured logs with 'aspire otel logs'
+        3. Check console logs with 'aspire logs'
+        4. Check traces with 'aspire otel traces'
+        The agent should NOT jump straight to editing code.
+      threshold: 0.7
+  - name: uses_aspire_commands
+    type: text
+    config:
+      contains:
+        - "aspire"

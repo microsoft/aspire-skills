@@ -1,0 +1,34 @@
+id: orch-detect-001
+name: Detect Aspire Project
+description: >
+  Agent should detect Aspire project signals and activate the skill.
+tags:
+  - detection
+  - p1
+
+inputs:
+  prompt: "Help me understand this project structure"
+  context:
+    files:
+      - path: "MyApp.AppHost/MyApp.AppHost.csproj"
+        content: |
+          <Project Sdk="Microsoft.NET.Sdk">
+            <Sdk Name="Aspire.AppHost.Sdk" Version="10.0.0" />
+          </Project>
+      - path: "aspire.config.json"
+        content: "{}"
+
+expected:
+  output_contains:
+    - "Aspire"
+    - "AppHost"
+
+graders:
+  - name: identifies_aspire
+    type: prompt
+    config:
+      rubric: >
+        The response should identify this as an Aspire project based on the
+        Aspire.AppHost.Sdk reference in the csproj file. It should mention
+        using aspire CLI commands rather than standard dotnet commands.
+      threshold: 0.8

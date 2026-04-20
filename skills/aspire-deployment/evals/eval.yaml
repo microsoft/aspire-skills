@@ -1,0 +1,41 @@
+name: aspire-deployment-eval
+description: >
+  Evaluates the aspire-deployment skill for correct multi-target deployment guidance,
+  pipeline step handling, and ensuring no handoff to azure-skills for Aspire deployments.
+skill: aspire-deployment
+version: "1.0"
+
+config:
+  trials_per_task: 3
+  timeout_seconds: 120
+  parallel: false
+  executor: mock
+
+metrics:
+  - name: deployment_correctness
+    weight: 0.4
+    threshold: 0.90
+  - name: trigger_accuracy
+    weight: 0.3
+    threshold: 0.90
+  - name: no_external_tooling
+    weight: 0.3
+    threshold: 0.95
+
+graders:
+  - type: text
+    name: never_azd
+    config:
+      not_contains:
+        - "azd up"
+        - "azd deploy"
+        - "azure-prepare"
+        - "azure-deploy"
+  - type: text
+    name: uses_aspire_deploy
+    config:
+      contains:
+        - "aspire"
+
+tasks:
+  - "tasks/*.yaml"

@@ -1,0 +1,31 @@
+id: mon-logs-001
+name: View Local Application Logs
+description: >
+  Agent should use aspire CLI for local log viewing, not manual file reading.
+tags:
+  - local-diagnostics
+  - p0
+
+inputs:
+  prompt: "Show me what the API service is logging"
+  context:
+    aspire_running: true
+    environment: local
+
+expected:
+  output_contains:
+    - "aspire logs"
+
+graders:
+  - name: uses_aspire_logs
+    type: text
+    config:
+      contains:
+        - "aspire logs"
+  - name: not_manual_logs
+    type: text
+    config:
+      not_contains:
+        - "cat"
+        - "tail -f"
+        - "docker logs"

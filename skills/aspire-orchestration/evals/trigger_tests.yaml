@@ -1,0 +1,59 @@
+skill: aspire-orchestration
+
+should_trigger_prompts:
+  - prompt: "Start my Aspire app"
+    reason: "Direct start request"
+    confidence: high
+  - prompt: "I need to run the AppHost"
+    reason: "AppHost execution implies orchestration"
+    confidence: high
+  - prompt: "My build is failing with file lock errors"
+    reason: "File lock = Aspire holding locks, core #15801 scenario"
+    confidence: high
+  - prompt: "How do I restart just the API service?"
+    reason: "Single resource restart is orchestration"
+    confidence: high
+  - prompt: "Something is using port 5000 already"
+    reason: "Port conflict = orphaned Aspire instance"
+    confidence: high
+  - prompt: "Wait for the database to be ready"
+    reason: "Resource wait is orchestration"
+    confidence: high
+  - prompt: "I want to add Redis to my Aspire app"
+    reason: "aspire add is orchestration"
+    confidence: high
+  - prompt: "Create a new Aspire project"
+    reason: "aspire new is orchestration"
+    confidence: high
+  - prompt: "Stop everything, I'm done"
+    reason: "Cleanup is orchestration"
+    confidence: high
+  - prompt: "The app won't start, something is wrong with my environment"
+    reason: "aspire doctor is orchestration"
+    confidence: high
+
+should_not_trigger_prompts:
+  - prompt: "Deploy my app to Azure"
+    reason: "Deployment routes to aspire-deployment"
+    confidence: high
+  - prompt: "Show me the application logs"
+    reason: "Logs route to aspire-monitoring"
+    confidence: high
+  - prompt: "Check the distributed traces"
+    reason: "Traces route to aspire-monitoring"
+    confidence: high
+  - prompt: "Publish deployment artifacts"
+    reason: "Publish routes to aspire-deployment"
+    confidence: high
+  - prompt: "What's the weather today?"
+    reason: "Completely unrelated"
+    confidence: high
+  - prompt: "Build my React app"
+    reason: "Non-Aspire project"
+    confidence: high
+  - prompt: "Run my unit tests"
+    reason: "Standard test workflow, not Aspire-specific"
+    confidence: high
+  - prompt: "Check my App Insights metrics for the deployed app"
+    reason: "Deployed diagnostics routes to azure-diagnostics"
+    confidence: high

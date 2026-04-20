@@ -1,0 +1,33 @@
+id: router-init-001
+name: Recommend aspire agent init
+description: >
+  When project lacks .agents/skills/aspire/, router should recommend aspire agent init
+  for comprehensive project-local guidance.
+tags:
+  - recommendation
+  - p1
+
+inputs:
+  prompt: "I want better AI agent support for my Aspire project"
+  context:
+    has_project_local_skill: false
+
+expected:
+  output_contains:
+    - "aspire agent init"
+
+graders:
+  - name: recommends_agent_init
+    type: text
+    config:
+      contains:
+        - "aspire agent init"
+  - name: explains_value
+    type: prompt
+    config:
+      rubric: >
+        The response should recommend running 'aspire agent init' to generate
+        project-local skills with richer, scenario-based guidance. It should
+        mention that this provides deeper coverage for C# AppHost editing,
+        TypeScript AppHosts, and investigation workflows.
+      threshold: 0.7

@@ -1,0 +1,23 @@
+id: mon-bridge-001
+name: Diagnostics Bridge Decision
+description: >
+  Agent should correctly route between local Aspire CLI and deployed platform tools
+  based on where the app is running.
+tags:
+  - routing
+  - p0
+
+inputs:
+  prompt: "How do I check what's going on with my application?"
+
+graders:
+  - name: explains_routing
+    type: prompt
+    config:
+      rubric: >
+        The response should ask or determine whether the app is running locally or deployed.
+        For local apps, it should recommend aspire CLI commands (aspire describe, aspire logs,
+        aspire otel). For deployed apps, it should route to platform-specific tools
+        (azure-diagnostics for Azure, docker/kubectl for others). The response should
+        NOT suggest aspire logs for deployed apps.
+      threshold: 0.8

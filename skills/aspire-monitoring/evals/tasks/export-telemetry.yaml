@@ -1,0 +1,24 @@
+id: mon-export-001
+name: Export Telemetry Bundle
+description: >
+  Agent should use 'aspire export' for portable diagnostics bundles.
+tags:
+  - local-diagnostics
+  - p1
+
+inputs:
+  prompt: "I need to share the diagnostic data with another team member"
+  context:
+    aspire_running: true
+    environment: local
+
+expected:
+  output_contains:
+    - "aspire export"
+
+graders:
+  - name: uses_export
+    type: text
+    config:
+      contains:
+        - "aspire export"

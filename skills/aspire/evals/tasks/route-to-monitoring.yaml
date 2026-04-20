@@ -1,0 +1,24 @@
+id: router-mon-001
+name: Route Diagnostics to Monitoring
+description: >
+  Router should direct logs/traces/diagnostics to aspire-monitoring.
+tags:
+  - routing
+  - p0
+
+inputs:
+  prompt: "Something is wrong with my app, show me what's happening"
+
+expected:
+  output_contains:
+    - "aspire"
+
+graders:
+  - name: routes_to_monitoring
+    type: prompt
+    config:
+      rubric: >
+        The response should route this to aspire-monitoring concerns: suggesting
+        'aspire describe' for state, 'aspire otel logs' or 'aspire logs' for
+        diagnostics. It should suggest investigation before code changes.
+      threshold: 0.8

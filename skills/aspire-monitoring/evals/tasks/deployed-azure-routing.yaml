@@ -1,0 +1,42 @@
+id: mon-azure-001
+name: Route Deployed Azure App to azure-diagnostics
+description: >
+  Agent should route deployed Azure app diagnostics to azure-diagnostics skill,
+  not try to use aspire CLI.
+tags:
+  - routing
+  - deployed
+  - p0
+
+inputs:
+  prompt: "My app is deployed to Azure Container Apps and I'm seeing 500 errors. Help me debug."
+  context:
+    environment: deployed
+    target: azure
+
+expected:
+  output_contains:
+    - "azure-diagnostics"
+  output_not_contains:
+    - "aspire logs"
+    - "aspire describe"
+
+graders:
+  - name: routes_to_azure_diagnostics
+    type: text
+    config:
+      contains:
+        - "azure-diagnostics"
+  - name: no_local_commands
+    type: text
+    config:
+      not_contains:
+        - "aspire logs"
+        - "aspire describe"
+  - name: explains_why
+    type: prompt
+    config:
+      rubric: >
+        The response should explain that Aspire CLI cannot connect to deployed apps
+        (local backchannel only) and route to azure-diagnostics skill or App Insights.
+      threshold: 0.7

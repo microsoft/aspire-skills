@@ -1,0 +1,50 @@
+skill: aspire-monitoring
+
+should_trigger_prompts:
+  - prompt: "Show me the logs for the API service"
+    reason: "Logs are monitoring"
+    confidence: high
+  - prompt: "I need to check the distributed traces"
+    reason: "Traces are monitoring"
+    confidence: high
+  - prompt: "What's the health status of my resources?"
+    reason: "Resource state is monitoring"
+    confidence: high
+  - prompt: "Export the telemetry data"
+    reason: "Telemetry export is monitoring"
+    confidence: high
+  - prompt: "Something is failing in production, check App Insights"
+    reason: "Deployed monitoring routes through this skill"
+    confidence: high
+  - prompt: "Show me the OpenTelemetry spans"
+    reason: "OTEL spans are monitoring"
+    confidence: high
+  - prompt: "The dashboard is showing errors"
+    reason: "Dashboard issues are monitoring"
+    confidence: high
+  - prompt: "What endpoints are available?"
+    reason: "Endpoint discovery via aspire describe"
+    confidence: high
+  - prompt: "Check the container app logs for my deployed service"
+    reason: "Deployed logs route through monitoring bridge"
+    confidence: high
+
+should_not_trigger_prompts:
+  - prompt: "Start my Aspire app"
+    reason: "Start routes to aspire-orchestration"
+    confidence: high
+  - prompt: "Deploy to Azure"
+    reason: "Deploy routes to aspire-deployment"
+    confidence: high
+  - prompt: "Restart the Redis resource"
+    reason: "Resource restart routes to aspire-orchestration"
+    confidence: high
+  - prompt: "Add PostgreSQL to my app"
+    reason: "Adding integrations routes to aspire-orchestration"
+    confidence: high
+  - prompt: "Create an Azure storage account"
+    reason: "Non-Aspire Azure work"
+    confidence: high
+  - prompt: "Write unit tests for my service"
+    reason: "Not monitoring related"
+    confidence: high

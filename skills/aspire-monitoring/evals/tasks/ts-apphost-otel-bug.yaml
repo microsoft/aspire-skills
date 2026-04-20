@@ -1,0 +1,29 @@
+id: mon-tsbug-001
+name: TypeScript AppHost OTEL DNS Failure
+description: >
+  Agent should recognize the known bug where aspire otel fails with TypeScript
+  AppHost due to *.dev.localhost DNS resolution (issue #15782).
+tags:
+  - known-bug
+  - issue-15782
+  - p1
+
+inputs:
+  prompt: |
+    I'm running a TypeScript AppHost and when I try 'aspire otel traces' I get:
+    "No such host is known" for some *.dev.localhost URL
+
+graders:
+  - name: knows_bug
+    type: prompt
+    config:
+      rubric: >
+        The response should recognize this as a known issue with TypeScript AppHosts
+        (issue #15782) where *.dev.localhost URLs don't resolve. It should suggest
+        using --dashboard-url with localhost:PORT as a workaround.
+      threshold: 0.7
+  - name: suggests_workaround
+    type: text
+    config:
+      contains:
+        - "localhost"

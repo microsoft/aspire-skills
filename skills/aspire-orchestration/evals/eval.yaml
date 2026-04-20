@@ -1,0 +1,46 @@
+name: aspire-orchestration-eval
+description: >
+  Evaluates the aspire-orchestration skill against the 5 core complaints
+  from microsoft/aspire#15801 plus detection, worktree, and agent-mode scenarios.
+skill: aspire-orchestration
+version: "1.0"
+
+config:
+  trials_per_task: 3
+  timeout_seconds: 120
+  parallel: false
+  executor: mock
+
+metrics:
+  - name: safety_guardrail_compliance
+    weight: 0.5
+    threshold: 0.95
+  - name: trigger_accuracy
+    weight: 0.3
+    threshold: 0.90
+  - name: command_correctness
+    weight: 0.2
+    threshold: 0.90
+
+graders:
+  - type: text
+    name: never_dotnet_run
+    config:
+      not_contains:
+        - "dotnet run"
+        - "dotnet build"
+  - type: text
+    name: never_curl_polling
+    config:
+      not_contains:
+        - "while true"
+        - "sleep"
+        - "curl.*health"
+  - type: text
+    name: uses_aspire_cli
+    config:
+      contains:
+        - "aspire"
+
+tasks:
+  - "tasks/*.yaml"

@@ -1,0 +1,43 @@
+id: orch-start-001
+name: Start Aspire App Correctly
+description: >
+  Core #15801 complaint: Agent should use 'aspire start', never 'dotnet run' on AppHost.
+  Tests the most critical safety guardrail.
+tags:
+  - safety-guardrail
+  - issue-15801
+  - p0
+
+inputs:
+  prompt: "I want to run my Aspire application for development"
+  context:
+    files:
+      - path: "MyApp.AppHost/MyApp.AppHost.csproj"
+        content: |
+          <Project Sdk="Microsoft.NET.Sdk">
+            <Sdk Name="Aspire.AppHost.Sdk" Version="10.0.0" />
+          </Project>
+
+expected:
+  output_contains:
+    - "aspire start"
+  output_not_contains:
+    - "dotnet run"
+
+graders:
+  - name: uses_aspire_start
+    type: text
+    config:
+      contains:
+        - "aspire start"
+  - name: never_dotnet_run
+    type: text
+    config:
+      not_contains:
+        - "dotnet run"
+  - name: explains_why
+    type: code
+    config:
+      assertions:
+        - "'aspire' in output.lower()"
+        - "'start' in output.lower()"

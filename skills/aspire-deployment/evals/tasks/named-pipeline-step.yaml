@@ -1,0 +1,28 @@
+id: deploy-step-001
+name: Run Named Pipeline Step
+description: >
+  Agent should use 'aspire do <step>' for individual pipeline steps, not full deploy.
+tags:
+  - core-flow
+  - p1
+
+inputs:
+  prompt: "I just need to re-seed the database, not redeploy everything"
+
+expected:
+  output_contains:
+    - "aspire do"
+
+graders:
+  - name: uses_aspire_do
+    type: text
+    config:
+      contains:
+        - "aspire do"
+  - name: not_full_deploy
+    type: prompt
+    config:
+      rubric: >
+        The response should use 'aspire do seed-data' or similar named step command.
+        It should NOT suggest a full 'aspire deploy' when the user only wants one step.
+      threshold: 0.7
