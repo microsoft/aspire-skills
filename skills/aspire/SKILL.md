@@ -1,7 +1,7 @@
 ---
 name: aspire
 description: >-
-  **WORKFLOW SKILL** - Top-level router for .NET Aspire distributed applications. Detects Aspire
+  **WORKFLOW SKILL** - Top-level router for Aspire distributed applications. Detects Aspire
   projects, enforces safety guardrails, and routes to the correct sub-skill.
   USE FOR: Aspire AppHost detected, aspire CLI, distributed app, cloud-native .NET, AppHost
   project, aspire start, aspire deploy, aspire logs, aspire otel, aspire init, aspire new,
@@ -18,7 +18,7 @@ metadata:
 
 # Aspire
 
-Use this skill when the task involves a .NET Aspire distributed application — operating the
+Use this skill when the task involves an Aspire distributed application — operating the
 AppHost or its resources through the Aspire CLI rather than falling back to ad-hoc `dotnet`,
 `docker`, or shell workflows.
 

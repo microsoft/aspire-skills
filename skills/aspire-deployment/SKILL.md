@@ -1,7 +1,7 @@
 ---
 name: aspire-deployment
 description: >-
-  **WORKFLOW SKILL** - Deploy .NET Aspire applications to multiple targets natively.
+  **WORKFLOW SKILL** - Deploy Aspire applications to multiple targets natively.
   Handles publish, deploy, and named pipeline steps without external tooling.
   USE FOR: aspire deploy, aspire publish, aspire do, deploy to Azure, deploy to Kubernetes,
   deploy to Docker Compose, push to production, ship it, go live, deployment pipeline,

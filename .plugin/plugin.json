@@ -1,6 +1,6 @@
 {
   "name": "aspire",
-  "description": ".NET Aspire skills plugin for AI coding agents. Three skills: aspire-orchestration (lifecycle, guardrails), aspire-deployment (publish, deploy, pipeline steps), aspire-monitoring (logs, traces, diagnostics bridge). Prevents agent self-harm in Aspire projects.",
+  "description": "Aspire skills plugin for AI coding agents. Three skills: aspire-orchestration (lifecycle, guardrails), aspire-deployment (publish, deploy, pipeline steps), aspire-monitoring (logs, traces, diagnostics bridge). Prevents agent self-harm in Aspire projects.",
   "version": "2.0.0",
   "author": {
     "name": "Microsoft",

@@ -1,6 +1,6 @@
 # aspire-skills
 
-Always-on AI agent safety net for .NET Aspire projects.
+Always-on AI agent safety net for Aspire projects.
 
 ## Problem
 
@@ -90,7 +90,7 @@ Key Aspire CLI commands the plugin enforces and routes to:
 
 ## Related Projects
 
-- [microsoft/aspire](https://github.com/microsoft/aspire) — .NET Aspire framework and CLI
+- [microsoft/aspire](https://github.com/microsoft/aspire) — Aspire framework and CLI
 - [microsoft/azure-skills](https://github.com/microsoft/azure-skills) — Azure skills plugin (model for this repo)
 - [aspire#15745](https://github.com/microsoft/aspire/pull/15745) — Scenario-based agent guidance (merged)
 - [aspire#15918](https://github.com/microsoft/aspire/pull/15918) — `aspire agent init` skill spike

@@ -1,7 +1,7 @@
 ---
 name: aspire-orchestration
 description: >-
-  **WORKFLOW SKILL** - Manage .NET Aspire AppHost lifecycle: start, stop, wait, restart resources,
+  **WORKFLOW SKILL** - Manage Aspire AppHost lifecycle: start, stop, wait, restart resources,
   and recover from file-lock errors. Detects Aspire projects automatically.
   USE FOR: aspire start, aspire stop, aspire wait, aspire run, aspire ps, aspire resource restart,
   aspire new, aspire init, aspire add, aspire restore, aspire doctor, AppHost detected, file lock

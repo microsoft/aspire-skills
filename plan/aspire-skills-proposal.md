@@ -11,7 +11,7 @@
 
 ### The Problem
 
-When developers use AI coding agents (Copilot, Claude, Cursor, etc.) with .NET Aspire projects, the agents have **no idea Aspire exists**. They fall back to raw `dotnet run`, manually poll health endpoints with `curl`, run `dotnet build` into file-lock errors, and leave orphaned processes behind. This isn't a minor annoyance — it makes the agent actively harmful to the developer's workflow ([#15801](https://github.com/microsoft/aspire/issues/15801)).
+When developers use AI coding agents (Copilot, Claude, Cursor, etc.) with Aspire projects, the agents have **no idea Aspire exists**. They fall back to raw `dotnet run`, manually poll health endpoints with `curl`, run `dotnet build` into file-lock errors, and leave orphaned processes behind. This isn't a minor annoyance — it makes the agent actively harmful to the developer's workflow ([#15801](https://github.com/microsoft/aspire/issues/15801)).
 
 ### Why It Happens
 

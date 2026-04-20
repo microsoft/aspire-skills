@@ -1,7 +1,7 @@
 ---
 name: aspire-monitoring
 description: >-
-  **ANALYSIS SKILL** - Observe .NET Aspire applications: logs, traces, metrics, resource state,
+  **ANALYSIS SKILL** - Observe Aspire applications: logs, traces, metrics, resource state,
   and telemetry export. Routes between local Aspire CLI diagnostics and deployed-app monitoring.
   USE FOR: aspire logs, aspire otel logs, aspire otel traces, aspire otel spans, aspire describe,
   aspire export, aspire ps, dashboard, App Insights query, deployed app logs, production

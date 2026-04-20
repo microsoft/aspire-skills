@@ -1,6 +1,6 @@
 # Detection — Recognizing Aspire Projects
 
-> **Purpose**: How to identify that a project uses .NET Aspire, and which project is the AppHost.
+> **Purpose**: How to identify that a project uses Aspire, and which project is the AppHost.
 
 ## Detection Signals
 
