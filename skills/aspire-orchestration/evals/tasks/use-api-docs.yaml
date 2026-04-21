@@ -1,0 +1,30 @@
+id: orch-apidocs-001
+name: Use API Docs Before Editing AppHost
+description: >
+  Agent should use aspire docs api search to look up API reference
+  before editing unfamiliar AppHost code.
+tags:
+  - best-practice
+  - p1
+
+inputs:
+  prompt: "I need to add a custom WithCommand to my AppHost resource but I'm not sure of the API signature"
+  files:
+    - path: "csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj"
+    - path: "csharp-apphost/MyApp.AppHost/Program.cs"
+
+graders:
+  - name: uses_docs_api
+    type: prompt
+    config:
+      prompt: >
+        Does the response recommend using 'aspire docs search' or
+        'aspire docs api search' to look up the WithCommand API before
+        editing the AppHost code? The agent should NOT guess the API shape.
+  - name: uses_docs_first
+    type: prompt
+    config:
+      prompt: >
+        Does the response follow a docs-first pattern — looking up
+        documentation or API reference before making code changes to
+        the AppHost?

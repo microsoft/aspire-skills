@@ -1,0 +1,24 @@
+id: deploy-diag-001
+name: Evaluate Deploy Pipeline with Diagnostics
+description: >
+  Agent should use 'aspire do diagnostics' as a pre-flight check
+  to evaluate the deployment pipeline before deploying.
+tags:
+  - core-flow
+  - p1
+
+inputs:
+  prompt: "Before I deploy, I want to understand what steps the pipeline will run and if there are any issues"
+  files:
+    - path: "csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj"
+    - path: "csharp-apphost/MyApp.AppHost/Program.cs"
+
+graders:
+  - name: uses_do_diagnostics
+    type: prompt
+    config:
+      prompt: >
+        Does the response recommend using 'aspire do diagnostics' (or a similar
+        pipeline inspection command) to evaluate the deployment pipeline steps
+        before actually deploying? It should suggest inspecting the pipeline
+        first rather than jumping straight to 'aspire deploy'.

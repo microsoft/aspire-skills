@@ -57,3 +57,9 @@ should_not_trigger_prompts:
   - prompt: "Check my App Insights metrics for the deployed app"
     reason: "Deployed diagnostics routes to azure-diagnostics"
     confidence: high
+  - prompt: "Run my apphost.cs file"
+    reason: "File-based C# AppHost should trigger orchestration"
+    confidence: high
+  - prompt: "I need to look up the API for AddPostgres in Aspire"
+    reason: "API lookup is orchestration (docs-first pattern)"
+    confidence: high

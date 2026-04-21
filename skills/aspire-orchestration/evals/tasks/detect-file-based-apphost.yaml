@@ -1,0 +1,28 @@
+id: orch-detect-filebased-001
+name: Detect File-Based C# AppHost
+description: >
+  Agent should detect file-based C# AppHost (apphost.cs with #:sdk directive)
+  and use aspire start, not dotnet run.
+tags:
+  - detection
+  - p0
+
+inputs:
+  prompt: "How do I run this app?"
+  files:
+    - path: "csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj"
+
+graders:
+  - name: recognizes_aspire
+    type: prompt
+    config:
+      prompt: >
+        Does the response recognize this as an Aspire project and recommend
+        using 'aspire start' or the Aspire CLI to run it, rather than
+        'dotnet run' or 'dotnet apphost.cs'?
+  - name: never_dotnet_run
+    type: text
+    config:
+      not_contains:
+        - "dotnet run"
+        - "dotnet apphost.cs"

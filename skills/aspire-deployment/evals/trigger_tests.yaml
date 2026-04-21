@@ -45,3 +45,6 @@ should_not_trigger_prompts:
   - prompt: "Run my unit tests"
     reason: "Not deployment related"
     confidence: high
+  - prompt: "Check my deploy pipeline health before shipping"
+    reason: "Pipeline diagnostics is deployment"
+    confidence: high
