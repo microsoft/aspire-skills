@@ -1,1 +1,5 @@
 eval-results/
+obj/
+bin/
+*.lscache
+*.cache
