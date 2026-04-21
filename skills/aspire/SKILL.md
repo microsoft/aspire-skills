@@ -62,6 +62,7 @@ Activate when ANY signal is present:
 | Task | Route To |
 |------|----------|
 | Start, stop, wait, restart, rebuild | → [aspire-orchestration](../aspire-orchestration/SKILL.md) |
+| Initialize Aspire in existing project | → [aspire-orchestration](../aspire-orchestration/SKILL.md) (+ aspire-init skill if available) |
 | Deploy, publish, pipeline steps | → [aspire-deployment](../aspire-deployment/SKILL.md) |
 | Logs, traces, metrics, diagnostics | → [aspire-monitoring](../aspire-monitoring/SKILL.md) |
 | Deployed app monitoring (Azure) | → `azure-diagnostics` skill (azure-skills plugin) |
@@ -71,6 +72,8 @@ Activate when ANY signal is present:
 ### aspire-orchestration
 Lifecycle management: start, stop, wait, restart resources, detect projects, recover from file
 locks. Safety guardrails that prevent agent self-harm.
+Includes `aspire init` workflow guidance and routes to project-local aspire-init skill for
+comprehensive initialization of existing projects.
 
 ### aspire-deployment
 Multi-target deployment: `aspire deploy`, `aspire publish`, `aspire do <step>`.

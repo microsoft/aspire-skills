@@ -1,0 +1,36 @@
+id: orch-init-001
+name: Initialize Aspire In Existing Project
+description: >
+  Agent should guide through aspire init workflow — use aspire init,
+  NOT manual project restructuring or dotnet workload install.
+tags:
+  - init-workflow
+  - p0
+
+inputs:
+  prompt: "I have an existing Express.js app and a .NET API. I want to add Aspire to orchestrate them together."
+  files:
+    - path: "non-aspire/MyApp/MyApp.csproj"
+    - path: "non-aspire/MyApp/Program.cs"
+
+graders:
+  - name: uses_aspire_init
+    type: prompt
+    config:
+      prompt: >
+        Does the response recommend using 'aspire init' to add Aspire to the
+        existing project? It should NOT suggest installing the Aspire workload
+        or manually creating project files from scratch.
+  - name: never_workload
+    type: text
+    config:
+      not_contains:
+        - "dotnet workload install"
+  - name: knows_workflow
+    type: prompt
+    config:
+      prompt: >
+        Does the response describe or reference the init workflow — scanning
+        the repository, wiring up the AppHost with discovered services, and
+        validating with aspire start? It should convey that aspire init handles
+        the bootstrapping process.

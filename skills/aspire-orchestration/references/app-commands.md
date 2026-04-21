@@ -36,6 +36,44 @@ aspire init --language typescript
 - Use `aspire new` when creating a brand-new Aspire app from scratch.
 - Use `aspire init` when adding Aspire to an existing application.
 
+## After `aspire init` — The Init Workflow
+
+When `aspire init` runs, it drops a skeleton AppHost and `aspire.config.json`. A project-local
+`aspire-init` skill (if available from `aspire agent init`) handles the heavy lifting:
+
+1. **Scan** the repository — discover .NET projects, Node.js apps, Python/Go services, docker-compose files
+2. **Present findings** — confirm with user which services to include
+3. **Wire the AppHost** — add resources using 3-tier API preference:
+   - Tier 1: First-party `Aspire.Hosting.*` (e.g., `AddPostgres`, `AddRedis`, `AddViteApp`)
+   - Tier 2: Community Toolkit `CommunityToolkit.Aspire.Hosting.*` (e.g., `AddGolangApp`)
+   - Tier 3: Raw fallbacks (`AddExecutable`, `AddDockerfile`, `AddContainer`)
+4. **Configure dependencies** — ServiceDefaults for .NET, OTel for non-.NET
+5. **Validate** — `aspire start` until all resources are healthy
+6. **Self-delete** — the init skill removes itself after success
+
+### Key Init Rules
+
+- **Never install the obsolete Aspire workload** (`dotnet workload install aspire`)
+- **Never change the repo's .NET SDK version** (don't modify root `global.json`)
+- **Never change existing project target frameworks** (older TFMs work with newer AppHost)
+- **Always use `aspire docs search` before writing AppHost code** — don't guess APIs
+- **Never hardcode URLs** — use endpoint references (`WithReference`, `WithEnvironment` with expressions)
+- **Never overwrite existing files** — augment and merge
+- **Adapt the AppHost to the app**, not the other way around
+
+### Init Config: `aspire.config.json`
+
+Read `aspire.config.json` at repo root for init context:
+
+| Field | Values | Meaning |
+|-------|--------|---------|
+| `appHost.language` | `"typescript/nodejs"` or `"csharp"` | AppHost syntax to use |
+| `appHost.path` | Path to AppHost file/dir | Where to edit |
+
+C# has two sub-modes:
+- **Single-file**: `appHost.path` → `apphost.cs` (uses `#:sdk` directive)
+- **Full project**: `appHost.path` → directory with `.csproj` + `Program.cs`
+
 ## Find The Right AppHost Or Refresh AppHost-Wide Support
 
 ```bash

@@ -1,0 +1,30 @@
+id: orch-tier-001
+name: Use Correct Integration Tier
+description: >
+  Agent should follow the 3-tier integration preference when adding
+  services to an AppHost.
+tags:
+  - init-workflow
+  - p1
+
+inputs:
+  prompt: "I need to add a Go HTTP service and a PostgreSQL database to my Aspire AppHost"
+  files:
+    - path: "csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj"
+    - path: "csharp-apphost/MyApp.AppHost/Program.cs"
+
+graders:
+  - name: correct_tiers
+    type: prompt
+    config:
+      prompt: >
+        Does the response use the correct integration tiers? PostgreSQL should
+        use Tier 1 first-party Aspire.Hosting.PostgreSQL (AddPostgres). Go should
+        use Tier 2 CommunityToolkit (AddGolangApp) or Tier 3 fallback (AddExecutable).
+        The agent should prefer higher tiers when available.
+  - name: uses_aspire_docs
+    type: prompt
+    config:
+      prompt: >
+        Does the response recommend looking up the API with aspire docs search
+        or aspire docs api search before writing AppHost code?

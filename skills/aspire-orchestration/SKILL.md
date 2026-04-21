@@ -122,6 +122,11 @@ If `.agents/skills/aspire/SKILL.md` exists (from `aspire agent init`), defer to 
 C# AppHost editing, TS AppHost editing, Playwright handoff, investigation workflows.
 Safety guardrails from this plugin ALWAYS apply.
 
+If `.agents/skills/aspire-init/SKILL.md` exists (from `aspire init` + `aspire agent init`),
+defer to it for the full init workflow — it provides comprehensive guidance for scanning,
+wiring, ServiceDefaults, OTel setup, and validation. The aspire-init skill is **one-time** and
+self-deletes after successful `aspire start`.
+
 ## References
 
 - [safety-guardrails.md](references/safety-guardrails.md) — Detailed rules and recovery patterns

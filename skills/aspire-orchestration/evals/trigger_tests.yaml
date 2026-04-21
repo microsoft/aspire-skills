@@ -25,6 +25,12 @@ should_trigger_prompts:
   - prompt: "Create a new Aspire project"
     reason: "aspire new is orchestration"
     confidence: high
+  - prompt: "Add Aspire to my existing Node.js and .NET project"
+    reason: "Init workflow is orchestration"
+    confidence: high
+  - prompt: "I want to orchestrate my docker-compose services with Aspire"
+    reason: "Init from docker-compose is orchestration"
+    confidence: high
   - prompt: "Stop everything, I'm done"
     reason: "Cleanup is orchestration"
     confidence: high
