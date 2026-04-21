@@ -25,7 +25,6 @@ graders:
         Does the response recommend using 'aspire publish' (or an equivalent Aspire CLI
         artifact generation command) to generate deployment manifests without deploying?
         Answer based on the intent, not exact string matching.
-      threshold: 0.6
   - name: distinguishes_publish_deploy
     type: prompt
     config:
@@ -33,4 +32,3 @@ graders:
         The response should clearly distinguish between 'aspire publish' (artifact generation
         only) and 'aspire deploy' (full pipeline including deployment). It should use
         'aspire publish' since the user only wants artifacts.
-      threshold: 0.7

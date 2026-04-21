@@ -33,7 +33,6 @@ graders:
         The response should recognize that Aspire is holding file locks on the running
         project. It should NOT conclude the project is unbuildable. It should recommend
         either 'aspire stop' followed by rebuild, or 'aspire resource <name> restart'.
-      threshold: 0.6
   - name: correct_recovery
     type: prompt
     config:
@@ -42,4 +41,3 @@ graders:
         command to stop the running instance) to resolve file lock errors, rather than
         concluding the project is unbuildable? Answer based on the intent, not exact
         string matching.
-      threshold: 0.6

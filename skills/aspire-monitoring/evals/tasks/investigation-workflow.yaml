@@ -28,7 +28,6 @@ graders:
         3. Check console logs with 'aspire logs'
         4. Check traces with 'aspire otel traces'
         The agent should NOT jump straight to editing code.
-      threshold: 0.7
   - name: uses_aspire_commands
     type: prompt
     config:
@@ -36,4 +35,3 @@ graders:
         Does the response recommend using Aspire CLI diagnostic commands (such as
         aspire describe, aspire logs, aspire otel) to investigate the issue before
         suggesting code changes? Answer based on the intent, not exact string matching.
-      threshold: 0.6

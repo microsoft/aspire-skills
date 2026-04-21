@@ -28,7 +28,6 @@ graders:
         Does the response recommend running 'aspire agent init' (or an equivalent
         command to generate project-local Aspire agent skills)? Answer based on
         the intent, not exact string matching.
-      threshold: 0.6
   - name: explains_value
     type: prompt
     config:
@@ -37,4 +36,3 @@ graders:
         project-local skills with richer, scenario-based guidance. It should
         mention that this provides deeper coverage for C# AppHost editing,
         TypeScript AppHosts, and investigation workflows.
-      threshold: 0.7

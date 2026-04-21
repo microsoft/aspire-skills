@@ -25,7 +25,6 @@ graders:
         The response should recognize this as a known issue with TypeScript AppHosts
         (issue #15782) where *.dev.localhost URLs don't resolve. It should suggest
         using --dashboard-url with localhost:PORT as a workaround.
-      threshold: 0.7
   - name: suggests_workaround
     type: prompt
     config:
@@ -33,4 +32,3 @@ graders:
         Does the response suggest using localhost with a specific port (e.g.
         --dashboard-url localhost:PORT) as a workaround for the DNS resolution
         issue? Answer based on the intent, not exact string matching.
-      threshold: 0.6

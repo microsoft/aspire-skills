@@ -25,11 +25,9 @@ graders:
         Does the response recommend using 'aspire do' (or an equivalent Aspire CLI
         command for running individual pipeline steps) rather than a full deployment?
         Answer based on the intent, not exact string matching.
-      threshold: 0.6
   - name: not_full_deploy
     type: prompt
     config:
       prompt: >
         The response should use 'aspire do seed-data' or similar named step command.
         It should NOT suggest a full 'aspire deploy' when the user only wants one step.
-      threshold: 0.7

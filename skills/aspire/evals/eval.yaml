@@ -12,7 +12,6 @@ config:
   parallel: false
   executor: copilot-sdk
   model: gpt-4.1
-  context_dir: "./fixtures"
 
 metrics:
   - name: routing_accuracy

@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "dgSpecHash": "YJ6i0AxujOk=",
+  "success": false,
+  "projectFilePath": "/Users/shboyer/github/aspire-skills/evals/csharp-apphost/MyApp.ApiService/MyApp.ApiService.csproj",
+  "expectedPackageFiles": [],
+  "logs": [
+    {
+      "code": "NU1101",
+      "level": "Error",
+      "message": "Unable to find package Aspire.ServiceDefaults. No packages exist with this id in source(s): nuget.org",
+      "projectPath": "/Users/shboyer/github/aspire-skills/evals/csharp-apphost/MyApp.ApiService/MyApp.ApiService.csproj",
+      "filePath": "/Users/shboyer/github/aspire-skills/evals/csharp-apphost/MyApp.ApiService/MyApp.ApiService.csproj",
+      "libraryId": "Aspire.ServiceDefaults",
+      "targetGraphs": [
+        "net10.0"
+      ]
+    }
+  ]
+}

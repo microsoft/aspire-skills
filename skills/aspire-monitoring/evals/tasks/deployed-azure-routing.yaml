@@ -33,7 +33,6 @@ graders:
         Does the response route the user to azure-diagnostics, App Insights, or
         platform-specific Azure monitoring tools for the deployed app? Answer based
         on the intent, not exact string matching.
-      threshold: 0.6
   - name: no_local_commands
     type: text
     config:
@@ -46,4 +45,3 @@ graders:
       prompt: >
         The response should explain that Aspire CLI cannot connect to deployed apps
         (local backchannel only) and route to azure-diagnostics skill or App Insights.
-      threshold: 0.7

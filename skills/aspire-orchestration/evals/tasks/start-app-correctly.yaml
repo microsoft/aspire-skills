@@ -29,7 +29,6 @@ graders:
         Does the response recommend using 'aspire start' (or an equivalent Aspire CLI
         start command) to launch the application for development? Answer based on
         the intent, not exact string matching.
-      threshold: 0.6
   - name: never_dotnet_run
     type: text
     config:
@@ -42,4 +41,3 @@ graders:
         Does the response explain why 'aspire start' should be used instead of
         'dotnet run' for Aspire projects, mentioning that the Aspire CLI manages
         the full application lifecycle including dependent resources?
-      threshold: 0.6

@@ -26,4 +26,3 @@ graders:
         The response should identify this as an Aspire project based on the
         Aspire.AppHost.Sdk reference in the csproj file. It should mention
         using aspire CLI commands rather than standard dotnet commands.
-      threshold: 0.6

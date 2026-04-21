@@ -28,7 +28,6 @@ graders:
         Does the response recommend using 'aspire otel traces' (or an equivalent
         Aspire CLI distributed tracing command) for cross-service trace analysis?
         Answer based on the intent, not exact string matching.
-      threshold: 0.6
   - name: structured_first
     type: prompt
     config:
@@ -36,4 +35,3 @@ graders:
         The response should prefer structured telemetry (aspire otel traces) over
         raw console logs (aspire logs). It should recommend checking traces first
         for cross-service analysis, then logs for detail.
-      threshold: 0.7

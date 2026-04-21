@@ -25,7 +25,6 @@ graders:
         The response should route this to aspire-deployment concerns:
         using 'aspire deploy' for production deployment. It should NOT suggest
         azd, azure-prepare, or azure-deploy.
-      threshold: 0.6
   - name: uses_aspire_deploy
     type: prompt
     config:
@@ -33,7 +32,6 @@ graders:
         Does the response recommend using 'aspire deploy' (or an equivalent Aspire CLI
         deployment command) for production deployment? Answer based on the intent,
         not exact string matching.
-      threshold: 0.6
   - name: no_azd
     type: text
     config:

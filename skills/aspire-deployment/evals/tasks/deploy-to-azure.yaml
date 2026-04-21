@@ -29,7 +29,6 @@ graders:
         Does the response recommend using 'aspire deploy' (or an equivalent Aspire CLI
         deployment command) to deploy the application to Azure? Answer based on the
         intent, not exact string matching.
-      threshold: 0.6
   - name: no_azd
     type: text
     config:
