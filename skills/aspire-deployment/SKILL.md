@@ -40,6 +40,7 @@ metadata:
 | `aspire do <step>` | Run an individual named pipeline step |
 | `aspire do --list-steps` | List available pipeline steps |
 | `aspire deploy --clear-cache` | Reset deployment state, full redeploy |
+| `aspire do diagnostics` | Evaluate deploy pipeline health for current AppHost |
 
 ## Decision Table
 
@@ -52,6 +53,7 @@ metadata:
 | Artifacts to specific directory | `aspire publish --output-path ./manifest` |
 | Run one pipeline step (e.g., seed data) | `aspire do seed-data` |
 | List available pipeline steps | `aspire do --list-steps` |
+| Evaluate pipeline before deploy | `aspire do diagnostics` |
 
 ## Pre-Deploy Checklist
 

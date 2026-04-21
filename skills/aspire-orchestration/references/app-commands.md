@@ -57,3 +57,19 @@ aspire restore
 - **Never edit `.modules/` directly** in TypeScript AppHosts. Use `aspire add <package>` to regenerate APIs, `aspire restore` if files are missing.
 - For unfamiliar C# AppHost APIs, use `aspire docs search` as primary reference. If the `dotnet-inspect` skill is available, use it to inspect local symbols and overloads — but keep docs as the source of truth.
 - For custom dashboard or resource commands (`WithCommand`), always run `aspire docs search "custom resource commands"` before implementing.
+
+## Look Up API Reference Before Editing AppHost Code
+
+```bash
+aspire docs search <query>
+aspire docs get <slug>
+aspire docs api search <query> --language csharp
+aspire docs api search <query> --language typescript
+aspire docs api list <scope>
+aspire docs api get <id>
+```
+
+- Use `aspire docs search` and `aspire docs get` for workflow guidance and documented patterns.
+- Use `aspire docs api search` when you need the C# or TypeScript API reference entry for a resource builder, extension method, or member.
+- Use `aspire docs api list <scope>` to browse children under a language, package, module, type, or symbol.
+- Always specify `--language csharp` or `--language typescript` to get the correct API surface.

@@ -8,10 +8,14 @@ Use this when the task is about docs lookup, secrets, CLI configuration, diagnos
 aspire docs search <query>
 aspire docs list
 aspire docs get <slug>
+aspire docs api search <query> --language csharp|typescript
+aspire docs api list <scope>
+aspire docs api get <id>
 ```
 
 - Use docs commands before changing integrations or implementing unfamiliar AppHost APIs.
 - Use `aspire docs list` to browse available doc set before narrowing.
+- Use `aspire docs api` when you need the C# or TypeScript API reference for a specific Aspire resource builder or extension method.
 
 ## AppHost Secrets Management
 

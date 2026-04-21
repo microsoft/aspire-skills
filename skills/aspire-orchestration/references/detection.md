@@ -23,6 +23,27 @@ grep -rl "Aspire.AppHost.Sdk" --include="*.csproj" .
 
 This is the **definitive signal** — if a `.csproj` contains this SDK reference, it is an Aspire AppHost project. All Aspire CLI commands should target this project's directory.
 
+### 1b. File-Based C# AppHost (Definitive)
+
+Single-file C# AppHosts use `apphost.cs` (or similar `.cs` files) with SDK directives instead of a `.csproj`:
+
+```cs
+#:sdk Aspire.AppHost.Sdk
+#:property IsAspireHost=true
+
+var builder = DistributedApplication.CreateBuilder(args);
+// ...
+```
+
+**Detection method**: Search for `apphost.cs` or `.cs` files containing `#:sdk Aspire.AppHost.Sdk`:
+
+```bash
+find . -name "apphost.cs" -not -path "*/node_modules/*"
+grep -rl "#:sdk Aspire.AppHost.Sdk" --include="*.cs" .
+```
+
+File-based AppHosts are run the same way: `aspire start` (never `dotnet apphost.cs` directly).
+
 ### 2. TypeScript AppHost (Definitive)
 
 Look for an `apphost.ts` file in the project:
@@ -78,6 +99,7 @@ When scanning a repository, check signals in this order:
 | Priority | Signal | What It Means |
 |----------|--------|---------------|
 | 1 | `Aspire.AppHost.Sdk` in `.csproj` | This IS the AppHost — target for `aspire start` |
+| 1b | `apphost.cs` or `#:sdk Aspire.AppHost.Sdk` in `.cs` | File-based C# AppHost — target for `aspire start` |
 | 2 | `apphost.ts` file | TypeScript AppHost — target for `aspire start` |
 | 3 | `.modules/` directory | Aspire project — look for the AppHost |
 | 4 | `aspire.config.json` or `.aspire/` | Aspire project — look for the AppHost |
@@ -90,6 +112,9 @@ The Aspire CLI commands must be run from the correct context. After detecting an
 ```bash
 # Find the AppHost project directory
 APPHOST_DIR=$(dirname $(grep -rl "Aspire.AppHost.Sdk" --include="*.csproj" .))
+
+# Or for file-based C# AppHost
+APPHOST_FILE=$(find . -name "apphost.cs" -not -path "*/node_modules/*" | head -1)
 
 # Or for TypeScript
 APPHOST_DIR=$(dirname $(find . -name "apphost.ts" -not -path "*/node_modules/*" | head -1))

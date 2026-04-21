@@ -29,6 +29,7 @@ Activate when ANY signal is present:
 | Signal | How to Detect | Confidence |
 |--------|---------------|------------|
 | C# AppHost | `.csproj` containing `Aspire.AppHost.Sdk` | ✅ Definitive |
+| File-based C# AppHost | `apphost.cs` with `#:sdk Aspire.AppHost.Sdk` | ✅ Definitive |
 | TypeScript AppHost | `apphost.ts` file in project | ✅ Definitive |
 | Aspire config | `aspire.config.json` in project root | High |
 | Aspire settings | `.aspire/` directory present | High |
@@ -51,6 +52,7 @@ Activate when ANY signal is present:
 - **Always** `aspire resource <name> restart`, **never** `dotnet build` while Aspire is running
 - **Always** `aspire stop` when done — leaving Aspire running causes file locks and port conflicts
 - **Always** `aspire docs search <topic>` before editing unfamiliar AppHost APIs
+- **Always** `aspire docs api search <query> --language csharp|typescript` for API reference before editing AppHost code
 - **Always** `--non-interactive` for agent execution
 - **Never** install the obsolete Aspire workload
 - **Never** edit `.modules/` directly in TypeScript AppHosts

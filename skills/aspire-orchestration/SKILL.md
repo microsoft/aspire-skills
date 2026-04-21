@@ -36,6 +36,7 @@ Activate when ANY signal is present:
 | Signal | How to Detect | Confidence |
 |--------|---------------|------------|
 | C# AppHost | `.csproj` containing `Aspire.AppHost.Sdk` | ✅ Definitive |
+| File-based C# AppHost | `apphost.cs` or `.cs` file with `#:sdk Aspire.AppHost.Sdk` | ✅ Definitive |
 | TypeScript AppHost | `apphost.ts` file in project | ✅ Definitive |
 | Aspire config | `aspire.config.json` in project root | High |
 | Aspire settings | `.aspire/` directory present | High |
@@ -55,7 +56,7 @@ See [detection.md](references/detection.md) for detailed fingerprinting.
 | Check resource status | `aspire describe` / `aspire ps` | Manual process inspection |
 | Working in git worktree | `aspire start --isolated` | `aspire start` without isolation |
 | Running from AI agent | Add `--non-interactive` to all commands | Assuming interactive terminal |
-| Editing unfamiliar API | `aspire docs search <topic>` first | Guessing API shape |
+| Editing unfamiliar API | `aspire docs search <topic>` then `aspire docs api search <query>` for API reference | Guessing API shape |
 | C# AppHost API inspection | Use `dotnet-inspect` skill (if available) for local symbols | Guessing overloads or builder chains |
 | Adding custom dashboard/resource commands | `aspire docs search "custom resource commands"` first | Inventing `WithCommand` patterns without docs |
 | Installing Aspire support | Use `aspire add` or `aspire init` | ~~`dotnet workload install aspire`~~ (obsolete) |
@@ -87,6 +88,9 @@ See [safety-guardrails.md](references/safety-guardrails.md) for detailed rules a
 | Restore generated files | `aspire restore` |
 | Diagnose environment | `aspire doctor` |
 | Machine-readable output | `--format Json` (supported: `ps`, `describe`, `start`) |
+| Look up API reference | `aspire docs api search <query> --language csharp\|typescript` |
+| Browse API entries | `aspire docs api list <scope>` |
+| Get API detail | `aspire docs api get <id>` |
 
 ## Error Handling
 

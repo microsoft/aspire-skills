@@ -28,6 +28,18 @@ aspire do --list-steps
 - Do not substitute `aspire deploy` when the request is to rerun only one step.
 - Use `aspire do --list-steps` to discover available steps.
 
+### `aspire do diagnostics` — Evaluate Pipeline Health
+
+Use `aspire do diagnostics` to evaluate the steps in the current AppHost's deploy pipeline before executing deployment:
+
+```bash
+aspire do diagnostics
+```
+
+- This command inspects the AppHost's deployment configuration and reports on the pipeline steps, their order, and any potential issues.
+- Use it as a **pre-flight check** before `aspire deploy` to understand what will happen.
+- Useful for AI agents to evaluate the deploy pipeline without actually deploying.
+
 ## Multi-Target Publishing
 
 Aspire generates deployment artifacts based on how resources are configured in the AppHost:
