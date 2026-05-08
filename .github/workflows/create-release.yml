@@ -1,0 +1,67 @@
+name: Create Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+jobs:
+  create-release:
+    if: >
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.title, 'Sync plugin files from')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Read version from plugin.json
+        id: version
+        run: |
+          VERSION=$(jq -er '.version | select(type == "string" and length > 0)' .plugin/plugin.json)
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract release notes from CHANGELOG.md
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          NOTES=""
+          if [ -f CHANGELOG.md ]; then
+            NOTES="$(
+              awk -v version="$VERSION" '
+                /^##[[:space:]]+/ {
+                  header = $0
+                  sub(/^##[[:space:]]+/, "", header)
+                  sub(/^\[/, "", header)
+                  sub(/\].*$/, "", header)
+                  sub(/[[:space:]].*$/, "", header)
+                  if (found) { exit }
+                  if (header == version) { found = 1; next }
+                }
+                found { print }
+              ' CHANGELOG.md
+            )"
+          fi
+          if [ -z "$NOTES" ]; then
+            NOTES="Sync release ${VERSION}"
+          fi
+          echo "$NOTES" > /tmp/release_notes.md
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if gh release view "${TAG}" > /dev/null 2>&1; then
+            echo "Release ${TAG} already exists, skipping release creation."
+            exit 0
+          fi
+          gh release create "${TAG}" \
+            --title "${TAG}" \
+            --notes-file /tmp/release_notes.md \
+            --target "${{ github.event.pull_request.merge_commit_sha }}"
