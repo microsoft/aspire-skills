@@ -1,0 +1,127 @@
+# SPDX-License-Identifier: MIT
+#
+# Full eval suite.
+#
+# Runs every Monday at 08:00 UTC and on-demand. NEVER triggered by a PR.
+# Catches regressions outside the p0 set without paying the cost per PR.
+#
+# SECURITY:
+#   - `schedule` + `workflow_dispatch` only.
+#   - Same SHA pins, version pin, scoped permissions as eval-p0.yml.
+
+name: Eval (full)
+
+on:
+  schedule:
+    - cron: "0 8 * * 1" # Mondays 08:00 UTC
+  workflow_dispatch:
+    inputs:
+      tags:
+        description: "Optional --tags filter (blank = all tasks)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eval-full
+  cancel-in-progress: false
+
+env:
+  WAZA_VERSION: "v0.28.0"
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      # actions/checkout@v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install waza ${{ env.WAZA_VERSION }}
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://raw.githubusercontent.com/microsoft/waza/${WAZA_VERSION}/install.sh" -o /tmp/waza-install.sh
+          bash /tmp/waza-install.sh
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+          rm /tmp/waza-install.sh
+
+      # actions/cache@v4.2.0
+      - uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57
+        with:
+          path: .waza-cache
+          key: waza-cache-full-${{ env.WAZA_VERSION }}-${{ hashFiles('skills/**', 'evals/**') }}
+          restore-keys: |
+            waza-cache-full-${{ env.WAZA_VERSION }}-
+
+      - name: Run full eval suite
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAGS_FILTER: ${{ inputs.tags }}
+        run: |
+          set -euo pipefail
+          mkdir -p eval-results
+          TAG_FLAG=""
+          if [ -n "${TAGS_FILTER:-}" ]; then
+            TAG_FLAG="--tags ${TAGS_FILTER}"
+          fi
+          waza run --discover \
+            --context-dir evals \
+            --parallel \
+            ${TAG_FLAG} \
+            --reporter junit:eval-results/junit.xml \
+            -o eval-results/results.json
+
+      # actions/upload-artifact@v4.4.3
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
+        if: always()
+        with:
+          name: eval-full-${{ github.run_id }}
+          path: eval-results/
+          retention-days: 90
+
+      - name: Open / update tracking issue on failure
+        if: failure()
+        # actions/github-script@v7.0.1
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          script: |
+            const title = "Full eval regression";
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              `Scheduled full eval run failed.`,
+              ``,
+              `- Run: ${runUrl}`,
+              `- SHA: \`${context.sha}\``,
+              `- Triggered by: \`${context.eventName}\``,
+              ``,
+              `Investigate the per-task results in the \`eval-full-${context.runId}\` artifact.`
+            ].join("\n");
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: "eval-regression",
+              state: "open"
+            });
+            if (existing.data.length > 0) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.data[0].number,
+                body
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ["eval-regression"]
+              });
+            }

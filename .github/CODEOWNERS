@@ -1,2 +1,11 @@
 # Aspire Skills Plugin
 * @spboyer
+
+# CI / workflow integrity — security-sensitive, require owner review
+/.github/workflows/    @spboyer
+/.github/scripts/      @spboyer
+/.github/CODEOWNERS    @spboyer
+
+# Eval suite — prompt-injection surface, require owner review on fixture changes
+/evals/                @spboyer
+/skills/*/evals/       @spboyer

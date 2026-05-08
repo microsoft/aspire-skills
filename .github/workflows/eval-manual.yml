@@ -1,0 +1,145 @@
+# SPDX-License-Identifier: MIT
+#
+# Manual eval runner.
+#
+# Used by maintainers to run evals against a fork PR's specific SHA after
+# reviewing the diff. Triggered explicitly via the Actions UI.
+#
+# SECURITY:
+#   - `workflow_dispatch` only — never auto-triggered.
+#   - Maintainer pastes the SHA they reviewed; checkout uses that SHA, NOT a
+#     mutable branch name. This prevents the "approve then force-push" attack
+#     class that the labeled-PR-run pattern is vulnerable to.
+#   - `permissions` are scoped per job; PR-comment job is split out.
+#   - Same waza version pin and SHA pins as eval-p0.yml.
+
+name: Eval (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to comment on (optional)"
+        required: false
+        type: string
+      head_sha:
+        description: "Exact commit SHA to evaluate (REQUIRED — review this diff first)"
+        required: true
+        type: string
+      tags:
+        description: "waza --tags filter (default: p0)"
+        required: false
+        type: string
+        default: "p0"
+      model:
+        description: "Override model (blank = use eval.yaml default)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eval-manual-${{ inputs.head_sha }}
+  cancel-in-progress: false
+
+env:
+  WAZA_VERSION: "v0.28.0"
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      summary: ${{ steps.summarize.outputs.summary }}
+    steps:
+      # actions/checkout@v4.2.2
+      # Pin to the exact SHA the maintainer reviewed; no branch resolution.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ inputs.head_sha }}
+          persist-credentials: false
+
+      - name: Install waza ${{ env.WAZA_VERSION }}
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://raw.githubusercontent.com/microsoft/waza/${WAZA_VERSION}/install.sh" -o /tmp/waza-install.sh
+          bash /tmp/waza-install.sh
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+          rm /tmp/waza-install.sh
+
+      - name: Run evals
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MODEL_OVERRIDE: ${{ inputs.model }}
+        run: |
+          set -euo pipefail
+          mkdir -p eval-results
+          MODEL_FLAG=""
+          if [ -n "${MODEL_OVERRIDE}" ]; then
+            MODEL_FLAG="--model ${MODEL_OVERRIDE}"
+          fi
+          waza run --discover \
+            --tags "${{ inputs.tags }}" \
+            --context-dir evals \
+            --parallel \
+            ${MODEL_FLAG} \
+            --reporter junit:eval-results/junit.xml \
+            -o eval-results/results.json
+
+      - name: Summarize
+        id: summarize
+        if: always()
+        run: |
+          python <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          path = "eval-results/results.json"
+          if not os.path.exists(path):
+              print("summary=No results.json produced.")
+          else:
+              with open(path) as f: d = json.load(f)
+              s = d.get("summary", {})
+              print(f"summary=✅ {s.get('succeeded','?')} passed · ❌ {s.get('failed','?')} failed · {s.get('total_tasks','?')} tasks")
+          PY
+
+      # actions/upload-artifact@v4.4.3
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
+        if: always()
+        with:
+          name: eval-manual-${{ inputs.head_sha }}
+          path: eval-results/
+          retention-days: 30
+
+  comment:
+    name: Post PR summary
+    needs: evaluate
+    if: always() && inputs.pr_number != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # actions/github-script@v7.0.1
+      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        with:
+          script: |
+            const summary = `${{ needs.evaluate.outputs.summary }}` || "Eval did not run.";
+            const status = `${{ needs.evaluate.result }}`;
+            const icon = status === "success" ? "✅" : "❌";
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.createComment({
+              issue_number: parseInt("${{ inputs.pr_number }}", 10),
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: [
+                `### ${icon} Eval (manual run) — ${status}`,
+                ``,
+                `Reviewed SHA: \`${{ inputs.head_sha }}\``,
+                `Tags: \`${{ inputs.tags }}\``,
+                ``,
+                summary,
+                ``,
+                `[Full results](${runUrl})`
+              ].join("\n")
+            });

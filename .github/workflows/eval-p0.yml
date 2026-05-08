@@ -1,0 +1,185 @@
+# SPDX-License-Identifier: MIT
+#
+# P0 eval workflow for aspire-skills.
+#
+# Runs the `p0`-tagged subset of the waza eval suite when a PR changes skills,
+# evals, or plugin manifests. Posts a result summary back to the PR.
+#
+# SECURITY (read this before editing):
+#   - Trigger is `pull_request` (NEVER `pull_request_target`).
+#   - The `evaluate` job runs ONLY on PRs from the same repo. Fork PRs hit the
+#     fork-skip job which posts a comment pointing at `eval-manual.yml`. This
+#     prevents secret exposure or API-quota abuse via fork PRs.
+#   - GITHUB_TOKEN is sufficient for `executor: copilot-sdk` in this org.
+#     If a dedicated entitlement token is needed later, set `secrets.COPILOT_TOKEN`
+#     and replace the env var below — DO NOT add the token to a permanent secret
+#     visible to forks.
+#   - permissions split between jobs: `evaluate` only needs `contents: read`;
+#     `comment` adds `pull-requests: write`. Keeps write scope away from the LLM step.
+#   - Third-party actions pinned to commit SHAs.
+#   - waza pinned by tag in install URL so the runner can't pull a moved binary.
+#   - Concurrency + timeout-minutes bound runtime cost.
+#
+# FUTURE: if the judge moves to Azure OpenAI, switch from GITHUB_TOKEN to OIDC
+# federated identity (`azure/login@...` with `id-token: write`). Do NOT store an
+# Azure OpenAI API key as a long-lived secret.
+
+name: Eval (p0)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "skills/**"
+      - "evals/**"
+      - ".github/plugins/**"
+      - ".github/workflows/eval-p0.yml"
+      - ".claude-plugin/**"
+      - ".cursor-plugin/**"
+      - ".plugin/**"
+      - "gemini-extension.json"
+      - ".mcp.json"
+      - "copilot-hooks.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eval-p0-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  WAZA_VERSION: "v0.28.0"
+
+jobs:
+  fork-skip:
+    name: Skip on fork PR
+    if: github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      # actions/github-script@v7.0.1
+      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: [
+                "🛈 **Eval (p0)** is restricted to internal PRs for security reasons (prompt-injection / secret exposure).",
+                "",
+                "A maintainer will review this diff and run evals manually via the",
+                "[`Eval (manual)`](../actions/workflows/eval-manual.yml) workflow against the reviewed SHA.",
+                "",
+                "See [docs/ci.md](../blob/main/docs/ci.md) for the fork-PR flow."
+              ].join("\n")
+            });
+
+  evaluate:
+    name: waza --tags p0
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      summary: ${{ steps.summarize.outputs.summary }}
+      passed: ${{ steps.summarize.outputs.passed }}
+    steps:
+      # actions/checkout@v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install waza ${{ env.WAZA_VERSION }}
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://raw.githubusercontent.com/microsoft/waza/${WAZA_VERSION}/install.sh" -o /tmp/waza-install.sh
+          bash /tmp/waza-install.sh
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+          rm /tmp/waza-install.sh
+
+      - name: Verify waza
+        run: waza -v
+
+      # actions/cache@v4.2.0
+      - uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57
+        with:
+          path: .waza-cache
+          key: waza-cache-${{ env.WAZA_VERSION }}-${{ hashFiles('skills/**', 'evals/**') }}
+          restore-keys: |
+            waza-cache-${{ env.WAZA_VERSION }}-
+
+      - name: Run p0 evals
+        env:
+          # GITHUB_TOKEN is read-only on this trigger and is the auth source for
+          # `executor: copilot-sdk`. Do not echo or log this value.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p eval-results
+          waza run --discover \
+            --tags p0 \
+            --context-dir evals \
+            --parallel \
+            --reporter junit:eval-results/junit.xml \
+            -o eval-results/results.json
+
+      - name: Summarize results
+        id: summarize
+        if: always()
+        run: |
+          python <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os, sys
+          path = "eval-results/results.json"
+          if not os.path.exists(path):
+              print("summary=Eval did not produce results.json (see job log).")
+              print("passed=false")
+              sys.exit(0)
+          with open(path) as f:
+              data = json.load(f)
+          s = data.get("summary", {})
+          succ = s.get("succeeded", s.get("passed", "?"))
+          fail = s.get("failed", "?")
+          total = s.get("total_tasks", s.get("total", "?"))
+          rate = s.get("pass_rate", "?")
+          print(f"summary=✅ {succ} passed · ❌ {fail} failed · {total} tasks · pass_rate={rate}")
+          print(f"passed={'true' if fail in (0, '0') else 'false'}")
+          PY
+
+      # actions/upload-artifact@v4.4.3
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
+        if: always()
+        with:
+          name: eval-p0-results
+          path: eval-results/
+          retention-days: 30
+
+  comment:
+    name: Post PR summary
+    needs: evaluate
+    if: always() && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # actions/github-script@v7.0.1
+      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        with:
+          script: |
+            const summary = `${{ needs.evaluate.outputs.summary }}` || "Eval did not run.";
+            const status = `${{ needs.evaluate.result }}`;
+            const icon = status === "success" ? "✅" : status === "failure" ? "❌" : "⚠️";
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: [
+                `### ${icon} Eval (p0) — ${status}`,
+                "",
+                summary,
+                "",
+                `[Full results & JUnit report](${runUrl})`
+              ].join("\n")
+            });

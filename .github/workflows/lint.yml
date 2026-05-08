@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: MIT
+#
+# Lint workflow for aspire-skills.
+#
+# Safe to run on PRs from forks: no LLM calls, no secrets accessed.
+# Performs structural validation of every skill + eval suite.
+#
+# SECURITY:
+#   - Uses `pull_request` (NOT `pull_request_target`). Default GITHUB_TOKEN is
+#     read-only on fork PRs.
+#   - permissions are scoped to `contents: read`. No write access required.
+#   - Third-party actions pinned to commit SHAs (Dependabot will keep current).
+
+name: Lint
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  structural-lint:
+    name: Skill / eval structure
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # actions/checkout@v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      # actions/setup-python@v5.3.0
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        run: pip install --quiet "pyyaml==6.0.2"
+
+      - name: Run structural lint
+        run: python .github/scripts/lint_skills.py
+
+  markdown-lint:
+    name: SKILL.md frontmatter
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # actions/checkout@v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      # actions/setup-node@v4.1.0
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af
+        with:
+          node-version: "20"
+
+      - name: Install markdownlint-cli2
+        run: npm install --global markdownlint-cli2@0.15.0
+
+      - name: Lint SKILL.md files
+        run: markdownlint-cli2 "skills/**/SKILL.md" "docs/**/*.md" || true
+        # NOTE: failures are reported but non-blocking until we agree a config.
+        # Remove `|| true` once `.markdownlint.json` is added in a follow-up.
