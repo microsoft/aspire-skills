@@ -1,29 +1,35 @@
 skill: aspire
 
 should_trigger_prompts:
-  - prompt: "Start my Aspire app"
-    reason: "Aspire lifecycle"
+  - prompt: "Run aspire start on my AppHost"
+    reason: "Direct aspire CLI invocation"
     confidence: high
-  - prompt: "Deploy my distributed app"
-    reason: "Aspire deployment"
+  - prompt: "Deploy my Aspire distributed app"
+    reason: "Aspire deployment lifecycle"
     confidence: high
-  - prompt: "Check the logs from my AppHost resources"
+  - prompt: "Check the aspire logs from my AppHost resources"
     reason: "Aspire monitoring"
     confidence: high
-  - prompt: "I have an Aspire.AppHost.Sdk project"
-    reason: "AppHost detection"
+  - prompt: "I have an Aspire.AppHost.Sdk project — how do I run it?"
+    reason: "AppHost detection via SDK reference"
     confidence: high
   - prompt: "How do I use the aspire CLI?"
-    reason: "Direct Aspire reference"
+    reason: "Direct aspire CLI reference"
     confidence: high
-  - prompt: "Add Redis to my cloud-native .NET app"
-    reason: "Integration is Aspire workflow"
+  - prompt: "Add Redis to my cloud-native .NET Aspire app"
+    reason: "Cloud-native .NET integration is the Aspire workflow"
     confidence: high
   - prompt: "My apphost.ts file needs updating"
-    reason: "TypeScript AppHost"
+    reason: "TypeScript AppHost detection"
     confidence: high
   - prompt: "Run aspire doctor to check my setup"
-    reason: "Direct CLI command"
+    reason: "Direct aspire CLI command"
+    confidence: high
+  - prompt: "Run aspire init to add Aspire to this repo"
+    reason: "aspire init is part of the Aspire workflow"
+    confidence: high
+  - prompt: "Run aspire destroy to tear down my deployment"
+    reason: "aspire destroy is part of the Aspire workflow"
     confidence: high
 
 should_not_trigger_prompts:

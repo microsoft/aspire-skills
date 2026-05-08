@@ -4,13 +4,13 @@ should_trigger_prompts:
   - prompt: "Add Aspire to this Express + .NET API repo"
     reason: "Existing repo without AppHost — first-run init flow"
     confidence: high
-  - prompt: "Scaffold a new Aspire app"
+  - prompt: "Scaffold a new Aspire app from scratch"
     reason: "Brand-new project — aspire new template selection"
     confidence: high
-  - prompt: "I want to start a new distributed app"
-    reason: "Greenfield Aspire project — aspire new"
+  - prompt: "Bootstrap Aspire into this directory"
+    reason: "Bootstrap = aspire init/new flow"
     confidence: high
-  - prompt: "Run aspire new aspire-starter"
+  - prompt: "Run aspire new aspire-starter to create a new project"
     reason: "Direct template scaffold request"
     confidence: high
   - prompt: "Run aspire init in this repo"
@@ -19,10 +19,10 @@ should_trigger_prompts:
   - prompt: "Bootstrap Aspire into my FastAPI project"
     reason: "Existing Python repo needing AppHost — aspire init or aspire-py-starter"
     confidence: high
-  - prompt: "Create a new Aspire TypeScript starter"
+  - prompt: "Create a new Aspire TypeScript starter app"
     reason: "Greenfield TS AppHost — aspire new aspire-ts-starter"
     confidence: high
-  - prompt: "How do I install the aspireify skill?"
+  - prompt: "How do I install the aspireify skill via aspire init?"
     reason: "aspireify is installed via aspire init / aspire agent init — init flow owns it"
     confidence: medium
 
@@ -40,7 +40,7 @@ should_not_trigger_prompts:
     reason: "Resource wiring on an existing AppHost routes to aspireify, not aspire-init"
     confidence: high
   - prompt: "Add a Redis integration to my AppHost"
-    reason: "aspire add on an existing AppHost routes to aspire-orchestration"
+    reason: "aspire add on an existing AppHost routes to aspireify"
     confidence: high
   - prompt: "Restart my database resource"
     reason: "Resource lifecycle routes to aspire-orchestration"

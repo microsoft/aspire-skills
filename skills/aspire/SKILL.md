@@ -1,18 +1,17 @@
 ---
 name: aspire
 description: >-
-  **WORKFLOW SKILL** - Top-level router for Aspire 13.3 distributed applications. Detects
-  Aspire projects, enforces safety guardrails, and routes to the correct sub-skill.
-  USE FOR: Aspire AppHost detected, aspire CLI, distributed app, cloud-native .NET, AppHost
-  project, aspire start, aspire deploy, aspire destroy, aspire publish, aspire logs,
-  aspire otel, aspire dashboard run, aspire init, aspire new, aspire update, aspire add,
-  aspire wait, aspire describe, aspire ps, aspire doctor, aspireify, WithBrowserLogs,
-  --include-hidden.
-  DO NOT USE FOR: non-Aspire .NET projects (use standard dotnet commands), Azure resource
-  provisioning without Aspire (use azure-prepare), container-only repos with no AppHost.
-  INVOKES: aspire-init, aspireify, aspire-orchestration, aspire-deployment,
-  aspire-monitoring skills.
-  FOR SINGLE OPERATIONS: Route directly to the appropriate sub-skill.
+  **WORKFLOW SKILL** - Top-level router for Aspire 13.3 distributed apps. Detects the
+  AppHost, enforces safety guardrails, and routes to the right sub-skill.
+  USE FOR: Aspire AppHost detected, aspire CLI, distributed app, cloud-native .NET,
+  aspire start, aspire stop, aspire deploy, aspire destroy, aspire publish, aspire init,
+  aspire new, aspire add, aspire wait, aspire describe, aspire ps, aspire dashboard run,
+  aspire doctor, aspire update, aspire logs, aspire otel, --include-hidden, aspireify,
+  WithBrowserLogs.
+  DO NOT USE FOR: non-Aspire .NET projects (use dotnet directly), Azure provisioning
+  without Aspire (use azure-prepare), container-only repos with no AppHost.
+  INVOKES: aspire-init, aspireify, aspire-orchestration, aspire-deployment, aspire-monitoring.
+  FOR SINGLE OPERATIONS: Route directly to the matching sub-skill.
 license: MIT
 metadata:
   author: Microsoft

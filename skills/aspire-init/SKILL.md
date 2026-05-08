@@ -2,17 +2,16 @@
 name: aspire-init
 description: >-
   **WORKFLOW SKILL** - First-run flow for adding Aspire to a repo. Picks `aspire new`
-  (greenfield) or `aspire init` (existing repo), drops the AppHost skeleton, and hands off
-  to `aspireify` for wiring.
-  USE FOR: aspire init, aspire new, aspire-starter, aspire-py-starter, add Aspire to existing
-  repo, scaffold Aspire app, no AppHost detected, install aspireify.
-  DO NOT USE FOR: AppHost wiring (use aspireify), start/stop/wait (use aspire-orchestration),
-  deploy or publish (use aspire-deployment), logs or traces (use aspire-monitoring), repo with
-  existing AppHost.
-  INVOKES: aspire CLI (init, new, doctor), aspireify (handoff), aspire-orchestration
-  (validate).
-  FOR SINGLE OPERATIONS: Run `aspire init` or `aspire new TEMPLATE` directly when language
-  is chosen.
+  (greenfield) or `aspire init` (existing repo), drops the AppHost skeleton, then hands
+  off to `aspireify` for resource wiring.
+  USE FOR: aspire init, aspire new, aspire-starter, aspire-ts-starter, aspire-py-starter,
+  add Aspire to existing repo, scaffold Aspire app, bootstrap Aspire, no AppHost detected,
+  install aspireify.
+  DO NOT USE FOR: AppHost wiring on an existing AppHost (use aspireify), start/stop/wait
+  (use aspire-orchestration), deploy/publish (use aspire-deployment), logs/traces (use
+  aspire-monitoring), repo that already has an AppHost.
+  INVOKES: aspire CLI (init, new, doctor), aspireify (handoff after skeleton drop).
+  FOR SINGLE OPERATIONS: Run `aspire init` or `aspire new TEMPLATE` directly.
 license: MIT
 metadata:
   author: Microsoft

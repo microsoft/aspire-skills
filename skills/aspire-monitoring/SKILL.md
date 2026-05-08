@@ -1,18 +1,17 @@
 ---
 name: aspire-monitoring
 description: >-
-  **ANALYSIS SKILL** - Observe Aspire applications: logs, traces, metrics, resource state,
-  telemetry export, browser console telemetry, and standalone dashboard. Routes between local
-  Aspire CLI, AKS workload diagnostics, and Azure resource health.
-  USE FOR: aspire logs, aspire otel logs/traces/spans, aspire describe, aspire export, aspire
-  ps, aspire dashboard run, --include-hidden, browser logs in dashboard, WithBrowserLogs,
-  App Insights query, AKS pod logs, container app logs, notification center, Rebuild command.
-  DO NOT USE FOR: starting/stopping apps (use aspire-orchestration), deploy/publish (use
+  **ANALYSIS SKILL** - Observe Aspire 13.3 apps: logs, traces, metrics, resource state,
+  telemetry export, browser telemetry, and the standalone dashboard. Routes between local
+  Aspire CLI, AKS workload diagnostics, and deployed Azure resource health.
+  USE FOR: aspire logs, aspire otel logs, aspire otel traces, aspire otel spans, aspire
+  describe, aspire ps, aspire export, aspire dashboard run, --include-hidden, browser logs
+  in dashboard, WithBrowserLogs, App Insights query, AKS pod logs, container app logs.
+  DO NOT USE FOR: start/stop/wait (use aspire-orchestration), deploy/publish/destroy (use
   aspire-deployment), AppHost code edits like WithBrowserLogs() (use aspireify), Azure
   provisioning (use azure-prepare).
-  INVOKES: aspire CLI, azure-diagnostics (deployed Azure), kubectl + Container Insights (AKS),
-  aspireify (AppHost edits).
-  FOR SINGLE OPERATIONS: Use aspire CLI directly for quick log or describe lookups.
+  INVOKES: aspire CLI, azure-diagnostics (deployed Azure), kubectl + Container Insights.
+  FOR SINGLE OPERATIONS: Run the aspire CLI command directly for quick log or describe lookups.
 license: MIT
 metadata:
   author: Microsoft

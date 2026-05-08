@@ -1,62 +1,62 @@
 skill: aspire-monitoring
 
 should_trigger_prompts:
-  - prompt: "Show me the logs for the API service"
-    reason: "Logs are monitoring"
+  - prompt: "Show me the aspire logs for the API service"
+    reason: "aspire logs is monitoring"
     confidence: high
-  - prompt: "I need to check the distributed traces"
-    reason: "Traces are monitoring"
+  - prompt: "Run aspire otel traces to view distributed traces"
+    reason: "aspire otel traces is monitoring"
     confidence: high
-  - prompt: "What's the health status of my resources?"
-    reason: "Resource state is monitoring"
+  - prompt: "Run aspire describe to see resource state"
+    reason: "Resource state via aspire describe is monitoring"
     confidence: high
-  - prompt: "Export the telemetry data"
+  - prompt: "Run aspire export to bundle telemetry"
     reason: "Telemetry export is monitoring"
     confidence: high
-  - prompt: "Something is failing in production, check App Insights"
-    reason: "Deployed monitoring routes through this skill"
+  - prompt: "Query App Insights for my deployed Aspire app"
+    reason: "App Insights query routes through monitoring bridge"
     confidence: high
-  - prompt: "Show me the OpenTelemetry spans"
+  - prompt: "Show me the OpenTelemetry spans with aspire otel spans"
     reason: "OTEL spans are monitoring"
     confidence: high
-  - prompt: "The dashboard is showing errors"
-    reason: "Dashboard issues are monitoring"
+  - prompt: "Tail the container app logs for my deployed Aspire service"
+    reason: "Deployed container app logs route through monitoring bridge"
     confidence: high
-  - prompt: "What endpoints are available?"
-    reason: "Endpoint discovery via aspire describe"
+  - prompt: "Run aspire dashboard run to open a standalone dashboard"
+    reason: "aspire dashboard run is a monitoring concern"
     confidence: high
-  - prompt: "Check the container app logs for my deployed service"
-    reason: "Deployed logs route through monitoring bridge"
-    confidence: high
-  - prompt: "Open the standalone dashboard"
-    reason: "aspire dashboard run is a monitoring/dashboard concern"
-    confidence: high
-  - prompt: "Run the dashboard without an AppHost"
-    reason: "Standalone dashboard via aspire dashboard run"
-    confidence: high
-  - prompt: "View browser console logs in the dashboard"
+  - prompt: "View browser console logs in the Aspire dashboard"
     reason: "Aspire.Hosting.Browsers / WithBrowserLogs surfaces in dashboard"
     confidence: high
-  - prompt: "I can't find a resource in aspire ps"
+  - prompt: "I can't find my proxy resource in aspire ps — try --include-hidden"
     reason: "Hidden-by-default in 13.3; requires --include-hidden"
+    confidence: high
+  - prompt: "Tail AKS pod logs for my deployed Aspire service"
+    reason: "AKS pod log routing lives in monitoring"
     confidence: high
 
 should_not_trigger_prompts:
   - prompt: "Start my Aspire app"
     reason: "Start routes to aspire-orchestration"
     confidence: high
-  - prompt: "Deploy to Azure"
+  - prompt: "Deploy my Aspire app to Azure"
     reason: "Deploy routes to aspire-deployment"
     confidence: high
   - prompt: "Restart the Redis resource"
     reason: "Resource restart routes to aspire-orchestration"
     confidence: high
-  - prompt: "Add PostgreSQL to my app"
-    reason: "Adding integrations routes to aspire-orchestration"
+  - prompt: "Add PostgreSQL to my Aspire AppHost"
+    reason: "Adding integrations routes to aspireify"
     confidence: high
   - prompt: "Create an Azure storage account"
     reason: "Non-Aspire Azure work"
     confidence: high
   - prompt: "Write unit tests for my service"
     reason: "Not monitoring related"
+    confidence: high
+  - prompt: "Tear down my Aspire deployment with aspire destroy"
+    reason: "aspire destroy routes to aspire-deployment"
+    confidence: high
+  - prompt: "Add WithBrowserLogs() to my Vite app in the AppHost"
+    reason: "AppHost code edits route to aspireify (monitoring only observes)"
     confidence: high

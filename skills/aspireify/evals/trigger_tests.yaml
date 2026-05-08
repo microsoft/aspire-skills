@@ -1,33 +1,39 @@
 skill: aspireify
 
 should_trigger_prompts:
-  - prompt: "Wire up my AppHost"
+  - prompt: "Wire up my Aspire AppHost"
     reason: "Direct wiring request — aspireify owns AppHost wiring"
     confidence: high
-  - prompt: "Add Postgres to my Aspire app"
+  - prompt: "Add Postgres to my Aspire AppHost"
     reason: "Adding an integration resource to AppHost is wiring"
     confidence: high
-  - prompt: "Scaffold the resource graph"
+  - prompt: "Scaffold the resource graph for my Aspire app"
     reason: "Resource graph scaffolding is the core aspireify flow"
     confidence: high
-  - prompt: "After running aspire init, what next?"
+  - prompt: "After running aspire init, what next to wire my AppHost?"
     reason: "aspire init drops a skeleton; aspireify completes the wiring"
     confidence: high
-  - prompt: "Connect my React frontend to my .NET API"
+  - prompt: "Connect my React frontend to my .NET API in the AppHost"
     reason: "Wiring service references between projects in the AppHost"
     confidence: high
-  - prompt: "Add Redis cache to my Aspire app"
+  - prompt: "Add Redis cache to my Aspire AppHost"
     reason: "Integration discovery + AppHost edit"
     confidence: high
-  - prompt: "Add browser logs to my Vite app"
+  - prompt: "Add WithBrowserLogs to my Vite app in apphost.ts"
     reason: "WithBrowserLogs is an AppHost authoring change"
     confidence: high
-  - prompt: "Help me use the unified withEnvironment API in my apphost.ts"
+  - prompt: "Help me use the unified withEnvironment API in apphost.ts"
     reason: "TS AppHost authoring is aspireify"
+    confidence: high
+  - prompt: "Edit .modules/postgres.module.ts to change the DB config"
+    reason: "Refuse-and-redirect anti-pattern handling lives in aspireify"
+    confidence: high
+  - prompt: "Add AddNextJsApp to my AppHost for the web frontend"
+    reason: "AddNextJsApp wiring is aspireify"
     confidence: high
 
 should_not_trigger_prompts:
-  - prompt: "Deploy my app to Azure"
+  - prompt: "Deploy my Aspire app to Azure"
     reason: "Deployment routes to aspire-deployment"
     confidence: high
   - prompt: "Start my Aspire app"
@@ -47,4 +53,7 @@ should_not_trigger_prompts:
     confidence: high
   - prompt: "Open the Aspire dashboard"
     reason: "Dashboard / monitoring routes to aspire-monitoring"
+    confidence: high
+  - prompt: "Run aspire init to scaffold a new AppHost"
+    reason: "aspire init (skeleton drop) routes to aspire-init"
     confidence: high

@@ -1,45 +1,42 @@
 skill: aspire-orchestration
 
 should_trigger_prompts:
+  - prompt: "Run aspire start on my AppHost"
+    reason: "Direct aspire start invocation — orchestration"
+    confidence: high
   - prompt: "Start my Aspire app"
     reason: "Direct start request"
     confidence: high
-  - prompt: "I need to run the AppHost"
-    reason: "AppHost execution implies orchestration"
+  - prompt: "Run aspire stop to clean up"
+    reason: "aspire stop is orchestration"
     confidence: high
-  - prompt: "My build is failing with file lock errors"
-    reason: "File lock = Aspire holding locks, core #15801 scenario"
+  - prompt: "I'm getting MSB3491 file lock errors building my Aspire project"
+    reason: "Exact MSB3491 error code — file-lock recovery scenario"
     confidence: high
-  - prompt: "How do I restart just the API service?"
+  - prompt: "CS2012 — Cannot open file for writing while Aspire is running"
+    reason: "Exact CS2012 error code — file-lock recovery"
+    confidence: high
+  - prompt: "How do I restart just the API service in Aspire?"
     reason: "Single resource restart is orchestration"
     confidence: high
-  - prompt: "Something is using port 5000 already"
-    reason: "Port conflict = orphaned Aspire instance"
+  - prompt: "Port 5000 is already in use after I ran aspire start"
+    reason: "Port conflict = orphaned Aspire instance — orchestration"
     confidence: high
-  - prompt: "Wait for the database to be ready"
-    reason: "Resource wait is orchestration"
+  - prompt: "Run aspire wait on my postgres resource"
+    reason: "aspire wait is orchestration"
     confidence: high
-  - prompt: "Stop everything, I'm done"
-    reason: "Cleanup is orchestration"
-    confidence: high
-  - prompt: "The app won't start, something is wrong with my environment"
-    reason: "aspire doctor is orchestration"
-    confidence: high
-  - prompt: "upgrade my Aspire CLI"
+  - prompt: "Upgrade my Aspire CLI with aspire update --self"
     reason: "aspire update --self is orchestration (CLI lifecycle)"
     confidence: high
-  - prompt: "I see proxies missing in aspire ps"
+  - prompt: "I see proxies missing in aspire ps — why?"
     reason: "Hidden-resource filtering = --include-hidden guidance lives in orchestration"
     confidence: high
   - prompt: "Run my apphost.cs file"
-    reason: "File-based C# AppHost should trigger orchestration"
-    confidence: high
-  - prompt: "I need to look up the API for AddPostgres in Aspire"
-    reason: "API lookup is orchestration (docs-first pattern)"
+    reason: "File-based C# AppHost should trigger orchestration (start/run lifecycle)"
     confidence: high
 
 should_not_trigger_prompts:
-  - prompt: "Deploy my app to Azure"
+  - prompt: "Deploy my Aspire app to Azure"
     reason: "Deployment routes to aspire-deployment"
     confidence: high
   - prompt: "Show me the application logs"
@@ -48,7 +45,7 @@ should_not_trigger_prompts:
   - prompt: "Check the distributed traces"
     reason: "Traces route to aspire-monitoring"
     confidence: high
-  - prompt: "Publish deployment artifacts"
+  - prompt: "Publish deployment artifacts with aspire publish"
     reason: "Publish routes to aspire-deployment"
     confidence: high
   - prompt: "What's the weather today?"
@@ -63,18 +60,18 @@ should_not_trigger_prompts:
   - prompt: "Check my App Insights metrics for the deployed app"
     reason: "Deployed diagnostics routes to azure-diagnostics"
     confidence: high
-  - prompt: "wire up my AppHost with the API and Postgres"
-    reason: "AppHost wiring (resource selection + AppHost edits) is owned by aspireify, not orchestration"
+  - prompt: "Wire up my AppHost with the API and Postgres"
+    reason: "AppHost wiring (resource selection + AppHost edits) is owned by aspireify"
     confidence: high
-  - prompt: "scan my repo and add the right resources to apphost.cs"
+  - prompt: "Scan my repo and add the right resources to apphost.cs"
     reason: "Repo scanning + AppHost edits route to aspireify"
     confidence: high
-  - prompt: "configure ServiceDefaults and OTel for my services"
+  - prompt: "Configure ServiceDefaults and OTel for my services"
     reason: "ServiceDefaults / OTel wiring routes to aspireify"
     confidence: high
-  - prompt: "tear down my Aspire deployment in Azure"
+  - prompt: "Tear down my Aspire deployment in Azure"
     reason: "aspire destroy routes to aspire-deployment"
     confidence: high
-  - prompt: "run the Aspire dashboard standalone"
+  - prompt: "Run aspire dashboard run standalone"
     reason: "aspire dashboard run routes to aspire-monitoring"
     confidence: high
