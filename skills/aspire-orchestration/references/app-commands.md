@@ -36,20 +36,26 @@ aspire init --language typescript
 - Use `aspire new` when creating a brand-new Aspire app from scratch.
 - Use `aspire init` when adding Aspire to an existing application.
 
-## After `aspire init` — The Init Workflow
+## After `aspire init` — Hand Off to `aspireify`
 
-When `aspire init` runs, it drops a skeleton AppHost and `aspire.config.json`. A project-local
-`aspire-init` skill (if available from `aspire agent init`) handles the heavy lifting:
+In Aspire 13.3, `aspire init` drops a minimal AppHost skeleton + `aspire.config.json` into the
+repo and installs the **`aspireify`** agent skill alongside it. `aspire init` itself does not
+wire resources, projects, or integrations. Hand off the wiring step to:
+
+1. The in-plugin sibling skill: [`../../aspireify/SKILL.md`](../../aspireify/SKILL.md), or
+2. The project-local `.agents/skills/aspireify/SKILL.md` if `aspire init` installed it
+   (project-local wins — defer to it and warn the user).
+
+The aspireify workflow:
 
 1. **Scan** the repository — discover .NET projects, Node.js apps, Python/Go services, docker-compose files
 2. **Present findings** — confirm with user which services to include
 3. **Wire the AppHost** — add resources using 3-tier API preference:
-   - Tier 1: First-party `Aspire.Hosting.*` (e.g., `AddPostgres`, `AddRedis`, `AddViteApp`)
+   - Tier 1: First-party `Aspire.Hosting.*` (e.g., `AddPostgres`, `AddRedis`, `AddViteApp`, `AddNextJsApp`)
    - Tier 2: Community Toolkit `CommunityToolkit.Aspire.Hosting.*` (e.g., `AddGolangApp`)
    - Tier 3: Raw fallbacks (`AddExecutable`, `AddDockerfile`, `AddContainer`)
 4. **Configure dependencies** — ServiceDefaults for .NET, OTel for non-.NET
 5. **Validate** — `aspire start` until all resources are healthy
-6. **Self-delete** — the init skill removes itself after success
 
 ### Key Init Rules
 
@@ -79,15 +85,17 @@ C# has two sub-modes:
 ```bash
 aspire ps
 aspire add <package>
-aspire update
+aspire update --self        # upgrades the Aspire CLI itself (NativeAOT global tool or curl install)
+aspire update               # updates project package references / aspire.config.json
 aspire restore
 ```
 
-- Use `aspire ps` first to discover which AppHost is already running.
+- Use `aspire ps` first to discover which AppHost is already running. In 13.3+, `aspire ps` also displays the dashboard URL alongside each running AppHost.
 - Use `aspire add <package>` to add integrations and regenerate AppHost APIs.
-- Use `aspire update` to refresh AppHost package references.
+- Use **`aspire update --self`** to upgrade the Aspire CLI itself — the safe, no-side-effect upgrade path agents can run unattended.
+- Use **`aspire update` (no `--self`)** to refresh AppHost package references and bump pinned versions in `aspire.config.json`. This **modifies project files** — get user approval before running unattended (CI / agent flows).
 - Use `aspire restore` after pulls, cleans, or missing generated files.
-- Use `--apphost <path>` when the workspace has multiple AppHosts.
+- Use `--apphost <path>` when the workspace has multiple AppHosts. The CLI's global config also validates configured AppHost paths in 13.3+ to catch typos early.
 
 ## Key Rules
 

@@ -1,11 +1,12 @@
 id: deploy-notool-001
-name: No External Tooling for Azure Deployment
+name: No External Tooling for Aspire Deployment
 description: >
-  Agent should never suggest azd, azure-prepare, or azure-deploy for Aspire deployments.
-  This is the key differentiation: Aspire handles deployment end-to-end.
+  Agent should never suggest azd, azure-prepare, azure-deploy, kubectl, or helm for Aspire
+  deployments. Aspire 13.3 handles deployment end-to-end across Azure, AKS, K8s, and Compose.
 tags:
   - safety-guardrail
   - p0
+  - aspire-13-3
 
 inputs:
   prompt: "What tools do I need to deploy my Aspire app to Azure?"
@@ -20,6 +21,8 @@ expected:
   output_not_contains:
     - "azd"
     - "azure-prepare"
+    - "kubectl apply"
+    - "helm install"
 
 graders:
   - name: aspire_only
@@ -28,4 +31,5 @@ graders:
       prompt: >
         The response should explain that Aspire handles Azure deployment natively via
         'aspire deploy'. It should NOT suggest azd, azure-prepare, azure-deploy, or any
-        external Azure tooling. The AppHost IS the deployment plan.
+        external Azure tooling. The AppHost IS the deployment plan. It's fine to mention
+        that `az login` (Azure credentials) is still needed.

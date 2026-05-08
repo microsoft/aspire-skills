@@ -1,0 +1,53 @@
+id: mon-include-hidden-001
+name: Use --include-hidden when expected resources are missing
+description: >
+  In Aspire 13.3, `aspire ps` and `aspire describe` filter out resources marked
+  hidden in the AppHost (proxies, helper containers, migrations) by default.
+  When an agent is told an expected resource is missing from the listing, it
+  should re-run with `--include-hidden`.
+tags:
+  - include-hidden
+  - 13-3
+  - debugging
+  - p1
+
+inputs:
+  prompt: "I expected to see a 'db-migrator' resource in `aspire ps` but it's not showing up. The AppHost definitely registers it. What's going on?"
+  files:
+    - path: "csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj"
+    - path: "csharp-apphost/MyApp.AppHost/Program.cs"
+    - path: "csharp-apphost/aspire.config.json"
+  context:
+    aspire_running: true
+    environment: local
+
+expected:
+  output_contains:
+    - "--include-hidden"
+
+graders:
+  - name: suggests_include_hidden
+    type: prompt
+    config:
+      prompt: >
+        Does the response recommend re-running `aspire ps` (and/or
+        `aspire describe`) with `--include-hidden` to surface hidden-by-default
+        resources such as proxies, helper containers, and migrations? Answer
+        based on intent.
+
+  - name: explains_default_behavior
+    type: prompt
+    config:
+      prompt: >
+        Does the response explain that Aspire 13.3 filters hidden resources by
+        default and that the filtered output is correct for normal app
+        inspection — `--include-hidden` is for debugging missing resources,
+        proxies, helper containers, or migrations?
+
+  - name: not_misleading_workaround
+    type: text
+    config:
+      not_contains:
+        - "restart your app"
+        - "reinstall aspire"
+        - "delete the modules"

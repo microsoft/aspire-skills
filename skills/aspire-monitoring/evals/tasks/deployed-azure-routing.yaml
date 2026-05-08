@@ -2,14 +2,15 @@ id: mon-azure-001
 name: Route Deployed Azure App to azure-diagnostics
 description: >
   Agent should route deployed Azure app diagnostics to azure-diagnostics skill,
-  not try to use aspire CLI.
+  not try to use aspire CLI. Includes Azure resource health surfaces added in
+  13.3 (Front Door, NSP, private endpoint).
 tags:
   - routing
   - deployed
   - p0
 
 inputs:
-  prompt: "My app is deployed to Azure Container Apps and I'm seeing 500 errors. Help me debug."
+  prompt: "My app is deployed to Azure Container Apps with Front Door in front and I'm seeing 500 errors. Help me debug."
   files:
     - path: "csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj"
     - path: "csharp-apphost/MyApp.AppHost/Program.cs"
@@ -31,8 +32,10 @@ graders:
     config:
       prompt: >
         Does the response route the user to azure-diagnostics, App Insights, or
-        platform-specific Azure monitoring tools for the deployed app? Answer based
-        on the intent, not exact string matching.
+        platform-specific Azure monitoring tools for the deployed app? It should
+        cover both the workload (Container Apps logs) and Azure resource health
+        in front of it (Front Door, App Insights, NSP, private endpoint) where
+        relevant. Answer based on the intent, not exact string matching.
   - name: no_local_commands
     type: text
     config:
@@ -43,5 +46,8 @@ graders:
     type: prompt
     config:
       prompt: >
-        The response should explain that Aspire CLI cannot connect to deployed apps
-        (local backchannel only) and route to azure-diagnostics skill or App Insights.
+        The response should explain that the Aspire CLI uses a local backchannel
+        and cannot reach deployed apps directly, then route to azure-diagnostics
+        or App Insights. It may mention `aspire otel logs --dashboard-url
+        --api-key` as the only remote-capable Aspire CLI surface (and only when
+        a Dashboard is reachable).

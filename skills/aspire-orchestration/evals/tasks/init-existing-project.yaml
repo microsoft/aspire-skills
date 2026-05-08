@@ -1,10 +1,14 @@
 id: orch-init-001
-name: Initialize Aspire In Existing Project
+name: Initialize Aspire In Existing Project — Hand Off To `aspireify`
 description: >
-  Agent should guide through aspire init workflow — use aspire init,
-  NOT manual project restructuring or dotnet workload install.
+  In Aspire 13.3, `aspire init` only drops a skeleton AppHost + `aspire.config.json` —
+  it does NOT wire resources. The agent should run `aspire init` and then hand off the
+  wiring step to the `aspireify` skill (in-plugin sibling at `../aspireify/SKILL.md`,
+  or project-local `.agents/skills/aspireify/SKILL.md` if installed by `aspire init`).
+  The agent must NOT install the obsolete Aspire workload or hand-author the AppHost.
 tags:
   - init-workflow
+  - aspireify-handoff
   - p0
 
 inputs:
@@ -18,19 +22,30 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response recommend using 'aspire init' to add Aspire to the
-        existing project? It should NOT suggest installing the Aspire workload
-        or manually creating project files from scratch.
+        Does the response recommend running `aspire init` to drop the AppHost skeleton
+        into the existing repository? It should NOT suggest installing the Aspire
+        workload (`dotnet workload install aspire`) or manually creating an AppHost
+        project from scratch.
   - name: never_workload
     type: text
     config:
       not_contains:
         - "dotnet workload install"
+  - name: hands_off_to_aspireify
+    type: prompt
+    config:
+      prompt: >
+        After running `aspire init`, does the response hand the wiring step off to the
+        `aspireify` skill (the in-plugin sibling skill, or the project-local
+        `.agents/skills/aspireify/SKILL.md` installed by `aspire init` in 13.3)?
+        The orchestration skill itself should NOT attempt to wire the AppHost — it
+        should explicitly defer to `aspireify` for repo scanning, resource selection,
+        ServiceDefaults / OTel wiring, and validation.
   - name: knows_workflow
     type: prompt
     config:
       prompt: >
-        Does the response describe or reference the init workflow — scanning
-        the repository, wiring up the AppHost with discovered services, and
-        validating with aspire start? It should convey that aspire init handles
-        the bootstrapping process.
+        Does the response describe (or reference, via aspireify) the wiring workflow:
+        scanning the repository, selecting services, adding resources to the AppHost
+        using the 3-tier API preference (first-party Aspire.Hosting.* > Community
+        Toolkit > raw fallbacks), and validating with `aspire start`?

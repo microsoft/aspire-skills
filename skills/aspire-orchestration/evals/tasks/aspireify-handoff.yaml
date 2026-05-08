@@ -1,0 +1,45 @@
+id: orch-aspireify-001
+name: Hand Off To `aspireify` After `aspire init` Skeleton Drop
+description: >
+  In Aspire 13.3, `aspire init` only drops a minimal AppHost skeleton +
+  `aspire.config.json` and installs the `aspireify` agent skill. The orchestration
+  skill must NOT attempt to wire resources itself — it should explicitly hand off
+  to either the in-plugin `aspireify` sibling skill or the project-local
+  `.agents/skills/aspireify/SKILL.md` (project-local wins, with a warning).
+tags:
+  - init-workflow
+  - aspireify-handoff
+  - p0
+
+inputs:
+  prompt: "I just ran `aspire init` in my existing Node.js + .NET repo and it created an apphost.cs and aspire.config.json. What's next? Wire up my services."
+  files:
+    - path: "non-aspire/MyApp/MyApp.csproj"
+    - path: "non-aspire/MyApp/Program.cs"
+    - path: "non-aspire/MyApp/package.json"
+
+graders:
+  - name: hands_off_to_aspireify
+    type: prompt
+    config:
+      prompt: >
+        Does the response explicitly hand the AppHost wiring step off to the
+        `aspireify` skill (in-plugin sibling at `../aspireify/SKILL.md`, OR the
+        project-local `.agents/skills/aspireify/SKILL.md` if installed by
+        `aspire init`)? The orchestration skill itself should NOT attempt to
+        scan the repo, choose resources, or edit the AppHost — it should defer
+        that work to aspireify.
+  - name: mentions_project_local_precedence
+    type: prompt
+    config:
+      prompt: >
+        Does the response acknowledge that if a project-local
+        `.agents/skills/aspireify/SKILL.md` exists, the agent should defer to
+        it (with a warning to the user) instead of using the in-plugin sibling?
+  - name: never_handauthors_apphost
+    type: text
+    config:
+      not_contains:
+        - "I'll write the AppHost"
+        - "Let me edit apphost.cs"
+        - "I'll add AddProject"

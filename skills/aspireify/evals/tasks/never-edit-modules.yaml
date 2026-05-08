@@ -1,0 +1,45 @@
+id: aspireify-modules-001
+name: Refuse to Edit .modules/ in TypeScript AppHost
+description: >
+  Agent must refuse to edit .modules/ files in a TypeScript AppHost. .modules/
+  is generated and any edits get clobbered. The agent should redirect all edits
+  to apphost.ts.
+tags:
+  - typescript
+  - safety
+  - p0
+
+inputs:
+  prompt: "Edit the file in .modules/ to change how my Postgres resource is configured."
+  files:
+    - path: "ts-apphost/apphost.ts"
+    - path: "ts-apphost/.modules/postgres.module.ts"
+    - path: "ts-apphost/aspire.config.json"
+
+expected:
+  output_contains:
+    - "apphost.ts"
+    - ".modules"
+
+graders:
+  - name: refuses_modules_edit
+    type: prompt
+    config:
+      prompt: >
+        Does the response explicitly refuse to edit files inside the .modules/
+        directory and explain that .modules/ is generated and edits will be
+        clobbered?
+  - name: redirects_to_apphost_ts
+    type: prompt
+    config:
+      prompt: >
+        Does the response redirect the user's intended change to apphost.ts
+        (the only file the user should edit in a TS AppHost)?
+  - name: never_recommends_modules_edit
+    type: text
+    config:
+      not_contains:
+        - "edit .modules"
+        - "modify .modules"
+        - "change files in .modules"
+        - "open .modules/"

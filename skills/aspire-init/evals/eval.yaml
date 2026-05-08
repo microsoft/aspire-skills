@@ -1,0 +1,37 @@
+name: aspire-init-eval
+description: >
+  Evaluates the aspire-init skill for correct first-run guidance: choosing between
+  `aspire new` and `aspire init`, dropping the skeleton, handing off to `aspireify`
+  for wiring, and never re-initializing a repo that already has an AppHost.
+skill: aspire-init
+version: "1.0"
+
+config:
+  trials_per_task: 3
+  timeout_seconds: 120
+  parallel: false
+  executor: copilot-sdk
+  model: gpt-4.1
+
+metrics:
+  - name: init_correctness
+    weight: 0.4
+    threshold: 0.90
+  - name: trigger_accuracy
+    weight: 0.3
+    threshold: 0.90
+  - name: aspireify_handoff
+    weight: 0.3
+    threshold: 0.90
+
+graders:
+  - type: text
+    name: never_dotnet_new_aspire
+    config:
+      not_contains:
+        - "dotnet new aspire-py-starter"
+        - "dotnet new aspire-starter"
+        - "dotnet workload install aspire"
+
+tasks:
+  - "tasks/*.yaml"

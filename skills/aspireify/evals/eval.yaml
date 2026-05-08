@@ -1,0 +1,46 @@
+name: aspireify-eval
+description: >
+  Evaluates the aspireify skill for correct agentic AppHost wiring guidance:
+  language-aware authoring (C#, file-based C#, TypeScript), 13.3 features
+  (unified withEnvironment, AddNextJsApp, WithBrowserLogs, ExcludeReferenceEndpoint),
+  ServiceDefaults wiring, validation flow, and proper hand-off to other Aspire skills.
+skill: aspireify
+version: "1.0"
+
+config:
+  trials_per_task: 3
+  timeout_seconds: 120
+  parallel: false
+  executor: copilot-sdk
+  model: gpt-4.1
+
+metrics:
+  - name: authoring_correctness
+    weight: 0.4
+    threshold: 0.90
+  - name: trigger_accuracy
+    weight: 0.3
+    threshold: 0.90
+  - name: thirteen_three_alignment
+    weight: 0.3
+    threshold: 0.90
+
+graders:
+  - type: text
+    name: never_deprecated_apis
+    config:
+      not_contains:
+        - "withEnvironmentEndpoint"
+        - "withEnvironmentParameter"
+        - "withEnvironmentConnectionString"
+        - "AddAndPublishPromptAgent"
+  - type: text
+    name: never_edit_modules
+    config:
+      not_contains:
+        - "edit .modules/"
+        - "modify .modules/"
+        - "change files in .modules"
+
+tasks:
+  - "tasks/*.yaml"
