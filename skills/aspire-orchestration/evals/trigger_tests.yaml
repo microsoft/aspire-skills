@@ -25,17 +25,20 @@ should_trigger_prompts:
   - prompt: "Create a new Aspire project"
     reason: "aspire new is orchestration"
     confidence: high
-  - prompt: "Add Aspire to my existing Node.js and .NET project"
-    reason: "Init workflow is orchestration"
-    confidence: high
-  - prompt: "I want to orchestrate my docker-compose services with Aspire"
-    reason: "Init from docker-compose is orchestration"
-    confidence: high
   - prompt: "Stop everything, I'm done"
     reason: "Cleanup is orchestration"
     confidence: high
   - prompt: "The app won't start, something is wrong with my environment"
     reason: "aspire doctor is orchestration"
+    confidence: high
+  - prompt: "upgrade my Aspire CLI"
+    reason: "aspire update --self is orchestration (CLI lifecycle)"
+    confidence: high
+  - prompt: "I see proxies missing in aspire ps"
+    reason: "Hidden-resource filtering = --include-hidden guidance lives in orchestration"
+    confidence: high
+  - prompt: "set up Aspire in this Express app"
+    reason: "Initial aspire init step is orchestration; orchestration then hands off to aspireify for wiring"
     confidence: high
 
 should_not_trigger_prompts:
@@ -68,4 +71,19 @@ should_not_trigger_prompts:
     confidence: high
   - prompt: "I need to look up the API for AddPostgres in Aspire"
     reason: "API lookup is orchestration (docs-first pattern)"
+    confidence: high
+  - prompt: "wire up my AppHost with the API and Postgres"
+    reason: "AppHost wiring (resource selection + AppHost edits) is owned by aspireify, not orchestration"
+    confidence: high
+  - prompt: "scan my repo and add the right resources to apphost.cs"
+    reason: "Repo scanning + AppHost edits route to aspireify"
+    confidence: high
+  - prompt: "configure ServiceDefaults and OTel for my services"
+    reason: "ServiceDefaults / OTel wiring routes to aspireify"
+    confidence: high
+  - prompt: "tear down my Aspire deployment in Azure"
+    reason: "aspire destroy routes to aspire-deployment"
+    confidence: high
+  - prompt: "run the Aspire dashboard standalone"
+    reason: "aspire dashboard run routes to aspire-monitoring"
     confidence: high

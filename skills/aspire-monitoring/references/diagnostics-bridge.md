@@ -5,32 +5,40 @@
 ## Decision Flowchart
 
 ```
-Is the app running locally (via aspire start)?
+Is the request about AppHost code or deployment definition?
 │
-├── YES → Use Aspire CLI
-│   ├── Console logs     → aspire logs <resource>
-│   ├── Structured logs  → aspire otel logs
-│   ├── Traces           → aspire otel traces
-│   ├── Spans            → aspire otel spans
-│   ├── Resource state   → aspire describe
-│   ├── Export telemetry → aspire export
-│   └── Filter by trace  → aspire otel logs --trace-id <id> (verify flag exists)
+├── YES → Route to aspire-deployment skill (and aspireify for code edits)
 │
-└── NO (deployed) → Route by target
-    ├── Azure → Use azure-diagnostics skill
-    │   ├── App logs          → az containerapp logs show
-    │   ├── Metrics           → az monitor metrics list
-    │   ├── App Insights      → az monitor app-insights query
-    │   └── Resource health   → az resource show / AppLens
+└── NO → Is the app running locally (via aspire start)?
     │
-    ├── Docker Compose → Use Docker tooling
-    │   ├── App logs          → docker compose logs <service>
-    │   └── Resource state    → docker compose ps
+    ├── YES → Use Aspire CLI
+    │   ├── Console logs       → aspire logs <resource>
+    │   ├── Structured logs    → aspire otel logs
+    │   ├── Traces             → aspire otel traces
+    │   ├── Spans              → aspire otel spans
+    │   ├── Resource state     → aspire describe   (add --include-hidden if missing)
+    │   ├── Export telemetry   → aspire export
+    │   ├── Filter by trace    → aspire otel logs --trace-id <id> (verify flag)
+    │   └── Standalone dash    → aspire dashboard run  (foreground/blocking)
     │
-    └── Kubernetes → Use kubectl
-        ├── App logs          → kubectl logs <pod>
-        ├── Resource state    → kubectl get pods
-        └── Metrics           → kubectl top pods
+    └── NO (deployed) → Route by target
+        ├── Azure Kubernetes Service (AKS)
+        │   ├── Pod logs           → kubectl logs <pod>
+        │   ├── Pod / workload state → kubectl describe pod <pod>, kubectl get pods
+        │   ├── Cluster Azure resources → azure-diagnostics skill
+        │   └── Cluster-wide telemetry → Azure Monitor Container Insights
+        │
+        ├── Other Azure (App Service, Container Apps) → azure-diagnostics skill
+        │   ├── App logs           → az containerapp logs show / az webapp log tail
+        │   ├── Metrics            → az monitor metrics list
+        │   ├── App Insights       → az monitor app-insights query
+        │   ├── Resource health    → az resource show / AppLens
+        │   └── Front Door / NSP / private endpoint → azure-diagnostics
+        │
+        └── Docker / Compose → Use Docker tooling
+            ├── Container logs     → docker logs <container>
+            ├── Service logs       → docker compose logs <service>
+            └── Resource state     → docker ps / docker compose ps
 ```
 
 ---
@@ -53,14 +61,22 @@ The Aspire CLI communicates with the running AppHost through a **backchannel soc
 | `aspire otel traces` | Distributed trace data | `aspire otel traces` |
 | `aspire otel spans` | Individual span-level detail | `aspire otel spans` |
 | `aspire otel logs --trace-id <id>` | Logs correlated to a specific trace (⚠️ verify flag in your version) | `aspire otel logs --trace-id abc123` |
-| `aspire describe` | Resource state, endpoints, health | `aspire describe --format Json` |
+| `aspire otel logs --dashboard-url --api-key` | Query a standalone or deployed dashboard | `aspire otel logs --dashboard-url https://localhost:18888 --api-key <TOKEN>` |
+| `aspire describe` | Resource state, endpoints, health (filtered) | `aspire describe --format Json` |
+| `aspire describe --include-hidden` | Include hidden resources (proxies, helpers, migrations) | `aspire describe --include-hidden --format Json` |
+| `aspire ps --include-hidden --format Json` | Resource list including hidden resources | `aspire ps --include-hidden --format Json` |
 | `aspire export` | Export portable telemetry bundle | `aspire export` |
+| `aspire dashboard run` | Run the Aspire Dashboard standalone (foreground/blocking) | `aspire dashboard run` |
 
 ### Tips for Agents
 
 ```bash
 # ✅ Always use --format Json for machine parsing
 aspire describe --format Json
+
+# ✅ When an expected resource is missing, retry with --include-hidden
+#    Hidden-by-default in 13.3 (proxies, helper containers, migrations)
+aspire ps --include-hidden --format Json
 
 # ✅ Get endpoints from describe, not guessing ports
 ENDPOINT=$(aspire describe apiservice --format Json | jq -r '.endpoints[0].url')
@@ -71,29 +87,72 @@ aspire otel logs --trace-id <trace-id-from-otel-traces>
 
 ---
 
-## Deployed Applications — azure-diagnostics Bridge
+## Standalone Dashboard — `aspire dashboard run`
 
-### Why Aspire CLI Cannot Help
+`aspire dashboard run` runs the Aspire Dashboard without an AppHost — point any OTLP-emitting application at it (Aspire or not) and telemetry shows up live.
 
-The Aspire CLI's diagnostics commands (`aspire logs`, `aspire describe`) use the local backchannel socket at `~/.aspire/backchannels/`. This is **by design** — there is no remote connection capability. When an app is deployed to Azure, the Aspire CLI has no way to reach it.
+```bash
+aspire dashboard run
+# Dashboard:  http://localhost:18888/login?t=<TOKEN>
+# OTLP/gRPC:  http://localhost:4317
+# OTLP/HTTP:  http://localhost:4318
+```
 
-### Exception: `--dashboard-url`
+> ⚠️ **Foreground / blocking.** This command does not return until you stop it (Ctrl-C). Agents must start it as a long-running background process (e.g., bash `mode="async"`), capture the dashboard URL and `t=` token from initial output, and leave it running. Do **not** treat it as a one-shot synchronous command.
 
-If the Aspire Dashboard is deployed alongside the app, some `aspire otel` commands can query it remotely:
+### Connect the CLI to a standalone dashboard
+
+The `aspire otel logs` and `aspire otel traces` commands accept `--dashboard-url` and `--api-key` so the CLI can query a standalone dashboard without an AppHost:
+
+```bash
+# Stream structured logs from a standalone dashboard
+aspire otel logs --dashboard-url https://localhost:18888 --api-key <TOKEN> --follow
+
+# Search recent traces in a standalone dashboard
+aspire otel traces --dashboard-url https://localhost:18888 --api-key <TOKEN>
+```
+
+`--dashboard-url` accepts either the dashboard's base URL or its login URL (login URLs are normalized automatically). The `--api-key` value is the `t=` token from the login URL printed by `aspire dashboard run`.
+
+The container-image standalone dashboard is still available where the CLI isn't an option.
+
+---
+
+## Browser Telemetry (`Aspire.Hosting.Browsers`)
+
+The `Aspire.Hosting.Browsers` integration captures **browser console logs, network requests, and screenshots** from frontend resources during local development. Frontend resources opt in by calling `WithBrowserLogs()` in the AppHost. The data shows up in the dashboard alongside server-side telemetry.
+
+| Need | Action |
+|------|--------|
+| Inspect existing browser telemetry | Open the dashboard or run `aspire otel logs <frontend-resource>` |
+| Check whether a frontend has it enabled | Look for `.WithBrowserLogs()` in the AppHost |
+| Add `WithBrowserLogs()` to a resource | → **`aspireify` skill** (AppHost authoring) |
+
+---
+
+## Deployed Applications — Routing
+
+### Why Aspire CLI Cannot Help Directly
+
+The Aspire CLI's `aspire logs`, `aspire describe`, and other backchannel commands use the local backchannel socket at `~/.aspire/backchannels/`. This is **by design** — there is no remote backchannel. When an app is deployed, the Aspire CLI cannot reach it directly.
+
+**Exception:** if a Dashboard is reachable (deployed alongside the app, or running standalone), `aspire otel logs --dashboard-url --api-key` and `aspire otel traces --dashboard-url --api-key` can query it remotely. This does **not** extend to `aspire logs` or `aspire describe`.
 
 ```bash
 # Limited remote support via deployed Dashboard
-aspire otel logs --dashboard-url https://my-dashboard.azurecontainerapps.io
-aspire otel traces --dashboard-url https://my-dashboard.azurecontainerapps.io
+aspire otel logs --dashboard-url https://my-dashboard.azurecontainerapps.io --api-key <TOKEN>
+aspire otel traces --dashboard-url https://my-dashboard.azurecontainerapps.io --api-key <TOKEN>
 ```
 
-> ⚠️ The `--dashboard-url` flag may not be available in all versions. Verify with `aspire otel --help` before using.
+### Three-way deployed routing
 
-> ⚠️ This requires the Dashboard to be deployed and accessible. It does NOT work for `aspire logs` or `aspire describe`.
+| Target | Use | Examples |
+|--------|-----|----------|
+| **AKS workload (pod logs, pod state, container insights)** | `kubectl` + Azure Monitor Container Insights | `kubectl logs <pod>`, `kubectl describe pod <pod>`, Container Insights queries |
+| **Azure resource health** (App Insights, Front Door, NSP, private endpoint, ACA, App Service) | `azure-diagnostics` skill (azure-skills) | `az containerapp logs show`, `az monitor app-insights query`, AppLens |
+| **Docker / Compose** | Docker CLI | `docker logs <container>`, `docker compose logs <service>` |
 
-### Route to azure-diagnostics
-
-For deployed applications, invoke the `azure-diagnostics` skill from the azure-skills plugin:
+### azure-diagnostics — quick reference
 
 | Need | azure-diagnostics Approach |
 |------|---------------------------|
@@ -102,6 +161,7 @@ For deployed applications, invoke the `azure-diagnostics` skill from the azure-s
 | App Insights queries | `az monitor app-insights query --analytics-query "KQL"` |
 | Resource health | AppLens MCP tool or `az resource show` |
 | Activity log | `az monitor activity-log list -g RG` |
+| Front Door / NSP / private endpoint | `az network front-door`, `az network perimeter`, AppLens |
 
 ### Production Telemetry — Automatic Configuration
 
@@ -120,8 +180,10 @@ No additional configuration is needed — Aspire wires the connection string dur
 | Issue | Symptom | Workaround |
 |-------|---------|-----------|
 | TS AppHost DNS failure ([#15782](https://github.com/microsoft/aspire/issues/15782)) | `aspire otel` returns "No such host" for `*.dev.localhost` | Use `--dashboard-url localhost:PORT` directly |
-| Standalone dashboard ([#16236](https://github.com/microsoft/aspire/issues/16236)) | `aspire otel` fails without `--enable-api` on dashboard | ⚠️ Verify `aspire dashboard` command exists in your version — may require manual dashboard config |
 | `--isolated` mode telemetry ([#16107](https://github.com/microsoft/aspire/issues/16107)) | OTEL port not randomized in isolated mode | Avoid `--isolated` if telemetry is needed |
+| Resource missing from `aspire ps` / `aspire describe` | Hidden-by-default in 13.3 (proxies, helpers, migrations) | Re-run with `--include-hidden` |
+
+> **Resolved in 13.3**: The standalone-dashboard workaround for [#16236](https://github.com/microsoft/aspire/issues/16236) is obsolete — `aspire dashboard run` ships in-box (see Standalone Dashboard section above).
 
 ---
 
@@ -129,9 +191,11 @@ No additional configuration is needed — Aspire wires the connection string dur
 
 | Question | Local Dev | Deployed |
 |----------|-----------|----------|
-| "What's the status of my resources?" | `aspire describe` | Azure Portal / `az containerapp show` |
-| "Show me the logs" | `aspire logs <resource>` | `az containerapp logs show` |
+| "What's the status of my resources?" | `aspire describe` (try `--include-hidden` if missing) | Azure Portal / `az containerapp show` / `kubectl describe pod` |
+| "Show me the logs" | `aspire logs <resource>` | `az containerapp logs show` / `kubectl logs <pod>` / `docker logs` |
 | "Show me distributed traces" | `aspire otel traces` | App Insights → Transaction Search |
-| "Why is this resource unhealthy?" | `aspire describe` + `aspire logs` | AppLens / azure-diagnostics |
-| "What metrics are available?" | Aspire Dashboard (auto-launched) | Azure Monitor / App Insights |
+| "Why is this resource unhealthy?" | `aspire describe` + `aspire logs` | AppLens / azure-diagnostics / `kubectl describe pod` |
+| "What metrics are available?" | Aspire Dashboard (auto-launched or `aspire dashboard run`) | Azure Monitor / App Insights / Container Insights |
 | "Export telemetry for analysis" | `aspire export` | App Insights export / KQL query |
+| "Browser console / network logs" | Dashboard (with `WithBrowserLogs()` enabled) — N/A in production |
+

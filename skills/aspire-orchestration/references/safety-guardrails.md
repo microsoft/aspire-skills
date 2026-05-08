@@ -197,6 +197,35 @@ aspire describe --format Json | jq '.resources[] | select(.state == "Running")'
 | `aspire stop` does NOT support `--format json` yet | Use exit code for success/failure |
 | `aspire ps --format Json` returns `name` and `displayName` fields | Use `displayName` for `aspire wait` — the `name` field may be rejected ([#15842](https://github.com/microsoft/aspire/issues/15842)) |
 
+### Hidden Resources and `--include-hidden`
+
+Starting in Aspire 13.3, `aspire ps`, `aspire describe`, and other CLI commands **filter out
+resources marked as hidden in the AppHost** (proxies, helper containers, migration jobs, etc.).
+This filtering is correct for normal workflows — agents and humans see only the resources they
+care about, not the implementation scaffolding.
+
+Use `--include-hidden` when:
+
+| Situation | Why |
+|-----------|-----|
+| Debugging a proxy or sidecar | Proxies are hidden by default; you need their state to diagnose connectivity |
+| Investigating helper containers | Helper containers (e.g. wait-for-it shims, init containers) are hidden |
+| Tracking down migration jobs | Migration / seed jobs are typically hidden once they finish |
+| Expected resources are missing from `aspire ps` | The resource may exist but be marked hidden — confirm with `--include-hidden` before assuming the AppHost is wrong |
+| Parsing for completeness in agent automation | A full-graph view requires explicit opt-in |
+
+```bash
+# ✅ Normal flow — filtered (correct for most tasks)
+aspire ps --format Json
+
+# ✅ Debugging / completeness — include hidden resources
+aspire ps --include-hidden --format Json
+aspire describe --include-hidden --format Json
+```
+
+If a user reports "I can't see my proxy / migration / helper container," reach for
+`--include-hidden` before assuming the AppHost is misconfigured.
+
 ---
 
 ## Rule 6: ALWAYS `--non-interactive` for Agent Commands

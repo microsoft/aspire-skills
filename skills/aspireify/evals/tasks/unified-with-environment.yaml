@@ -1,0 +1,47 @@
+id: aspireify-unified-env-001
+name: Use Unified withEnvironment, Not Deprecated Per-Kind Helpers
+description: >
+  Agent must use the unified withEnvironment(name, value) API in TypeScript
+  AppHosts and reject the deprecated per-kind helpers (withEnvironmentEndpoint,
+  withEnvironmentParameter, withEnvironmentConnectionString,
+  withEnvironmentExpression) — they are @deprecated in 13.3.
+tags:
+  - typescript
+  - 13-3
+  - p0
+
+inputs:
+  prompt: |
+    In my apphost.ts I want to inject three env vars into my API: an endpoint,
+    a parameter, and a connection string. Show me the right API to use in 13.3.
+  files:
+    - path: "ts-apphost/apphost.ts"
+    - path: "ts-apphost/aspire.config.json"
+
+expected:
+  output_contains:
+    - "withEnvironment("
+
+graders:
+  - name: uses_unified_api
+    type: prompt
+    config:
+      prompt: >
+        Does the response use the unified withEnvironment(name, value) API
+        (one method) for ALL three injections — endpoint, parameter, and
+        connection string — rather than per-kind helpers?
+  - name: no_per_kind_helpers
+    type: text
+    config:
+      not_contains:
+        - "withEnvironmentEndpoint"
+        - "withEnvironmentParameter"
+        - "withEnvironmentConnectionString"
+        - "withEnvironmentExpression"
+  - name: explains_deprecation
+    type: prompt
+    config:
+      prompt: >
+        Does the response mention that per-kind helpers (withEnvironmentEndpoint,
+        withEnvironmentParameter, etc.) are @deprecated in 13.3 and should not
+        be used in new code?

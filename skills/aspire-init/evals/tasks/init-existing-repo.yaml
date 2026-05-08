@@ -1,0 +1,47 @@
+id: init-existing-001
+name: Init Existing Repo and Hand Off to Aspireify
+description: >
+  Agent is given a repo with existing services (Express + .NET API) and no AppHost.
+  It should run `aspire init` to drop the skeleton, then hand off to the `aspireify`
+  skill for the actual resource wiring. It must NOT try to wire resources itself.
+tags:
+  - core-flow
+  - p0
+
+inputs:
+  prompt: "Add Aspire to this repository so I can orchestrate my Express frontend and .NET API."
+  files:
+    - path: "non-aspire/MyApp/api/MyApi.csproj"
+    - path: "non-aspire/MyApp/api/Program.cs"
+    - path: "non-aspire/MyApp/web/package.json"
+    - path: "non-aspire/MyApp/web/server.js"
+
+expected:
+  output_contains:
+    - "aspire init"
+    - "aspireify"
+  output_not_contains:
+    - "dotnet workload install aspire"
+    - "dotnet new aspire"
+
+graders:
+  - name: runs_aspire_init
+    type: prompt
+    config:
+      prompt: >
+        Does the response recommend running `aspire init` (not `aspire new`) to bootstrap
+        the existing repository? It should pick init because the repo already contains
+        services. Answer based on intent, not exact string matching.
+  - name: hands_off_to_aspireify
+    type: prompt
+    config:
+      prompt: >
+        Does the response explicitly hand off the resource-wiring step to the `aspireify`
+        skill (or the project-local `aspireify` skill installed by `aspire init`)? It
+        should make clear that `aspire init` only drops the skeleton plus
+        `aspire.config.json` and that wiring is `aspireify`'s job.
+  - name: no_obsolete_workload
+    type: text
+    config:
+      not_contains:
+        - "dotnet workload install aspire"

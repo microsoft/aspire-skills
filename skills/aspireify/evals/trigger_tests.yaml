@@ -1,0 +1,50 @@
+skill: aspireify
+
+should_trigger_prompts:
+  - prompt: "Wire up my AppHost"
+    reason: "Direct wiring request — aspireify owns AppHost wiring"
+    confidence: high
+  - prompt: "Add Postgres to my Aspire app"
+    reason: "Adding an integration resource to AppHost is wiring"
+    confidence: high
+  - prompt: "Scaffold the resource graph"
+    reason: "Resource graph scaffolding is the core aspireify flow"
+    confidence: high
+  - prompt: "After running aspire init, what next?"
+    reason: "aspire init drops a skeleton; aspireify completes the wiring"
+    confidence: high
+  - prompt: "Connect my React frontend to my .NET API"
+    reason: "Wiring service references between projects in the AppHost"
+    confidence: high
+  - prompt: "Add Redis cache to my Aspire app"
+    reason: "Integration discovery + AppHost edit"
+    confidence: high
+  - prompt: "Add browser logs to my Vite app"
+    reason: "WithBrowserLogs is an AppHost authoring change"
+    confidence: high
+  - prompt: "Help me use the unified withEnvironment API in my apphost.ts"
+    reason: "TS AppHost authoring is aspireify"
+    confidence: high
+
+should_not_trigger_prompts:
+  - prompt: "Deploy my app to Azure"
+    reason: "Deployment routes to aspire-deployment"
+    confidence: high
+  - prompt: "Start my Aspire app"
+    reason: "App lifecycle routes to aspire-orchestration"
+    confidence: high
+  - prompt: "Show me my application logs"
+    reason: "Logs route to aspire-monitoring"
+    confidence: high
+  - prompt: "Create a new Aspire project from scratch"
+    reason: "Skeleton drop routes to aspire-init"
+    confidence: high
+  - prompt: "Stop the AppHost"
+    reason: "Lifecycle routes to aspire-orchestration"
+    confidence: high
+  - prompt: "Tear down my Azure deployment"
+    reason: "aspire destroy routes to aspire-deployment"
+    confidence: high
+  - prompt: "Open the Aspire dashboard"
+    reason: "Dashboard / monitoring routes to aspire-monitoring"
+    confidence: high

@@ -1,11 +1,12 @@
 id: deploy-multi-001
 name: Multi-Target Deployment Awareness
 description: >
-  Agent should know Aspire deploys to Azure, Docker Compose, and Kubernetes.
-  K8s requires kubectl for cluster apply.
+  Agent should know Aspire 13.3 deploys natively to Azure, Docker Compose, AKS, and any
+  Kubernetes cluster — using a Helm-based engine for K8s. No kubectl/helm by hand.
 tags:
   - knowledge
   - p1
+  - aspire-13-3
 
 inputs:
   prompt: "What deployment targets does Aspire support?"
@@ -19,6 +20,9 @@ expected:
     - "Azure"
     - "Docker"
     - "Kubernetes"
+  output_not_contains:
+    - "kubectl apply"
+    - "helm install"
 
 graders:
   - name: mentions_all_targets
@@ -26,13 +30,16 @@ graders:
     config:
       prompt: >
         Does the response mention Azure as a deployment target for Aspire applications?
-        It should cover Azure Container Apps or Azure App Service. Answer based on
-        the intent, not exact string matching.
-  - name: knows_k8s_needs_kubectl
+        It should cover Azure Container Apps, Azure App Service, and Azure Kubernetes
+        Service (AKS). Answer based on the intent, not exact string matching.
+  - name: knows_k8s_helm_native
     type: prompt
     config:
       prompt: >
-        The response should mention that Aspire supports Azure Container Apps,
-        Azure App Service, Docker Compose, and Kubernetes. It should note that
-        Kubernetes requires kubectl for cluster apply while Azure targets are
-        fully native.
+        The response should explain that in Aspire 13.3, Kubernetes deployment is native
+        and Helm-based — `aspire deploy` runs end-to-end after declaring an
+        `AddKubernetesEnvironment` (or `AddAzureKubernetesEnvironment` for AKS) and
+        `WithComputeEnvironment(...)`. The agent should NOT instruct the user to run
+        `kubectl apply` or `helm install` by hand. It is acceptable (and correct) to note
+        that the user still needs cluster credentials (e.g., kubeconfig context, or
+        `az aks get-credentials`).

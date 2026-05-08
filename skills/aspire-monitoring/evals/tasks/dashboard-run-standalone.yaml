@@ -1,0 +1,60 @@
+id: mon-dashboard-run-001
+name: Standalone Dashboard via aspire dashboard run
+description: >
+  Agent should know that `aspire dashboard run` (new in Aspire 13.3) launches
+  the Aspire Dashboard standalone, that it is foreground/blocking and must be
+  treated as a long-running background process, and that the Aspire CLI can
+  connect to it via `aspire otel logs --dashboard-url --api-key` and
+  `aspire otel traces --dashboard-url --api-key`.
+tags:
+  - dashboard
+  - standalone
+  - 13-3
+  - p1
+
+inputs:
+  prompt: "I want to view OTLP telemetry from a non-Aspire service in the Aspire Dashboard without booting an AppHost. How do I do that and how do I query it from the CLI?"
+  files: []
+
+expected:
+  output_contains:
+    - "aspire dashboard run"
+    - "--dashboard-url"
+    - "--api-key"
+
+graders:
+  - name: knows_dashboard_run
+    type: prompt
+    config:
+      prompt: >
+        Does the response recommend `aspire dashboard run` as the way to launch
+        the Aspire Dashboard standalone (without an AppHost) and capture OTLP
+        from any source? Answer based on intent.
+
+  - name: warns_foreground_blocking
+    type: prompt
+    config:
+      prompt: >
+        Does the response warn that `aspire dashboard run` is foreground /
+        blocking and must be treated as a long-running background process by
+        agents (e.g., bash mode="async", capture the printed dashboard URL and
+        token, do not wait for it to "finish")? This is the critical safety
+        note. Answer based on intent.
+
+  - name: connects_cli_via_dashboard_url_and_api_key
+    type: prompt
+    config:
+      prompt: >
+        Does the response show how to connect the Aspire CLI to a standalone
+        dashboard using both `--dashboard-url` AND `--api-key` on
+        `aspire otel logs` and/or `aspire otel traces`? The token is the `t=`
+        value from the dashboard login URL.
+
+  - name: not_obsolete_workaround
+    type: text
+    config:
+      not_contains:
+        - "issue 16236"
+        - "#16236"
+        - "may not exist in your version"
+        - "verify aspire dashboard command exists"

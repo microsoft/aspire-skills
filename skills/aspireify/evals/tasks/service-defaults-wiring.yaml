@@ -1,0 +1,50 @@
+id: aspireify-defaults-001
+name: Wire Aspire.ServiceDefaults + OTel into Each Project
+description: >
+  Agent should add Aspire.ServiceDefaults reference + AddServiceDefaults() +
+  MapDefaultEndpoints() to each service project so OpenTelemetry, health checks,
+  service discovery, and HTTP resilience are wired.
+tags:
+  - service-defaults
+  - otel
+  - p1
+
+inputs:
+  prompt: "I just wired my AppHost. Now wire ServiceDefaults and OpenTelemetry into each of my projects."
+  files:
+    - path: "csharp-apphost/MyApp.AppHost/Program.cs"
+    - path: "csharp-apphost/MyApp.ServiceDefaults/Extensions.cs"
+    - path: "csharp-apphost/src/Api/Program.cs"
+    - path: "csharp-apphost/src/Worker/Program.cs"
+
+expected:
+  output_contains:
+    - "AddServiceDefaults"
+    - "MapDefaultEndpoints"
+
+graders:
+  - name: adds_service_defaults
+    type: prompt
+    config:
+      prompt: >
+        Does the response add builder.AddServiceDefaults() to each service's
+        Program.cs (Api and Worker)?
+  - name: maps_default_endpoints
+    type: prompt
+    config:
+      prompt: >
+        Does the response add app.MapDefaultEndpoints() so /health and /alive
+        are exposed for use by AppHost's WaitFor / HealthChecks?
+  - name: mentions_otel_health_discovery
+    type: prompt
+    config:
+      prompt: >
+        Does the response explain that AddServiceDefaults wires OpenTelemetry
+        (tracing, metrics, logs), health checks, service discovery, and HTTP
+        resilience — i.e., the agent understands what they are configuring?
+  - name: project_reference
+    type: prompt
+    config:
+      prompt: >
+        Does the response add a ProjectReference from each service project to
+        the Aspire.ServiceDefaults project (or equivalent NuGet package)?

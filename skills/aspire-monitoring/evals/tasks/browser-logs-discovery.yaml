@@ -1,0 +1,54 @@
+id: mon-browser-logs-001
+name: Browser Logs Discovery and aspireify Routing
+description: >
+  Agent should know that browser console logs, network requests, and screenshots
+  surface in the Aspire Dashboard via the `Aspire.Hosting.Browsers` integration
+  (new in 13.3), that frontend resources opt in via `WithBrowserLogs()`, and
+  that *adding* `WithBrowserLogs()` is AppHost authoring — route to the
+  `aspireify` skill rather than editing the AppHost from the monitoring skill.
+tags:
+  - browser-logs
+  - dashboard
+  - 13-3
+  - routing
+  - p1
+
+inputs:
+  prompt: "I want to see browser console logs and network requests from my Vite frontend in the Aspire Dashboard alongside the API server logs. How does that work?"
+  files:
+    - path: "csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj"
+    - path: "csharp-apphost/MyApp.AppHost/Program.cs"
+    - path: "csharp-apphost/aspire.config.json"
+
+expected:
+  output_contains:
+    - "WithBrowserLogs"
+
+graders:
+  - name: knows_browsers_integration
+    type: prompt
+    config:
+      prompt: >
+        Does the response identify the `Aspire.Hosting.Browsers` integration
+        (or equivalent description) as the mechanism that captures browser
+        console logs, network requests, and screenshots into the dashboard,
+        and `WithBrowserLogs()` as the opt-in call on a frontend resource?
+        Answer based on intent.
+
+  - name: routes_code_change_to_aspireify
+    type: prompt
+    config:
+      prompt: >
+        Does the response route the actual code edit (adding `WithBrowserLogs()`
+        to the AppHost) to the `aspireify` skill (or otherwise indicate that
+        AppHost authoring is out of scope for this monitoring skill)? Answer
+        based on intent — direct AppHost edits from the monitoring skill should
+        be discouraged.
+
+  - name: explains_dashboard_surface
+    type: prompt
+    config:
+      prompt: >
+        Does the response explain that once `WithBrowserLogs()` is wired, the
+        browser telemetry surfaces in the dashboard alongside server-side
+        telemetry (and is also visible via `aspire otel logs <frontend>`)?

@@ -25,6 +25,21 @@ should_trigger_prompts:
   - prompt: "Push my app to Docker Compose"
     reason: "Docker Compose is a deploy target"
     confidence: high
+  - prompt: "Tear down my Aspire deployment"
+    reason: "aspire destroy is deployment lifecycle"
+    confidence: high
+  - prompt: "Destroy my Aspire stack"
+    reason: "aspire destroy is deployment lifecycle"
+    confidence: high
+  - prompt: "Publish my Next.js app via Aspire"
+    reason: "Next.js publishing is AddNextJsApp / PublishAs* family"
+    confidence: high
+  - prompt: "Deploy to AKS"
+    reason: "AKS is an Aspire deploy target via AddAzureKubernetesEnvironment"
+    confidence: high
+  - prompt: "Add Azure Front Door in front of my Aspire app"
+    reason: "AddAzureFrontDoor is a deployment-time hosting integration"
+    confidence: high
 
 should_not_trigger_prompts:
   - prompt: "Start my Aspire app locally"

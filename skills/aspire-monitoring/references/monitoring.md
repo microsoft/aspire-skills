@@ -9,11 +9,16 @@ aspire describe
 aspire ps --format Json
 aspire describe --apphost <path>
 aspire describe --apphost <path> --format Json
+
+# When an expected resource is missing (hidden-by-default in 13.3)
+aspire ps --include-hidden --format Json
+aspire describe --include-hidden --format Json
 ```
 
 - Use `aspire describe` first when you need current state before deciding what to do next.
 - Use `--apphost <path>` when the workspace has multiple AppHosts.
 - Prefer `--format Json` when another tool or script needs to consume the result.
+- Add `--include-hidden` when debugging proxies, helper containers, migrations, or when an expected resource is missing from the filtered output.
 
 ## Something Is Wrong — Investigate Before Editing Code
 
@@ -55,7 +60,15 @@ No additional configuration needed for Azure — Aspire wires connection strings
 
 | Target | Tool | Commands |
 |--------|------|----------|
-| Azure Container Apps | azure-diagnostics | `az containerapp logs show`, App Insights |
-| Azure App Service | azure-diagnostics | `az webapp log tail`, App Insights |
-| Docker Compose | Docker CLI | `docker compose logs <service>` |
-| Kubernetes | kubectl | `kubectl logs <pod>`, `kubectl top pods` |
+| Azure Container Apps / App Service | azure-diagnostics | `az containerapp logs show`, `az webapp log tail`, App Insights |
+| Azure resource health (Front Door, NSP, private endpoint, App Insights) | azure-diagnostics | AppLens, `az monitor app-insights query` |
+| AKS workload (pods, workloads) | kubectl + Container Insights | `kubectl logs <pod>`, `kubectl describe pod <pod>`, Azure Monitor Container Insights |
+| Docker / Compose | Docker CLI | `docker logs <container>`, `docker compose logs <service>` |
+
+## Standalone Dashboard
+
+`aspire dashboard run` launches the Aspire Dashboard with no AppHost — useful for collecting OTLP from any source. The command is **foreground/blocking**; run it as a long-running background process and capture the printed dashboard URL + `t=` token. Connect the CLI with `aspire otel logs --dashboard-url <url> --api-key <token>` (also accepted by `aspire otel traces`).
+
+## Browser Telemetry
+
+Frontend resources opted into `Aspire.Hosting.Browsers` via `WithBrowserLogs()` surface browser console logs, network requests, and screenshots in the dashboard alongside server-side telemetry. Inspecting them is monitoring's job; **adding `WithBrowserLogs()` is AppHost authoring — route to the `aspireify` skill.**

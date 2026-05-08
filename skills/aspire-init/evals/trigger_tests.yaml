@@ -1,0 +1,50 @@
+skill: aspire-init
+
+should_trigger_prompts:
+  - prompt: "Add Aspire to this Express + .NET API repo"
+    reason: "Existing repo without AppHost — first-run init flow"
+    confidence: high
+  - prompt: "Scaffold a new Aspire app"
+    reason: "Brand-new project — aspire new template selection"
+    confidence: high
+  - prompt: "I want to start a new distributed app"
+    reason: "Greenfield Aspire project — aspire new"
+    confidence: high
+  - prompt: "Run aspire new aspire-starter"
+    reason: "Direct template scaffold request"
+    confidence: high
+  - prompt: "Run aspire init in this repo"
+    reason: "Direct init request on existing repo"
+    confidence: high
+  - prompt: "Bootstrap Aspire into my FastAPI project"
+    reason: "Existing Python repo needing AppHost — aspire init or aspire-py-starter"
+    confidence: high
+  - prompt: "Create a new Aspire TypeScript starter"
+    reason: "Greenfield TS AppHost — aspire new aspire-ts-starter"
+    confidence: high
+  - prompt: "How do I install the aspireify skill?"
+    reason: "aspireify is installed via aspire init / aspire agent init — init flow owns it"
+    confidence: medium
+
+should_not_trigger_prompts:
+  - prompt: "Start my Aspire app"
+    reason: "App lifecycle routes to aspire-orchestration"
+    confidence: high
+  - prompt: "Deploy my Aspire app to Azure"
+    reason: "Deployment routes to aspire-deployment"
+    confidence: high
+  - prompt: "Show me logs for my Aspire app"
+    reason: "Logs route to aspire-monitoring"
+    confidence: high
+  - prompt: "Wire up my existing AppHost with new resources"
+    reason: "Resource wiring on an existing AppHost routes to aspireify, not aspire-init"
+    confidence: high
+  - prompt: "Add a Redis integration to my AppHost"
+    reason: "aspire add on an existing AppHost routes to aspire-orchestration"
+    confidence: high
+  - prompt: "Restart my database resource"
+    reason: "Resource lifecycle routes to aspire-orchestration"
+    confidence: high
+  - prompt: "Wait for my API to be ready"
+    reason: "aspire wait routes to aspire-orchestration"
+    confidence: high

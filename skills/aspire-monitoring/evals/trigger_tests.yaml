@@ -28,6 +28,18 @@ should_trigger_prompts:
   - prompt: "Check the container app logs for my deployed service"
     reason: "Deployed logs route through monitoring bridge"
     confidence: high
+  - prompt: "Open the standalone dashboard"
+    reason: "aspire dashboard run is a monitoring/dashboard concern"
+    confidence: high
+  - prompt: "Run the dashboard without an AppHost"
+    reason: "Standalone dashboard via aspire dashboard run"
+    confidence: high
+  - prompt: "View browser console logs in the dashboard"
+    reason: "Aspire.Hosting.Browsers / WithBrowserLogs surfaces in dashboard"
+    confidence: high
+  - prompt: "I can't find a resource in aspire ps"
+    reason: "Hidden-by-default in 13.3; requires --include-hidden"
+    confidence: high
 
 should_not_trigger_prompts:
   - prompt: "Start my Aspire app"

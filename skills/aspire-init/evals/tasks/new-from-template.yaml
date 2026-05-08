@@ -1,0 +1,43 @@
+id: init-new-001
+name: New Project from `aspire new aspire-starter`
+description: >
+  Agent is asked to scaffold a brand-new distributed app in an empty directory.
+  It should pick `aspire new aspire-starter` (or another `aspire new` template),
+  not `aspire init`, and not `dotnet new`.
+tags:
+  - core-flow
+  - p0
+
+inputs:
+  prompt: "I'm starting a brand-new distributed app from scratch. Scaffold an Aspire starter project for me."
+  files: []
+
+expected:
+  output_contains:
+    - "aspire new"
+    - "aspire-starter"
+  output_not_contains:
+    - "dotnet new aspire"
+    - "dotnet workload install aspire"
+
+graders:
+  - name: uses_aspire_new
+    type: prompt
+    config:
+      prompt: >
+        Does the response recommend `aspire new aspire-starter` (or a similar `aspire new`
+        template) to scaffold a brand-new project? It should NOT recommend `aspire init`
+        for an empty/greenfield project, and it should NOT use `dotnet new aspire-*`.
+  - name: no_dotnet_new_template
+    type: text
+    config:
+      not_contains:
+        - "dotnet new aspire-starter"
+        - "dotnet new aspire-empty"
+        - "dotnet new aspire-ts-starter"
+  - name: no_init_for_greenfield
+    type: prompt
+    config:
+      prompt: >
+        The response should NOT suggest `aspire init` for a brand-new, empty project. The
+        `aspire init` command is for existing repositories that already contain services.
