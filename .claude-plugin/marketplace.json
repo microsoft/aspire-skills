@@ -1,4 +1,48 @@
 {
-  "status": "placeholder",
-  "note": "Marketplace metadata will be added when publishing to Claude marketplace"
+  "name": "aspire-skills",
+  "owner": {
+    "name": "Microsoft",
+    "url": "https://www.microsoft.com"
+  },
+  "description": "Microsoft Aspire skills marketplace — agent skills for Aspire distributed application development with the Aspire CLI.",
+  "homepage": "https://github.com/microsoft/aspire-skills",
+  "repository": "https://github.com/microsoft/aspire-skills",
+  "license": "MIT",
+  "plugins": [
+    {
+      "name": "aspire",
+      "source": "./",
+      "description": "Aspire skills plugin for AI coding agents. Six skills covering top-level routing, first-run init, agentic AppHost wiring (aspireify), lifecycle orchestration, multi-target deployment, and observability. Aligned with Aspire 13.3.",
+      "version": "2.1.0",
+      "author": {
+        "name": "Microsoft",
+        "url": "https://www.microsoft.com"
+      },
+      "homepage": "https://github.com/microsoft/aspire-skills",
+      "repository": "https://github.com/microsoft/aspire-skills",
+      "license": "MIT",
+      "category": "developer-tools",
+      "keywords": [
+        "aspire",
+        "dotnet",
+        "cloud-native",
+        "orchestration",
+        "observability",
+        "deployment",
+        "microsoft"
+      ],
+      "tags": [
+        "aspire",
+        "dotnet",
+        "cloud-native",
+        "azure",
+        "kubernetes",
+        "docker-compose"
+      ],
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      }
+    }
+  ]
 }
