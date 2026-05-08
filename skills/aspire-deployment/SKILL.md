@@ -1,16 +1,17 @@
 ---
 name: aspire-deployment
 description: >-
-  **WORKFLOW SKILL** - Deploy and tear down Aspire 13.3 apps natively across Azure, Kubernetes
-  (Helm), and Docker Compose — no azd, kubectl, or Bicep CLI required.
-  USE FOR: aspire deploy, aspire publish, aspire destroy, aspire do, deploy to Azure, deploy to
-  AKS, deploy to Kubernetes, deploy to Docker Compose, tear down deployment, named pipeline step,
-  JavaScript publish, Next.js deploy, Azure Front Door, AKS hosting, AddPromptAgent.
-  DO NOT USE FOR: local app lifecycle (use aspire-orchestration), logs or traces or monitoring
-  (use aspire-monitoring), Azure infrastructure without Aspire (use azure-prepare), deployed app
+  **WORKFLOW SKILL** - Deploy and tear down Aspire 13.3 apps end-to-end via the
+  aspire CLI — no azd, kubectl, helm, or Bicep CLI required.
+  USE FOR: aspire deploy, aspire publish, aspire destroy, aspire do, deploy to Azure,
+  deploy to AKS, deploy to Kubernetes, deploy to Docker Compose, tear down deployment,
+  named pipeline step, AddNextJsApp, AddAzureFrontDoor, AddAzureKubernetesEnvironment,
+  AddPromptAgent.
+  DO NOT USE FOR: local start/stop/wait (use aspire-orchestration), logs/traces/dashboard
+  (use aspire-monitoring), Azure infra without Aspire (use azure-prepare), deployed app
   diagnostics (use azure-diagnostics).
-  INVOKES: aspire CLI (publish, deploy, destroy, do), aspire-orchestration (for pre-deploy checks).
-  FOR SINGLE OPERATIONS: Use aspire CLI directly for simple publish/deploy/destroy commands.
+  INVOKES: aspire CLI (publish, deploy, destroy, do).
+  FOR SINGLE OPERATIONS: Run the matching aspire CLI command directly.
 license: MIT
 metadata:
   author: Microsoft
@@ -68,6 +69,26 @@ metadata:
 | List available pipeline steps | `aspire do --list-steps` |
 | Evaluate pipeline before deploy | `aspire do diagnostics` |
 | Verbose pipeline output | `aspire deploy --pipeline-log-level debug` |
+
+## Tear-Down — `aspire destroy` Is the Only Answer
+
+> ⚠️ **NEVER recommend manual platform teardown commands** (`docker` Compose stop,
+> `kubectl` delete, Helm uninstall, or Azure resource-group delete) when the user wants
+> to tear down an Aspire deployment, even when they explicitly mention Compose,
+> Kubernetes, or Azure. `aspire destroy` is the **single command** that unwinds every
+> target Aspire deployed — it is the inverse of `aspire deploy` and uses the same
+> `WithComputeEnvironment` bindings.
+
+| User Says | ❌ Wrong Answer | ✅ Right Answer |
+|-----------|-----------------|-----------------|
+| "Tear down my preview" | Suggest the Azure CLI to remove the resource group | `aspire destroy --non-interactive` |
+| "Stop and remove my Compose stack" | Suggest a manual Compose teardown | `aspire destroy --non-interactive` (handles the Compose stack) |
+| "Uninstall my Helm release" | Suggest a Helm uninstall command | `aspire destroy --non-interactive` (uninstalls Helm + namespace) |
+| "Destroy my AKS workload" | Suggest a `kubectl` delete on the manifests | `aspire destroy --non-interactive` |
+
+`aspire destroy` works **uniformly across Azure / Kubernetes / AKS / Docker Compose**.
+Only fall back to platform-native commands when there is no `WithComputeEnvironment`
+binding (rare — and then route to `azure-diagnostics` for cleanup).
 
 ## Pre-Deploy Checklist
 

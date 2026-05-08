@@ -1,4 +1,5 @@
 eval-results/
+.smoketest-results/
 obj/
 bin/
 *.lscache

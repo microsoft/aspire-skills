@@ -108,17 +108,32 @@ error CS2012: Cannot open 'obj/Debug/net10.0/MyService.dll' for writing
 
 The agent then concludes the project is "un-buildable" — a false conclusion.
 
-### Correct Pattern
+### Recovery If `dotnet build` Was Used and Locks Hit
+
+When you see `MSB3491` / `CS2012` / "file in use" / "another process is using":
 
 ```bash
-# ✅ Rebuild a specific resource (Aspire manages the build)
-aspire resource apiservice restart
+# ✅ Single correct recovery
+aspire stop              # release all Aspire-held locks
 
-# ✅ If AppHost code changed, full restart
-aspire stop
-# ... make changes ...
-aspire start
+# Then EITHER:
+aspire resource <name> restart   # if Aspire is still up + one resource changed
+# OR:
+aspire start             # if AppHost code changed or Aspire was fully stopped
 ```
+
+> 🔒 **`aspire stop` is the ONLY first step.** Do not `pkill dotnet`, do not delete
+> `bin/`/`obj/`, do not "reboot to release the lock", and do not tell the user the
+> project has a permanent build failure. The cause is always the same — Aspire is
+> holding the output files — and the fix is always `aspire stop`.
+
+| ❌ NEVER (file-lock recovery) | ✅ ALWAYS |
+|------------------------------|----------|
+| Say the project has a permanent build failure when you see `MSB3491`/`CS2012` | Recognize Aspire is holding locks and run `aspire stop` |
+| `pkill dotnet` / `kill <PID>` | `aspire stop` (clean shutdown via the CLI) |
+| `rm -rf bin obj` to "force" the build | `aspire stop`, then rebuild |
+| Suggest a reboot | `aspire stop` (single command) |
+| Re-run `dotnet build` with Aspire still up | `aspire stop` first; prefer `aspire resource <name> restart` |
 
 ### What Changed Determines the Action
 

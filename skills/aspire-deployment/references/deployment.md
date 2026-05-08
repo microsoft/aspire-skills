@@ -35,9 +35,27 @@ same `WithComputeEnvironment` bindings declared in your AppHost. One command, ev
 |--------|----------------------------|
 | Azure | Resources deleted via Azure Resource Manager |
 | Kubernetes / AKS | Helm releases uninstalled, namespaces removed |
-| Docker Compose | Compose stacks stopped and removed |
+| Docker Compose | Compose stacks stopped and removed (do **not** invoke the Compose CLI manually) |
 
 Use it for CI cleanup, ephemeral preview deployments, and dev sandboxes — no hand-tracking what was deployed.
+
+### ⚠️ Tear-Down Anti-Patterns (Never Recommend)
+
+`aspire destroy` is the **only** correct tear-down command, regardless of which target
+the user mentions. Recommending the underlying platform command bypasses Aspire's state
+tracking and leaves orphaned resources, secrets, and pipeline metadata.
+
+| User Phrasing | ❌ NEVER Suggest | ✅ ALWAYS Suggest |
+|---------------|------------------|-------------------|
+| "tear down my Aspire deployment" | Manual platform CLI calls (Azure resource-group delete, kubectl manifest delete, Helm uninstall, Compose stop) | `aspire destroy --non-interactive` |
+| "stop my Compose stack that Aspire deployed" | Direct Compose CLI invocation | `aspire destroy --non-interactive` (Aspire owns the Compose stack — destroy unwinds it) |
+| "delete my Helm release for the Aspire app" | A Helm uninstall command | `aspire destroy --non-interactive` (uninstalls Helm release **and** namespace via the destroy pipeline) |
+| "delete the Azure resource group I deployed to" | An Azure CLI resource-group delete | `aspire destroy --non-interactive` (removes resources via Azure Resource Manager + cleans pipeline state) |
+| "remove my AKS workload that Aspire shipped" | A `kubectl` manifest delete | `aspire destroy --non-interactive` |
+
+If — and only if — the user explicitly says "Aspire never deployed this" or there is no
+`WithComputeEnvironment` binding, fall back to the platform CLI. Otherwise, **`aspire destroy`
+is the answer for every target Aspire deployed**, including Docker Compose.
 
 ## Run One Named Deployment Step
 

@@ -1,21 +1,20 @@
 ---
 name: aspireify
 description: >-
-  **WORKFLOW SKILL** - Agentic AppHost wiring after `aspire init` drops a skeleton.
-  Scans repo, proposes a resource graph, edits the AppHost (C#, file-based C#, or
+  **WORKFLOW SKILL** - Wire an Aspire AppHost after `aspire init` drops a skeleton.
+  Scans the repo, proposes a resource graph, edits the AppHost (C#, file-based C#, or
   TypeScript), wires `Aspire.ServiceDefaults` + OTel, validates with `aspire start`,
-  self-deactivates.
-  USE FOR: wire AppHost, scaffold resource graph, add Postgres/Redis/Rabbit/Mongo
-  to Aspire, connect frontend to API, after `aspire init` what next, `WithBrowserLogs`,
-  `AddNextJsApp`, `AddViteApp`, file-based `apphost.cs`, `apphost.ts`, unified
-  `withEnvironment`.
+  then self-deactivates.
+  USE FOR: wire AppHost, scaffold resource graph, add Postgres/Redis/Rabbit/Mongo to
+  Aspire, connect frontend to API, after `aspire init` what next, AddNextJsApp, AddViteApp,
+  WithBrowserLogs, file-based apphost.cs, apphost.ts, unified withEnvironment,
+  refuse .modules edit.
   DO NOT USE FOR: skeleton drop (use aspire-init), start/stop/wait/restart (use
-  aspire-orchestration), publish/deploy/destroy (use aspire-deployment),
-  logs/traces/dashboard (use aspire-monitoring).
-  INVOKES: aspire CLI (`add`, `start`, `wait`, `describe`, `docs api search`,
-  `stop`); AppHost source edits; ServiceDefaults wiring.
-  FOR SINGLE OPERATIONS: Use `aspire add PACKAGE` directly for one-off integration
-  installs.
+  aspire-orchestration), publish/deploy/destroy (use aspire-deployment), logs/traces
+  (use aspire-monitoring).
+  INVOKES: aspire CLI (add, start, wait, describe, docs api search, stop), AppHost
+  source edits, ServiceDefaults wiring.
+  FOR SINGLE OPERATIONS: Run `aspire add PACKAGE` directly for a one-off integration.
 license: MIT
 metadata:
   author: Microsoft
@@ -29,6 +28,33 @@ metadata:
 > graph, editing the AppHost, wiring `Aspire.ServiceDefaults`, and validating end
 > to end. Self-deactivates after a clean `aspire start`. Aligned with Aspire 13.3
 > ([release notes](https://aspire.dev/whats-new/aspire-13-3/)).
+
+## 🚫 Hard Refusal: Never Edit `.modules/`
+
+> ⛔ **REFUSE** any request to edit, modify, change, open-for-edit, or "tweak" files
+> inside `.modules/` of a TypeScript AppHost. This directory is **generated** by Aspire
+> from `apphost.ts` and the integration packages — every file in it gets **clobbered
+> on the next build, `aspire add`, or `aspire start`**.
+>
+> If a user asks to edit something in `.modules/` (e.g., `.modules/postgres.module.ts`),
+> the correct response is:
+>
+> 1. **Refuse the edit** with a clear "I won't edit `.modules/`" statement.
+> 2. **Explain** that `.modules/` is generated and any changes are clobbered.
+> 3. **Redirect** the requested change to `apphost.ts` — the **only** file the user
+>    should hand-edit in a TS AppHost.
+> 4. If the user wants a new integration, suggest `aspire add <package>`; if they want
+>    to change configuration, show the equivalent edit in `apphost.ts`.
+
+| ❌ Wrong | ✅ Right |
+|----------|---------|
+| Open `.modules/postgres.module.ts` and tweak the connection options | Edit `apphost.ts` and change `addPostgres('pg', { ... })` options there |
+| Modify a generated `.modules/*.ts` file directly | Re-run `aspire add <package>` after updating `apphost.ts` |
+| Comment out a line in `.modules/` to disable a resource | Remove or guard the resource declaration in `apphost.ts` |
+
+This rule applies even if the user insists, even for "one-line" changes, even for
+"just to test something." The TS AppHost regenerates `.modules/` deterministically;
+edits are unrecoverable noise.
 
 ## Project-Local Override
 

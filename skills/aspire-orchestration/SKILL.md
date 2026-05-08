@@ -2,10 +2,12 @@
 name: aspire-orchestration
 description: >-
   **WORKFLOW SKILL** — Manage Aspire AppHost lifecycle and recover from file locks,
-  port conflicts, orphaned processes. WHEN: "start my Aspire app", "aspire wait",
-  "restart the API service", "file lock error", "port in use", "upgrade Aspire CLI",
-  "proxies missing". INVOKES: aspire CLI (start, stop, wait, ps, resource, add, init,
-  doctor, update). FOR SINGLE OPERATIONS: Run the aspire CLI directly.
+  port conflicts, and orphaned processes. WHEN: "start my Aspire app", "aspire start",
+  "aspire stop", "aspire wait", "restart the API service", "file lock error",
+  "MSB3491", "CS2012", "port already in use", "upgrade Aspire CLI", "aspire update --self",
+  "proxies missing in aspire ps", "--include-hidden". INVOKES: aspire CLI (start, stop,
+  wait, ps, resource, add, init, doctor, update). FOR SINGLE OPERATIONS: Run the aspire
+  CLI command directly.
 license: MIT
 metadata:
   author: Microsoft
@@ -98,7 +100,7 @@ See [safety-guardrails.md](references/safety-guardrails.md) for detailed rules a
 
 | Symptom | Cause | Action |
 |---------|-------|--------|
-| File lock errors during build | Aspire holds file locks | `aspire stop`, then rebuild |
+| **File lock errors during build (`MSB3491`, `CS2012`)** | **Aspire is running and holds locks on `bin/`, `obj/`, and assemblies.** | **Run `aspire stop` first**, then rebuild or `aspire start`. Do NOT conclude the project has a permanent build failure. |
 | "Port already in use" | Previous instance running | `aspire stop`, then `aspire start` |
 | Resource not found | App not started or name wrong | `aspire ps` to check |
 | Build errors in resource | Code error, not Aspire issue | Fix code, `aspire resource <name> restart` |
@@ -109,6 +111,33 @@ See [safety-guardrails.md](references/safety-guardrails.md) for detailed rules a
 | `aspire agent init` fails | Non-interactive terminal ([#16264](https://github.com/microsoft/aspire/issues/16264)) | Run from standard terminal |
 | Docker daemon unavailable | Container-backed resources fail to start | Start Docker Desktop, then `aspire start` |
 | Multiple AppHosts detected | Wrong AppHost targeted | Use `--apphost <path>` to specify explicitly |
+
+### 🔒 File-Lock Recovery (MSB3491 / CS2012) — Always `aspire stop` First
+
+When a build fails with `error MSB3491: Could not write to output file ...` or
+`error CS2012: Cannot open ... for writing`, the project itself is healthy —
+**Aspire is running and holding file locks** on the resource's output assemblies.
+The recovery is always the same:
+
+```bash
+# ✅ Correct recovery sequence
+aspire stop              # release the locks
+# ... then either rebuild ...
+aspire resource <name> restart   # if Aspire is still up and only one resource changed
+# ... or restart the whole AppHost ...
+aspire start             # if AppHost code changed or Aspire was already stopped
+```
+
+| ❌ NEVER do | ✅ ALWAYS do |
+|------------|-------------|
+| Tell the user the project has a permanent build failure | Recognize the lock as Aspire holding outputs and run `aspire stop` |
+| `dotnet build` again with locks held | `aspire stop` first, then `dotnet build` (or prefer `aspire resource <name> restart`) |
+| Delete `bin/` / `obj/` to "fix" the lock | `aspire stop` — deletion may succeed but the next build relocks |
+| `pkill dotnet` or `kill <PID>` to free locks | `aspire stop` — clean shutdown via the CLI, no orphans |
+| Tell the user to "reboot" or "restart your machine" | `aspire stop` — single command, instant fix |
+
+The same rule applies to any "file in use", "cannot access the file", or
+"another process is using" error during a build of an Aspire-managed resource.
 
 ## Handoff Rules
 
