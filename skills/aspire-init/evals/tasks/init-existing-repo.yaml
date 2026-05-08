@@ -29,14 +29,14 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response recommend running `aspire init` (not `aspire new`) to bootstrap
+        Does the assistant's response recommend running `aspire init` (not `aspire new`) to bootstrap
         the existing repository? It should pick init because the repo already contains
         services. Answer based on intent, not exact string matching.
   - name: hands_off_to_aspireify
     type: prompt
     config:
       prompt: >
-        Does the response explicitly hand off the resource-wiring step to the `aspireify`
+        Does the assistant's response explicitly hand off the resource-wiring step to the `aspireify`
         skill (or the project-local `aspireify` skill installed by `aspire init`)? It
         should make clear that `aspire init` only drops the skeleton plus
         `aspire.config.json` and that wiring is `aspireify`'s job.

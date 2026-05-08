@@ -22,10 +22,8 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response recommend running `aspire init` to drop the AppHost skeleton
-        into the existing repository? It should NOT suggest installing the Aspire
-        workload (`dotnet workload install aspire`) or manually creating an AppHost
-        project from scratch.
+        Does the assistant's response recommend running `aspire init` to drop the
+        AppHost skeleton into the existing repository? Answer based on intent.
   - name: never_workload
     type: text
     config:
@@ -35,17 +33,18 @@ graders:
     type: prompt
     config:
       prompt: >
-        After running `aspire init`, does the response hand the wiring step off to the
-        `aspireify` skill (the in-plugin sibling skill, or the project-local
-        `.agents/skills/aspireify/SKILL.md` installed by `aspire init` in 13.3)?
-        The orchestration skill itself should NOT attempt to wire the AppHost — it
-        should explicitly defer to `aspireify` for repo scanning, resource selection,
-        ServiceDefaults / OTel wiring, and validation.
+        After running `aspire init`, does the assistant's response hand the wiring
+        step off to the `aspireify` skill (the in-plugin sibling skill, or the
+        project-local `.agents/skills/aspireify/SKILL.md` installed by `aspire init`
+        in 13.3)? The orchestration skill should explicitly defer to `aspireify`
+        for repo scanning, resource selection, ServiceDefaults / OTel wiring, and
+        validation.
   - name: knows_workflow
     type: prompt
     config:
       prompt: >
-        Does the response describe (or reference, via aspireify) the wiring workflow:
-        scanning the repository, selecting services, adding resources to the AppHost
-        using the 3-tier API preference (first-party Aspire.Hosting.* > Community
-        Toolkit > raw fallbacks), and validating with `aspire start`?
+        Does the assistant's response describe (or reference, via aspireify) the
+        wiring workflow: scanning the repository, selecting services, adding
+        resources to the AppHost using the 3-tier API preference (first-party
+        Aspire.Hosting.* > Community Toolkit > raw fallbacks), and validating
+        with `aspire start`?

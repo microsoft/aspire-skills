@@ -22,16 +22,18 @@ graders:
     type: prompt
     config:
       prompt: >
-        The response should follow an investigation workflow before suggesting code changes:
+        The assistant's response should follow an investigation workflow before
+        suggesting code changes:
         1. Check resource state with 'aspire describe'
         2. Check structured logs with 'aspire otel logs'
         3. Check console logs with 'aspire logs'
         4. Check traces with 'aspire otel traces'
-        The agent should NOT jump straight to editing code.
+        Investigation must come before any proposed code edit. Answer based on intent.
   - name: uses_aspire_commands
     type: prompt
     config:
       prompt: >
-        Does the response recommend using Aspire CLI diagnostic commands (such as
-        aspire describe, aspire logs, aspire otel) to investigate the issue before
-        suggesting code changes? Answer based on the intent, not exact string matching.
+        Does the assistant's response recommend using Aspire CLI diagnostic commands
+        (such as aspire describe, aspire logs, aspire otel) to investigate the issue
+        before suggesting code changes? Answer based on the intent, not exact string
+        matching.

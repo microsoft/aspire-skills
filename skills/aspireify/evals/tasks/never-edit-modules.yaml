@@ -26,14 +26,14 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response explicitly refuse to edit files inside the .modules/
+        Does the assistant's response explicitly refuse to edit files inside the .modules/
         directory and explain that .modules/ is generated and edits will be
         clobbered?
   - name: redirects_to_apphost_ts
     type: prompt
     config:
       prompt: >
-        Does the response redirect the user's intended change to apphost.ts
+        Does the assistant's response redirect the user's intended change to apphost.ts
         (the only file the user should edit in a TS AppHost)?
   - name: never_recommends_modules_edit
     type: text

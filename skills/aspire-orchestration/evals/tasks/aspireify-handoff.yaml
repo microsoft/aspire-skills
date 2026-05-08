@@ -23,19 +23,19 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response explicitly hand the AppHost wiring step off to the
-        `aspireify` skill (in-plugin sibling at `../aspireify/SKILL.md`, OR the
+        Does the assistant's response explicitly hand the AppHost wiring step off to
+        the `aspireify` skill (in-plugin sibling at `../aspireify/SKILL.md`, OR the
         project-local `.agents/skills/aspireify/SKILL.md` if installed by
-        `aspire init`)? The orchestration skill itself should NOT attempt to
-        scan the repo, choose resources, or edit the AppHost — it should defer
-        that work to aspireify.
+        `aspire init`)? The orchestration skill itself should defer scanning the
+        repo, choosing resources, and editing the AppHost to aspireify. Answer
+        based on intent.
   - name: mentions_project_local_precedence
     type: prompt
     config:
       prompt: >
-        Does the response acknowledge that if a project-local
-        `.agents/skills/aspireify/SKILL.md` exists, the agent should defer to
-        it (with a warning to the user) instead of using the in-plugin sibling?
+        Does the assistant's response acknowledge that if a project-local
+        `.agents/skills/aspireify/SKILL.md` exists, the agent should defer to it
+        (with a warning to the user) instead of using the in-plugin sibling?
   - name: never_handauthors_apphost
     type: text
     config:

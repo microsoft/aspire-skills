@@ -29,15 +29,22 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response recommend `aspire destroy` (new in Aspire 13.3) as the way to tear
-        down a deployed Aspire app? It should NOT instruct the user to manually run
-        `az group delete`, `kubectl delete`, `helm uninstall`, or `docker compose down`.
+        Does the assistant's response recommend `aspire destroy` (new in Aspire 13.3)
+        as the way to tear down a deployed Aspire app? Answer based on intent.
+  - name: no_manual_teardown
+    type: text
+    config:
+      not_contains:
+        - "az group delete"
+        - "kubectl delete"
+        - "helm uninstall"
+        - "docker compose down"
   - name: knows_destroy_is_cross_target
     type: prompt
     config:
       prompt: >
-        The response should mention that `aspire destroy` is the inverse of `aspire deploy`
-        and works across deployment targets — Azure (resources deleted via Azure Resource
-        Manager), Kubernetes/AKS (Helm releases uninstalled, namespaces removed), and
-        Docker Compose (stacks stopped and removed). Bonus if it mentions the use case
-        of CI cleanup or ephemeral preview deployments.
+        The assistant's response should mention that `aspire destroy` is the inverse of
+        `aspire deploy` and works across deployment targets — Azure (resources deleted
+        via Azure Resource Manager), Kubernetes/AKS (Helm releases uninstalled,
+        namespaces removed), and Docker Compose (stacks stopped and removed). Bonus
+        if it mentions the use case of CI cleanup or ephemeral preview deployments.

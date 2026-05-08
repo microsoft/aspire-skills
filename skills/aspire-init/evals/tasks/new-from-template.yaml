@@ -25,9 +25,9 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response recommend `aspire new aspire-starter` (or a similar `aspire new`
-        template) to scaffold a brand-new project? It should NOT recommend `aspire init`
-        for an empty/greenfield project, and it should NOT use `dotnet new aspire-*`.
+        Does the assistant's response recommend `aspire new aspire-starter` (or a
+        similar `aspire new` template) to scaffold a brand-new project? Answer
+        based on intent.
   - name: no_dotnet_new_template
     type: text
     config:
@@ -39,5 +39,8 @@ graders:
     type: prompt
     config:
       prompt: >
-        The response should NOT suggest `aspire init` for a brand-new, empty project. The
-        `aspire init` command is for existing repositories that already contain services.
+        For a brand-new, empty project, the assistant's response should pick
+        `aspire new` rather than `aspire init`. The `aspire init` command is
+        for existing repositories that already contain services. Does the
+        response correctly avoid suggesting `aspire init` for this greenfield
+        scenario? Answer based on intent.

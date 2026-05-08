@@ -18,13 +18,12 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response recommend using 'aspire docs search' or
-        'aspire docs api search' to look up the WithCommand API before
-        editing the AppHost code? The agent should NOT guess the API shape.
+        Does the assistant's response recommend using 'aspire docs search' or
+        'aspire docs api search' to look up the WithCommand API before editing the
+        AppHost code, rather than guessing the API shape? Answer based on intent.
   - name: uses_docs_first
     type: prompt
     config:
       prompt: >
-        Does the response follow a docs-first pattern — looking up
-        documentation or API reference before making code changes to
-        the AppHost?
+        Does the assistant's response follow a docs-first pattern — looking up
+        documentation or API reference before making code changes to the AppHost?

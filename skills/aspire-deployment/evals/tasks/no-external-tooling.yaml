@@ -19,7 +19,10 @@ expected:
   output_contains:
     - "aspire deploy"
   output_not_contains:
-    - "azd"
+    - "azd up"
+    - "azd deploy"
+    - "azd init"
+    - "azd provision"
     - "azure-prepare"
     - "kubectl apply"
     - "helm install"
@@ -29,7 +32,18 @@ graders:
     type: prompt
     config:
       prompt: >
-        The response should explain that Aspire handles Azure deployment natively via
-        'aspire deploy'. It should NOT suggest azd, azure-prepare, azure-deploy, or any
-        external Azure tooling. The AppHost IS the deployment plan. It's fine to mention
-        that `az login` (Azure credentials) is still needed.
+        The assistant's response should explain that Aspire handles Azure deployment
+        natively via 'aspire deploy' — the AppHost IS the deployment plan. It's fine
+        to mention that `az login` (Azure credentials) is still needed.
+  - name: no_external_tooling
+    type: text
+    config:
+      not_contains:
+        - "azd up"
+        - "azd deploy"
+        - "azd init"
+        - "azd provision"
+        - "azure-prepare"
+        - "azure-deploy"
+        - "kubectl apply"
+        - "helm install"

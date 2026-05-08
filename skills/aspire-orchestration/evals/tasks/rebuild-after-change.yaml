@@ -29,7 +29,7 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response recommend using 'aspire resource restart' (or an equivalent
+        Does the assistant's response recommend using 'aspire resource restart' (or an equivalent
         Aspire CLI hot-reload/restart command) to apply code changes while the app is
         running? Answer based on the intent, not exact string matching.
   - name: never_dotnet_build
@@ -41,6 +41,6 @@ graders:
     type: prompt
     config:
       prompt: >
-        The response should mention that 'dotnet build' would cause file lock errors
+        The assistant's response should mention that 'dotnet build' would cause file lock errors
         because Aspire holds locks on running projects. It should recommend using
         aspire resource <name> restart instead.

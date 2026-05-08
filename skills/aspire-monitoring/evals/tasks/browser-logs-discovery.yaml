@@ -29,7 +29,7 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response identify the `Aspire.Hosting.Browsers` integration
+        Does the assistant's response identify the `Aspire.Hosting.Browsers` integration
         (or equivalent description) as the mechanism that captures browser
         console logs, network requests, and screenshots into the dashboard,
         and `WithBrowserLogs()` as the opt-in call on a frontend resource?
@@ -39,7 +39,7 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response route the actual code edit (adding `WithBrowserLogs()`
+        Does the assistant's response route the actual code edit (adding `WithBrowserLogs()`
         to the AppHost) to the `aspireify` skill (or otherwise indicate that
         AppHost authoring is out of scope for this monitoring skill)? Answer
         based on intent — direct AppHost edits from the monitoring skill should
@@ -49,6 +49,6 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response explain that once `WithBrowserLogs()` is wired, the
+        Does the assistant's response explain that once `WithBrowserLogs()` is wired, the
         browser telemetry surfaces in the dashboard alongside server-side
         telemetry (and is also visible via `aspire otel logs <frontend>`)?

@@ -25,7 +25,7 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response recommend `AddNextJsApp(name, path)` as the first-class Next.js
+        Does the assistant's response recommend `AddNextJsApp(name, path)` as the first-class Next.js
         helper introduced in Aspire 13.3? It should also note the requirement that
         `next.config.js` set `output: "standalone"` so the build emits the standalone
         server, since `AddNextJsApp` auto-configures Next.js standalone publishing.
@@ -33,7 +33,7 @@ graders:
     type: prompt
     config:
       prompt: >
-        Bonus: does the response mention or describe the broader 13.3 `PublishAs*` family
+        Bonus: does the assistant's response mention or describe the broader 13.3 `PublishAs*` family
         — `PublishAsStaticWebsite` (SPAs / Vite / Next.js export, preview), `PublishAsNodeServer`
         (pre-bundled Node entry-points like SSR / TanStack Start / SvelteKit), and
         `PublishAsNpmScript` (full Nitro Next.js, Remix, Astro SSR)? It does NOT need to mention

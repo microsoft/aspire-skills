@@ -28,18 +28,18 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response edit apphost.cs directly (with #:sdk and #:package
+        Does the assistant's response edit apphost.cs directly (with #:sdk and #:package
         directives at the top), rather than creating a .csproj file?
   - name: uses_path_overload
     type: prompt
     config:
       prompt: >
-        Does the response use AddProject("name", "path/to/Api.csproj") — the
+        Does the assistant's response use AddProject("name", "path/to/Api.csproj") — the
         path overload — instead of AddProject<Projects.Api>("name") which is
         only available in SDK-style AppHosts with strongly-typed references?
   - name: adds_redis_package
     type: prompt
     config:
       prompt: >
-        Does the response add a #:package directive for Aspire.Hosting.Redis
+        Does the assistant's response add a #:package directive for Aspire.Hosting.Redis
         so AddRedis is available?

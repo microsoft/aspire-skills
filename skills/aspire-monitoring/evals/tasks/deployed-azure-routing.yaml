@@ -31,7 +31,7 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response route the user to azure-diagnostics, App Insights, or
+        Does the assistant's response route the user to azure-diagnostics, App Insights, or
         platform-specific Azure monitoring tools for the deployed app? It should
         cover both the workload (Container Apps logs) and Azure resource health
         in front of it (Front Door, App Insights, NSP, private endpoint) where
@@ -46,7 +46,7 @@ graders:
     type: prompt
     config:
       prompt: >
-        The response should explain that the Aspire CLI uses a local backchannel
+        The assistant's response should explain that the Aspire CLI uses a local backchannel
         and cannot reach deployed apps directly, then route to azure-diagnostics
         or App Insights. It may mention `aspire otel logs --dashboard-url
         --api-key` as the only remote-capable Aspire CLI surface (and only when

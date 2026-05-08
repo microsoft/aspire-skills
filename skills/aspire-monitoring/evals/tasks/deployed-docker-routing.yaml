@@ -26,7 +26,7 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response recommend using Docker CLI commands (docker logs, docker compose
+        Does the assistant's response recommend using Docker CLI commands (docker logs, docker compose
         logs, etc.) to check logs for a service running in Docker Compose? Answer based
         on the intent, not exact string matching.
   - name: not_aspire_cli

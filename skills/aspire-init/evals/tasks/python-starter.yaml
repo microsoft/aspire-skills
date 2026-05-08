@@ -26,14 +26,14 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response use `aspire new aspire-py-starter` (the Aspire 13.3 path) and
+        Does the assistant's response use `aspire new aspire-py-starter` (the Aspire 13.3 path) and
         NOT `dotnet new aspire-py-starter` (which was removed in 13.3)? It should also
         explain that the AppHost will be TypeScript and orchestrates the Python service.
   - name: includes_redis_flag
     type: prompt
     config:
       prompt: >
-        Since the user asked for Redis, the response should include the
+        Since the user asked for Redis, the assistant's response should include the
         `--use-redis-cache true` template option (or note that this option exists for the
         py-starter template).
   - name: no_dotnet_new

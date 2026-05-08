@@ -29,13 +29,13 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response wire Postgres into the AppHost using AddPostgres
+        Does the assistant's response wire Postgres into the AppHost using AddPostgres
         (e.g., AddPostgres("pg").AddDatabase("appdb"))? Answer based on intent.
   - name: wires_with_reference
     type: prompt
     config:
       prompt: >
-        Does the response connect the API project to Postgres via WithReference
+        Does the assistant's response connect the API project to Postgres via WithReference
         and WaitFor (so the API blocks startup until Postgres is healthy)?
   - name: no_deprecated_helpers
     type: text

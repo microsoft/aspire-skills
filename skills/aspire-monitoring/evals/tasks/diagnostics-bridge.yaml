@@ -21,8 +21,8 @@ graders:
     type: prompt
     config:
       prompt: >
-        The response should ask or determine where the app is running and route
-        to the correct tooling. Specifically it should distinguish at least three
+        The assistant's response should ask or determine where the app is running and
+        route to the correct tooling. Specifically it should distinguish at least three
         deployed targets:
         (1) local dev → aspire CLI (aspire describe, aspire logs, aspire otel),
         (2) AKS / Kubernetes workload → kubectl + Container Insights for pod
@@ -31,9 +31,8 @@ graders:
             Front Door, NSP, private endpoint, App Service / Container Apps),
         and ideally also Docker/Compose → docker logs.
         AppHost code or deployment definition questions should route to
-        aspire-deployment (and aspireify for code edits).
-        The response should NOT suggest aspire logs for deployed apps and
-        should NOT collapse AKS into a generic "Azure" bucket.
+        aspire-deployment (and aspireify for code edits). AKS should be a
+        distinct bucket — not collapsed into a generic "Azure" answer.
   - name: no_local_for_deployed
     type: text
     config:

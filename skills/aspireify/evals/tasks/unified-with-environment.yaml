@@ -27,7 +27,7 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response use the unified withEnvironment(name, value) API
+        Does the assistant's response use the unified withEnvironment(name, value) API
         (one method) for ALL three injections — endpoint, parameter, and
         connection string — rather than per-kind helpers?
   - name: no_per_kind_helpers
@@ -42,6 +42,6 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response mention that per-kind helpers (withEnvironmentEndpoint,
+        Does the assistant's response mention that per-kind helpers (withEnvironmentEndpoint,
         withEnvironmentParameter, etc.) are @deprecated in 13.3 and should not
         be used in new code?

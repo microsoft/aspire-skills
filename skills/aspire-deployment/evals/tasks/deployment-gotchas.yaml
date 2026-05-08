@@ -23,6 +23,6 @@ graders:
     type: prompt
     config:
       prompt: >
-        The response should acknowledge that Aspire currently builds in Debug configuration
+        The assistant's response should acknowledge that Aspire currently builds in Debug configuration
         during deployment (issue #14540). There is no Release flag yet. This is a known
         limitation the user should track.

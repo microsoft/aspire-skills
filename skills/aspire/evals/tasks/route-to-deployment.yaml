@@ -22,18 +22,26 @@ graders:
     type: prompt
     config:
       prompt: >
-        The response should route this to aspire-deployment concerns:
-        using 'aspire deploy' for production deployment. It should NOT suggest
-        azd, azure-prepare, or azure-deploy.
+        The assistant's response should route this to aspire-deployment concerns:
+        using 'aspire deploy' for production deployment. Answer based on intent.
   - name: uses_aspire_deploy
     type: prompt
     config:
       prompt: >
-        Does the response recommend using 'aspire deploy' (or an equivalent Aspire CLI
-        deployment command) for production deployment? Answer based on the intent,
-        not exact string matching.
+        Does the assistant's response recommend using 'aspire deploy' (or an
+        equivalent Aspire CLI deployment command) for production deployment?
+        Answer based on the intent, not exact string matching.
   - name: no_azd
     type: text
     config:
       not_contains:
-        - "azd"
+        - "azd up"
+        - "azd deploy"
+        - "azd init"
+        - "azd provision"
+  - name: no_azure_skills
+    type: text
+    config:
+      not_contains:
+        - "azure-prepare"
+        - "azure-deploy"

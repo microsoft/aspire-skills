@@ -16,10 +16,10 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response confirm that Aspire works with existing .NET SDK
-        versions and that the agent should NOT modify global.json or change
-        existing project target frameworks? The AppHost can use a newer SDK
-        while orchestrating older services.
+        Does the assistant's response confirm that Aspire works with existing .NET
+        SDK versions and that global.json plus existing project target frameworks
+        should be left untouched? The AppHost can use a newer SDK while
+        orchestrating older services. Answer based on intent.
   - name: never_modify_globaljson
     type: text
     config:

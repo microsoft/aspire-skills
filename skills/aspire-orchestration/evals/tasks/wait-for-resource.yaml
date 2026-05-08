@@ -30,7 +30,7 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response recommend using 'aspire wait' (or an equivalent Aspire CLI
+        Does the assistant's response recommend using 'aspire wait' (or an equivalent Aspire CLI
         readiness-check command) to wait for a resource to become ready, rather than
         manual HTTP polling? Answer based on the intent, not exact string matching.
   - name: no_polling

@@ -30,7 +30,7 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response recommend re-running `aspire ps` (and/or
+        Does the assistant's response recommend re-running `aspire ps` (and/or
         `aspire describe`) with `--include-hidden` to surface hidden-by-default
         resources such as proxies, helper containers, and migrations? Answer
         based on intent.
@@ -39,7 +39,7 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response explain that Aspire 13.3 filters hidden resources by
+        Does the assistant's response explain that Aspire 13.3 filters hidden resources by
         default and that the filtered output is correct for normal app
         inspection — `--include-hidden` is for debugging missing resources,
         proxies, helper containers, or migrations?

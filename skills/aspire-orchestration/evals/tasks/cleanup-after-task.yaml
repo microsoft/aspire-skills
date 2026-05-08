@@ -26,12 +26,12 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response recommend using 'aspire stop' (or an equivalent Aspire CLI
+        Does the assistant's response recommend using 'aspire stop' (or an equivalent Aspire CLI
         cleanup command) to stop the running application? Answer based on the intent,
         not exact string matching.
   - name: explains_cleanup
     type: prompt
     config:
       prompt: >
-        The response should recommend running 'aspire stop' and explain that
+        The assistant's response should recommend running 'aspire stop' and explain that
         leaving Aspire running causes port conflicts, file locks, and resource waste.

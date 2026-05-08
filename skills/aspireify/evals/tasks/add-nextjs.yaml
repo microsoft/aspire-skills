@@ -27,20 +27,20 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response use AddNextJsApp("web", "./web") (the 13.3 first-class
+        Does the assistant's response use AddNextJsApp("web", "./web") (the 13.3 first-class
         Next.js helper that auto-applies standalone publishing) rather than
         AddNodeApp or a hand-rolled Dockerfile?
   - name: mentions_standalone_output
     type: prompt
     config:
       prompt: >
-        Does the response mention setting output:"standalone" in next.config.js
+        Does the assistant's response mention setting output:"standalone" in next.config.js
         so that AddNextJsApp's auto-publish works correctly?
   - name: wires_to_api
     type: prompt
     config:
       prompt: >
-        Does the response connect the Next.js app to the API via WithReference
+        Does the assistant's response connect the Next.js app to the API via WithReference
         (or equivalent) so the frontend gets the API endpoint via service discovery?
   - name: no_dockerfile_recommendation
     type: text

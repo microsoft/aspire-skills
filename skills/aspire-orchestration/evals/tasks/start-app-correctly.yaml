@@ -26,7 +26,7 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response recommend using 'aspire start' (or an equivalent Aspire CLI
+        Does the assistant's response recommend using 'aspire start' (or an equivalent Aspire CLI
         start command) to launch the application for development? Answer based on
         the intent, not exact string matching.
   - name: never_dotnet_run
@@ -38,6 +38,6 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response explain why 'aspire start' should be used instead of
+        Does the assistant's response explain why 'aspire start' should be used instead of
         'dotnet run' for Aspire projects, mentioning that the Aspire CLI manages
         the full application lifecycle including dependent resources?

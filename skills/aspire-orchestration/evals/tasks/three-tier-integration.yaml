@@ -18,7 +18,7 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response use the correct integration tiers? PostgreSQL should
+        Does the assistant's response use the correct integration tiers? PostgreSQL should
         use Tier 1 first-party Aspire.Hosting.PostgreSQL (AddPostgres). Go should
         use Tier 2 CommunityToolkit (AddGolangApp) or Tier 3 fallback (AddExecutable).
         The agent should prefer higher tiers when available.
@@ -26,5 +26,5 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response recommend looking up the API with aspire docs search
+        Does the assistant's response recommend looking up the API with aspire docs search
         or aspire docs api search before writing AppHost code?

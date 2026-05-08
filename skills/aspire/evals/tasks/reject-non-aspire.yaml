@@ -17,11 +17,18 @@ graders:
     type: prompt
     config:
       prompt: >
-        The response should recognize this is a standard .NET project (no Aspire.AppHost.Sdk)
-        and suggest 'dotnet run' rather than 'aspire start'. It should NOT apply
-        Aspire-specific guardrails to non-Aspire projects.
+        The assistant's response should recognize this is a standard .NET project
+        (no Aspire.AppHost.Sdk) and suggest 'dotnet run' rather than 'aspire start'.
+        Aspire-specific guardrails should not be applied to a non-Aspire project.
+        Answer based on intent.
   - name: allows_dotnet_run
     type: text
     config:
       contains:
         - "dotnet run"
+  - name: no_aspire_commands
+    type: text
+    config:
+      not_contains:
+        - "aspire start"
+        - "aspire run"

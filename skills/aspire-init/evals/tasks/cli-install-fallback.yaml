@@ -27,8 +27,8 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response suggest at least one of the two supported Aspire CLI install
-        paths in 13.3?
+        Does the assistant's response suggest at least one of the two supported Aspire
+        CLI install paths in 13.3?
         (1) `dotnet tool install -g Aspire.Cli` — the NativeAOT .NET 10 global tool, OR
         (2) `curl -sSL https://aspire.dev/install.sh | bash` — the curl installer.
         Either is acceptable; ideally the response mentions both and notes that the
@@ -43,6 +43,6 @@ graders:
     type: prompt
     config:
       prompt: >
-        After installing the CLI, does the response also tell the user how to verify
-        the install (for example, `aspire doctor`, `aspire --version`, or re-running
-        `aspire init`)? Light mention is acceptable.
+        After installing the CLI, does the assistant's response also tell the user how
+        to verify the install (for example, `aspire doctor`, `aspire --version`, or
+        re-running `aspire init`)? Light mention is acceptable.

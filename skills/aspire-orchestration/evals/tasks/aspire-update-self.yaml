@@ -25,14 +25,14 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response recommend `aspire update --self` to upgrade the
+        Does the assistant's response recommend `aspire update --self` to upgrade the
         Aspire CLI itself? This is the safe, no-side-effect upgrade path that
         an agent can run unattended.
   - name: distinguishes_project_update
     type: prompt
     config:
       prompt: >
-        Does the response distinguish `aspire update --self` (CLI upgrade) from
+        Does the assistant's response distinguish `aspire update --self` (CLI upgrade) from
         bare `aspire update` (which modifies project package references and
         `aspire.config.json`)? It should warn that bare `aspire update` edits
         project files and therefore should be run with user approval rather

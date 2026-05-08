@@ -25,17 +25,16 @@ graders:
     type: prompt
     config:
       prompt: >
-        The response should detect that an AppHost already exists in the repo (the
-        `.csproj` references `Aspire.AppHost.Sdk` and `aspire.config.json` is present).
-        It should explicitly say `aspire init` is NOT needed.
+        The assistant's response should detect that an AppHost already exists in the
+        repo (the `.csproj` references `Aspire.AppHost.Sdk` and `aspire.config.json`
+        is present) and explicitly say `aspire init` is NOT needed.
   - name: routes_to_correct_skill
     type: prompt
     config:
       prompt: >
-        The response should route the user to either `aspireify` (for adding/changing
-        resources in the existing AppHost) or `aspire-orchestration` (for starting and
-        managing the running AppHost). It should NOT recommend re-running `aspire init`
-        or `aspire new`.
+        The assistant's response should route the user to either `aspireify` (for
+        adding/changing resources in the existing AppHost) or `aspire-orchestration`
+        (for starting and managing the running AppHost).
   - name: no_init_or_new
     type: text
     config:

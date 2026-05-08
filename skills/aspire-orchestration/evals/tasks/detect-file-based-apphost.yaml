@@ -17,7 +17,7 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response recognize this as an Aspire project and recommend
+        Does the assistant's response recognize this as an Aspire project and recommend
         using 'aspire start' or the Aspire CLI to run it, rather than
         'dotnet run' or 'dotnet apphost.cs'?
   - name: never_dotnet_run

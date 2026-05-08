@@ -27,7 +27,7 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response recommend running `aspire ps --include-hidden` (or
+        Does the assistant's response recommend running `aspire ps --include-hidden` (or
         `aspire describe --include-hidden`) BEFORE concluding that the AppHost
         is misconfigured? Aspire 13.3 filters hidden resources (proxies, helper
         containers, migrations) by default, so a missing-from-`aspire ps`
@@ -36,6 +36,6 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response explain (or imply) that filtered output is the
+        Does the assistant's response explain (or imply) that filtered output is the
         correct default for normal workflows, and that `--include-hidden` is
         the diagnostic opt-in for debugging proxies, sidecars, or migrations?

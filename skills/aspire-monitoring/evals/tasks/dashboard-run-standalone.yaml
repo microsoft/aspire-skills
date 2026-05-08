@@ -27,7 +27,7 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response recommend `aspire dashboard run` as the way to launch
+        Does the assistant's response recommend `aspire dashboard run` as the way to launch
         the Aspire Dashboard standalone (without an AppHost) and capture OTLP
         from any source? Answer based on intent.
 
@@ -35,7 +35,7 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response warn that `aspire dashboard run` is foreground /
+        Does the assistant's response warn that `aspire dashboard run` is foreground /
         blocking and must be treated as a long-running background process by
         agents (e.g., bash mode="async", capture the printed dashboard URL and
         token, do not wait for it to "finish")? This is the critical safety
@@ -45,7 +45,7 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response show how to connect the Aspire CLI to a standalone
+        Does the assistant's response show how to connect the Aspire CLI to a standalone
         dashboard using `--dashboard-url` on `aspire otel logs` and/or
         `aspire otel traces`? The simplest form passes the full login URL
         printed by `aspire dashboard run` (which contains the `t=` token) to

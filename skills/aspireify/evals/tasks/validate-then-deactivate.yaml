@@ -27,24 +27,24 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response use aspire start --non-interactive (required for
+        Does the assistant's response use aspire start --non-interactive (required for
         agent execution to suppress prompts and spinners)?
   - name: uses_aspire_wait
     type: prompt
     config:
       prompt: >
-        Does the response use aspire wait <resource> rather than curl loops
+        Does the assistant's response use aspire wait <resource> rather than curl loops
         or HTTP polling to confirm each resource is healthy?
   - name: uses_describe
     type: prompt
     config:
       prompt: >
-        Does the response use aspire describe --format Json (with --include-hidden
+        Does the assistant's response use aspire describe --format Json (with --include-hidden
         if appropriate) to sanity-check the resource graph?
   - name: hands_off_to_orchestration
     type: prompt
     config:
       prompt: >
-        Does the response announce that aspireify is done and hand off
+        Does the assistant's response announce that aspireify is done and hand off
         day-to-day start/stop/wait responsibility to the aspire-orchestration
         skill (i.e., self-deactivates rather than continuing to own lifecycle)?

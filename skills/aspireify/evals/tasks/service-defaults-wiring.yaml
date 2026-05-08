@@ -27,24 +27,24 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response add builder.AddServiceDefaults() to each service's
+        Does the assistant's response add builder.AddServiceDefaults() to each service's
         Program.cs (Api and Worker)?
   - name: maps_default_endpoints
     type: prompt
     config:
       prompt: >
-        Does the response add app.MapDefaultEndpoints() so /health and /alive
+        Does the assistant's response add app.MapDefaultEndpoints() so /health and /alive
         are exposed for use by AppHost's WaitFor / HealthChecks?
   - name: mentions_otel_health_discovery
     type: prompt
     config:
       prompt: >
-        Does the response explain that AddServiceDefaults wires OpenTelemetry
+        Does the assistant's response explain that AddServiceDefaults wires OpenTelemetry
         (tracing, metrics, logs), health checks, service discovery, and HTTP
         resilience — i.e., the agent understands what they are configuring?
   - name: project_reference
     type: prompt
     config:
       prompt: >
-        Does the response add a ProjectReference from each service project to
+        Does the assistant's response add a ProjectReference from each service project to
         the Aspire.ServiceDefaults project (or equivalent NuGet package)?

@@ -21,7 +21,13 @@ graders:
     type: prompt
     config:
       prompt: >
-        The response should recognize this is a deployed app and route to
-        azure-diagnostics or platform-specific tools. It should explain that
+        The assistant's response should recognize this is a deployed app and route
+        to azure-diagnostics or platform-specific tools. It should explain that
         Aspire CLI cannot connect to deployed apps (local backchannel only).
-        It should NOT suggest 'aspire logs' or 'aspire describe' for deployed apps.
+        Answer based on intent.
+  - name: no_local_aspire_for_deployed
+    type: text
+    config:
+      not_contains:
+        - "aspire logs"
+        - "aspire describe"

@@ -22,6 +22,6 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response recommend using the '--non-interactive' flag (or an equivalent
+        Does the assistant's response recommend using the '--non-interactive' flag (or an equivalent
         mechanism to prevent CLI prompts from hanging) when running Aspire in a CI
         pipeline? Answer based on the intent, not exact string matching.

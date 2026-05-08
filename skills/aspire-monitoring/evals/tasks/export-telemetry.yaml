@@ -25,6 +25,6 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response recommend using 'aspire export' (or an equivalent Aspire CLI
+        Does the assistant's response recommend using 'aspire export' (or an equivalent Aspire CLI
         command for creating portable diagnostics bundles) to share diagnostic data?
         Answer based on the intent, not exact string matching.

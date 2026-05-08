@@ -25,7 +25,7 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response recommend using 'aspire logs' (or an equivalent Aspire CLI
+        Does the assistant's response recommend using 'aspire logs' (or an equivalent Aspire CLI
         log viewing command) to view application logs locally? Answer based on the
         intent, not exact string matching.
   - name: not_manual_logs

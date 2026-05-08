@@ -18,7 +18,7 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response recommend using 'aspire do diagnostics' (or a similar
+        Does the assistant's response recommend using 'aspire do diagnostics' (or a similar
         pipeline inspection command) to evaluate the deployment pipeline steps
         before actually deploying? It should suggest inspecting the pipeline
         first rather than jumping straight to 'aspire deploy'.

@@ -29,25 +29,31 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response recommend the new `AddAzureFrontDoor("frontdoor")` hosting
-        integration (with `WithOrigin(...)` to attach backends as origins) instead of
-        suggesting hand-written ARM/Bicep templates or Azure Portal blade-clicking?
+        Does the assistant's response recommend the new `AddAzureFrontDoor("frontdoor")`
+        hosting integration (with `WithOrigin(...)` to attach backends as origins)
+        rather than suggesting hand-written ARM/Bicep templates or Azure Portal
+        blade-clicking? Answer based on intent.
   - name: uses_aks_integration
     type: prompt
     config:
       prompt: >
-        Does the response recommend `AddAzureKubernetesEnvironment("aks")` plus
-        `WithComputeEnvironment(aks)` (and optionally `WithSystemNodePool` to customize
-        node pool VM size and autoscaling bounds) for AKS deployment? It should NOT
-        reference the removed `AksSkuTier` enum — the AKS control-plane defaults to
-        the Free SKU in 13.3.
+        Does the assistant's response recommend `AddAzureKubernetesEnvironment("aks")`
+        plus `WithComputeEnvironment(aks)` (and optionally `WithSystemNodePool` to
+        customize node pool VM size and autoscaling bounds) for AKS deployment?
+        Answer based on intent.
+  - name: no_removed_aks_apis
+    type: text
+    config:
+      not_contains:
+        - "AksSkuTier"
   - name: knows_other_13_3_integrations
     type: prompt
     config:
       prompt: >
-        Bonus: does the response mention any of the other Aspire 13.3 Azure features —
-        `AddPromptAgent` for Foundry (the working replacement for the removed
-        `AddAndPublishPromptAgent`), `WithPrivateEndpoint` for ACR/OpenAI/Foundry,
-        Network Security Perimeter (`AddNetworkSecurityPerimeter`), automatic HTTPS
-        upgrade for Azure App Service, or the requirement to bind every resource to a
-        compute environment via `WithComputeEnvironment` for multi-environment deploys?
+        Bonus: does the assistant's response mention any of the other Aspire 13.3 Azure
+        features — `AddPromptAgent` for Foundry (the working replacement for the
+        removed `AddAndPublishPromptAgent`), `WithPrivateEndpoint` for ACR/OpenAI/
+        Foundry, Network Security Perimeter (`AddNetworkSecurityPerimeter`),
+        automatic HTTPS upgrade for Azure App Service, or the requirement to bind
+        every resource to a compute environment via `WithComputeEnvironment` for
+        multi-environment deploys?

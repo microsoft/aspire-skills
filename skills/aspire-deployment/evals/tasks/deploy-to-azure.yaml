@@ -17,7 +17,10 @@ expected:
   output_contains:
     - "aspire deploy"
   output_not_contains:
-    - "azd"
+    - "azd up"
+    - "azd deploy"
+    - "azd init"
+    - "azd provision"
     - "azure-prepare"
     - "azure-deploy"
 
@@ -26,9 +29,9 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response recommend using 'aspire deploy' (or an equivalent Aspire CLI
-        deployment command) to deploy the application to Azure? Answer based on the
-        intent, not exact string matching.
+        Does the assistant's response recommend using 'aspire deploy' (or an
+        equivalent Aspire CLI deployment command) to deploy the application to
+        Azure? Answer based on the intent, not exact string matching.
   - name: no_azd
     type: text
     config:

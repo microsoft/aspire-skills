@@ -27,7 +27,7 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response use the unified withEnvironment(name, value) API
+        Does the assistant's response use the unified withEnvironment(name, value) API
         (a single method that accepts any value kind) rather than per-kind
         helpers like withEnvironmentEndpoint or withEnvironmentParameter?
   - name: no_deprecated_helpers
@@ -49,5 +49,5 @@ graders:
     type: prompt
     config:
       prompt: >
-        Does the response edit apphost.ts (and explicitly avoid editing the
+        Does the assistant's response edit apphost.ts (and explicitly avoid editing the
         generated .modules/ directory)?
