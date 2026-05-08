@@ -50,7 +50,7 @@ await api
 
 > **❌ DO NOT USE** the per-kind helpers — they are `@deprecated` in 13.3:
 > `withEnvironmentEndpoint`, `withEnvironmentParameter`, `withEnvironmentConnectionString`,
-> `withEnvironmentExpression`.
+> `withEnvironmentExpression`, `withEnvironmentFromOutput`, `withEnvironmentFromKeyVaultSecret`.
 >
 > ✅ Use unified `withEnvironment(name, value)` instead. Any agent suggesting
 > the per-kind helpers is wrong for 13.3.

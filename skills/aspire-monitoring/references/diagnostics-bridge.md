@@ -61,7 +61,7 @@ The Aspire CLI communicates with the running AppHost through a **backchannel soc
 | `aspire otel traces` | Distributed trace data | `aspire otel traces` |
 | `aspire otel spans` | Individual span-level detail | `aspire otel spans` |
 | `aspire otel logs --trace-id <id>` | Logs correlated to a specific trace (⚠️ verify flag in your version) | `aspire otel logs --trace-id abc123` |
-| `aspire otel logs --dashboard-url --api-key` | Query a standalone or deployed dashboard | `aspire otel logs --dashboard-url https://localhost:18888 --api-key <TOKEN>` |
+| `aspire otel logs --dashboard-url` | Query a standalone or deployed dashboard | `aspire otel logs --dashboard-url "https://localhost:18888/login?t=TOKEN"` |
 | `aspire describe` | Resource state, endpoints, health (filtered) | `aspire describe --format Json` |
 | `aspire describe --include-hidden` | Include hidden resources (proxies, helpers, migrations) | `aspire describe --include-hidden --format Json` |
 | `aspire ps --include-hidden --format Json` | Resource list including hidden resources | `aspire ps --include-hidden --format Json` |
@@ -102,17 +102,23 @@ aspire dashboard run
 
 ### Connect the CLI to a standalone dashboard
 
-The `aspire otel logs` and `aspire otel traces` commands accept `--dashboard-url` and `--api-key` so the CLI can query a standalone dashboard without an AppHost:
+The `aspire otel logs` and `aspire otel traces` commands accept `--dashboard-url` (and `--api-key` when the dashboard is configured with API-key auth) so the CLI can query a standalone dashboard without an AppHost.
+
+The simplest form passes the full login URL printed by `aspire dashboard run` — the CLI normalizes login URLs automatically:
 
 ```bash
-# Stream structured logs from a standalone dashboard
-aspire otel logs --dashboard-url https://localhost:18888 --api-key <TOKEN> --follow
+# Stream structured logs (login URL form — token in URL)
+aspire otel logs --dashboard-url "http://localhost:18888/login?t=TOKEN" --follow
 
-# Search recent traces in a standalone dashboard
-aspire otel traces --dashboard-url https://localhost:18888 --api-key <TOKEN>
+# Search recent traces
+aspire otel traces --dashboard-url "http://localhost:18888/login?t=TOKEN"
 ```
 
-`--dashboard-url` accepts either the dashboard's base URL or its login URL (login URLs are normalized automatically). The `--api-key` value is the `t=` token from the login URL printed by `aspire dashboard run`.
+For dashboards that use a separate API key (e.g., the standalone container image with API-key auth configured), pass `--api-key` alongside the base URL:
+
+```bash
+aspire otel logs --dashboard-url https://my-dashboard.example.com --api-key "$DASHBOARD_API_KEY" --follow
+```
 
 The container-image standalone dashboard is still available where the CLI isn't an option.
 
@@ -136,12 +142,15 @@ The `Aspire.Hosting.Browsers` integration captures **browser console logs, netwo
 
 The Aspire CLI's `aspire logs`, `aspire describe`, and other backchannel commands use the local backchannel socket at `~/.aspire/backchannels/`. This is **by design** — there is no remote backchannel. When an app is deployed, the Aspire CLI cannot reach it directly.
 
-**Exception:** if a Dashboard is reachable (deployed alongside the app, or running standalone), `aspire otel logs --dashboard-url --api-key` and `aspire otel traces --dashboard-url --api-key` can query it remotely. This does **not** extend to `aspire logs` or `aspire describe`.
+**Exception:** if a Dashboard is reachable (deployed alongside the app, or running standalone), `aspire otel logs --dashboard-url` and `aspire otel traces --dashboard-url` (with `--api-key` when the dashboard requires it) can query it remotely. This does **not** extend to `aspire logs` or `aspire describe`.
 
 ```bash
-# Limited remote support via deployed Dashboard
-aspire otel logs --dashboard-url https://my-dashboard.azurecontainerapps.io --api-key <TOKEN>
-aspire otel traces --dashboard-url https://my-dashboard.azurecontainerapps.io --api-key <TOKEN>
+# Limited remote support via deployed Dashboard — login URL form
+aspire otel logs --dashboard-url "https://my-dashboard.azurecontainerapps.io/login?t=TOKEN"
+aspire otel traces --dashboard-url "https://my-dashboard.azurecontainerapps.io/login?t=TOKEN"
+
+# Or with separate API-key auth
+aspire otel logs --dashboard-url https://my-dashboard.azurecontainerapps.io --api-key "$DASHBOARD_API_KEY"
 ```
 
 ### Three-way deployed routing

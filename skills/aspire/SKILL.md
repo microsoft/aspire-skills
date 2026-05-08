@@ -118,11 +118,11 @@ If any of the following exist project-locally (from `aspire agent init` or 13.3
 `aspire init`), **warn the user** and **defer to the project-local copy** — repo-specific
 guidance there should not be overridden by the in-plugin sibling:
 
-| Project-local file | Defers to |
+| Project-local file | Precedence |
 |--------------------|-----------|
-| `.agents/skills/aspire/SKILL.md` | this top-level router (deeper C# / TS AppHost editing, Playwright handoff, investigation workflows) |
-| `.agents/skills/aspireify/SKILL.md` | the in-plugin `aspireify` sibling (AppHost wiring) |
-| `.agents/skills/aspire-init/SKILL.md` | the in-plugin `aspire-init` sibling (skeleton drop) |
+| `.agents/skills/aspire/SKILL.md` | This file (top-level router) defers to it for deeper C# / TS AppHost editing, Playwright handoff, investigation workflows. |
+| `.agents/skills/aspireify/SKILL.md` | The in-plugin `aspireify` sibling defers to it for AppHost wiring. |
+| `.agents/skills/aspire-init/SKILL.md` | The in-plugin `aspire-init` sibling defers to it for the skeleton/first-run flow. |
 
 **Safety guardrails from this plugin always apply** even when project-local skills are
 active.

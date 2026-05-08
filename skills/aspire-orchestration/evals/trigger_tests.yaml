@@ -19,12 +19,6 @@ should_trigger_prompts:
   - prompt: "Wait for the database to be ready"
     reason: "Resource wait is orchestration"
     confidence: high
-  - prompt: "I want to add Redis to my Aspire app"
-    reason: "aspire add is orchestration"
-    confidence: high
-  - prompt: "Create a new Aspire project"
-    reason: "aspire new is orchestration"
-    confidence: high
   - prompt: "Stop everything, I'm done"
     reason: "Cleanup is orchestration"
     confidence: high
@@ -37,8 +31,11 @@ should_trigger_prompts:
   - prompt: "I see proxies missing in aspire ps"
     reason: "Hidden-resource filtering = --include-hidden guidance lives in orchestration"
     confidence: high
-  - prompt: "set up Aspire in this Express app"
-    reason: "Initial aspire init step is orchestration; orchestration then hands off to aspireify for wiring"
+  - prompt: "Run my apphost.cs file"
+    reason: "File-based C# AppHost should trigger orchestration"
+    confidence: high
+  - prompt: "I need to look up the API for AddPostgres in Aspire"
+    reason: "API lookup is orchestration (docs-first pattern)"
     confidence: high
 
 should_not_trigger_prompts:
@@ -65,12 +62,6 @@ should_not_trigger_prompts:
     confidence: high
   - prompt: "Check my App Insights metrics for the deployed app"
     reason: "Deployed diagnostics routes to azure-diagnostics"
-    confidence: high
-  - prompt: "Run my apphost.cs file"
-    reason: "File-based C# AppHost should trigger orchestration"
-    confidence: high
-  - prompt: "I need to look up the API for AddPostgres in Aspire"
-    reason: "API lookup is orchestration (docs-first pattern)"
     confidence: high
   - prompt: "wire up my AppHost with the API and Postgres"
     reason: "AppHost wiring (resource selection + AppHost edits) is owned by aspireify, not orchestration"

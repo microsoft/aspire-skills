@@ -131,11 +131,11 @@ Plain Kubernetes (Helm-based, 13.3): `AddKubernetesEnvironment("k8s")`.
 | `PublishAsNpmScript(scriptName)` | npm `start` / `serve` runtime (full Nitro Next.js, Remix, Astro SSR) |
 
 ```csharp
-#pragma warning disable ASPIREEXTENSION001
+#pragma warning disable ASPIREJAVASCRIPT001
 builder.AddViteApp("web", "../web")
     .WithReference(api)
     .PublishAsStaticWebsite(apiPath: "/api", apiTarget: api);
-#pragma warning restore ASPIREEXTENSION001
+#pragma warning restore ASPIREJAVASCRIPT001
 ```
 
 `AddNextJsApp` auto-applies standalone publishing — no explicit `PublishAs*`

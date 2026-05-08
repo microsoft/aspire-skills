@@ -14,7 +14,7 @@ description: >-
   logs/traces/dashboard (use aspire-monitoring).
   INVOKES: aspire CLI (`add`, `start`, `wait`, `describe`, `docs api search`,
   `stop`); AppHost source edits; ServiceDefaults wiring.
-  FOR SINGLE OPERATIONS: Use `aspire add <package>` directly for one-off integration
+  FOR SINGLE OPERATIONS: Use `aspire add PACKAGE` directly for one-off integration
   installs.
 license: MIT
 metadata:

@@ -40,6 +40,9 @@ should_trigger_prompts:
   - prompt: "Add Azure Front Door in front of my Aspire app"
     reason: "AddAzureFrontDoor is a deployment-time hosting integration"
     confidence: high
+  - prompt: "Check my deploy pipeline health before shipping"
+    reason: "aspire do diagnostics is deployment-owned (pipeline diagnostics)"
+    confidence: high
 
 should_not_trigger_prompts:
   - prompt: "Start my Aspire app locally"
@@ -59,7 +62,4 @@ should_not_trigger_prompts:
     confidence: high
   - prompt: "Run my unit tests"
     reason: "Not deployment related"
-    confidence: high
-  - prompt: "Check my deploy pipeline health before shipping"
-    reason: "Pipeline diagnostics is deployment"
     confidence: high

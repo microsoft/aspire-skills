@@ -4,8 +4,9 @@ description: >
   Agent should know that `aspire dashboard run` (new in Aspire 13.3) launches
   the Aspire Dashboard standalone, that it is foreground/blocking and must be
   treated as a long-running background process, and that the Aspire CLI can
-  connect to it via `aspire otel logs --dashboard-url --api-key` and
-  `aspire otel traces --dashboard-url --api-key`.
+  connect to it via `aspire otel logs --dashboard-url` /
+  `aspire otel traces --dashboard-url` (login URL form, with optional
+  `--api-key` when the dashboard uses API-key auth).
 tags:
   - dashboard
   - standalone
@@ -20,7 +21,6 @@ expected:
   output_contains:
     - "aspire dashboard run"
     - "--dashboard-url"
-    - "--api-key"
 
 graders:
   - name: knows_dashboard_run
@@ -41,14 +41,17 @@ graders:
         token, do not wait for it to "finish")? This is the critical safety
         note. Answer based on intent.
 
-  - name: connects_cli_via_dashboard_url_and_api_key
+  - name: connects_cli_via_dashboard_url
     type: prompt
     config:
       prompt: >
         Does the response show how to connect the Aspire CLI to a standalone
-        dashboard using both `--dashboard-url` AND `--api-key` on
-        `aspire otel logs` and/or `aspire otel traces`? The token is the `t=`
-        value from the dashboard login URL.
+        dashboard using `--dashboard-url` on `aspire otel logs` and/or
+        `aspire otel traces`? The simplest form passes the full login URL
+        printed by `aspire dashboard run` (which contains the `t=` token) to
+        `--dashboard-url` — login URLs are normalized automatically. `--api-key`
+        is only required when the dashboard is configured with API-key auth.
+        Either approach is acceptable.
 
   - name: not_obsolete_workaround
     type: text

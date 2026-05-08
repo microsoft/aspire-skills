@@ -11,7 +11,7 @@ description: >-
   existing AppHost.
   INVOKES: aspire CLI (init, new, doctor), aspireify (handoff), aspire-orchestration
   (validate).
-  FOR SINGLE OPERATIONS: Run `aspire init` or `aspire new <template>` directly when language
+  FOR SINGLE OPERATIONS: Run `aspire init` or `aspire new TEMPLATE` directly when language
   is chosen.
 license: MIT
 metadata:
