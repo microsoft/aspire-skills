@@ -12,6 +12,7 @@ interface Props {
 
 const { title, description } = Astro.props;
 const canonical = new URL(Astro.url.pathname, Astro.site);
+const faviconUrl = `${import.meta.env.BASE_URL}favicon.svg`;
 const imageUrl = new URL(`${import.meta.env.BASE_URL}brand/aspire-logo-256.svg`, Astro.site);
 ---
 
@@ -37,6 +38,7 @@ const imageUrl = new URL(`${import.meta.env.BASE_URL}brand/aspire-logo-256.svg`,
     <title>{title}</title>
     <meta name="description" content={description} />
     <meta name="theme-color" content="#7455dd" />
+    <link rel="icon" type="image/svg+xml" href={faviconUrl} />
     <link rel="canonical" href={canonical} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
