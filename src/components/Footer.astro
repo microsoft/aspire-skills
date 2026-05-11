@@ -1,0 +1,49 @@
+---
+import { Icon } from "astro-icon/components";
+
+const year = new Date().getFullYear();
+const links = [
+  { label: "Open on GitHub", href: "https://github.com/microsoft/aspire-skills", icon: "simple-icons:github", color: "text-aspire-black bg-slate-100 dark:bg-white/10 dark:text-white" },
+  { label: "Read Aspire docs", href: "https://aspire.dev", icon: "lucide:book-open", color: "text-aspire-purple bg-[#f4f0ff] dark:bg-aspire-primary/20 dark:text-aspire-muted" },
+  { label: "Use the brand kit", href: "https://microsoft.github.io/aspire-brand/", icon: "lucide:palette", color: "text-aspire-magenta bg-fuchsia-50 dark:bg-aspire-magenta/20 dark:text-fuchsia-200" },
+  { label: "File an issue", href: "https://github.com/microsoft/aspire-skills/issues", icon: "lucide:circle-dot", color: "text-aspire-blue bg-blue-50 dark:bg-aspire-blue/20 dark:text-blue-200" },
+  { label: "Learn about Waza", href: "https://github.com/microsoft/waza", icon: "lucide:file-check-2", color: "text-aspire-cyan bg-cyan-50 dark:bg-aspire-cyan/20 dark:text-cyan-200" },
+  { label: "Explore evals", href: "https://github.com/microsoft/aspire-skills/tree/main/evals", icon: "lucide:list-checks", color: "text-aspire-flamingo bg-rose-50 dark:bg-aspire-flamingo/20 dark:text-rose-200" }
+] as const;
+---
+
+<footer class="mt-16 border-t border-aspire-primary/10 bg-white/70 dark:border-white/10 dark:bg-white/[0.03]">
+  <div class="mx-auto w-full max-w-7xl px-5 py-10 sm:px-8">
+    <div class="grid gap-8 lg:grid-cols-[1fr_2fr] lg:items-start">
+      <div>
+        <p class="inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-aspire-purple dark:text-aspire-muted">
+          <img class="h-5 w-5" src={`${import.meta.env.BASE_URL}brand/aspire-logo-256.svg`} alt="" />
+          Aspire skills
+        </p>
+        <p class="mt-3 max-w-md text-sm leading-7 text-slate-700 dark:text-slate-200">
+          Agent skills that help AI coding tools understand Aspire projects, follow Aspire workflows, and surface deployment and diagnostics guidance.
+        </p>
+      </div>
+
+      <nav aria-label="Footer links" class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {links.map((link) => (
+          <a class="group flex items-center gap-3 rounded-xl px-2 py-2 text-sm font-semibold text-aspire-black transition hover:bg-[#f4f0ff] hover:text-aspire-purple dark:text-white dark:hover:bg-white/10 dark:hover:text-aspire-muted" href={link.href}>
+            <span class:list={["inline-flex h-8 w-8 items-center justify-center rounded-lg ring-1 ring-aspire-primary/10 dark:ring-white/10", link.color]}>
+              <Icon name={link.icon} class="h-4 w-4" />
+            </span>
+            <span>{link.label}</span>
+            <Icon name="lucide:arrow-up-right" class="ml-auto h-4 w-4 opacity-45 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:opacity-100" />
+          </a>
+        ))}
+      </nav>
+    </div>
+
+    <div class="mt-8 flex flex-col gap-3 border-t border-aspire-primary/10 pt-5 text-xs text-slate-600 dark:border-white/10 dark:text-slate-400 sm:flex-row sm:items-center sm:justify-between">
+      <a class="inline-flex items-center gap-2 font-semibold text-aspire-purple underline decoration-aspire-secondary decoration-2 underline-offset-4 dark:text-aspire-muted" href="https://github.com/microsoft/aspire-skills/blob/main/LICENSE">
+        <Icon name="lucide:scale" class="h-4 w-4" />
+        MIT licensed
+      </a>
+      <p>© {year} Microsoft.</p>
+    </div>
+  </div>
+</footer>

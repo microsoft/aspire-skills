@@ -39,18 +39,35 @@ Tells developers to run `aspire agent init` for scenario-based reference files (
 ## Installation
 
 ```bash
-# Copilot CLI
+# GitHub Copilot CLI
+copilot plugin marketplace add microsoft/aspire-skills
+copilot plugin install aspire@aspire-skills
+
+# Claude Code CLI
+claude
 /plugin marketplace add microsoft/aspire-skills
 /plugin install aspire@aspire-skills
 
-# Claude Code
-claude plugin install aspire@aspire-skills
+# Codex CLI
+codex plugin marketplace add microsoft/aspire-skills
+# then open /plugins and install aspire
 
 # Gemini CLI
 gemini extensions install https://github.com/microsoft/aspire-skills
 
-# Cursor
-# Install from Cursor marketplace → search "aspire-skills"
+# Cursor CLI
+mkdir -p ~/.cursor/skills
+git clone https://github.com/microsoft/aspire-skills ~/.cursor/skills/aspire-skills
+agent
+
+# OpenCode
+apm install microsoft/aspire-skills
+opencode
+
+# Ollama + Copilot CLI
+ollama launch copilot
+copilot plugin marketplace add microsoft/aspire-skills
+copilot plugin install aspire@aspire-skills
 ```
 
 ## How It Fits Together

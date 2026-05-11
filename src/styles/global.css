@@ -1,0 +1,159 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme {
+  --color-aspire-primary: #7455dd;
+  --color-aspire-purple: #512bd4;
+  --color-aspire-secondary: #b9aaee;
+  --color-aspire-muted: #dcd5f6;
+  --color-aspire-grey: #dce0e8;
+  --color-aspire-black: #1f1e33;
+  --color-aspire-white: #ffffff;
+  --color-aspire-magenta: #b30f87;
+  --color-aspire-flamingo: #f65163;
+  --color-aspire-blue: #0078d7;
+  --color-aspire-cyan: #0b7e84;
+  --color-aspire-yellow: #9b8308;
+  --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+  --aspire-primary: #7455dd;
+  --aspire-purple: #512bd4;
+  --aspire-black: #1f1e33;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-width: 320px;
+  background: #faf9ff;
+  color: var(--aspire-black);
+  font-family: "Poppins", ui-sans-serif, system-ui, sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+:root[data-theme="dark"] body {
+  background: #111020;
+  color: #ffffff;
+}
+
+::selection {
+  background: #dcd5f6;
+  color: #1f1e33;
+}
+
+:focus-visible {
+  outline: 3px solid #0b7e84;
+  outline-offset: 4px;
+}
+
+:where(a, button, summary, [role="button"], [role="tab"], label[for], select, input[type="button"], input[type="reset"], input[type="submit"]) {
+  cursor: pointer;
+}
+
+:where(button:disabled, [aria-disabled="true"], input:disabled, select:disabled) {
+  cursor: not-allowed;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+.glass-card {
+  border: 1px solid rgb(116 85 221 / 0.18);
+  background: rgb(255 255 255 / 0.94);
+  backdrop-filter: blur(12px);
+}
+
+:root[data-theme="dark"] .glass-card {
+  border-color: rgb(185 170 238 / 0.22);
+  background: rgb(31 30 51 / 0.72);
+}
+
+.install-tab[data-active="true"] {
+  border-color: transparent;
+  background: #512bd4;
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.install-tab[data-active="true"] .vendor-badge {
+  background: rgb(255 255 255 / 0.94);
+  color: #1f1e33;
+}
+
+:root[data-theme="dark"] .install-tab[data-active="true"] .vendor-badge {
+  background: rgb(255 255 255 / 0.94);
+  color: #1f1e33;
+}
+
+:root[data-theme="dark"] .install-tab[data-active="true"] .vendor-badge svg {
+  color: #1f1e33;
+}
+
+:root[data-theme="dark"] .install-tab[data-active="true"] .vendor-badge img {
+  filter: none;
+}
+
+.install-terminal .expressive-code {
+  margin: 0;
+}
+
+.install-terminal .expressive-code figure.frame {
+  border: 1px solid rgb(116 85 221 / 0.16) !important;
+  border-radius: 0.875rem !important;
+  box-shadow: none !important;
+  overflow: hidden;
+}
+
+.install-terminal .expressive-code figure.frame figcaption.header {
+  border-bottom: 1px solid rgb(116 85 221 / 0.12) !important;
+}
+
+:root[data-theme="dark"] .install-terminal .expressive-code figure.frame {
+  border-color: rgb(255 255 255 / 0.12) !important;
+}
+
+:root[data-theme="dark"] .install-terminal .expressive-code figure.frame figcaption.header {
+  border-bottom-color: rgb(255 255 255 / 0.12) !important;
+}
+
+.inline-code {
+  border: 1px solid rgb(116 85 221 / 0.2);
+  border-radius: 0.65rem;
+  background:
+    linear-gradient(135deg, rgb(244 240 255 / 0.96), rgb(224 253 255 / 0.72));
+  box-shadow: inset 0 -1px 0 rgb(11 126 132 / 0.14);
+  color: #512bd4;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
+  font-weight: 700;
+}
+
+:root[data-theme="dark"] .inline-code {
+  border-color: rgb(185 170 238 / 0.26);
+  background:
+    linear-gradient(135deg, rgb(116 85 221 / 0.22), rgb(11 126 132 / 0.18));
+  box-shadow: inset 0 -1px 0 rgb(185 170 238 / 0.14);
+  color: #dcd5f6;
+}
+
+.theme-toggle .moon-icon {
+  display: none;
+}
+
+:root[data-theme="dark"] .theme-toggle .moon-icon {
+  display: block;
+}
+
+:root[data-theme="dark"] .theme-toggle .sun-icon {
+  display: none;
+}

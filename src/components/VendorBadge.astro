@@ -1,0 +1,74 @@
+---
+import { Icon } from "astro-icon/components";
+
+interface Props {
+  icon: "aspire" | "claude" | "copilot" | "cursor" | "gemini" | "github" | "ollama" | "openai" | "opencode";
+  label: string;
+  compact?: boolean;
+}
+
+const { icon, label, compact = false } = Astro.props;
+
+const iconifyNames = {
+  claude: "logos:claude-icon",
+  copilot: "logos:github-copilot",
+  cursor: "simple-icons:cursor",
+  gemini: "logos:google-gemini",
+  github: "simple-icons:github",
+  ollama: "simple-icons:ollama",
+  openai: "logos:openai-icon"
+};
+const compactIconifyNames = {
+  ...iconifyNames,
+  gemini: "simple-icons:googlegemini"
+};
+const imageSources = {
+  aspire: `${import.meta.env.BASE_URL}brand/aspire-logo-256.svg`,
+  opencode: `${import.meta.env.BASE_URL}brand/opencode-logo.svg`
+};
+
+const iconSet = compact ? compactIconifyNames : iconifyNames;
+const iconifyName = icon in iconSet ? iconSet[icon as keyof typeof iconSet] : undefined;
+const imageSource = icon in imageSources ? imageSources[icon as keyof typeof imageSources] : undefined;
+const isWide = !compact && (icon === "gemini" || icon === "opencode");
+const currentColorIconClasses = {
+  cursor: "text-aspire-black dark:text-white",
+  gemini: "text-aspire-purple dark:text-aspire-muted",
+  github: "text-aspire-black dark:text-white",
+  ollama: "text-aspire-black dark:text-white"
+};
+const currentColorClass = icon in currentColorIconClasses ? currentColorIconClasses[icon as keyof typeof currentColorIconClasses] : "";
+---
+
+<span
+  class:list={[
+    "vendor-badge inline-flex shrink-0 items-center justify-center bg-white text-aspire-black ring-1 ring-aspire-primary/10 transition dark:bg-white/[0.08] dark:text-white dark:ring-white/15",
+    compact ? "h-8 w-8 rounded-lg" : "h-10 rounded-xl",
+    isWide ? "w-24 px-2" : compact ? "w-8" : "w-10"
+  ]}
+  aria-hidden="true"
+>
+  {iconifyName && (
+    <Icon
+      name={iconifyName}
+      class:list={[
+        "shrink-0",
+        compact ? "h-4.5 w-4.5" : isWide ? "h-5 w-16" : "h-5 w-5",
+        currentColorClass
+      ]}
+    />
+  )}
+  {imageSource && (
+    <img
+      class:list={[
+        compact ? "max-h-4 w-auto max-w-6" : isWide ? "max-h-5 w-auto max-w-[5.25rem]" : "h-6 w-6",
+        icon === "opencode" ? "dark:invert" : ""
+      ]}
+      src={imageSource}
+      alt=""
+      loading="lazy"
+      decoding="async"
+    />
+  )}
+</span>
+<span class="sr-only">{label}</span>
