@@ -30,7 +30,7 @@ Resolve these before pursuing any single channel:
 |---|---|---|---|
 | 1 | **Repo must be PUBLIC** | Microsoft IP / legal review | Single largest gate. All install commands above need URL-based fetch. |
 | 2 | **Telemetry disclosure** | Engineering / privacy | `hooks/scripts/track-telemetry.sh` + `.ps1` collect data — audit + document opt-out env var (`ASPIRE_SKILLS_COLLECT_TELEMETRY=false` per azure-skills convention). |
-| 3 | **Version string alignment** | Engineering | `plugin.json` says `2.0.0`; SKILL.md says `2.1.0`. Pick a single source (git tag or NBGV) and stamp. |
+| 3 | **Version string alignment** | Engineering | Keep plugin manifests, marketplace manifests, and top-level skill metadata on the same version. Pick a single source (git tag or NBGV) and stamp. |
 | 4 | **`marketplace.json` populated** | Engineering | `.claude-plugin/marketplace.json` and `.cursor-plugin/marketplace.json` are placeholders today — Claude Code submission and Codex CLI both require populated content. |
 | 5 | **Microsoft brand check** | Legal / brand | `author.name: "Microsoft"` is fine (azure-skills uses it freely). VS Code Marketplace publisher (`ms-azuretools` / `ms-dotnet`) needs Azure DevOps PAT — only relevant if shipping a VS Code extension wrapper. |
 
@@ -58,13 +58,13 @@ Resolve these before pursuing any single channel:
       "name": "aspire",
       "source": "./",
       "description": "Top-level router + 5 sub-skills for Aspire 13.3+",
-      "version": "2.1.0",
+      "version": "0.0.1",
       "author": { "name": "Microsoft" },
       "homepage": "https://github.com/microsoft/aspire-skills",
       "repository": "https://github.com/microsoft/aspire-skills",
       "license": "MIT",
       "category": "developer-tools",
-      "tags": ["aspire", "dotnet", "cloud-native"],
+      "tags": ["aspire", "dotnet", "typescript", "javascript", "python", "cloud-native"],
       "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }
     }
   ]
@@ -116,7 +116,7 @@ codex plugin marketplace add microsoft/aspire-skills
 
 ```bash
 gemini extensions install microsoft/aspire-skills
-gemini extensions install microsoft/aspire-skills --ref=v2.1.0
+gemini extensions install microsoft/aspire-skills --ref=v0.0.1
 ```
 
 **GitHub Releases acceleration:** attach `.tar.gz`/`.zip` artifacts (named `darwin.arm64.aspire.tar.gz`, etc.) to GitHub releases — CLI auto-discovers the latest release.
@@ -233,7 +233,7 @@ Possible internal path: package the skills' instructions as a Foundry **prompt a
 
 | Order | Channel | Action |
 |---|---|---|
-| 1 | Gemini CLI | Push GitHub release tag `v2.1.0` with archives. |
+| 1 | Gemini CLI | Push GitHub release tag `v0.0.1` with archives. |
 | 2 | Claude Code Marketplace | Submit at <https://claude.com/plugins>; verify `/plugin marketplace add microsoft/aspire-skills`. |
 | 3 | Codex CLI | No extra step — `marketplace.json` is shared. Verify `codex plugin marketplace add`. |
 | 4 | JetBrains | Document `npx skills add` install command in README. |
