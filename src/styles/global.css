@@ -189,6 +189,32 @@ body {
   line-height: 1.25rem;
 }
 
+.inline-code-doc-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.inline-code-doc-link code {
+  font: inherit;
+}
+
+.inline-code-doc-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 0.05rem;
+  padding-left: 0.45rem;
+  border-left: 1px solid color-mix(in srgb, var(--inline-code-color) 28%, transparent);
+  color: var(--inline-code-color);
+  opacity: 0.75;
+  transition: opacity 150ms ease;
+}
+
+a.inline-code-doc-link:hover .inline-code-doc-icon {
+  opacity: 1;
+}
+
 a.inline-code:hover {
   transform: translateY(-1px);
 }

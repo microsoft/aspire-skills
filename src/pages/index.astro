@@ -187,11 +187,14 @@ const navLinks = [
             </div>
             <div class="flex flex-col justify-between gap-3 sm:min-w-52 sm:items-end">
               <a
-                class:list={["inline-code inline-code-command w-fit px-3 text-sm", inlineCodeAccentClasses[index % inlineCodeAccentClasses.length]]}
+                class:list={["inline-code inline-code-command inline-code-doc-link w-fit px-3 text-sm", inlineCodeAccentClasses[index % inlineCodeAccentClasses.length]]}
                 href={skill.commandHref}
-                aria-label={`Read Aspire CLI docs for ${skill.command}`}
+                aria-label={`Open Aspire CLI reference for ${skill.command}`}
               >
                 <code>{skill.command}</code>
+                <span class="inline-code-doc-icon" aria-hidden="true">
+                  <Icon name="lucide:book-open" class="h-3.5 w-3.5" />
+                </span>
               </a>
               <p class="text-xs font-medium text-slate-500 dark:text-slate-400">{skill.highlights.slice(0, 2).join(" · ")}</p>
             </div>
@@ -231,11 +234,14 @@ const navLinks = [
               <p class="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{rule.why}</p>
             </div>
             <a
-              class:list={["inline-code inline-code-command w-fit px-3 text-sm md:ml-auto", inlineCodeAccentClasses[index % guardrailIconColors.length]]}
+              class:list={["inline-code inline-code-command inline-code-doc-link w-fit px-3 text-sm md:ml-auto", inlineCodeAccentClasses[index % guardrailIconColors.length]]}
               href={rule.commandHref}
-              aria-label={`Read Aspire CLI docs for ${rule.command}`}
+              aria-label={`Open Aspire CLI reference for ${rule.command}`}
             >
               <code>{rule.command}</code>
+              <span class="inline-code-doc-icon" aria-hidden="true">
+                <Icon name="lucide:book-open" class="h-3.5 w-3.5" />
+              </span>
             </a>
           </div>
         ))}
@@ -334,11 +340,14 @@ const navLinks = [
             <p class="mt-5 max-w-2xl text-base leading-8 text-slate-600 dark:text-slate-300">
               The marketplace plugin gives every agent an Aspire-native route. Project-local guidance from
               <a
-                class="inline-code inline-code-accent-purple mx-1 whitespace-nowrap px-1.5 py-0.5"
+                class="inline-code inline-code-doc-link inline-code-accent-purple mx-1 whitespace-nowrap px-1.5 py-0.5"
                 href="https://aspire.dev/reference/cli/commands/aspire-agent-init/"
-                aria-label="Read Aspire CLI docs for aspire agent init"
+                aria-label="Open Aspire CLI reference for aspire agent init"
               >
                 <code>aspire agent init</code>
+                <span class="inline-code-doc-icon" aria-hidden="true">
+                  <Icon name="lucide:book-open" class="h-3 w-3" />
+                </span>
               </a>
               adds app-specific context, then the setup, diagnostics, and deployment skills keep work anchored to the Aspire CLI.
             </p>
