@@ -138,6 +138,7 @@ body {
   color: #dcd5f6;
 }
 
+:root[data-theme="dark"] .install-tab[data-active="true"] .vendor-badge[data-vendor-icon="aspire"],
 :root[data-theme="dark"] .install-tab[data-active="true"] .vendor-badge[data-vendor-icon="copilot"] {
   border-color: rgb(255 255 255 / 0.7);
   background: rgb(255 255 255 / 0.94);
