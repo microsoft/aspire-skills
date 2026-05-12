@@ -95,7 +95,7 @@ const navLinks = [
         </p>
         <h1 class="text-balance max-w-3xl text-4xl font-semibold leading-[1.08] tracking-[-0.035em] text-aspire-black dark:text-white sm:text-5xl sm:leading-[1.04] lg:text-[4rem] lg:leading-[1]">
           <a class="heading-anchor inline-flex items-start gap-3" href="#top">
-            <span>Install once. Keep <span class="text-aspire-magenta dark:text-aspire-flamingo">agents</span> on the <span class="text-aspire-purple dark:text-aspire-muted">Aspire</span> path.</span>
+            <span>Install once. Keep <span class="text-aspire-cyan dark:text-cyan-200">agents</span> on the <span class="text-aspire-purple dark:text-aspire-muted">Aspire</span> path.</span>
             <Icon name="lucide:link" class="heading-anchor-icon mt-2 h-5 w-5 shrink-0 sm:mt-3 lg:mt-4" />
           </a>
         </h1>
@@ -204,47 +204,66 @@ const navLinks = [
     </section>
 
     <section id="guardrails" class="mx-auto w-full max-w-7xl px-5 py-14 sm:px-8">
-      <div class="mb-8 grid gap-4 lg:grid-cols-[0.8fr_1.2fr] lg:items-end">
-        <div>
-          <p class="eyebrow inline-flex items-center gap-2">
-            <Icon name="lucide:traffic-cone" class="h-4 w-4" />
-            Guardrails
-          </p>
-          <h2 class="mt-3 text-3xl font-semibold tracking-[-0.03em] text-aspire-black dark:text-white sm:text-5xl">
-            <a class="heading-anchor inline-flex items-start gap-3" href="#guardrails">
-              <span>The right Aspire command at the right time.</span>
-              <Icon name="lucide:link" class="heading-anchor-icon mt-2 h-5 w-5 shrink-0 sm:mt-4" />
-            </a>
-          </h2>
-        </div>
-        <p class="text-base leading-8 text-slate-600 dark:text-slate-300">
-          Aspire skills guide agents toward workflows that understand the AppHost graph,
-          resource readiness, deployment state, and diagnostics context.
-        </p>
-      </div>
-
-      <div class="divide-y divide-slate-950/10 border-y border-slate-950/10 dark:divide-white/10 dark:border-white/10">
-        {guardrails.map((rule, index) => (
-          <div class="grid gap-4 py-5 md:grid-cols-[auto_minmax(0,1fr)_minmax(13rem,0.7fr)] md:items-center">
-            <div class:list={["inline-flex h-10 w-10 items-center justify-center rounded-xl border", guardrailIconColors[index % guardrailIconColors.length]]}>
-              <Icon name={rule.icon} class="h-5 w-5" />
-            </div>
-            <div>
-              <p class="text-xs font-medium uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{rule.label}</p>
-              <p class="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{rule.why}</p>
-            </div>
-            <a
-              class:list={["inline-code inline-code-command inline-code-doc-link w-fit px-3 text-sm md:ml-auto", inlineCodeAccentClasses[index % guardrailIconColors.length]]}
-              href={rule.commandHref}
-              aria-label={`Open Aspire CLI reference for ${rule.command}`}
-            >
-              <code>{rule.command}</code>
-              <span class="inline-code-doc-icon" aria-hidden="true">
-                <Icon name="lucide:book-open" class="h-3.5 w-3.5" />
-              </span>
-            </a>
+      <div class="grid gap-4 lg:grid-cols-[0.9fr_1.45fr] lg:items-stretch">
+        <div class="surface-card relative overflow-hidden p-6 sm:p-8">
+          <div class="pointer-events-none absolute -right-20 -top-20 h-52 w-52 rounded-full bg-aspire-purple/10 blur-3xl dark:bg-aspire-muted/10"></div>
+          <div class="relative">
+            <p class="eyebrow inline-flex items-center gap-2">
+              <Icon name="lucide:traffic-cone" class="h-4 w-4" />
+              Guardrails
+            </p>
+            <h2 class="mt-3 text-3xl font-semibold tracking-[-0.03em] text-aspire-black dark:text-white sm:text-5xl">
+              <a class="heading-anchor inline-flex items-start gap-3" href="#guardrails">
+                <span>The right Aspire command at the right time.</span>
+                <Icon name="lucide:link" class="heading-anchor-icon mt-2 h-5 w-5 shrink-0 sm:mt-4" />
+              </a>
+            </h2>
+            <p class="mt-5 text-base leading-8 text-slate-600 dark:text-slate-300">
+              Aspire skills guide agents toward workflows that understand the AppHost graph,
+              resource readiness, deployment state, and diagnostics context.
+            </p>
           </div>
-        ))}
+
+          <div class="relative mt-8 grid gap-3">
+            {guardrails.map((rule, index) => (
+              <div class="flex items-center gap-3 rounded-2xl border border-slate-950/10 bg-white/70 p-3 text-sm font-medium text-slate-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-200">
+                <span class:list={["inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border", guardrailIconColors[index % guardrailIconColors.length]]}>
+                  <Icon name={rule.icon} class="h-4 w-4" />
+                </span>
+                <span>{rule.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div class="grid gap-4 sm:grid-cols-2">
+          {guardrails.map((rule, index) => (
+            <article class="group flex min-h-56 flex-col justify-between rounded-3xl border border-slate-950/10 bg-white p-5 transition hover:-translate-y-1 hover:border-aspire-purple/20 hover:shadow-xl hover:shadow-slate-950/5 dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-aspire-muted/30 dark:hover:bg-white/[0.06] dark:hover:shadow-black/20">
+              <div>
+                <div class="flex items-start justify-between gap-4">
+                  <span class:list={["inline-flex h-11 w-11 items-center justify-center rounded-2xl border transition group-hover:scale-[1.03]", guardrailIconColors[index % guardrailIconColors.length]]}>
+                    <Icon name={rule.icon} class="h-5 w-5" />
+                  </span>
+                  <span class="rounded-full border border-slate-950/10 px-2.5 py-1 text-xs font-semibold text-slate-500 dark:border-white/10 dark:text-slate-400">
+                    0{index + 1}
+                  </span>
+                </div>
+                <p class="mt-5 text-xs font-medium uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{rule.label}</p>
+                <p class="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">{rule.why}</p>
+              </div>
+              <a
+                class:list={["inline-code inline-code-command inline-code-doc-link mt-5 w-fit px-3 text-sm", inlineCodeAccentClasses[index % inlineCodeAccentClasses.length]]}
+                href={rule.commandHref}
+                aria-label={`Open Aspire CLI reference for ${rule.command}`}
+              >
+                <code>{rule.command}</code>
+                <span class="inline-code-doc-icon" aria-hidden="true">
+                  <Icon name="lucide:book-open" class="h-3.5 w-3.5" />
+                </span>
+              </a>
+            </article>
+          ))}
+        </div>
       </div>
     </section>
 
