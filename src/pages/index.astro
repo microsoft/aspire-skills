@@ -88,7 +88,7 @@ const navLinks = [
       </div>
     </header>
 
-    <section id="top" class="mx-auto grid w-full max-w-7xl gap-8 px-5 pb-10 pt-12 sm:px-8 lg:grid-cols-[minmax(0,1fr)_24rem] lg:pb-14 lg:pt-20">
+    <section id="top" class="mx-auto grid w-full max-w-7xl gap-8 px-5 pb-10 pt-12 sm:px-8 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-stretch lg:pb-14 lg:pt-20">
       <div>
         <p class="mb-5 inline-flex items-center gap-2 rounded-full border border-aspire-purple/20 bg-[#f4f0ff] px-3 py-1.5 text-sm font-semibold text-aspire-purple dark:border-aspire-muted/25 dark:bg-aspire-primary/20 dark:text-aspire-muted">
           <span class="h-1.5 w-1.5 rounded-full bg-current"></span>
@@ -116,31 +116,35 @@ const navLinks = [
         </div>
       </div>
 
-      <aside class="surface-card h-fit p-4" aria-label="Aspire skills safety net">
-        <div class="grid grid-cols-3 divide-x divide-slate-950/10 border-b border-slate-950/10 pb-4 dark:divide-white/10 dark:border-white/10">
-          {heroStats.map((stat) => (
-            <div class="px-3 first:pl-0 last:pr-0">
-              <span class:list={["mb-3 inline-flex h-8 w-8 items-center justify-center rounded-lg border", stat.color]}>
-                <Icon name={stat.icon} class="h-4 w-4" />
-              </span>
-              <p class="text-2xl font-semibold tracking-[-0.03em] text-aspire-black dark:text-white">{stat.value}</p>
-              <p class="mt-0.5 text-[0.65rem] font-medium uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{stat.label}</p>
+      <aside class="surface-card flex self-stretch p-5 sm:p-6 lg:p-5" aria-label="Aspire skills safety net">
+        <div class="flex w-full flex-col justify-between gap-6">
+          <div class="grid grid-cols-3 divide-x divide-slate-950/10 border-b border-slate-950/10 pb-5 dark:divide-white/10 dark:border-white/10">
+            {heroStats.map((stat) => (
+              <div class="px-3 first:pl-0 last:pr-0">
+                <span class:list={["mb-3 inline-flex h-8 w-8 items-center justify-center rounded-lg border", stat.color]}>
+                  <Icon name={stat.icon} class="h-4 w-4" />
+                </span>
+                <p class="text-2xl font-semibold tracking-[-0.03em] text-aspire-black dark:text-white">{stat.value}</p>
+                <p class="mt-0.5 text-[0.65rem] font-medium uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{stat.label}</p>
+              </div>
+            ))}
+          </div>
+          <div>
+            <div>
+              <p class="eyebrow">Safety net</p>
+              <h2 class="mt-2 text-xl font-semibold tracking-[-0.02em] text-aspire-black dark:text-white">Aspire-aware by default</h2>
             </div>
-          ))}
-        </div>
-        <div class="mt-4">
-          <p class="eyebrow">Safety net</p>
-          <h2 class="mt-2 text-xl font-semibold tracking-[-0.02em] text-aspire-black dark:text-white">Aspire-aware by default</h2>
-        </div>
-        <div class="mt-4 grid gap-3">
-          {safetySignals.map((signal) => (
-            <div class="flex items-center gap-3 text-sm font-medium text-slate-700 dark:text-slate-300">
-              <span class:list={["inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border", signal.color]}>
-                <Icon name={signal.icon} class="h-4.5 w-4.5" />
-              </span>
-              {signal.label}
+            <div class="mt-5 grid gap-3">
+              {safetySignals.map((signal) => (
+                <div class="flex items-center gap-3 text-sm font-medium text-slate-700 dark:text-slate-300">
+                  <span class:list={["inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border", signal.color]}>
+                    <Icon name={signal.icon} class="h-4.5 w-4.5" />
+                  </span>
+                  {signal.label}
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
         </div>
       </aside>
     </section>
