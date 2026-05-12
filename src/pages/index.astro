@@ -118,17 +118,6 @@ const navLinks = [
 
       <aside class="surface-card flex self-stretch p-5 sm:p-6 lg:p-5" aria-label="Aspire skills safety net">
         <div class="flex w-full flex-col justify-between gap-6">
-          <div class="grid grid-cols-3 divide-x divide-slate-950/10 border-b border-slate-950/10 pb-5 dark:divide-white/10 dark:border-white/10">
-            {heroStats.map((stat) => (
-              <div class="px-3 first:pl-0 last:pr-0">
-                <span class:list={["mb-3 inline-flex h-8 w-8 items-center justify-center rounded-lg border", stat.color]}>
-                  <Icon name={stat.icon} class="h-4 w-4" />
-                </span>
-                <p class="text-2xl font-semibold tracking-[-0.03em] text-aspire-black dark:text-white">{stat.value}</p>
-                <p class="mt-0.5 text-[0.65rem] font-medium uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{stat.label}</p>
-              </div>
-            ))}
-          </div>
           <div>
             <div>
               <p class="eyebrow">Safety net</p>
@@ -144,6 +133,17 @@ const navLinks = [
                 </div>
               ))}
             </div>
+          </div>
+          <div class="grid grid-cols-3 divide-x divide-slate-950/10 border-t border-slate-950/10 pt-5 dark:divide-white/10 dark:border-white/10">
+            {heroStats.map((stat) => (
+              <div class="px-3 first:pl-0 last:pr-0">
+                <span class:list={["mb-3 inline-flex h-8 w-8 items-center justify-center rounded-lg border", stat.color]}>
+                  <Icon name={stat.icon} class="h-4 w-4" />
+                </span>
+                <p class="text-2xl font-semibold tracking-[-0.03em] text-aspire-black dark:text-white">{stat.value}</p>
+                <p class="mt-0.5 text-[0.65rem] font-medium uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{stat.label}</p>
+              </div>
+            ))}
           </div>
         </div>
       </aside>
