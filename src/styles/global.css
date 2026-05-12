@@ -138,6 +138,16 @@ body {
   color: #dcd5f6;
 }
 
+:root[data-theme="dark"] .install-tab[data-active="true"] .vendor-badge[data-vendor-icon="copilot"] {
+  border-color: rgb(255 255 255 / 0.7);
+  background: rgb(255 255 255 / 0.94);
+  color: #1f1e33;
+}
+
+:root[data-theme="dark"] .install-tab[data-active="true"] .vendor-badge[data-vendor-icon="copilot"] svg {
+  color: #1f1e33;
+}
+
 :root[data-theme="dark"] .install-tab[data-active="true"] .vendor-badge img {
   filter: none;
 }
