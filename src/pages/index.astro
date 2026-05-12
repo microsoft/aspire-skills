@@ -268,30 +268,38 @@ const navLinks = [
     </section>
 
     <section id="evals" class="mx-auto w-full max-w-7xl px-5 py-14 sm:px-8">
-      <div class="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
-        <div>
-          <p class="eyebrow inline-flex items-center gap-2">
-            <Icon name="lucide:file-check-2" class="h-4 w-4" />
-            Evaluated guidance
-          </p>
-          <h2 class="mt-3 text-3xl font-semibold tracking-[-0.03em] text-aspire-black dark:text-white sm:text-5xl">
-            <a class="heading-anchor inline-flex items-start gap-3" href="#evals">
-              <span>Confidence built into the guidance.</span>
-              <Icon name="lucide:link" class="heading-anchor-icon mt-2 h-5 w-5 shrink-0 sm:mt-4" />
-            </a>
-          </h2>
-          <p class="mt-5 text-lg leading-8 text-slate-600 dark:text-slate-300">
-            <a class="font-semibold text-aspire-purple underline decoration-aspire-secondary decoration-2 underline-offset-4 dark:text-aspire-muted" href="https://github.com/microsoft/waza">Waza</a>
-            evaluations exercise routing, command choices, and scenario-specific workflows
-            so Aspire guidance stays dependable as the skills evolve.
-          </p>
-          <div class="mt-6 flex flex-wrap gap-3">
-            {evalLinks.map((link) => (
-              <a class="inline-flex items-center gap-2 rounded-xl border border-slate-950/10 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-950/25 hover:bg-slate-50 hover:text-aspire-black dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white" href={link.href}>
-                <Icon name={link.icon} class="h-4 w-4" />
-                {link.label}
-              </a>
-            ))}
+      <div class="grid gap-5 lg:grid-cols-2 lg:items-stretch">
+        <div class="surface-card relative flex min-h-full overflow-hidden p-6 sm:p-8">
+          <div class="pointer-events-none absolute -left-24 -top-24 h-56 w-56 rounded-full bg-aspire-cyan/10 blur-3xl dark:bg-aspire-cyan/15"></div>
+          <div class="relative flex w-full flex-col">
+            <div>
+              <p class="eyebrow inline-flex items-center gap-2">
+                <Icon name="lucide:file-check-2" class="h-4 w-4" />
+                Evaluated guidance
+              </p>
+              <h2 class="mt-3 text-3xl font-semibold tracking-[-0.03em] text-aspire-black dark:text-white sm:text-5xl">
+                <a class="heading-anchor inline-flex items-start gap-3" href="#evals">
+                  <span>Confidence built into the guidance.</span>
+                  <Icon name="lucide:link" class="heading-anchor-icon mt-2 h-5 w-5 shrink-0 sm:mt-4" />
+                </a>
+              </h2>
+              <p class="mt-5 text-lg leading-8 text-slate-600 dark:text-slate-300">
+                <a class="font-semibold text-aspire-purple underline decoration-aspire-secondary decoration-2 underline-offset-4 dark:text-aspire-muted" href="https://github.com/microsoft/waza">Waza</a>
+                evaluations exercise routing, command choices, and scenario-specific workflows
+                so Aspire guidance stays dependable as the skills evolve.
+              </p>
+            </div>
+            <div class="mt-8 grid gap-3 sm:grid-cols-3 lg:mt-auto lg:grid-cols-1">
+              {evalLinks.map((link) => (
+                <a class="group flex items-center justify-between gap-3 rounded-2xl border border-slate-950/10 bg-white/75 p-3 text-sm font-medium text-slate-700 transition hover:border-aspire-purple/25 hover:bg-white hover:text-aspire-black dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-aspire-muted/30 dark:hover:bg-white/[0.08] dark:hover:text-white" href={link.href}>
+                  <span class="inline-flex items-center gap-2">
+                    <Icon name={link.icon} class="h-4 w-4 text-aspire-purple dark:text-aspire-muted" />
+                    {link.label}
+                  </span>
+                  <Icon name="lucide:arrow-up-right" class="h-3.5 w-3.5 opacity-50 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:opacity-100" />
+                </a>
+              ))}
+            </div>
           </div>
         </div>
         <div class="surface-card p-5">
