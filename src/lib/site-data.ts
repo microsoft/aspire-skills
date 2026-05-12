@@ -394,18 +394,18 @@ function getInstallSurfaces(pluginVersion: string, marketplaceVersion: string): 
     },
     {
       id: "npx",
-      name: "NPX Context7 helper",
+      name: "skills.sh via NPX",
       shortName: "NPX",
-      badge: "MCP",
-      status: "Docs context helper",
-      detail: "Use the NPX-backed Context7 MCP server when an agent host needs fresh package and framework documentation alongside Aspire guidance.",
-      command: "npx -y @upstash/context7-mcp@latest",
+      badge: "skills.sh",
+      status: "Skills installer",
+      detail: "Use the skills.sh NPX installer to add Aspire skills directly from this GitHub repository.",
+      command: "npx skills add microsoft/aspire-skills",
       language: "bash",
-      title: "NPX Context7 MCP",
+      title: "skills.sh NPX",
       icon: "npm",
       notes: [
-        "This is the NPX MCP helper declared by the Gemini extension manifest, not the primary Aspire skill install path.",
-        "Keep it alongside Aspire skills when your agent host supports MCP tools for live documentation lookup."
+        "Installs Aspire guidance through the Skills-compatible installer path.",
+        "Use this when your agent host supports skills.sh-managed skill locations."
       ]
     }
   ];

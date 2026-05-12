@@ -78,8 +78,8 @@ ollama launch copilot
 copilot plugin marketplace add microsoft/aspire-skills
 copilot plugin install aspire@aspire-skills
 
-# NPX Context7 MCP helper
-npx -y @upstash/context7-mcp@latest
+# skills.sh via NPX
+npx skills add microsoft/aspire-skills
 ```
 
 ## How It Fits Together
