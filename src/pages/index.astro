@@ -13,15 +13,31 @@ const description =
   "Install Aspire skills for AI coding agents: guardrails, orchestration, deployment, monitoring, and self-evaluating guidance for Aspire apps.";
 
 const heroStats = [
-  { label: "skills", value: skills.length, icon: "lucide:layers" },
-  { label: "evals", value: evalSummary.taskCount, icon: "lucide:circle-check" },
-  { label: "plugin", value: manifests.plugin.version, icon: "lucide:plug" }
+  { label: "skills", value: skills.length, icon: "lucide:layers", color: "text-aspire-purple bg-[#f4f0ff] border-aspire-purple/15 dark:bg-aspire-primary/20 dark:text-aspire-muted dark:border-aspire-muted/20" },
+  { label: "evals", value: evalSummary.taskCount, icon: "lucide:circle-check", color: "text-aspire-cyan bg-cyan-50 border-cyan-200 dark:bg-aspire-cyan/20 dark:text-cyan-200 dark:border-cyan-200/20" },
+  { label: "plugin", value: manifests.plugin.version, icon: "lucide:plug", color: "text-aspire-blue bg-blue-50 border-blue-200 dark:bg-aspire-blue/20 dark:text-blue-200 dark:border-blue-200/20" }
 ] as const;
 
 const safetySignals = [
-  { label: "Detects AppHosts", icon: "lucide:radar" },
-  { label: "Keeps agents on Aspire CLI", icon: "lucide:shield-check" },
-  { label: "Routes lifecycle, deploy, and diagnostics", icon: "lucide:workflow" }
+  { label: "Detects AppHosts", icon: "lucide:radar", color: "text-aspire-purple bg-[#f4f0ff] border-aspire-purple/15 dark:bg-aspire-primary/20 dark:text-aspire-muted dark:border-aspire-muted/20" },
+  { label: "Keeps agents on Aspire CLI", icon: "lucide:shield-check", color: "text-aspire-cyan bg-cyan-50 border-cyan-200 dark:bg-aspire-cyan/20 dark:text-cyan-200 dark:border-cyan-200/20" },
+  { label: "Routes lifecycle, deploy, and diagnostics", icon: "lucide:workflow", color: "text-aspire-blue bg-blue-50 border-blue-200 dark:bg-aspire-blue/20 dark:text-blue-200 dark:border-blue-200/20" }
+] as const;
+
+const skillIconColors = [
+  "text-aspire-purple bg-[#f4f0ff] border-aspire-purple/15 dark:bg-aspire-primary/20 dark:text-aspire-muted dark:border-aspire-muted/20",
+  "text-aspire-cyan bg-cyan-50 border-cyan-200 dark:bg-aspire-cyan/20 dark:text-cyan-200 dark:border-cyan-200/20",
+  "text-aspire-blue bg-blue-50 border-blue-200 dark:bg-aspire-blue/20 dark:text-blue-200 dark:border-blue-200/20",
+  "text-aspire-magenta bg-fuchsia-50 border-fuchsia-200 dark:bg-aspire-magenta/20 dark:text-fuchsia-200 dark:border-fuchsia-200/20",
+  "text-aspire-flamingo bg-rose-50 border-rose-200 dark:bg-aspire-flamingo/20 dark:text-rose-200 dark:border-rose-200/20",
+  "text-aspire-yellow bg-yellow-50 border-yellow-200 dark:bg-aspire-yellow/20 dark:text-yellow-200 dark:border-yellow-200/20"
+] as const;
+
+const guardrailIconColors = [
+  "text-aspire-purple bg-[#f4f0ff] border-aspire-purple/15 dark:bg-aspire-primary/20 dark:text-aspire-muted dark:border-aspire-muted/20",
+  "text-aspire-cyan bg-cyan-50 border-cyan-200 dark:bg-aspire-cyan/20 dark:text-cyan-200 dark:border-cyan-200/20",
+  "text-aspire-blue bg-blue-50 border-blue-200 dark:bg-aspire-blue/20 dark:text-blue-200 dark:border-blue-200/20",
+  "text-aspire-flamingo bg-rose-50 border-rose-200 dark:bg-aspire-flamingo/20 dark:text-rose-200 dark:border-rose-200/20"
 ] as const;
 
 const evalLinks = [
@@ -91,7 +107,9 @@ const navLinks = [
         <div class="grid grid-cols-3 divide-x divide-slate-950/10 border-b border-slate-950/10 pb-4 dark:divide-white/10 dark:border-white/10">
           {heroStats.map((stat) => (
             <div class="px-3 first:pl-0 last:pr-0">
-              <Icon name={stat.icon} class="mb-3 h-4 w-4 text-slate-400 dark:text-slate-500" />
+              <span class:list={["mb-3 inline-flex h-8 w-8 items-center justify-center rounded-lg border", stat.color]}>
+                <Icon name={stat.icon} class="h-4 w-4" />
+              </span>
               <p class="text-2xl font-semibold tracking-[-0.03em] text-aspire-black dark:text-white">{stat.value}</p>
               <p class="mt-0.5 text-[0.65rem] font-medium uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{stat.label}</p>
             </div>
@@ -104,7 +122,7 @@ const navLinks = [
         <div class="mt-4 grid gap-3">
           {safetySignals.map((signal) => (
             <div class="flex items-center gap-3 text-sm font-medium text-slate-700 dark:text-slate-300">
-              <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-950/10 bg-white text-aspire-purple dark:border-white/10 dark:bg-white/[0.04] dark:text-aspire-muted">
+              <span class:list={["inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border", signal.color]}>
                 <Icon name={signal.icon} class="h-4.5 w-4.5" />
               </span>
               {signal.label}
@@ -134,9 +152,9 @@ const navLinks = [
       </div>
 
       <div class="divide-y divide-slate-950/10 border-y border-slate-950/10 dark:divide-white/10 dark:border-white/10">
-        {skills.map((skill) => (
+        {skills.map((skill, index) => (
           <a class="group grid gap-4 py-5 transition hover:bg-slate-50 dark:hover:bg-white/[0.04] sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:px-3" href={skill.href}>
-            <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-950/10 bg-white text-aspire-purple transition group-hover:border-aspire-purple/30 group-hover:bg-[#f4f0ff] dark:border-white/10 dark:bg-white/[0.04] dark:text-aspire-muted dark:group-hover:border-aspire-muted/30 dark:group-hover:bg-white/[0.08]">
+            <span class:list={["inline-flex h-10 w-10 items-center justify-center rounded-xl border transition group-hover:scale-[1.03]", skillIconColors[index % skillIconColors.length]]}>
               <Icon name={skill.icon} class="h-5 w-5" />
             </span>
             <div>
@@ -171,9 +189,9 @@ const navLinks = [
       </div>
 
       <div class="divide-y divide-slate-950/10 border-y border-slate-950/10 dark:divide-white/10 dark:border-white/10">
-        {guardrails.map((rule) => (
+        {guardrails.map((rule, index) => (
           <div class="grid gap-4 py-5 md:grid-cols-[auto_minmax(0,1fr)_minmax(13rem,0.7fr)] md:items-center">
-            <div class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-950/10 bg-white text-aspire-purple dark:border-white/10 dark:bg-white/[0.04] dark:text-aspire-muted">
+            <div class:list={["inline-flex h-10 w-10 items-center justify-center rounded-xl border", guardrailIconColors[index % guardrailIconColors.length]]}>
               <Icon name={rule.icon} class="h-5 w-5" />
             </div>
             <div>
@@ -219,14 +237,18 @@ const navLinks = [
 
           <div class="mt-5 grid grid-cols-2 divide-x divide-slate-950/10 border-y border-slate-950/10 py-4 dark:divide-white/10 dark:border-white/10">
             <div class="pr-4">
-              <Icon name="lucide:list-checks" class="mb-3 h-5 w-5 text-slate-400 dark:text-slate-500" />
+              <span class="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-aspire-purple/15 bg-[#f4f0ff] text-aspire-purple dark:border-aspire-muted/20 dark:bg-aspire-primary/20 dark:text-aspire-muted">
+                <Icon name="lucide:list-checks" class="h-5 w-5" />
+              </span>
               <div>
                 <p class="text-4xl font-semibold tracking-[-0.04em] text-aspire-purple dark:text-aspire-muted">{evalSummary.taskCount}</p>
                 <p class="mt-1 text-sm font-medium text-slate-600 dark:text-slate-300">scenario tasks</p>
               </div>
             </div>
             <div class="pl-4">
-              <Icon name="lucide:message-square-text" class="mb-3 h-5 w-5 text-slate-400 dark:text-slate-500" />
+              <span class="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-cyan-200 bg-cyan-50 text-aspire-cyan dark:border-cyan-200/20 dark:bg-aspire-cyan/20 dark:text-cyan-200">
+                <Icon name="lucide:message-square-text" class="h-5 w-5" />
+              </span>
               <div>
                 <p class="text-4xl font-semibold tracking-[-0.04em] text-aspire-purple dark:text-aspire-muted">{evalSummary.triggerCount}</p>
                 <p class="mt-1 text-sm font-medium text-slate-600 dark:text-slate-300">trigger prompts</p>
@@ -279,8 +301,8 @@ const navLinks = [
             </p>
 
             <div class="grid gap-3 md:grid-cols-[1fr_auto_1fr_auto_1fr] md:items-center">
-              <div class="rounded-2xl border border-slate-950/10 bg-white p-4 dark:border-white/10 dark:bg-[#0a0a14]">
-                <Icon name="lucide:bot" class="h-7 w-7 text-slate-400 dark:text-slate-500" />
+              <div class="rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-200/20 dark:bg-aspire-blue/15">
+                <Icon name="lucide:bot" class="h-7 w-7 text-aspire-blue dark:text-blue-200" />
                 <p class="mt-4 text-sm font-semibold text-aspire-black dark:text-white">Agent host</p>
                 <p class="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-300">Copilot, Claude, Codex, Gemini, Cursor, OpenCode, or Ollama.</p>
               </div>
@@ -291,8 +313,8 @@ const navLinks = [
                 <p class="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-300">Shared guardrails plus project-local guidance.</p>
               </div>
               <Icon name="lucide:arrow-right" class="hidden h-5 w-5 text-slate-300 dark:text-slate-600 md:block" />
-              <div class="rounded-2xl border border-slate-950/10 bg-white p-4 dark:border-white/10 dark:bg-[#0a0a14]">
-                <Icon name="lucide:boxes" class="h-7 w-7 text-slate-400 dark:text-slate-500" />
+              <div class="rounded-2xl border border-cyan-200 bg-cyan-50 p-4 dark:border-cyan-200/20 dark:bg-aspire-cyan/15">
+                <Icon name="lucide:boxes" class="h-7 w-7 text-aspire-cyan dark:text-cyan-200" />
                 <p class="mt-4 text-sm font-semibold text-aspire-black dark:text-white">Aspire app</p>
                 <p class="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-300">AppHost graph, resources, diagnostics, and deployments.</p>
               </div>

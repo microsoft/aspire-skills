@@ -27,7 +27,7 @@ const { surfaces } = Astro.props;
       <button
         type="button"
         role="tab"
-        class="install-tab inline-flex min-w-0 items-center justify-start gap-2 rounded-xl border border-slate-950/10 bg-white px-2.5 py-2 text-[0.8rem] font-medium text-slate-700 transition hover:border-slate-950/25 hover:text-aspire-black dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-200 dark:hover:bg-white/[0.08] dark:hover:text-white sm:w-auto sm:px-3 sm:text-sm"
+        class="install-tab inline-flex min-w-0 items-center justify-start gap-2 rounded-xl border border-slate-950/10 bg-white px-2.5 py-2 text-[0.8rem] font-medium text-slate-700 transition hover:border-aspire-purple/30 hover:bg-[#fbf9ff] hover:text-aspire-black dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-200 dark:hover:border-aspire-muted/25 dark:hover:bg-aspire-primary/10 dark:hover:text-white sm:w-auto sm:px-3 sm:text-sm"
         id={`install-tab-${surface.id}`}
         data-install-tab={surface.id}
         data-active={index === 0 ? "true" : "false"}
@@ -49,13 +49,13 @@ const { surfaces } = Astro.props;
         aria-labelledby={`install-tab-${surface.id}`}
         hidden={index !== 0}
       >
-        <div class="mb-4 rounded-xl border border-slate-950/10 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+        <div class="mb-4 rounded-xl border border-aspire-purple/15 bg-[#fbf9ff] p-4 dark:border-aspire-muted/15 dark:bg-aspire-primary/10">
           <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h3 class="text-xl font-semibold tracking-[-0.015em] text-aspire-black dark:text-white">{surface.name}</h3>
               <p class="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">{surface.detail}</p>
             </div>
-            <span class="inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full border border-slate-950/10 bg-white px-3 py-1 text-xs font-medium text-slate-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300">
+            <span class="inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full border border-aspire-purple/15 bg-white px-3 py-1 text-xs font-medium text-aspire-purple dark:border-aspire-muted/20 dark:bg-white/[0.06] dark:text-aspire-muted">
               <Icon name="lucide:plug" class="h-3.5 w-3.5" />
               {surface.status}
             </span>

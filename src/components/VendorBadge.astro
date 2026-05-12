@@ -38,11 +38,24 @@ const currentColorIconClasses = {
   ollama: "text-aspire-black dark:text-white"
 };
 const currentColorClass = icon in currentColorIconClasses ? currentColorIconClasses[icon as keyof typeof currentColorIconClasses] : "";
+const toneClasses = {
+  aspire: "border-aspire-purple/20 bg-[#f4f0ff] text-aspire-purple dark:border-aspire-muted/25 dark:bg-aspire-primary/20 dark:text-aspire-muted",
+  claude: "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-300/20 dark:bg-orange-400/15 dark:text-orange-200",
+  copilot: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-300/20 dark:bg-emerald-400/15 dark:text-emerald-200",
+  cursor: "border-slate-300 bg-slate-100 text-aspire-black dark:border-white/15 dark:bg-white/10 dark:text-white",
+  gemini: "border-blue-200 bg-blue-50 text-aspire-blue dark:border-blue-300/20 dark:bg-blue-400/15 dark:text-blue-200",
+  github: "border-slate-300 bg-slate-100 text-aspire-black dark:border-white/15 dark:bg-white/10 dark:text-white",
+  ollama: "border-yellow-200 bg-yellow-50 text-aspire-yellow dark:border-yellow-300/20 dark:bg-yellow-400/15 dark:text-yellow-200",
+  openai: "border-teal-200 bg-teal-50 text-teal-700 dark:border-teal-300/20 dark:bg-teal-400/15 dark:text-teal-200",
+  opencode: "border-fuchsia-200 bg-fuchsia-50 text-aspire-magenta dark:border-fuchsia-300/20 dark:bg-fuchsia-400/15 dark:text-fuchsia-200"
+};
+const toneClass = toneClasses[icon];
 ---
 
 <span
   class:list={[
-    "vendor-badge inline-flex shrink-0 items-center justify-center bg-white text-aspire-black ring-1 ring-aspire-primary/10 transition dark:bg-white/[0.08] dark:text-white dark:ring-white/15",
+    "vendor-badge inline-flex shrink-0 items-center justify-center border transition",
+    toneClass,
     compact ? "h-8 w-8 rounded-lg" : "h-10 rounded-xl",
     isWide ? "w-24 px-2" : compact ? "w-8" : "w-10"
   ]}

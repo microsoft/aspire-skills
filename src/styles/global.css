@@ -110,30 +110,32 @@ body {
 }
 
 .install-tab[data-active="true"] {
-  border-color: var(--aspire-black);
-  background: var(--aspire-black);
+  border-color: #512bd4;
+  background: #512bd4;
   color: #ffffff;
   box-shadow: none;
 }
 
 :root[data-theme="dark"] .install-tab[data-active="true"] {
-  border-color: #ffffff;
-  background: #ffffff;
-  color: #0a0a14;
+  border-color: #b9aaee;
+  background: #b9aaee;
+  color: #1f1e33;
 }
 
 .install-tab[data-active="true"] .vendor-badge {
+  border-color: rgb(255 255 255 / 0.55);
   background: rgb(255 255 255 / 0.94);
-  color: #0a0a14;
+  color: #512bd4;
 }
 
 :root[data-theme="dark"] .install-tab[data-active="true"] .vendor-badge {
-  background: rgb(10 10 20 / 0.94);
-  color: #ffffff;
+  border-color: rgb(31 30 51 / 0.18);
+  background: rgb(31 30 51 / 0.95);
+  color: #dcd5f6;
 }
 
 :root[data-theme="dark"] .install-tab[data-active="true"] .vendor-badge svg {
-  color: #ffffff;
+  color: #dcd5f6;
 }
 
 :root[data-theme="dark"] .install-tab[data-active="true"] .vendor-badge img {
