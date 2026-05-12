@@ -13,31 +13,15 @@ const description =
   "Install Aspire skills for AI coding agents: guardrails, orchestration, deployment, monitoring, and self-evaluating guidance for Aspire apps.";
 
 const heroStats = [
-  { label: "skills", value: skills.length, icon: "lucide:layers", color: "text-aspire-purple bg-[#f4f0ff] dark:bg-aspire-primary/20 dark:text-aspire-muted dark:ring-1 dark:ring-aspire-muted/20" },
-  { label: "evals", value: evalSummary.taskCount, icon: "lucide:circle-check", color: "text-aspire-cyan bg-cyan-50 dark:bg-aspire-cyan/20 dark:text-cyan-200 dark:ring-1 dark:ring-cyan-200/20" },
-  { label: "plugin", value: manifests.plugin.version, icon: "lucide:plug", color: "text-aspire-blue bg-blue-50 dark:bg-aspire-blue/20 dark:text-blue-200 dark:ring-1 dark:ring-blue-200/20" }
+  { label: "skills", value: skills.length, icon: "lucide:layers" },
+  { label: "evals", value: evalSummary.taskCount, icon: "lucide:circle-check" },
+  { label: "plugin", value: manifests.plugin.version, icon: "lucide:plug" }
 ] as const;
 
 const safetySignals = [
-  { label: "Detects AppHosts", icon: "lucide:radar", color: "text-aspire-purple bg-[#f4f0ff] dark:bg-aspire-primary/20 dark:text-aspire-muted dark:ring-1 dark:ring-aspire-muted/20" },
-  { label: "Keeps agents on Aspire CLI", icon: "lucide:shield-check", color: "text-aspire-cyan bg-cyan-50 dark:bg-aspire-cyan/20 dark:text-cyan-200 dark:ring-1 dark:ring-cyan-200/20" },
-  { label: "Routes lifecycle, deploy, and diagnostics", icon: "lucide:workflow", color: "text-aspire-blue bg-blue-50 dark:bg-aspire-blue/20 dark:text-blue-200 dark:ring-1 dark:ring-blue-200/20" }
-] as const;
-
-const skillIconColors = [
-  "text-aspire-purple bg-[#f4f0ff] dark:bg-aspire-primary/20 dark:text-aspire-muted dark:ring-1 dark:ring-aspire-muted/20",
-  "text-aspire-cyan bg-cyan-50 dark:bg-aspire-cyan/20 dark:text-cyan-200 dark:ring-1 dark:ring-cyan-200/20",
-  "text-aspire-blue bg-blue-50 dark:bg-aspire-blue/20 dark:text-blue-200 dark:ring-1 dark:ring-blue-200/20",
-  "text-aspire-magenta bg-fuchsia-50 dark:bg-aspire-magenta/20 dark:text-fuchsia-200 dark:ring-1 dark:ring-fuchsia-200/20",
-  "text-aspire-flamingo bg-rose-50 dark:bg-aspire-flamingo/20 dark:text-rose-200 dark:ring-1 dark:ring-rose-200/20",
-  "text-aspire-yellow bg-yellow-50 dark:bg-aspire-yellow/20 dark:text-yellow-200 dark:ring-1 dark:ring-yellow-200/20"
-] as const;
-
-const guardrailIconColors = [
-  "text-aspire-purple bg-[#f4f0ff] dark:bg-aspire-primary/20 dark:text-aspire-muted dark:ring-1 dark:ring-aspire-muted/20",
-  "text-aspire-cyan bg-cyan-50 dark:bg-aspire-cyan/20 dark:text-cyan-200 dark:ring-1 dark:ring-cyan-200/20",
-  "text-aspire-blue bg-blue-50 dark:bg-aspire-blue/20 dark:text-blue-200 dark:ring-1 dark:ring-blue-200/20",
-  "text-aspire-flamingo bg-rose-50 dark:bg-aspire-flamingo/20 dark:text-rose-200 dark:ring-1 dark:ring-rose-200/20"
+  { label: "Detects AppHosts", icon: "lucide:radar" },
+  { label: "Keeps agents on Aspire CLI", icon: "lucide:shield-check" },
+  { label: "Routes lifecycle, deploy, and diagnostics", icon: "lucide:workflow" }
 ] as const;
 
 const evalLinks = [
@@ -47,84 +31,80 @@ const evalLinks = [
 ] as const;
 
 const navLinks = [
-  { label: "Install", href: "#install", icon: "lucide:download" },
-  { label: "Scenarios", href: "#scenarios", icon: "lucide:layout-grid" },
-  { label: "Guardrails", href: "#guardrails", icon: "lucide:traffic-cone" },
-  { label: "Evals", href: "#evals", icon: "lucide:file-check-2" }
+  { label: "Install", href: "#install" },
+  { label: "Scenarios", href: "#scenarios" },
+  { label: "Guardrails", href: "#guardrails" },
+  { label: "Evals", href: "#evals" }
 ] as const;
 ---
 
 <BaseLayout title={title} description={description}>
-  <main class="relative isolate overflow-hidden bg-[#faf9ff] text-aspire-black dark:bg-[#111020] dark:text-white">
-    <header class="border-b border-aspire-primary/10 bg-white/70 dark:border-white/10 dark:bg-[#111020]/80">
+  <main class="relative isolate overflow-hidden bg-white text-aspire-black dark:bg-[#0a0a14] dark:text-white">
+    <header class="sticky top-0 z-40 border-b border-slate-950/10 bg-white/85 backdrop-blur dark:border-white/10 dark:bg-[#0a0a14]/85">
       <div class="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-5 py-5 sm:px-8">
         <a class="flex items-center gap-3 rounded-xl text-aspire-black transition hover:text-aspire-purple dark:text-white dark:hover:text-aspire-muted" href="#top" aria-label="Aspire skills home">
           <img class="h-10 w-10" src={`${base}brand/aspire-logo-256.svg`} alt="" width="40" height="40" />
-          <span class="hidden text-sm font-semibold uppercase tracking-[0.2em] sm:inline">Aspire skills</span>
+          <span class="hidden text-sm font-semibold tracking-[-0.01em] sm:inline">Aspire skills</span>
         </a>
-        <nav class="hidden items-center gap-5 text-sm font-medium text-slate-700 dark:text-slate-200 md:flex" aria-label="Primary navigation">
+        <nav class="hidden items-center gap-6 text-sm font-medium text-slate-600 dark:text-slate-300 md:flex" aria-label="Primary navigation">
           {navLinks.map((link) => (
-            <a class="inline-flex items-center gap-1.5 rounded-lg transition hover:text-aspire-purple dark:hover:text-aspire-muted" href={link.href}>
-              <Icon name={link.icon} class="h-4 w-4" />
+            <a class="rounded-lg transition hover:text-aspire-black dark:hover:text-white" href={link.href}>
               {link.label}
             </a>
           ))}
         </nav>
         <div class="flex items-center gap-2">
           <ThemeToggle />
-          <a class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-aspire-primary/20 bg-white text-aspire-purple transition hover:border-aspire-primary dark:border-white/15 dark:bg-white/10 dark:text-aspire-muted dark:hover:bg-white/15" href="https://github.com/microsoft/aspire-skills" aria-label="Open microsoft/aspire-skills on GitHub">
+          <a class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-950/10 bg-white text-aspire-black transition hover:border-slate-950/25 hover:bg-slate-50 dark:border-white/15 dark:bg-white/[0.04] dark:text-white dark:hover:bg-white/[0.08]" href="https://github.com/microsoft/aspire-skills" aria-label="Open microsoft/aspire-skills on GitHub">
             <Icon name="simple-icons:github" class="h-5 w-5" />
           </a>
         </div>
       </div>
     </header>
 
-    <section id="top" class="mx-auto grid w-full max-w-7xl gap-8 px-5 pb-10 pt-10 sm:px-8 lg:grid-cols-[minmax(0,1fr)_24rem] lg:pb-12 lg:pt-16">
+    <section id="top" class="mx-auto grid w-full max-w-7xl gap-8 px-5 pb-10 pt-12 sm:px-8 lg:grid-cols-[minmax(0,1fr)_24rem] lg:pb-14 lg:pt-20">
       <div>
-        <p class="mb-5 inline-flex items-center gap-2 rounded-xl border border-aspire-primary/20 bg-white px-3 py-2 text-sm font-semibold text-aspire-purple dark:border-white/10 dark:bg-white/[0.06] dark:text-aspire-muted">
-          <Icon name="lucide:shield-check" class="h-4 w-4" />
+        <p class="mb-5 inline-flex items-center gap-2 rounded-full border border-slate-950/10 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300">
+          <span class="h-1.5 w-1.5 rounded-full bg-aspire-purple dark:bg-aspire-muted"></span>
           Always-on Aspire guidance for AI agents
         </p>
-        <h1 class="text-balance max-w-3xl text-4xl font-bold leading-[1.1] tracking-[-0.03em] text-aspire-black dark:text-white sm:text-5xl sm:leading-[1.08] lg:text-6xl lg:leading-[1.06]">
-          Install once. Keep <span class="text-aspire-cyan dark:text-cyan-200">agents</span> on the <span class="text-aspire-purple dark:text-aspire-muted">Aspire</span> path.
+        <h1 class="text-balance max-w-3xl text-4xl font-semibold leading-[1.08] tracking-[-0.035em] text-aspire-black dark:text-white sm:text-5xl sm:leading-[1.04] lg:text-[4rem] lg:leading-[1]">
+          Install once. Keep agents on the <span class="text-aspire-purple dark:text-aspire-muted">Aspire</span> path.
         </h1>
-        <p class="mt-6 max-w-2xl text-lg leading-8 text-slate-700 dark:text-slate-200">
+        <p class="mt-6 max-w-2xl text-lg leading-8 text-slate-600 dark:text-slate-300">
           Aspire skills help coding agents detect AppHosts, use the Aspire CLI, wire resources,
           deploy safely, and route diagnostics without guessing.
         </p>
         <div class="mt-8 flex flex-col gap-3 sm:flex-row">
-          <a class="inline-flex items-center justify-center gap-2 rounded-xl bg-aspire-purple px-5 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-aspire-primary" href="#install">
+          <a class="inline-flex items-center justify-center gap-2 rounded-xl bg-aspire-black px-5 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-black dark:bg-white dark:text-aspire-black dark:hover:bg-aspire-muted" href="#install">
             <Icon name="lucide:download" class="h-4 w-4" />
             Start with installation
           </a>
-          <a class="inline-flex items-center justify-center gap-2 rounded-xl border border-aspire-primary/25 bg-white px-5 py-3 text-sm font-bold text-aspire-purple transition hover:-translate-y-0.5 hover:border-aspire-primary dark:border-white/15 dark:bg-white/10 dark:text-aspire-muted dark:hover:bg-white/15" href="#scenarios">
+          <a class="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-950/10 bg-white px-5 py-3 text-sm font-semibold text-aspire-black transition hover:-translate-y-0.5 hover:border-slate-950/25 hover:bg-slate-50 dark:border-white/15 dark:bg-white/[0.04] dark:text-white dark:hover:bg-white/[0.08]" href="#scenarios">
             <Icon name="lucide:map" class="h-4 w-4" />
             Explore scenarios
           </a>
         </div>
       </div>
 
-      <aside class="h-fit rounded-2xl border border-aspire-primary/15 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.06]" aria-label="Aspire skills safety net">
-        <div class="grid grid-cols-3 gap-2">
+      <aside class="surface-card h-fit p-4" aria-label="Aspire skills safety net">
+        <div class="grid grid-cols-3 divide-x divide-slate-950/10 border-b border-slate-950/10 pb-4 dark:divide-white/10 dark:border-white/10">
           {heroStats.map((stat) => (
-            <div class="rounded-xl border border-aspire-primary/10 bg-[#fbfaff] p-3 dark:border-white/10 dark:bg-white/[0.04]">
-              <span class:list={["mb-3 inline-flex h-8 w-8 items-center justify-center rounded-lg", stat.color]}>
-                <Icon name={stat.icon} class="h-4 w-4" />
-              </span>
-              <p class="text-xl font-bold text-aspire-black dark:text-white">{stat.value}</p>
-              <p class="mt-0.5 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300">{stat.label}</p>
+            <div class="px-3 first:pl-0 last:pr-0">
+              <Icon name={stat.icon} class="mb-3 h-4 w-4 text-slate-400 dark:text-slate-500" />
+              <p class="text-2xl font-semibold tracking-[-0.03em] text-aspire-black dark:text-white">{stat.value}</p>
+              <p class="mt-0.5 text-[0.65rem] font-medium uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{stat.label}</p>
             </div>
           ))}
         </div>
-        <div class="my-4 h-px bg-aspire-primary/10 dark:bg-white/10"></div>
-        <div>
-          <p class="text-sm font-semibold uppercase tracking-[0.18em] text-aspire-purple dark:text-aspire-muted">Safety net</p>
-          <h2 class="text-xl font-bold text-aspire-black dark:text-white">Aspire-aware by default</h2>
+        <div class="mt-4">
+          <p class="eyebrow">Safety net</p>
+          <h2 class="mt-2 text-xl font-semibold tracking-[-0.02em] text-aspire-black dark:text-white">Aspire-aware by default</h2>
         </div>
-        <div class="mt-4 grid gap-2">
+        <div class="mt-4 grid gap-3">
           {safetySignals.map((signal) => (
-            <div class="flex items-center gap-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
-              <span class:list={["inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", signal.color]}>
+            <div class="flex items-center gap-3 text-sm font-medium text-slate-700 dark:text-slate-300">
+              <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-950/10 bg-white text-aspire-purple dark:border-white/10 dark:bg-white/[0.04] dark:text-aspire-muted">
                 <Icon name={signal.icon} class="h-4.5 w-4.5" />
               </span>
               {signal.label}
@@ -141,34 +121,34 @@ const navLinks = [
     <section id="scenarios" class="mx-auto w-full max-w-7xl px-5 py-14 sm:px-8">
       <div class="mb-8 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
         <div class="max-w-3xl">
-          <p class="inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-aspire-purple dark:text-aspire-muted">
+          <p class="eyebrow inline-flex items-center gap-2">
             <Icon name="lucide:layout-grid" class="h-4 w-4" />
             Scenarios
           </p>
-          <h2 class="mt-3 text-3xl font-bold tracking-tight text-aspire-black dark:text-white sm:text-5xl">Skills for every Aspire workflow.</h2>
+          <h2 class="mt-3 text-3xl font-semibold tracking-[-0.03em] text-aspire-black dark:text-white sm:text-5xl">Skills for every Aspire workflow.</h2>
         </div>
-        <a class="inline-flex items-center gap-2 text-sm font-semibold text-aspire-purple underline decoration-aspire-secondary decoration-2 underline-offset-4 dark:text-aspire-muted" href="https://github.com/microsoft/aspire-skills/tree/main/skills">
+        <a class="inline-flex items-center gap-2 text-sm font-medium text-slate-700 underline decoration-slate-300 underline-offset-4 transition hover:text-aspire-purple dark:text-slate-300 dark:decoration-white/25 dark:hover:text-white" href="https://github.com/microsoft/aspire-skills/tree/main/skills">
           Browse skill catalog
           <Icon name="lucide:arrow-up-right" class="h-4 w-4" />
         </a>
       </div>
 
-      <div class="divide-y divide-aspire-primary/10 border-y border-aspire-primary/15 dark:divide-white/10 dark:border-white/10">
-        {skills.map((skill, index) => (
-          <a class="group grid gap-4 py-5 transition hover:bg-white/60 dark:hover:bg-white/[0.04] sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:px-3" href={skill.href}>
-            <span class:list={["inline-flex h-10 w-10 items-center justify-center rounded-xl transition group-hover:bg-aspire-purple group-hover:text-white", skillIconColors[index % skillIconColors.length]]}>
+      <div class="divide-y divide-slate-950/10 border-y border-slate-950/10 dark:divide-white/10 dark:border-white/10">
+        {skills.map((skill) => (
+          <a class="group grid gap-4 py-5 transition hover:bg-slate-50 dark:hover:bg-white/[0.04] sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:px-3" href={skill.href}>
+            <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-950/10 bg-white text-aspire-purple transition group-hover:border-aspire-purple/30 group-hover:bg-[#f4f0ff] dark:border-white/10 dark:bg-white/[0.04] dark:text-aspire-muted dark:group-hover:border-aspire-muted/30 dark:group-hover:bg-white/[0.08]">
               <Icon name={skill.icon} class="h-5 w-5" />
             </span>
             <div>
               <div class="flex flex-wrap items-center gap-2">
-                <p class="text-xs font-semibold uppercase tracking-[0.18em] text-aspire-purple dark:text-aspire-muted">{skill.scenario}</p>
+                <p class="text-xs font-medium uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{skill.scenario}</p>
               </div>
-              <h3 class="mt-2 text-xl font-bold text-aspire-black group-hover:text-aspire-purple dark:text-white dark:group-hover:text-aspire-muted">{skill.role}</h3>
-              <p class="mt-1 text-sm leading-6 text-slate-700 dark:text-slate-200">{skill.summary}</p>
+              <h3 class="mt-2 text-xl font-semibold tracking-[-0.02em] text-aspire-black group-hover:text-aspire-purple dark:text-white dark:group-hover:text-aspire-muted">{skill.role}</h3>
+              <p class="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">{skill.summary}</p>
             </div>
             <div class="flex flex-col justify-between gap-3 sm:min-w-52 sm:items-end">
               <code class="inline-code w-fit px-3 py-2 text-sm">{skill.command}</code>
-              <p class="text-xs font-semibold text-slate-500 dark:text-slate-400">{skill.highlights.slice(0, 2).join(" · ")}</p>
+              <p class="text-xs font-medium text-slate-500 dark:text-slate-400">{skill.highlights.slice(0, 2).join(" · ")}</p>
             </div>
           </a>
         ))}
@@ -178,27 +158,27 @@ const navLinks = [
     <section id="guardrails" class="mx-auto w-full max-w-7xl px-5 py-14 sm:px-8">
       <div class="mb-8 grid gap-4 lg:grid-cols-[0.8fr_1.2fr] lg:items-end">
         <div>
-          <p class="inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-aspire-purple dark:text-aspire-muted">
+          <p class="eyebrow inline-flex items-center gap-2">
             <Icon name="lucide:traffic-cone" class="h-4 w-4" />
             Guardrails
           </p>
-          <h2 class="mt-3 text-3xl font-bold tracking-tight text-aspire-black dark:text-white sm:text-5xl">The right Aspire command at the right time.</h2>
+          <h2 class="mt-3 text-3xl font-semibold tracking-[-0.03em] text-aspire-black dark:text-white sm:text-5xl">The right Aspire command at the right time.</h2>
         </div>
-        <p class="text-base leading-8 text-slate-700 dark:text-slate-200">
+        <p class="text-base leading-8 text-slate-600 dark:text-slate-300">
           Aspire skills guide agents toward workflows that understand the AppHost graph,
           resource readiness, deployment state, and diagnostics context.
         </p>
       </div>
 
-      <div class="divide-y divide-aspire-primary/10 border-y border-aspire-primary/15 dark:divide-white/10 dark:border-white/10">
-        {guardrails.map((rule, index) => (
+      <div class="divide-y divide-slate-950/10 border-y border-slate-950/10 dark:divide-white/10 dark:border-white/10">
+        {guardrails.map((rule) => (
           <div class="grid gap-4 py-5 md:grid-cols-[auto_minmax(0,1fr)_minmax(13rem,0.7fr)] md:items-center">
-            <div class:list={["inline-flex h-10 w-10 items-center justify-center rounded-xl", guardrailIconColors[index % guardrailIconColors.length]]}>
+            <div class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-950/10 bg-white text-aspire-purple dark:border-white/10 dark:bg-white/[0.04] dark:text-aspire-muted">
               <Icon name={rule.icon} class="h-5 w-5" />
             </div>
             <div>
-              <p class="text-xs font-semibold uppercase tracking-[0.18em] text-aspire-purple dark:text-aspire-muted">{rule.label}</p>
-              <p class="mt-2 text-sm leading-6 text-slate-700 dark:text-slate-200">{rule.why}</p>
+              <p class="text-xs font-medium uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{rule.label}</p>
+              <p class="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{rule.why}</p>
             </div>
             <code class="inline-code block w-fit px-3 py-3 text-sm md:ml-auto">{rule.command}</code>
           </div>
@@ -209,60 +189,60 @@ const navLinks = [
     <section id="evals" class="mx-auto w-full max-w-7xl px-5 py-14 sm:px-8">
       <div class="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
         <div>
-          <p class="inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-aspire-purple dark:text-aspire-muted">
+          <p class="eyebrow inline-flex items-center gap-2">
             <Icon name="lucide:file-check-2" class="h-4 w-4" />
             Evaluated guidance
           </p>
-          <h2 class="mt-3 text-3xl font-bold tracking-tight text-aspire-black dark:text-white sm:text-5xl">Confidence built into the guidance.</h2>
-          <p class="mt-5 text-lg leading-8 text-slate-700 dark:text-slate-200">
+          <h2 class="mt-3 text-3xl font-semibold tracking-[-0.03em] text-aspire-black dark:text-white sm:text-5xl">Confidence built into the guidance.</h2>
+          <p class="mt-5 text-lg leading-8 text-slate-600 dark:text-slate-300">
             <a class="font-semibold text-aspire-purple underline decoration-aspire-secondary decoration-2 underline-offset-4 dark:text-aspire-muted" href="https://github.com/microsoft/waza">Waza</a>
             evaluations exercise routing, command choices, and scenario-specific workflows
             so Aspire guidance stays dependable as the skills evolve.
           </p>
           <div class="mt-6 flex flex-wrap gap-3">
             {evalLinks.map((link) => (
-              <a class="inline-flex items-center gap-2 rounded-xl border border-aspire-primary/15 bg-white px-3 py-2 text-sm font-semibold text-aspire-purple transition hover:border-aspire-primary dark:border-white/10 dark:bg-white/[0.06] dark:text-aspire-muted dark:hover:bg-white/10" href={link.href}>
+              <a class="inline-flex items-center gap-2 rounded-xl border border-slate-950/10 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-950/25 hover:bg-slate-50 hover:text-aspire-black dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white" href={link.href}>
                 <Icon name={link.icon} class="h-4 w-4" />
                 {link.label}
               </a>
             ))}
           </div>
         </div>
-        <div class="rounded-2xl border border-aspire-primary/15 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
+        <div class="surface-card p-5">
           <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p class="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-aspire-purple dark:text-aspire-muted">
+            <p class="eyebrow inline-flex items-center gap-2">
               <Icon name="lucide:repeat-2" class="h-4 w-4" />
               Evaluation loop
             </p>
-            <p class="text-sm font-semibold text-slate-600 dark:text-slate-300">Measured before guidance ships</p>
+            <p class="text-sm font-medium text-slate-500 dark:text-slate-400">Measured before guidance ships</p>
           </div>
 
-          <div class="mt-5 grid grid-cols-2 divide-x divide-aspire-primary/10 border-y border-aspire-primary/10 py-4 dark:divide-white/10 dark:border-white/10">
+          <div class="mt-5 grid grid-cols-2 divide-x divide-slate-950/10 border-y border-slate-950/10 py-4 dark:divide-white/10 dark:border-white/10">
             <div class="pr-4">
-              <Icon name="lucide:list-checks" class="mb-3 h-5 w-5 text-aspire-purple dark:text-aspire-muted" />
+              <Icon name="lucide:list-checks" class="mb-3 h-5 w-5 text-slate-400 dark:text-slate-500" />
               <div>
-                <p class="text-4xl font-bold text-aspire-purple dark:text-aspire-muted">{evalSummary.taskCount}</p>
-                <p class="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">scenario tasks</p>
+                <p class="text-4xl font-semibold tracking-[-0.04em] text-aspire-purple dark:text-aspire-muted">{evalSummary.taskCount}</p>
+                <p class="mt-1 text-sm font-medium text-slate-600 dark:text-slate-300">scenario tasks</p>
               </div>
             </div>
             <div class="pl-4">
-              <Icon name="lucide:message-square-text" class="mb-3 h-5 w-5 text-aspire-cyan dark:text-cyan-200" />
+              <Icon name="lucide:message-square-text" class="mb-3 h-5 w-5 text-slate-400 dark:text-slate-500" />
               <div>
-                <p class="text-4xl font-bold text-aspire-cyan dark:text-cyan-200">{evalSummary.triggerCount}</p>
-                <p class="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">trigger prompts</p>
+                <p class="text-4xl font-semibold tracking-[-0.04em] text-aspire-purple dark:text-aspire-muted">{evalSummary.triggerCount}</p>
+                <p class="mt-1 text-sm font-medium text-slate-600 dark:text-slate-300">trigger prompts</p>
               </div>
             </div>
           </div>
 
           <div class="mt-6">
-            <p class="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-aspire-purple dark:text-aspire-muted">
+            <p class="eyebrow inline-flex items-center gap-2">
               <Icon name="lucide:target" class="h-4 w-4" />
               Coverage focus
             </p>
             <div class="mt-4 grid gap-3">
               {evalSummary.focusAreas.map((focus) => (
-                <div class="flex gap-3 text-sm leading-6 text-slate-700 dark:text-slate-200">
-                  <span class="mt-2 h-2 w-2 shrink-0 rounded-full bg-aspire-cyan dark:bg-cyan-200"></span>
+                <div class="flex gap-3 border-t border-slate-950/10 pt-3 text-sm leading-6 text-slate-600 first:border-t-0 first:pt-0 dark:border-white/10 dark:text-slate-300">
+                  <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-aspire-purple dark:bg-aspire-muted"></span>
                   {focus}
                 </div>
               ))}
@@ -273,60 +253,57 @@ const navLinks = [
     </section>
 
     <section class="mx-auto w-full max-w-7xl px-5 py-14 sm:px-8">
-      <div class="relative overflow-hidden rounded-[2rem] bg-aspire-black p-6 text-white shadow-sm sm:p-8 lg:p-10">
-        <div class="absolute -left-24 -top-24 h-72 w-72 rounded-full bg-aspire-primary/30 blur-3xl"></div>
-        <div class="absolute -bottom-28 right-0 h-80 w-80 rounded-full bg-aspire-cyan/25 blur-3xl"></div>
-
-        <div class="relative grid gap-10 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
+      <div class="surface-card p-6 sm:p-8 lg:p-10">
+        <div class="grid gap-10 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
           <div>
-            <p class="inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-aspire-muted">
+            <p class="eyebrow inline-flex items-center gap-2">
               <Icon name="lucide:layers-3" class="h-4 w-4" />
               Architecture
             </p>
-            <h2 class="mt-3 max-w-xl text-3xl font-bold tracking-tight sm:text-5xl">A guidance layer between agents and the AppHost.</h2>
-            <p class="mt-5 max-w-2xl text-base leading-8 text-slate-200">
+            <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-[-0.03em] text-aspire-black dark:text-white sm:text-5xl">A guidance layer between agents and the AppHost.</h2>
+            <p class="mt-5 max-w-2xl text-base leading-8 text-slate-600 dark:text-slate-300">
               The marketplace plugin gives every agent an Aspire-native route. Project-local guidance from
               <code class="inline-code mx-1 whitespace-nowrap px-1.5 py-0.5">aspire agent init</code>
               adds app-specific context, then the setup, diagnostics, and deployment skills keep work anchored to the Aspire CLI.
             </p>
-            <a class="mt-7 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-bold text-aspire-purple transition hover:-translate-y-0.5 hover:bg-aspire-muted" href="https://aspire.dev/get-started/ai-coding-agents/">
+            <a class="mt-7 inline-flex items-center gap-2 rounded-xl border border-slate-950/10 bg-white px-4 py-3 text-sm font-semibold text-aspire-black transition hover:-translate-y-0.5 hover:border-slate-950/25 hover:bg-slate-50 dark:border-white/15 dark:bg-white/[0.04] dark:text-white dark:hover:bg-white/[0.08]" href="https://aspire.dev/get-started/ai-coding-agents/">
               Read the Aspire AI agents guide
               <Icon name="lucide:arrow-up-right" class="h-4 w-4" />
             </a>
           </div>
 
-          <div class="rounded-[1.75rem] border border-white/15 bg-white/[0.07] p-4 backdrop-blur sm:p-5">
-            <p class="mb-5 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-aspire-muted">
+          <div class="rounded-2xl border border-slate-950/10 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-white/[0.04] sm:p-5">
+            <p class="eyebrow mb-5 inline-flex items-center gap-2">
               <Icon name="lucide:route" class="h-4 w-4" />
               Agent path
             </p>
 
             <div class="grid gap-3 md:grid-cols-[1fr_auto_1fr_auto_1fr] md:items-center">
-              <div class="rounded-2xl border border-white/12 bg-white/[0.08] p-4">
-                <Icon name="lucide:bot" class="h-7 w-7 text-cyan-200" />
-                <p class="mt-4 text-sm font-bold">Agent host</p>
-                <p class="mt-1 text-xs leading-5 text-slate-300">Copilot, Claude, Codex, Gemini, Cursor, OpenCode, or Ollama.</p>
+              <div class="rounded-2xl border border-slate-950/10 bg-white p-4 dark:border-white/10 dark:bg-[#0a0a14]">
+                <Icon name="lucide:bot" class="h-7 w-7 text-slate-400 dark:text-slate-500" />
+                <p class="mt-4 text-sm font-semibold text-aspire-black dark:text-white">Agent host</p>
+                <p class="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-300">Copilot, Claude, Codex, Gemini, Cursor, OpenCode, or Ollama.</p>
               </div>
-              <Icon name="lucide:arrow-right" class="hidden h-5 w-5 text-aspire-muted md:block" />
-              <div class="rounded-2xl border border-aspire-muted/30 bg-aspire-primary/25 p-4 ring-1 ring-aspire-muted/20">
-                <Icon name="lucide:sparkles" class="h-7 w-7 text-aspire-muted" />
-                <p class="mt-4 text-sm font-bold">Aspire skills</p>
-                <p class="mt-1 text-xs leading-5 text-slate-200">Shared guardrails plus project-local guidance.</p>
+              <Icon name="lucide:arrow-right" class="hidden h-5 w-5 text-slate-300 dark:text-slate-600 md:block" />
+              <div class="rounded-2xl border border-aspire-purple/20 bg-[#f8f5ff] p-4 dark:border-aspire-muted/20 dark:bg-aspire-primary/10">
+                <Icon name="lucide:sparkles" class="h-7 w-7 text-aspire-purple dark:text-aspire-muted" />
+                <p class="mt-4 text-sm font-semibold text-aspire-black dark:text-white">Aspire skills</p>
+                <p class="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-300">Shared guardrails plus project-local guidance.</p>
               </div>
-              <Icon name="lucide:arrow-right" class="hidden h-5 w-5 text-aspire-muted md:block" />
-              <div class="rounded-2xl border border-white/12 bg-white/[0.08] p-4">
-                <Icon name="lucide:boxes" class="h-7 w-7 text-aspire-muted" />
-                <p class="mt-4 text-sm font-bold">Aspire app</p>
-                <p class="mt-1 text-xs leading-5 text-slate-300">AppHost graph, resources, diagnostics, and deployments.</p>
+              <Icon name="lucide:arrow-right" class="hidden h-5 w-5 text-slate-300 dark:text-slate-600 md:block" />
+              <div class="rounded-2xl border border-slate-950/10 bg-white p-4 dark:border-white/10 dark:bg-[#0a0a14]">
+                <Icon name="lucide:boxes" class="h-7 w-7 text-slate-400 dark:text-slate-500" />
+                <p class="mt-4 text-sm font-semibold text-aspire-black dark:text-white">Aspire app</p>
+                <p class="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-300">AppHost graph, resources, diagnostics, and deployments.</p>
               </div>
             </div>
 
             <div class="mt-6 grid gap-2 sm:grid-cols-2">
               {architecture.map((step, index) => (
-                <div class="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.06] px-3 py-3">
-                  <span class="text-xs font-bold text-aspire-muted">0{index + 1}</span>
-                  <Icon name={step.icon} class="h-4 w-4 shrink-0 text-cyan-200" />
-                  <span class="text-sm font-semibold text-slate-100">{step.label}</span>
+                <div class="flex items-center gap-3 rounded-xl border border-slate-950/10 bg-white px-3 py-3 dark:border-white/10 dark:bg-[#0a0a14]">
+                  <span class="text-xs font-semibold text-slate-400 dark:text-slate-500">0{index + 1}</span>
+                  <Icon name={step.icon} class="h-4 w-4 shrink-0 text-aspire-purple dark:text-aspire-muted" />
+                  <span class="text-sm font-medium text-slate-700 dark:text-slate-300">{step.label}</span>
                 </div>
               ))}
             </div>
