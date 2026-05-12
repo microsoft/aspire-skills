@@ -18,7 +18,12 @@ const { surfaces } = Astro.props;
         <Icon name="lucide:download" class="h-4 w-4" />
         Start here
       </p>
-      <h2 id="install-heading" class="mt-2 text-2xl font-semibold tracking-[-0.02em] text-aspire-black dark:text-white">Install in your agent CLI</h2>
+      <h2 id="install-heading" class="mt-2 text-2xl font-semibold tracking-[-0.02em] text-aspire-black dark:text-white">
+        <a class="heading-anchor inline-flex items-start gap-2" href="#install">
+          <span>Install in your agent CLI</span>
+          <Icon name="lucide:link" class="heading-anchor-icon mt-1 h-4 w-4 shrink-0" />
+        </a>
+      </h2>
     </div>
   </div>
 

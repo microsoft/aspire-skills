@@ -33,6 +33,15 @@ const skillIconColors = [
   "text-aspire-yellow bg-yellow-50 border-yellow-200 dark:bg-aspire-yellow/20 dark:text-yellow-200 dark:border-yellow-200/20"
 ] as const;
 
+const inlineCodeAccentClasses = [
+  "inline-code-accent-purple",
+  "inline-code-accent-cyan",
+  "inline-code-accent-blue",
+  "inline-code-accent-magenta",
+  "inline-code-accent-flamingo",
+  "inline-code-accent-yellow"
+] as const;
+
 const guardrailIconColors = [
   "text-aspire-purple bg-[#f4f0ff] border-aspire-purple/15 dark:bg-aspire-primary/20 dark:text-aspire-muted dark:border-aspire-muted/20",
   "text-aspire-cyan bg-cyan-50 border-cyan-200 dark:bg-aspire-cyan/20 dark:text-cyan-200 dark:border-cyan-200/20",
@@ -85,7 +94,10 @@ const navLinks = [
           Always-on Aspire guidance for AI agents
         </p>
         <h1 class="text-balance max-w-3xl text-4xl font-semibold leading-[1.08] tracking-[-0.035em] text-aspire-black dark:text-white sm:text-5xl sm:leading-[1.04] lg:text-[4rem] lg:leading-[1]">
-          Install once. Keep agents on the <span class="text-aspire-purple dark:text-aspire-muted">Aspire</span> path.
+          <a class="heading-anchor inline-flex items-start gap-3" href="#top">
+            <span>Install once. Keep agents on the <span class="text-aspire-purple dark:text-aspire-muted">Aspire</span> path.</span>
+            <Icon name="lucide:link" class="heading-anchor-icon mt-2 h-5 w-5 shrink-0 sm:mt-3 lg:mt-4" />
+          </a>
         </h1>
         <p class="mt-6 max-w-2xl text-lg leading-8 text-slate-600 dark:text-slate-300">
           Aspire skills help coding agents detect AppHosts, use the Aspire CLI, wire resources,
@@ -143,7 +155,12 @@ const navLinks = [
             <Icon name="lucide:layout-grid" class="h-4 w-4" />
             Scenarios
           </p>
-          <h2 class="mt-3 text-3xl font-semibold tracking-[-0.03em] text-aspire-black dark:text-white sm:text-5xl">Skills for every Aspire workflow.</h2>
+          <h2 class="mt-3 text-3xl font-semibold tracking-[-0.03em] text-aspire-black dark:text-white sm:text-5xl">
+            <a class="heading-anchor inline-flex items-start gap-3" href="#scenarios">
+              <span>Skills for every Aspire workflow.</span>
+              <Icon name="lucide:link" class="heading-anchor-icon mt-2 h-5 w-5 shrink-0 sm:mt-4" />
+            </a>
+          </h2>
         </div>
         <a class="inline-flex items-center gap-2 text-sm font-medium text-slate-700 underline decoration-slate-300 underline-offset-4 transition hover:text-aspire-purple dark:text-slate-300 dark:decoration-white/25 dark:hover:text-white" href="https://github.com/microsoft/aspire-skills/tree/main/skills">
           Browse skill catalog
@@ -153,7 +170,7 @@ const navLinks = [
 
       <div class="divide-y divide-slate-950/10 border-y border-slate-950/10 dark:divide-white/10 dark:border-white/10">
         {skills.map((skill, index) => (
-          <a class="group grid gap-4 py-5 transition hover:bg-slate-50 dark:hover:bg-white/[0.04] sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:px-3" href={skill.href}>
+          <div class="group grid gap-4 py-5 transition hover:bg-slate-50 dark:hover:bg-white/[0.04] sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:px-3">
             <span class:list={["inline-flex h-10 w-10 items-center justify-center rounded-xl border transition group-hover:scale-[1.03]", skillIconColors[index % skillIconColors.length]]}>
               <Icon name={skill.icon} class="h-5 w-5" />
             </span>
@@ -161,14 +178,24 @@ const navLinks = [
               <div class="flex flex-wrap items-center gap-2">
                 <p class="text-xs font-medium uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{skill.scenario}</p>
               </div>
-              <h3 class="mt-2 text-xl font-semibold tracking-[-0.02em] text-aspire-black group-hover:text-aspire-purple dark:text-white dark:group-hover:text-aspire-muted">{skill.role}</h3>
+              <h3 class="mt-2 text-xl font-semibold tracking-[-0.02em]">
+                <a class="text-aspire-black transition hover:text-aspire-purple dark:text-white dark:hover:text-aspire-muted" href={skill.href}>
+                  {skill.role}
+                </a>
+              </h3>
               <p class="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">{skill.summary}</p>
             </div>
             <div class="flex flex-col justify-between gap-3 sm:min-w-52 sm:items-end">
-              <code class="inline-code w-fit px-3 py-2 text-sm">{skill.command}</code>
+              <a
+                class:list={["inline-code inline-code-command w-fit px-3 text-sm", inlineCodeAccentClasses[index % inlineCodeAccentClasses.length]]}
+                href={skill.commandHref}
+                aria-label={`Read Aspire CLI docs for ${skill.command}`}
+              >
+                <code>{skill.command}</code>
+              </a>
               <p class="text-xs font-medium text-slate-500 dark:text-slate-400">{skill.highlights.slice(0, 2).join(" · ")}</p>
             </div>
-          </a>
+          </div>
         ))}
       </div>
     </section>
@@ -180,7 +207,12 @@ const navLinks = [
             <Icon name="lucide:traffic-cone" class="h-4 w-4" />
             Guardrails
           </p>
-          <h2 class="mt-3 text-3xl font-semibold tracking-[-0.03em] text-aspire-black dark:text-white sm:text-5xl">The right Aspire command at the right time.</h2>
+          <h2 class="mt-3 text-3xl font-semibold tracking-[-0.03em] text-aspire-black dark:text-white sm:text-5xl">
+            <a class="heading-anchor inline-flex items-start gap-3" href="#guardrails">
+              <span>The right Aspire command at the right time.</span>
+              <Icon name="lucide:link" class="heading-anchor-icon mt-2 h-5 w-5 shrink-0 sm:mt-4" />
+            </a>
+          </h2>
         </div>
         <p class="text-base leading-8 text-slate-600 dark:text-slate-300">
           Aspire skills guide agents toward workflows that understand the AppHost graph,
@@ -198,7 +230,13 @@ const navLinks = [
               <p class="text-xs font-medium uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{rule.label}</p>
               <p class="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{rule.why}</p>
             </div>
-            <code class="inline-code block w-fit px-3 py-3 text-sm md:ml-auto">{rule.command}</code>
+            <a
+              class:list={["inline-code inline-code-command w-fit px-3 text-sm md:ml-auto", inlineCodeAccentClasses[index % guardrailIconColors.length]]}
+              href={rule.commandHref}
+              aria-label={`Read Aspire CLI docs for ${rule.command}`}
+            >
+              <code>{rule.command}</code>
+            </a>
           </div>
         ))}
       </div>
@@ -211,7 +249,12 @@ const navLinks = [
             <Icon name="lucide:file-check-2" class="h-4 w-4" />
             Evaluated guidance
           </p>
-          <h2 class="mt-3 text-3xl font-semibold tracking-[-0.03em] text-aspire-black dark:text-white sm:text-5xl">Confidence built into the guidance.</h2>
+          <h2 class="mt-3 text-3xl font-semibold tracking-[-0.03em] text-aspire-black dark:text-white sm:text-5xl">
+            <a class="heading-anchor inline-flex items-start gap-3" href="#evals">
+              <span>Confidence built into the guidance.</span>
+              <Icon name="lucide:link" class="heading-anchor-icon mt-2 h-5 w-5 shrink-0 sm:mt-4" />
+            </a>
+          </h2>
           <p class="mt-5 text-lg leading-8 text-slate-600 dark:text-slate-300">
             <a class="font-semibold text-aspire-purple underline decoration-aspire-secondary decoration-2 underline-offset-4 dark:text-aspire-muted" href="https://github.com/microsoft/waza">Waza</a>
             evaluations exercise routing, command choices, and scenario-specific workflows
@@ -274,7 +317,7 @@ const navLinks = [
       </div>
     </section>
 
-    <section class="mx-auto w-full max-w-7xl px-5 py-14 sm:px-8">
+    <section id="architecture" class="mx-auto w-full max-w-7xl px-5 py-14 sm:px-8">
       <div class="surface-card p-6 sm:p-8 lg:p-10">
         <div class="grid gap-10 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
           <div>
@@ -282,10 +325,21 @@ const navLinks = [
               <Icon name="lucide:layers-3" class="h-4 w-4" />
               Architecture
             </p>
-            <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-[-0.03em] text-aspire-black dark:text-white sm:text-5xl">A guidance layer between agents and the AppHost.</h2>
+            <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-[-0.03em] text-aspire-black dark:text-white sm:text-5xl">
+              <a class="heading-anchor inline-flex items-start gap-3" href="#architecture">
+                <span>A guidance layer between agents and the AppHost.</span>
+                <Icon name="lucide:link" class="heading-anchor-icon mt-2 h-5 w-5 shrink-0 sm:mt-4" />
+              </a>
+            </h2>
             <p class="mt-5 max-w-2xl text-base leading-8 text-slate-600 dark:text-slate-300">
               The marketplace plugin gives every agent an Aspire-native route. Project-local guidance from
-              <code class="inline-code mx-1 whitespace-nowrap px-1.5 py-0.5">aspire agent init</code>
+              <a
+                class="inline-code inline-code-accent-purple mx-1 whitespace-nowrap px-1.5 py-0.5"
+                href="https://aspire.dev/reference/cli/commands/aspire-agent-init/"
+                aria-label="Read Aspire CLI docs for aspire agent init"
+              >
+                <code>aspire agent init</code>
+              </a>
               adds app-specific context, then the setup, diagnostics, and deployment skills keep work anchored to the Aspire CLI.
             </p>
             <a class="mt-7 inline-flex items-center gap-2 rounded-xl border border-slate-950/10 bg-white px-4 py-3 text-sm font-semibold text-aspire-black transition hover:-translate-y-0.5 hover:border-slate-950/25 hover:bg-slate-50 dark:border-white/15 dark:bg-white/[0.04] dark:text-white dark:hover:bg-white/[0.08]" href="https://aspire.dev/get-started/ai-coding-agents/">

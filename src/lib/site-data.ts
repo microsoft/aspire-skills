@@ -20,6 +20,7 @@ export type SkillCard = {
   description: string;
   version: string;
   command: string;
+  commandHref: string;
   highlights: string[];
   icon: string;
   href: string;
@@ -31,10 +32,13 @@ type SkillProfile = {
   role: string;
   summary: string;
   command: string;
+  commandHref: string;
   highlights: string[];
   icon: string;
   order: number;
 };
+
+const aspireCliDocsRoot = "https://aspire.dev/reference/cli/commands";
 
 const skillProfiles: Record<string, SkillProfile> = {
   aspire: {
@@ -42,6 +46,7 @@ const skillProfiles: Record<string, SkillProfile> = {
     role: "Always-on safety net",
     summary: "Recognizes Aspire context and routes each task to the right workflow.",
     command: "aspire start",
+    commandHref: `${aspireCliDocsRoot}/aspire-start/`,
     highlights: ["Detects AppHosts", "Routes to sub-skills", "Keeps guardrails active"],
     icon: "lucide:route",
     order: 0
@@ -51,6 +56,7 @@ const skillProfiles: Record<string, SkillProfile> = {
     role: "First-run setup",
     summary: "Chooses a starter or skeleton for repos that do not have an AppHost yet.",
     command: "aspire init",
+    commandHref: `${aspireCliDocsRoot}/aspire-init/`,
     highlights: ["Chooses init vs new", "Drops AppHost skeleton", "Hands off to aspireify"],
     icon: "lucide:package-plus",
     order: 1
@@ -60,6 +66,7 @@ const skillProfiles: Record<string, SkillProfile> = {
     role: "Resource graph authoring",
     summary: "Turns an AppHost skeleton into a modeled resource graph.",
     command: "aspire add",
+    commandHref: `${aspireCliDocsRoot}/aspire-add/`,
     highlights: ["Scans projects", "Models services", "Never edits .modules"],
     icon: "lucide:network",
     order: 2
@@ -69,6 +76,7 @@ const skillProfiles: Record<string, SkillProfile> = {
     role: "Lifecycle guardrails",
     summary: "Runs the app through Aspire and recovers cleanly from local lifecycle issues.",
     command: "aspire wait <resource>",
+    commandHref: `${aspireCliDocsRoot}/aspire-wait/`,
     highlights: ["Starts the orchestrator", "Waits for readiness", "Recovers from file locks"],
     icon: "lucide:orbit",
     order: 3
@@ -78,6 +86,7 @@ const skillProfiles: Record<string, SkillProfile> = {
     role: "Native deployment",
     summary: "Publishes, deploys, and destroys using Aspire's deployment pipeline.",
     command: "aspire deploy",
+    commandHref: `${aspireCliDocsRoot}/aspire-deploy/`,
     highlights: ["Publishes artifacts", "Deploys across targets", "Uses aspire destroy"],
     icon: "lucide:rocket",
     order: 4
@@ -87,6 +96,7 @@ const skillProfiles: Record<string, SkillProfile> = {
     role: "Telemetry bridge",
     summary: "Uses local Aspire telemetry and routes deployed diagnostics to the right tools.",
     command: "aspire otel traces",
+    commandHref: `${aspireCliDocsRoot}/aspire-otel-traces/`,
     highlights: ["Reads local telemetry", "Finds hidden resources", "Routes deployed diagnostics"],
     icon: "lucide:activity",
     order: 5
@@ -110,6 +120,7 @@ export type InstallSurface = {
 export type Guardrail = {
   label: string;
   command: string;
+  commandHref: string;
   why: string;
   icon: string;
 };
@@ -145,24 +156,28 @@ export async function getSiteData() {
       {
         label: "Start the app",
         command: "aspire start",
+        commandHref: `${aspireCliDocsRoot}/aspire-start/`,
         why: "Launch the full AppHost resource graph through the orchestrator.",
         icon: "lucide:play"
       },
       {
         label: "Wait for readiness",
         command: "aspire wait <resource>",
+        commandHref: `${aspireCliDocsRoot}/aspire-wait/`,
         why: "Use Aspire's readiness model before touching a service.",
         icon: "lucide:timer"
       },
       {
         label: "Apply code changes",
         command: "aspire resource <name> restart",
+        commandHref: `${aspireCliDocsRoot}/aspire-resource/`,
         why: "Restart only the changed resource while preserving the running graph.",
         icon: "lucide:refresh-cw"
       },
       {
         label: "Tear down deployments",
         command: "aspire destroy",
+        commandHref: `${aspireCliDocsRoot}/aspire-destroy/`,
         why: "Unwind Azure, Kubernetes, or Compose resources through Aspire.",
         icon: "lucide:trash-2"
       }
@@ -193,6 +208,7 @@ async function getSkills(): Promise<SkillCard[]> {
           role: "Aspire skill",
           summary: "Adds focused Aspire guidance for a specific development workflow.",
           command: "aspire",
+          commandHref: `${aspireCliDocsRoot}/aspire/`,
           highlights: ["Guides Aspire workflows", "Keeps context close", "Stays current with the skill"],
           icon: "lucide:sparkles",
           order: 99
@@ -204,6 +220,7 @@ async function getSkills(): Promise<SkillCard[]> {
           role: profile.role,
           summary: profile.summary,
           command: profile.command,
+          commandHref: profile.commandHref,
           highlights: profile.highlights,
           icon: profile.icon,
           order: profile.order,
