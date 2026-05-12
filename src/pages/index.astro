@@ -19,24 +19,9 @@ const heroStats = [
 ] as const;
 
 const safetySignals = [
-  {
-    label: "Detects AppHosts",
-    description: "Recognizes the distributed app shape before an agent edits resources.",
-    icon: "lucide:radar",
-    color: "text-aspire-purple bg-[#f4f0ff] border-aspire-purple/15 dark:bg-aspire-primary/20 dark:text-aspire-muted dark:border-aspire-muted/20"
-  },
-  {
-    label: "Keeps agents on Aspire CLI",
-    description: "Guides lifecycle, deploy, config, and diagnostics through supported commands.",
-    icon: "lucide:shield-check",
-    color: "text-aspire-cyan bg-cyan-50 border-cyan-200 dark:bg-aspire-cyan/20 dark:text-cyan-200 dark:border-cyan-200/20"
-  },
-  {
-    label: "Routes diagnostics with context",
-    description: "Pulls logs, traces, resources, and health into the next agent step.",
-    icon: "lucide:workflow",
-    color: "text-aspire-blue bg-blue-50 border-blue-200 dark:bg-aspire-blue/20 dark:text-blue-200 dark:border-blue-200/20"
-  }
+  { label: "Detects AppHosts", icon: "lucide:radar", color: "text-aspire-purple bg-[#f4f0ff] border-aspire-purple/15 dark:bg-aspire-primary/20 dark:text-aspire-muted dark:border-aspire-muted/20" },
+  { label: "Keeps agents on Aspire CLI", icon: "lucide:shield-check", color: "text-aspire-cyan bg-cyan-50 border-cyan-200 dark:bg-aspire-cyan/20 dark:text-cyan-200 dark:border-cyan-200/20" },
+  { label: "Routes diagnostics", icon: "lucide:workflow", color: "text-aspire-blue bg-blue-50 border-blue-200 dark:bg-aspire-blue/20 dark:text-blue-200 dark:border-blue-200/20" }
 ] as const;
 
 const skillIconColors = [
@@ -103,7 +88,7 @@ const navLinks = [
       </div>
     </header>
 
-    <section id="top" class="mx-auto grid w-full max-w-7xl gap-8 px-5 pb-10 pt-12 sm:px-8 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-stretch lg:pb-14 lg:pt-20">
+    <section id="top" class="mx-auto grid w-full max-w-7xl gap-8 px-5 pb-10 pt-12 sm:px-8 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start lg:pb-14 lg:pt-20">
       <div>
         <p class="mb-5 inline-flex items-center gap-2 rounded-full border border-aspire-purple/20 bg-[#f4f0ff] px-3 py-1.5 text-sm font-semibold text-aspire-purple dark:border-aspire-muted/25 dark:bg-aspire-primary/20 dark:text-aspire-muted">
           <span class="h-1.5 w-1.5 rounded-full bg-current"></span>
@@ -131,44 +116,43 @@ const navLinks = [
         </div>
       </div>
 
-      <aside class="surface-card relative isolate flex self-stretch overflow-hidden p-5 sm:p-6 lg:p-5" aria-label="Aspire skills safety net">
-        <div class="pointer-events-none absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-aspire-muted/60 to-transparent dark:via-aspire-muted/35"></div>
-        <div class="flex w-full flex-col gap-5">
-          <div>
+      <aside class="surface-card relative isolate overflow-hidden p-5 sm:p-6" aria-label="Aspire skills safety net">
+        <div class="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-aspire-purple/15 blur-3xl dark:bg-aspire-muted/15"></div>
+        <div class="relative">
+          <div class="flex items-start justify-between gap-4">
             <div>
               <p class="eyebrow">Safety net</p>
               <h2 class="mt-2 text-xl font-semibold tracking-[-0.02em] text-aspire-black dark:text-white">Aspire-aware by default</h2>
             </div>
-            <p class="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
-              The skill turns agent intent into Aspire-native actions instead of one-off guesses.
-            </p>
+            <span class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-aspire-purple/15 bg-[#f4f0ff] text-aspire-purple dark:border-aspire-muted/20 dark:bg-aspire-primary/20 dark:text-aspire-muted">
+              <Icon name="lucide:route" class="h-5 w-5" />
+            </span>
           </div>
 
-          <div class="grid gap-3">
-            {safetySignals.map((signal, index) => (
-              <div class="rounded-2xl border border-slate-950/10 bg-slate-950/[0.025] p-3.5 dark:border-white/10 dark:bg-white/[0.035]">
-                <div class="flex gap-3">
-                  <span class:list={["inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border", signal.color]}>
-                    <Icon name={signal.icon} class="h-5 w-5" />
+          <div class="mt-6 rounded-2xl border border-slate-950/10 bg-white/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+            <div class="mb-3 flex items-center justify-between text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+              <span>Agent path</span>
+              <span>Guided</span>
+            </div>
+            <div class="space-y-2">
+              {safetySignals.map((signal, index) => (
+                <div class="flex items-center gap-3 rounded-xl bg-slate-950/[0.025] p-2.5 dark:bg-white/[0.035]">
+                  <span class:list={["inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border", signal.color]}>
+                    <Icon name={signal.icon} class="h-4.5 w-4.5" />
                   </span>
-                  <div class="min-w-0">
-                    <div class="flex items-start justify-between gap-3">
-                      <p class="text-sm font-semibold leading-5 text-aspire-black dark:text-white">{signal.label}</p>
-                      <span class="rounded-full border border-slate-950/10 bg-white px-2 py-0.5 text-[0.62rem] font-semibold text-slate-500 dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-300">
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
-                    </div>
-                    <p class="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-400">{signal.description}</p>
-                  </div>
+                  <span class="min-w-0 flex-1 text-sm font-semibold text-slate-700 dark:text-slate-200">{signal.label}</span>
+                  <span class="text-[0.65rem] font-semibold text-slate-400 dark:text-slate-500">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
 
-          <div class="grid grid-cols-3 gap-2 rounded-2xl border border-slate-950/10 bg-white/70 p-2 dark:border-white/10 dark:bg-white/[0.04]">
+          <div class="mt-4 grid grid-cols-3 gap-2">
             {heroStats.map((stat) => (
-              <div class="rounded-xl px-2.5 py-3">
-                <span class:list={["mb-3 inline-flex h-8 w-8 items-center justify-center rounded-lg border", stat.color]}>
+              <div class="rounded-2xl border border-slate-950/10 bg-slate-950/[0.025] p-3 dark:border-white/10 dark:bg-white/[0.035]">
+                <span class:list={["mb-2 inline-flex h-8 w-8 items-center justify-center rounded-lg border", stat.color]}>
                   <Icon name={stat.icon} class="h-4 w-4" />
                 </span>
                 <p class="text-2xl font-semibold leading-none tracking-[-0.04em] text-aspire-black dark:text-white">{stat.value}</p>
