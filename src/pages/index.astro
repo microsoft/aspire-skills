@@ -52,7 +52,8 @@ const guardrailIconColors = [
 const evalLinks = [
   { label: "Waza", href: "https://github.com/microsoft/waza", icon: "lucide:external-link" },
   { label: "View eval coverage", href: "https://github.com/microsoft/aspire-skills/tree/main/evals", icon: "lucide:book-open" },
-  { label: "Authoring guide", href: "https://github.com/microsoft/aspire-skills/blob/main/evals/AUTHORING.md", icon: "lucide:file-pen-line" }
+  { label: "Authoring guide", href: "https://github.com/microsoft/aspire-skills/blob/main/evals/AUTHORING.md", icon: "lucide:file-pen-line" },
+  { label: "Evaluation guide", href: "https://agentskills.io/skill-creation/evaluating-skills", icon: "lucide:clipboard-check" }
 ] as const;
 
 const navLinks = [
@@ -289,7 +290,7 @@ const navLinks = [
                 so Aspire guidance stays dependable as the skills evolve.
               </p>
             </div>
-            <div class="mt-8 grid gap-3 sm:grid-cols-3 lg:mt-auto lg:grid-cols-1">
+            <div class="mt-8 grid gap-3 sm:grid-cols-2 lg:mt-auto lg:grid-cols-1">
               {evalLinks.map((link) => (
                 <a class="group flex items-center justify-between gap-3 rounded-2xl border border-slate-950/10 bg-white/75 p-3 text-sm font-medium text-slate-700 transition hover:border-aspire-purple/25 hover:bg-white hover:text-aspire-black dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-aspire-muted/30 dark:hover:bg-white/[0.08] dark:hover:text-white" href={link.href}>
                   <span class="inline-flex items-center gap-2">
