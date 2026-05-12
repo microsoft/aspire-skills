@@ -2,7 +2,7 @@
 import { Icon } from "astro-icon/components";
 
 interface Props {
-  icon: "aspire" | "claude" | "copilot" | "cursor" | "gemini" | "github" | "ollama" | "openai" | "opencode";
+  icon: "aspire" | "claude" | "copilot" | "cursor" | "gemini" | "github" | "npm" | "ollama" | "openai" | "opencode";
   label: string;
   compact?: boolean;
 }
@@ -15,6 +15,7 @@ const iconifyNames = {
   cursor: "simple-icons:cursor",
   gemini: "logos:google-gemini",
   github: "simple-icons:github",
+  npm: "simple-icons:npm",
   ollama: "simple-icons:ollama",
   openai: "simple-icons:openai"
 };
@@ -41,6 +42,7 @@ const currentColorIconClasses = {
   cursor: "text-aspire-black dark:text-white",
   gemini: "text-aspire-purple dark:text-aspire-muted",
   github: "text-aspire-black dark:text-white",
+  npm: "text-red-700 dark:text-red-200",
   ollama: "text-aspire-black dark:text-white",
   openai: "text-teal-700 dark:text-teal-200"
 };
@@ -52,6 +54,7 @@ const toneClasses = {
   cursor: "border-slate-300 bg-slate-100 text-aspire-black dark:border-white/15 dark:bg-white/10 dark:text-white",
   gemini: "border-blue-200 bg-blue-50 text-aspire-blue dark:border-blue-300/20 dark:bg-blue-400/15 dark:text-blue-200",
   github: "border-slate-300 bg-slate-100 text-aspire-black dark:border-white/15 dark:bg-white/10 dark:text-white",
+  npm: "border-red-200 bg-red-50 text-red-700 dark:border-red-300/20 dark:bg-red-400/15 dark:text-red-200",
   ollama: "border-yellow-200 bg-yellow-50 text-aspire-yellow dark:border-yellow-300/20 dark:bg-yellow-400/15 dark:text-yellow-200",
   openai: "border-teal-200 bg-teal-50 text-teal-700 dark:border-teal-300/20 dark:bg-teal-400/15 dark:text-teal-200",
   opencode: "border-fuchsia-200 bg-fuchsia-50 text-aspire-magenta dark:border-fuchsia-300/20 dark:bg-fuchsia-400/15 dark:text-fuchsia-200"

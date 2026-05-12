@@ -113,7 +113,7 @@ export type InstallSurface = {
   status: string;
   language: string;
   title: string;
-  icon: "claude" | "copilot" | "cursor" | "gemini" | "ollama" | "openai" | "opencode";
+  icon: "aspire" | "claude" | "copilot" | "cursor" | "gemini" | "npm" | "ollama" | "openai" | "opencode";
   notes: string[];
 };
 
@@ -265,6 +265,22 @@ async function getEvalSummary(): Promise<EvalSummary> {
 function getInstallSurfaces(pluginVersion: string, marketplaceVersion: string): InstallSurface[] {
   return [
     {
+      id: "aspire",
+      name: "Aspire CLI",
+      shortName: "Aspire",
+      badge: "first-party",
+      status: "Built-in agent setup",
+      detail: "Use Aspire's first-party agent setup when creating a new app, adding Aspire to an existing repo, or refreshing agent guidance later.",
+      command: "aspire new\n# select y when prompted to configure AI agent environments\n\naspire init\n# select y when prompted to install Aspire agent guidance\n\naspire agent init",
+      language: "bash",
+      title: "Aspire CLI",
+      icon: "aspire",
+      notes: [
+        "The official path installs Aspire skill files and MCP configuration into detected agent environments.",
+        "Run aspire agent init any time to add, update, or reconfigure Aspire guidance in an existing workspace."
+      ]
+    },
+    {
       id: "copilot",
       name: "GitHub Copilot CLI",
       shortName: "Copilot",
@@ -374,6 +390,22 @@ function getInstallSurfaces(pluginVersion: string, marketplaceVersion: string): 
       notes: [
         "Run Copilot CLI with a local model while keeping the same Aspire plugin guidance.",
         "Good for developers who want local model execution with Aspire-aware workflows."
+      ]
+    },
+    {
+      id: "npx",
+      name: "NPX Context7 helper",
+      shortName: "NPX",
+      badge: "MCP",
+      status: "Docs context helper",
+      detail: "Use the NPX-backed Context7 MCP server when an agent host needs fresh package and framework documentation alongside Aspire guidance.",
+      command: "npx -y @upstash/context7-mcp@latest",
+      language: "bash",
+      title: "NPX Context7 MCP",
+      icon: "npm",
+      notes: [
+        "This is the NPX MCP helper declared by the Gemini extension manifest, not the primary Aspire skill install path.",
+        "Keep it alongside Aspire skills when your agent host supports MCP tools for live documentation lookup."
       ]
     }
   ];

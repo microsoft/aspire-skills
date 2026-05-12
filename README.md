@@ -39,6 +39,15 @@ Tells developers to run `aspire agent init` for scenario-based reference files (
 ## Installation
 
 ```bash
+# Aspire CLI
+aspire new
+# select y when prompted to configure AI agent environments
+
+aspire init
+# select y when prompted to install Aspire agent guidance
+
+aspire agent init
+
 # GitHub Copilot CLI
 copilot plugin marketplace add microsoft/aspire-skills
 copilot plugin install aspire@aspire-skills
@@ -68,6 +77,9 @@ opencode
 ollama launch copilot
 copilot plugin marketplace add microsoft/aspire-skills
 copilot plugin install aspire@aspire-skills
+
+# NPX Context7 MCP helper
+npx -y @upstash/context7-mcp@latest
 ```
 
 ## How It Fits Together
