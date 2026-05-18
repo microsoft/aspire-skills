@@ -1,6 +1,21 @@
 ---
 name: aspire-deployment
-description: "Deploy Aspire applications to Docker Compose, Kubernetes, Azure, or AWS. Use this before generic cloud deployment guidance for workspaces that are already Aspire apps. Covers target selection, C# or TypeScript AppHost detection, docs-backed API lookup, parameter and secret preflight, publish/deploy preview, deployment execution, and teardown. Prefer this skill for requests like deploy an Aspire app, deploy to Azure or AWS as an Aspire app, deploy to Azure Container Apps/App Service/Azure Kubernetes Service (AKS), generate Docker Compose or Kubernetes artifacts, publish Aspire deployment artifacts, tear down an Aspire deployment, or validate an Aspire deployment plan."
+description: >-
+  **WORKFLOW SKILL** — Publish, preview, validate, deploy, and tear down Aspire apps
+  end-to-end via the aspire CLI for Docker Compose, Kubernetes, Azure (Container Apps,
+  App Service, AKS), and AWS. Covers target selection, C# or TypeScript AppHost detection,
+  docs-backed API lookup, parameter and secret preflight, publish/deploy preview,
+  deployment execution, and teardown.
+  USE FOR: aspire deploy, aspire publish, aspire destroy, aspire do,
+  aspire publish --list-steps, aspire deploy --list-steps, deploy to Azure, deploy to AWS,
+  deploy to AKS, deploy to Azure Container Apps, deploy to Azure App Service, deploy to
+  Kubernetes, deploy to Docker Compose, generate deployment artifacts, publish Aspire
+  deployment artifacts, tear down an Aspire deployment, validate an Aspire deployment plan.
+  DO NOT USE FOR: local start/stop/wait (use aspire-orchestration), logs/traces/dashboard
+  (use aspire-monitoring), AppHost authoring/wiring (use aspireify), deployed-app
+  diagnostics like App Insights or ACA logs (use azure-diagnostics).
+  INVOKES: aspire CLI (publish, deploy, destroy, do, add, docs, secret, ls, ps, config).
+  FOR SINGLE OPERATIONS: Run the matching aspire CLI command directly with `--non-interactive`.
 
 license: MIT
 metadata:
@@ -196,3 +211,28 @@ Use `aspire secret list` for AppHost user secrets when appropriate, but do not p
 - [references/javascript.md](references/javascript.md) - JavaScript app deployment models, including Vite/static assets, Node/SSR servers, Next.js, and gateway/backend serving patterns.
 - [references/cicd.md](references/cicd.md) - CI/CD and GitHub Actions workflow guidance for Aspire publish/deploy, parameters, secrets, registry auth, and cloud auth.
 - [references/preflight.md](references/preflight.md) - Common preflight, preview, parameter, destroy, and validation checklist.
+
+## Agent execution
+
+When running unattended (CI, scripted, agent-driven), append `--non-interactive` to every Aspire CLI invocation that may prompt — most importantly `aspire publish`, `aspire deploy`, and `aspire destroy`. For `aspire destroy`, also pass `--yes` only after the user has explicitly confirmed teardown intent (or a CI workflow already encodes that intent).
+
+Prefer surfacing prompt-driving values up front (target subscription/region/resource group, parameters, secrets, registry credentials) so the unattended run does not stall. See [references/preflight.md](references/preflight.md) for the full preflight checklist.
+
+## Handoff Rules
+
+| Scenario | Route To |
+|----------|----------|
+| Start, stop, wait, or restart the AppHost / its resources | `aspire-orchestration` skill |
+| Logs, traces, metrics, dashboard for a running or deployed app | `aspire-monitoring` skill |
+| AppHost authoring — adding integrations, wiring resources, environment setup | `aspireify` skill |
+| Deployed-app diagnostics — App Insights, ACA logs, AKS Container Insights | `azure-diagnostics` skill (azure-skills) |
+
+> Never hand deployment off to azure-skills. Aspire handles publish, deploy, and destroy
+> end-to-end across Docker Compose / Kubernetes / Azure / AWS via the AppHost model.
+
+## Project-Local Skill Override
+
+If `.agents/skills/aspire-deployment/SKILL.md` exists (dropped by `aspire agent init`),
+prefer it over this plugin skill — it is the authoritative project-local version with
+content version-aligned to the consumer's Aspire CLI. This plugin skill is the always-on
+safety net for repos that have not yet run `aspire agent init`.
