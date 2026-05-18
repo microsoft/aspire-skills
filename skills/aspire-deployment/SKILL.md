@@ -1,17 +1,7 @@
 ---
 name: aspire-deployment
-description: >-
-  **WORKFLOW SKILL** - Deploy and tear down Aspire 13.3 apps end-to-end via the
-  aspire CLI — no azd, kubectl, helm, or Bicep CLI required.
-  USE FOR: aspire deploy, aspire publish, aspire destroy, aspire do, deploy to Azure,
-  deploy to AKS, deploy to Kubernetes, deploy to Docker Compose, tear down deployment,
-  named pipeline step, AddNextJsApp, AddAzureFrontDoor, AddAzureKubernetesEnvironment,
-  AddPromptAgent.
-  DO NOT USE FOR: local start/stop/wait (use aspire-orchestration), logs/traces/dashboard
-  (use aspire-monitoring), Azure infra without Aspire (use azure-prepare), deployed app
-  diagnostics (use azure-diagnostics).
-  INVOKES: aspire CLI (publish, deploy, destroy, do).
-  FOR SINGLE OPERATIONS: Run the matching aspire CLI command directly.
+description: "Deploy Aspire applications to Docker Compose, Kubernetes, Azure, or AWS. Use this before generic cloud deployment guidance for workspaces that are already Aspire apps. Covers target selection, C# or TypeScript AppHost detection, docs-backed API lookup, parameter and secret preflight, publish/deploy preview, deployment execution, and teardown. Prefer this skill for requests like deploy an Aspire app, deploy to Azure or AWS as an Aspire app, deploy to Azure Container Apps/App Service/Azure Kubernetes Service (AKS), generate Docker Compose or Kubernetes artifacts, publish Aspire deployment artifacts, tear down an Aspire deployment, or validate an Aspire deployment plan."
+
 license: MIT
 metadata:
   author: Microsoft
@@ -20,174 +10,189 @@ metadata:
 
 # Aspire Deployment
 
-> Aspire handles deployment end-to-end for Azure, Kubernetes, and Docker Compose targets — no
-> `azd`, `azure-prepare`, `azure-deploy`, `kubectl apply`, `helm install`, or Bicep CLI needed.
-> Users still need cluster/cloud credentials; Aspire just stops you from invoking those tools by hand.
+Use this skill when the task is to publish, preview, validate, deploy, or tear down an Aspire application deployment. This skill owns Aspire deployment routing. Do not start with a generic Azure, Docker, Kubernetes, Helm, or Bicep workflow until you have checked whether the workspace is an Aspire app.
 
-> ⚠️ **13.3 breaking change**: `--log-level` was renamed to `--pipeline-log-level` on
-> `aspire publish` / `aspire deploy`. Update CI snippets accordingly.
+Aspire deployment starts from the AppHost model. Treat `aspire deploy`, `aspire publish`, `aspire destroy`, `aspire do`, and the deployment environment resources in the AppHost as the primary path.
 
-## Supported Targets
+Keep this as one skill with target-specific references. Load only the reference files that match the target you discover or the user requests.
 
-| Target | Method | External Tool Needed? |
-|--------|--------|----------------------|
-| Azure Container Apps | `aspire deploy` / `aspire publish` | No (just `az login` credentials) |
-| Azure App Service | `aspire deploy` / `aspire publish` | No (auto HTTPS upgrade in 13.3) |
-| Azure Kubernetes Service (AKS) | `aspire deploy` (Bicep + Helm pipeline) | No (just `az login` credentials) |
-| Kubernetes (any cluster) | `aspire deploy` (Helm-based, **preview**) | No — cluster credentials only |
-| Docker Compose | `aspire publish` / `aspire deploy` | Docker or Podman runtime |
+## Routing precedence
 
-## Commands
+This skill wins over generic cloud deployment skills when both conditions are true:
 
-| Command | What It Does |
-|---------|-------------|
-| `aspire publish` | Generate deployment artifacts for configured targets |
-| `aspire deploy` | Full pipeline: generate + apply deployment (runs `check-container-runtime` first) |
-| `aspire destroy` | Tear down provisioned resources across Azure / K8s / Compose |
-| `aspire do <step>` | Run an individual named pipeline step |
-| `aspire do --list-steps` | List pipeline steps for `do` / `publish` / `deploy` / `destroy` without executing |
-| `aspire deploy --clear-cache` | Reset deployment state, full redeploy |
-| `aspire do diagnostics` | Evaluate deploy pipeline health for current AppHost |
-| `aspire deploy --pipeline-log-level <level>` | Verbose pipeline logs (renamed from `--log-level` in 13.3) |
+1. The user asks to deploy, publish, generate deployment artifacts, create Bicep/Helm/Compose/CDK output, host on Azure or AWS, deploy to Azure or AWS, deploy to Kubernetes, deploy to Docker Compose, tear down deployed resources, or validate a deployment.
+2. The workspace has Aspire markers:
+   - Aspire workspace configuration
+   - C# or TypeScript AppHost files
+   - an AppHost project
+   - AppHost code using Aspire distributed application builder APIs
 
-> Each `do` / `publish` / `deploy` / `destroy` run prints a **pipeline step summary** at the end
-> (✓/✗ per step, duration, total). Independent steps continue on sibling failure in 13.3.
+If Aspire markers are present but this skill was not automatically invoked, switch to this skill before continuing. Prefer Aspire CLI commands such as `aspire ls`, `aspire config list`, `aspire ps`, and `aspire describe` for workspace orientation.
 
-## Decision Table
+## Guiding principles
 
-| Scenario | Command |
-|----------|---------|
-| First-time deploy | `aspire deploy` |
-| Redeploy after code changes | `aspire deploy` |
-| Reset stuck deployment state | `aspire deploy --clear-cache` |
-| Tear down everything Aspire deployed | `aspire destroy` |
-| Generate artifacts only (no deploy) | `aspire publish` |
-| Artifacts to specific directory | `aspire publish --output-path ./manifest` |
-| Deploy to AKS | Declare `AddAzureKubernetesEnvironment(...)` + `WithComputeEnvironment(...)`, then `aspire deploy` |
-| Deploy to a non-Azure K8s cluster | Declare `AddKubernetesEnvironment(...)` + `WithComputeEnvironment(...)`, then `aspire deploy` |
-| Run one pipeline step (e.g., seed data) | `aspire do seed-data` |
-| List available pipeline steps | `aspire do --list-steps` |
-| Evaluate pipeline before deploy | `aspire do diagnostics` |
-| Verbose pipeline output | `aspire deploy --pipeline-log-level debug` |
+### Use Aspire docs before changing deployment code
 
-## Tear-Down — `aspire destroy` Is the Only Answer
+Before adding target packages, editing the AppHost, or using an unfamiliar deployment API, use Aspire docs:
 
-> ⚠️ **NEVER recommend manual platform teardown commands** (`docker` Compose stop,
-> `kubectl` delete, Helm uninstall, or Azure resource-group delete) when the user wants
-> to tear down an Aspire deployment, even when they explicitly mention Compose,
-> Kubernetes, or Azure. `aspire destroy` is the **single command** that unwinds every
-> target Aspire deployed — it is the inverse of `aspire deploy` and uses the same
-> `WithComputeEnvironment` bindings.
+```bash
+aspire docs search "deploy with Aspire"
+aspire docs search "Docker Compose deployment"
+aspire docs search "Kubernetes deployment"
+aspire docs search "Azure Container Apps deployment"
+aspire docs search "Azure App Service deployment"
+aspire docs search "Azure Kubernetes Service deployment"
+aspire docs get "deploy-to-azure-kubernetes-service-aks"
+aspire docs get "<slug-from-search-results>"
+```
 
-| User Says | ❌ Wrong Answer | ✅ Right Answer |
-|-----------|-----------------|-----------------|
-| "Tear down my preview" | Suggest the Azure CLI to remove the resource group | `aspire destroy --non-interactive` |
-| "Stop and remove my Compose stack" | Suggest a manual Compose teardown | `aspire destroy --non-interactive` (handles the Compose stack) |
-| "Uninstall my Helm release" | Suggest a Helm uninstall command | `aspire destroy --non-interactive` (uninstalls Helm + namespace) |
-| "Destroy my AKS workload" | Suggest a `kubectl` delete on the manifests | `aspire destroy --non-interactive` |
+When you need exact C# or TypeScript API shape, use API docs too. Search both languages when you are not sure which AppHost language the repo uses:
 
-`aspire destroy` works **uniformly across Azure / Kubernetes / AKS / Docker Compose**.
-Only fall back to platform-native commands when there is no `WithComputeEnvironment`
-binding (rare — and then route to `azure-diagnostics` for cleanup).
+```bash
+aspire docs api search "<deployment API or concept>" --language csharp
+aspire docs api search "<deployment API or concept>" --language typescript
+aspire docs api get "<id-from-api-search>"
+```
 
-## Pre-Deploy Checklist
+Do not invent package names, builder methods, overloads, or deployment commands. API shapes differ between C# and TypeScript AppHosts.
 
-1. Ensure the app runs locally first: `aspire start` → `aspire wait <resource>` → verify
-2. `aspire stop` before deploying
-3. Run `aspire deploy` (or `aspire publish` for artifacts only)
-4. Docker must be running for container-based targets
+### Prefer Aspire-native deployment
 
-## JavaScript and Node.js Publishing (13.3)
+Use Aspire deployment targets and CLI commands first:
 
-A unified `PublishAs*` family replaces hand-rolled Dockerfile plumbing for JS/TS apps:
+```bash
+aspire publish --list-steps
+aspire deploy --list-steps
+aspire publish
+aspire deploy
+aspire destroy
+aspire do <step>
+```
 
-| API | Use For | Notes |
-|-----|---------|-------|
-| `PublishAsStaticWebsite` (preview) | SPAs (Vite, plain Next.js export) | YARP-served static; optional `apiPath` + `apiTarget` reverse-proxy to backend |
-| `PublishAsNodeServer` | Pre-bundled Node entry-point (e.g., `server.js`) | No `node_modules` copied at runtime — slim runtime container |
-| `PublishAsNpmScript` | Full Nitro Next.js, Remix, Astro SSR | Runs an npm `start`/`serve` script with prod deps |
-| `AddNextJsApp(name, path)` | First-class Next.js | Auto-configures standalone publishing — set `output: "standalone"` in `next.config.js` |
-| `AddViteApp(name, path)` | Vite dev server | Pair with `PublishAsStaticWebsite` for SPA, or `PublishAsNodeServer` for SSR (TanStack Start, SvelteKit) |
+Use target-specific tooling only after Aspire has generated artifacts or when the target docs call for it:
 
-TypeScript AppHosts now have first-class **Bun, Yarn, and pnpm** support (npm remains default).
-TS AppHosts can also build Dockerfiles programmatically via `WithDockerfileBuilder` /
-`AddDockerfileBuilder` — covered by experimental diagnostic
-[`ASPIREDOCKERFILEBUILDER001`](https://aspire.dev/diagnostics/aspiredockerfilebuilder001/).
+- Docker Compose: inspect generated `aspire-output/docker-compose.yaml` and `.env*`; Aspire can also run `docker compose up` through `aspire deploy`.
+- Kubernetes: inspect generated Helm chart output; use Helm/kubectl when applying published artifacts yourself.
+- Azure: use `aspire add <azure-target>`, `aspire publish`, and `aspire deploy` through the AppHost deployment environment.
+- AWS: use `aspire add aws` to add the integration, inspect generated CDK/CloudFormation output, and follow the AWS integrations repository guidance.
 
-## Azure 13.3 Integrations
+### Ask where to deploy only when ambiguous
 
-| Integration | API | What It Does |
-|-------------|-----|--------------|
-| Azure Front Door | `AddAzureFrontDoor("frontdoor").WithOrigin(api).WithOrigin(web)` | Provisions Front Door (Standard SKU default); each `WithOrigin` creates its own endpoint, origin group, route, `*.azurefd.net` host |
-| Network Security Perimeter | `AddNetworkSecurityPerimeter("nsp").WithAccessRule(...)` then `.WithNetworkSecurityPerimeter(nsp)` on resources | PaaS-layer boundary; Enforced (block) / Learning (log-only) modes |
-| Azure Kubernetes Service | `AddAzureKubernetesEnvironment("aks").WithSystemNodePool(vmSize, minCount, maxCount)` | First-class AKS; control-plane defaults to **Free** SKU (`AksSkuTier` enum REMOVED) |
-| Foundry Prompt Agent | `AddPromptAgent(...)` | Replaces non-functional `AddAndPublishPromptAgent` (REMOVED) |
-| Private endpoints | `.WithPrivateEndpoint()` on ACR / Azure OpenAI / Foundry | Resource reachable over VNet without public exposure |
-| App Service HTTPS | Automatic | Endpoints deployed to App Service auto-upgrade HTTP→HTTPS |
-| Credential timeout | `Azure:CredentialProcessTimeoutSeconds` config | Tune timeout for slow auth round-trips |
-| Multi-environment binding | `.WithComputeEnvironment(env)` per resource (REQUIRED) | Prevents accidental cross-environment leakage |
+Do not ask for target selection when the user already chose a target such as Docker Compose, Kubernetes, Azure Container Apps, Azure App Service, Azure Kubernetes Service (AKS), or AWS. Use the chosen target and continue with its reference.
 
-Deployment summaries now print **clickable Azure Portal links** for each provisioned resource.
+If the user did not explicitly choose a deployment target and the AppHost does not already contain exactly one deployment environment, ask where they want to deploy before adding integrations, editing the AppHost, publishing artifacts, or deploying. Use a single multiple-choice question:
 
-## Docker Compose (13.3)
+> Where do you want to deploy this Aspire app?
 
-- **Podman** is supported out of the box — Aspire detects Podman and generates `podman-compose`-compatible files.
-- **Privileged containers**: `PublishAsDockerComposeService((resource, service) => service.Privileged = true)` for low-level networking utilities or nested containers.
+Show these choices:
 
-## Docs & Secrets (for deployment config)
+| Choice | Aspire add command | Use when |
+|--------|--------------------|----------|
+| Docker Compose | `aspire add docker` | The user wants local/server container deployment artifacts for Docker or Podman. |
+| Kubernetes | `aspire add kubernetes` | The user has an existing Kubernetes cluster and wants Helm/Kubernetes artifacts or direct cluster deployment. |
+| Azure Container Apps | `aspire add azure-appcontainers` | The user wants an Azure-managed container platform for distributed apps and services. |
+| Azure App Service | `aspire add azure-appservice` | The user wants Azure website hosting for web apps/APIs that fit the App Service model. |
+| Azure Kubernetes Service (AKS) | `aspire add azure-kubernetes` | The user wants Aspire to provision and deploy to Azure-managed Kubernetes. |
+| AWS | `aspire add aws` | The user wants Aspire to publish/deploy through the AWS Aspire integrations and AWS CDK. |
 
-| Task | Command |
-|------|---------|
-| Search docs for deployment patterns | `aspire docs search <topic>` |
-| Get specific doc page | `aspire docs get <slug>` |
-| Set deployment secret | `aspire secret set <key> <value>` |
-| List secrets | `aspire secret list` |
-| Check CLI config | `aspire config list` |
+If the user says only "Azure", ask again with just the Azure choices: Azure Container Apps, Azure App Service, or Azure Kubernetes Service (AKS). If the AppHost already contains exactly one deployment environment and the user did not ask to change targets, use that target and tell the user what was detected.
 
-See [tools-and-config.md](references/tools-and-config.md) for full docs/secrets/config reference.
+### Ask before creating cloud resources when intent is not explicit
 
-> **Agent execution**: Append `--non-interactive` to `aspire deploy`, `aspire publish`, and
-> `aspire destroy` to prevent prompts.
+Cloud deploys can create billable resources. If the user asked for a plan, preview, validation, or "make this deployable", stop after the deployment plan/artifacts and ask before running the command that provisions resources.
 
-## Known Deployment Gotchas
+If the user explicitly asked to deploy now, continue through preflight and deployment, but still surface any target choice, subscription/resource group ambiguity, or missing parameter decisions before provisioning.
 
-| Issue | Workaround |
-|-------|-----------|
-| Builds Debug config only ([#14540](https://github.com/microsoft/aspire/issues/14540)) | Known limitation — no Release flag yet |
-| No selective resource deploy ([#16166](https://github.com/microsoft/aspire/issues/16166)) | Always full redeploy |
-| Docker / Podman required for container targets | `check-container-runtime` step fails fast in 13.3; start runtime, retry |
-| Vite publish quirks ([#15621](https://github.com/microsoft/aspire/issues/15621)) | For new Vite deployments, prefer `PublishAsStaticWebsite`; #15621 may still apply to legacy Vite publish paths |
+### Keep Azure deployment Aspire-native
 
-## Error Handling
+The Azure deployment path in this skill is `aspire add <azure-target>`, AppHost environment configuration, `aspire publish`, and `aspire deploy`. Do not route Azure deployment work through a separate Azure deployment tool or generated infrastructure workflow.
 
-| Symptom | Cause | Action |
-|---------|-------|--------|
-| Deploy fails with auth error | Azure credentials expired | Re-authenticate with `az login` |
-| Deploy hangs | Stuck cache state | `aspire deploy --clear-cache` |
-| Publish generates no artifacts | Targets not configured in AppHost | Check AppHost code for publish targets |
-| `check-container-runtime` step fails | No Docker / Podman available | Start container runtime, retry |
-| Resource not torn down by `aspire destroy` | Resource missing `WithComputeEnvironment` binding | Add binding, redeploy, retry destroy |
-| `AddAndPublishPromptAgent` not found | Removed in 13.3 | Replace with `AddPromptAgent` |
-| `AksSkuTier` not found | Enum removed in 13.3 | Delete reference; control-plane defaults to Free |
-| `--log-level` rejected | Renamed in 13.3 | Use `--pipeline-log-level` |
+## Default workflow
 
-## Handoff Rules
+1. **Orient to the Aspire workspace.**
+   - Start with `aspire ls` to list AppHosts in the current scope, then use `aspire.config.json`, AppHost project files, or `aspire ps` if more context is needed.
+   - If no AppHost exists, stop deployment work and invoke the `aspireify` skill to initialize/wire the AppHost before continuing.
+   - Identify C# vs TypeScript AppHost.
+   - Prefer Aspire CLI commands for discovery and state inspection.
+2. **Clarify or infer the deployment target.**
+   - If the user named Docker Compose, Kubernetes, Azure Container Apps, Azure App Service, Azure Kubernetes Service (AKS), or AWS, load that target reference without asking again.
+   - If they only said "deploy", inspect existing AppHost target environment resources.
+   - If exactly one target environment already exists, use it and state what was detected.
+   - If multiple targets exist, none exists, or the user says only "Azure", ask where to deploy using the choices above.
+3. **Load target and app-type references.**
+    - Docker Compose: [references/docker-compose.md](references/docker-compose.md)
+    - Kubernetes and Azure Kubernetes Service (AKS): [references/kubernetes.md](references/kubernetes.md)
+    - Azure Container Apps/App Service/Azure Kubernetes Service (AKS): [references/azure.md](references/azure.md)
+    - AWS: [references/aws.md](references/aws.md)
+    - JavaScript app resources: [references/javascript.md](references/javascript.md)
+    - CI/CD or GitHub Actions automation: [references/cicd.md](references/cicd.md)
+4. **Use Aspire docs search for current guidance.**
+    - Search and get the target deployment docs.
+    - Search API docs before editing AppHost code.
+5. **Apply the target code changes.**
+   - Run the target's `aspire add ...` command if the integration is missing.
+   - Add the deployment environment resource to the AppHost.
+   - Do not add explicit compute-environment assignment for the common single-environment case. Only disambiguate when the AppHost has multiple deployment environments. In C# this is usually `WithComputeEnvironment(...)`; for TypeScript AppHosts, verify the current language-specific docs before assuming an equivalent.
+   - Add only the target-specific customization APIs the deployment needs, such as endpoint exposure, Helm settings, Compose file customization, Azure site/container app customization, or AWS publish target overrides.
+6. **Preflight the deployment model.**
+   - Confirm the target integration package exists in the AppHost.
+   - Confirm the AppHost has the target environment resource.
+   - Confirm compute resources are assigned to the target environment only when multiple compute environments exist. A single compute environment is the common case and can be inferred.
+   - Inventory parameters, secrets, connection strings, external endpoints, container registries, and target-specific prerequisites.
+   - For Azure or AWS, confirm auth, target account/subscription, region/location, and resource group/stack context.
+7. **Preview before applying.**
+   - Run `aspire publish --list-steps` or `aspire deploy --list-steps`.
+   - Use `aspire publish -o <scratch-or-output-path>` when artifact review is requested.
+   - Treat published artifacts as a preview/handoff. `aspire deploy` resolves values and applies the deployment from the AppHost model; it does not consume a previously published output directory.
+   - Summarize resources, endpoints, parameters, secrets, identities, and generated artifacts.
+8. **Deploy or hand off.**
+   - Run `aspire deploy` when the user asked to deploy and preflight is complete.
+   - Run a named step with `aspire do <step>` only when the user asked for a specific pipeline step.
+   - For published artifacts, explain the target-native apply step.
+9. **Destroy only when explicitly requested.**
+   - Run `aspire destroy` to execute the selected AppHost/environment's target destroy pipeline.
+   - Confirm the AppHost, environment, target account/subscription/cluster, and destructive intent before running it.
+   - Use `--yes` only when the user or CI workflow already made teardown intent explicit.
+   - Prefer `aspire destroy` over target-native delete commands unless you are troubleshooting failed teardown or cleaning up unmanaged leftovers.
+10. **Verify the outcome.**
+   - Use target output, `aspire describe`, cloud CLI, Docker Compose, kubectl, or endpoint checks appropriate to the target.
+   - After destroy, verify target resources are removed or record any leftovers that require manual cleanup.
 
-| Scenario | Route To |
-|----------|----------|
-| Start/stop/wait/rebuild app lifecycle | → `aspire-orchestration` skill |
-| Logs, traces, metrics after deploy | → `aspire-monitoring` skill |
-| AppHost authoring (adding `AddAzureFrontDoor`, `WithBrowserLogs`, etc.) | → `aspireify` skill |
-| Deployed app diagnostics (App Insights, ACA logs, AKS Container Insights) | → `azure-diagnostics` skill (azure-skills) |
+## AppHost target detection
 
-> ⚠️ **NEVER hand off to azure-skills for deployment.** Aspire handles it end-to-end.
+Search the AppHost for deployment environment resources:
 
-## Project-Local Skill Routing
+| Target | Aspire add command | Integration | AppHost environment concept |
+|--------|--------------------|-------------|-----------------------------|
+| Docker Compose | `aspire add docker` | Docker hosting | Docker Compose environment |
+| Kubernetes | `aspire add kubernetes` | Kubernetes hosting | Kubernetes environment |
+| Azure Container Apps | `aspire add azure-appcontainers` | Azure Container Apps hosting | Azure Container Apps environment |
+| Azure App Service | `aspire add azure-appservice` | Azure App Service hosting | Azure App Service environment |
+| Azure Kubernetes Service (AKS) | `aspire add azure-kubernetes` | Azure Kubernetes hosting | Azure Kubernetes Service (AKS) environment |
+| AWS | `aspire add aws` | AWS hosting | AWS CDK environment |
 
-If `.agents/skills/aspire/SKILL.md` exists (from `aspire agent init`), see its
-`references/deployment.md` for deeper pipeline and step guidance.
+Use this table only for orientation. Before editing code, verify the current API in Aspire docs for the AppHost language.
 
-## References
+## Parameter and secret preflight
 
-- [deployment.md](references/deployment.md) — Publish, deploy, destroy, JS publishing, K8s/AKS, pipeline steps
-- [tools-and-config.md](references/tools-and-config.md) — Docs, secrets, config, diagnostics, certificates
+Parameters are deployment inputs. They may be supplied by configuration files, user secrets, environment variables, command-line args, interactive prompts, or CI/CD secret stores depending on the target and command.
+
+Before deployment, report:
+
+- Parameter name from AppHost parameter APIs, including config-backed parameters
+- Whether it is secret
+- Expected provider syntax such as `Parameters__name`; for parameter names with dashes, use underscores in environment variables, for example `registry-endpoint` becomes `Parameters__registry_endpoint`
+- Where it flows, such as a project environment variable, connection string, Key Vault secret, Helm Secret, Compose `.env`, or Azure app setting
+- Whether a value appears configured or missing
+
+Use `aspire secret list` for AppHost user secrets when appropriate, but do not print secret values. For deployment artifacts, inspect generated placeholders and mappings, not raw secret content.
+
+## Target references
+
+- [references/docker-compose.md](references/docker-compose.md) - Docker Compose target, generated files, environment variables, cleanup.
+- [references/kubernetes.md](references/kubernetes.md) - Kubernetes and Azure Kubernetes Service (AKS) target selection, Helm output, registry requirements, kubectl/Helm checks.
+- [references/azure.md](references/azure.md) - Azure target selection, Azure settings, Container Apps, App Service, and Azure Kubernetes Service (AKS).
+- [references/aws.md](references/aws.md) - AWS target selection, AWS CDK prerequisites, publish/deploy workflow, and AWS integration docs.
+- [references/javascript.md](references/javascript.md) - JavaScript app deployment models, including Vite/static assets, Node/SSR servers, Next.js, and gateway/backend serving patterns.
+- [references/cicd.md](references/cicd.md) - CI/CD and GitHub Actions workflow guidance for Aspire publish/deploy, parameters, secrets, registry auth, and cloud auth.
+- [references/preflight.md](references/preflight.md) - Common preflight, preview, parameter, destroy, and validation checklist.
