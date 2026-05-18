@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import matter from "gray-matter";
@@ -240,7 +241,7 @@ async function readJson(relativePath: string) {
 
 async function getEvalSummary(): Promise<EvalSummary> {
   const readme = await readFile(path.join(root, "evals", "README.md"), "utf8");
-  const totalRow = readme.match(/\|\s*\*\*Total\*\*\s*\|\s*\*\*(?<tasks>[^*]+)\*\*\s*\|\s*\*\*(?<triggers>[^*]+)\*\*\s*\|\s*(?<focus>[^|]+)\|/);
+  const evalCounts = await getEvalCounts();
   const focusAreas = readme
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -250,16 +251,41 @@ async function getEvalSummary(): Promise<EvalSummary> {
     .map((cells) => stripMarkdown(cells[4]))
     .filter(Boolean);
 
-  if (!totalRow?.groups) {
-    throw new Error("Unable to find eval totals in evals/README.md");
+  if (focusAreas.length === 0) {
+    throw new Error("Unable to find eval focus areas in evals/README.md");
   }
 
   return {
-    taskCount: totalRow.groups.tasks.trim(),
-    triggerCount: totalRow.groups.triggers.trim(),
+    taskCount: String(evalCounts.taskCount),
+    triggerCount: String(evalCounts.triggerCount),
     focus: focusAreas.join(" · "),
     focusAreas
   };
+}
+
+async function getEvalCounts() {
+  const skillsRoot = path.join(root, "skills");
+  const skillEntries = await readdir(skillsRoot, { withFileTypes: true });
+  let taskCount = 0;
+  let triggerCount = 0;
+
+  for (const entry of skillEntries.filter((candidate) => candidate.isDirectory())) {
+    const evalsRoot = path.join(skillsRoot, entry.name, "evals");
+    const tasksRoot = path.join(evalsRoot, "tasks");
+    const triggerFile = path.join(evalsRoot, "trigger_tests.yaml");
+
+    if (existsSync(tasksRoot)) {
+      const taskEntries = await readdir(tasksRoot, { withFileTypes: true });
+      taskCount += taskEntries.filter((task) => task.isFile() && /\.ya?ml$/i.test(task.name)).length;
+    }
+
+    if (existsSync(triggerFile)) {
+      const triggerTests = await readFile(triggerFile, "utf8");
+      triggerCount += triggerTests.match(/^\s*-\s+prompt:/gm)?.length ?? 0;
+    }
+  }
+
+  return { taskCount, triggerCount };
 }
 
 function getInstallSurfaces(pluginVersion: string, marketplaceVersion: string): InstallSurface[] {

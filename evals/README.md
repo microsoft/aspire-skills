@@ -76,21 +76,21 @@ Each task runs `config.trials_per_task` times (default 3). Each trial is one exe
 
 - ~200k–300k tokens per task (typical, `executor: copilot-sdk`, `model: gpt-4.1`).
 - ~3–4 minutes per task at default `parallel: false`.
-- A full `--discover` run across all 6 skills = **~56 tasks × ~3.5 min ≈ 3+ hours** if serial. Use `--parallel` and `--tags p0` to scope.
+- A full `--discover` run across all 6 skills = **54 tasks × ~3.5 min ≈ 3+ hours** if serial. Use `--parallel` and `--tags p0` to scope.
 
 ## Test coverage
 
-Counts as of 2026-05-08 (Aspire 13.3 refresh + `aspire-init` + `aspireify` skills):
+Counts as of 2026-05-18 (Aspire 13.3 refresh + `aspire-init` + `aspireify` skills):
 
 | Skill | Tasks | Trigger prompts | Focus |
 |-------|-------|-----------------|-------|
-| `aspire` (router) | 6 | ~14 | Routing precision to sub-skills |
-| `aspire-init` | 5 | ~15 | Skeleton drop, `aspire new` / `aspire init` decision, aspireify handoff |
-| `aspireify` | 8 | ~15 | AppHost wiring (C# / file-based C# / TS), validation, never edit `.modules/` |
-| `aspire-orchestration` | 16 | ~25 | Lifecycle, file lock recovery, `--include-hidden`, `aspire update --self` |
-| `aspire-deployment` | 10 | ~20 | Multi-target deploy + native K8s Helm, `aspire destroy`, JS publishing, Azure 13.3 |
-| `aspire-monitoring` | 11 | ~20 | Diagnostics bridge, standalone dashboard, browser logs, `--include-hidden` |
-| **Total** | **56** | **~109** | |
+| `aspire` (router) | 6 | 16 | Routing precision to sub-skills |
+| `aspire-init` | 5 | 15 | Skeleton drop, `aspire new` / `aspire init` decision, aspireify handoff |
+| `aspireify` | 8 | 18 | AppHost wiring (C# / file-based C# / TS), validation, never edit `.modules/` |
+| `aspire-orchestration` | 16 | 24 | Lifecycle, file lock recovery, `--include-hidden`, `aspire update --self` |
+| `aspire-deployment` | 8 | 21 | Multi-target deploy, `aspire destroy`, JS publishing, pipeline previews |
+| `aspire-monitoring` | 11 | 19 | Diagnostics bridge, standalone dashboard, browser logs, `--include-hidden` |
+| **Total** | **54** | **113** | |
 
 Run `find skills -path '*evals/tasks/*.yaml' | wc -l` for the live count.
 
