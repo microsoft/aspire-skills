@@ -5,6 +5,12 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Synced `aspire-deployment` skill routing description with
+  [microsoft/aspire#17209](https://github.com/microsoft/aspire/pull/17209).
+  Replaced the verbose `USE FOR:` / `DO NOT USE FOR:` folded-scalar description with the
+  upstream cross-model optimized single-line format: `**WORKFLOW SKILL**` prefix, five quoted
+  `WHEN:` triggers, concise `INVOKES:` clause, and tightened `FOR SINGLE OPERATIONS:` guidance.
+  Bumped skill `metadata.version` to `1.2.0`.
 - Synced `aspire-deployment` skill with [microsoft/aspire#17182](https://github.com/microsoft/aspire/pull/17182).
   Replaced the quick-reference SKILL.md and broad `deployment.md` / `tools-and-config.md` references with the
   upstream workflow-style SKILL.md and per-target references (`aws.md`, `azure.md`, `cicd.md`,

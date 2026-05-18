@@ -1,26 +1,10 @@
 ---
 name: aspire-deployment
-description: >-
-  **WORKFLOW SKILL** — Publish, preview, validate, deploy, and tear down Aspire apps
-  end-to-end via the aspire CLI for Docker Compose, Kubernetes, Azure (Container Apps,
-  App Service, AKS), and AWS. Covers target selection, C# or TypeScript AppHost detection,
-  docs-backed API lookup, parameter and secret preflight, publish/deploy preview,
-  deployment execution, and teardown.
-  USE FOR: aspire deploy, aspire publish, aspire destroy, aspire do,
-  aspire publish --list-steps, aspire deploy --list-steps, deploy to Azure, deploy to AWS,
-  deploy to AKS, deploy to Azure Container Apps, deploy to Azure App Service, deploy to
-  Kubernetes, deploy to Docker Compose, generate deployment artifacts, publish Aspire
-  deployment artifacts, tear down an Aspire deployment, validate an Aspire deployment plan.
-  DO NOT USE FOR: local start/stop/wait (use aspire-orchestration), logs/traces/dashboard
-  (use aspire-monitoring), AppHost authoring/wiring (use aspireify), deployed-app
-  diagnostics like App Insights or ACA logs (use azure-diagnostics).
-  INVOKES: aspire CLI (publish, deploy, destroy, do, add, docs, secret, ls, ps, config).
-  FOR SINGLE OPERATIONS: Run the matching aspire CLI command directly with `--non-interactive`.
-
+description: "**WORKFLOW SKILL** — Deploy Aspire apps from AppHost models to Docker Compose, Kubernetes, Azure, or AWS. WHEN: \"deploy Aspire app\", \"publish Aspire artifacts\", \"deploy to Azure Container Apps\", \"generate Kubernetes artifacts\", \"tear down Aspire deployment\". INVOKES: aspire CLI, Aspire docs, target cloud/container CLIs. FOR SINGLE OPERATIONS: use generic Azure, Kubernetes, Docker, or AWS tools only when no Aspire AppHost exists."
 license: MIT
 metadata:
   author: Microsoft
-  version: "1.1.0"
+  version: "1.2.0"
 ---
 
 # Aspire Deployment
