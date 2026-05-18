@@ -13,8 +13,8 @@ should_trigger_prompts:
   - prompt: "Generate deployment artifacts for Kubernetes with Aspire"
     reason: "K8s artifact generation routes to aspire-deployment"
     confidence: high
-  - prompt: "My aspire deploy is stuck — how do I clear the deployment cache?"
-    reason: "Deployment troubleshooting (--clear-cache)"
+  - prompt: "My aspire deploy is stuck — how do I unstick or reset the deployment?"
+    reason: "Deployment troubleshooting routes to aspire-deployment"
     confidence: high
   - prompt: "Push my Aspire app to a Docker Compose target"
     reason: "Docker Compose is an Aspire deploy target"
@@ -31,11 +31,14 @@ should_trigger_prompts:
   - prompt: "Deploy my Aspire app to AKS"
     reason: "AKS is an Aspire deploy target via AddAzureKubernetesEnvironment"
     confidence: high
-  - prompt: "Add Azure Front Door in front of my Aspire app"
-    reason: "AddAzureFrontDoor is a deployment-time hosting integration"
+  - prompt: "Deploy my Aspire app to AWS"
+    reason: "AWS is an Aspire deploy target via `aspire add aws` + CDK environment"
     confidence: high
-  - prompt: "Run aspire do diagnostics on my deploy pipeline"
-    reason: "aspire do diagnostics is deployment-owned (pipeline diagnostics)"
+  - prompt: "Validate my Aspire deployment plan before applying"
+    reason: "Preflight / preview workflow is owned by aspire-deployment"
+    confidence: high
+  - prompt: "Inspect the deployment pipeline steps with aspire publish --list-steps"
+    reason: "--list-steps is the canonical pipeline preview in aspire-deployment"
     confidence: high
 
 should_not_trigger_prompts:
