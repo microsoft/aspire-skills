@@ -2,9 +2,15 @@ import { defineConfig } from "astro/config";
 import expressiveCode from "astro-expressive-code";
 import icon from "astro-icon";
 
+const isGitHubActions = process.env.GITHUB_ACTIONS === "true";
+const defaultSite = isGitHubActions ? "https://solid-barnacle-o328nr3.pages.github.io" : "https://microsoft.github.io";
+const defaultBase = isGitHubActions ? "/" : "/aspire-skills";
+const site = process.env.ASTRO_SITE || defaultSite;
+const base = process.env.ASTRO_BASE === undefined ? defaultBase : process.env.ASTRO_BASE || "/";
+
 export default defineConfig({
-  site: "https://microsoft.github.io",
-  base: "/aspire-skills",
+  site,
+  base,
   output: "static",
   trailingSlash: "always",
   integrations: [
