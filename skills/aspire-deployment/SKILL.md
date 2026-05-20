@@ -4,7 +4,7 @@ description: "**WORKFLOW SKILL** — Deploy Aspire apps from AppHost models to D
 license: MIT
 metadata:
   author: Microsoft
-  version: "1.2.0"
+  version: "0.0.1"
 ---
 
 # Aspire Deployment
