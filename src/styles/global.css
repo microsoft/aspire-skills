@@ -1,0 +1,332 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme {
+  --color-aspire-primary: #7455dd;
+  --color-aspire-purple: #512bd4;
+  --color-aspire-secondary: #b9aaee;
+  --color-aspire-muted: #dcd5f6;
+  --color-aspire-grey: #dce0e8;
+  --color-aspire-black: #1f1e33;
+  --color-aspire-white: #ffffff;
+  --color-aspire-magenta: #b30f87;
+  --color-aspire-flamingo: #f65163;
+  --color-aspire-blue: #0078d7;
+  --color-aspire-cyan: #0b7e84;
+  --color-aspire-yellow: #9b8308;
+  --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+  --aspire-primary: #7455dd;
+  --aspire-purple: #512bd4;
+  --aspire-black: #1f1e33;
+  --surface-bg: #ffffff;
+  --surface-muted: #fafafa;
+  --surface-elevated: #ffffff;
+  --hairline: rgb(15 23 42 / 0.08);
+  --hairline-strong: rgb(15 23 42 / 0.14);
+  --text-muted: rgb(15 23 42 / 0.6);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-bg: #0a0a14;
+  --surface-muted: #0f0f1f;
+  --surface-elevated: rgb(255 255 255 / 0.04);
+  --hairline: rgb(255 255 255 / 0.08);
+  --hairline-strong: rgb(255 255 255 / 0.16);
+  --text-muted: rgb(255 255 255 / 0.62);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-width: 320px;
+  background: var(--surface-bg);
+  color: var(--aspire-black);
+  font-family: "Poppins", ui-sans-serif, system-ui, sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "ss01", "cv11";
+}
+
+:root[data-theme="dark"] body {
+  background: var(--surface-bg);
+  color: #ffffff;
+}
+
+::selection {
+  background: #dcd5f6;
+  color: #1f1e33;
+}
+
+:focus-visible {
+  outline: 2px solid #512bd4;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+:root[data-theme="dark"] :focus-visible {
+  outline-color: #b9aaee;
+}
+
+:where(a, button, summary, [role="button"], [role="tab"], label[for], select, input[type="button"], input[type="reset"], input[type="submit"]) {
+  cursor: pointer;
+}
+
+:where(button:disabled, [aria-disabled="true"], input:disabled, select:disabled) {
+  cursor: not-allowed;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+.hairline {
+  border-color: var(--hairline);
+}
+
+.surface-card {
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  background: var(--surface-elevated);
+}
+
+.section-rule {
+  border-top: 1px solid var(--hairline);
+}
+
+.eyebrow {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.install-tab[data-active="true"] {
+  border-color: #512bd4;
+  background: #512bd4;
+  color: #ffffff;
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .install-tab[data-active="true"] {
+  border-color: #b9aaee;
+  background: #b9aaee;
+  color: #1f1e33;
+}
+
+.install-tab[data-active="true"] .vendor-badge {
+  border-color: rgb(255 255 255 / 0.55);
+  background: rgb(255 255 255 / 0.94);
+  color: #512bd4;
+}
+
+:root[data-theme="dark"] .install-tab[data-active="true"] .vendor-badge {
+  border-color: rgb(31 30 51 / 0.18);
+  background: rgb(31 30 51 / 0.95);
+  color: #dcd5f6;
+}
+
+:root[data-theme="dark"] .install-tab[data-active="true"] .vendor-badge svg {
+  color: #dcd5f6;
+}
+
+:root[data-theme="dark"] .install-tab[data-active="true"] .vendor-badge[data-vendor-icon="aspire"],
+:root[data-theme="dark"] .install-tab[data-active="true"] .vendor-badge[data-vendor-icon="copilot"] {
+  border-color: rgb(255 255 255 / 0.7);
+  background: rgb(255 255 255 / 0.94);
+  color: #1f1e33;
+}
+
+:root[data-theme="dark"] .install-tab[data-active="true"] .vendor-badge[data-vendor-icon="copilot"] svg {
+  color: #1f1e33;
+}
+
+:root[data-theme="dark"] .install-tab[data-active="true"] .vendor-badge img {
+  filter: none;
+}
+
+.install-terminal .expressive-code {
+  margin: 0;
+}
+
+.install-terminal .expressive-code figure.frame {
+  border: 1px solid var(--hairline) !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+  overflow: hidden;
+}
+
+.install-terminal .expressive-code figure.frame figcaption.header {
+  border-bottom: 1px solid var(--hairline) !important;
+}
+
+.inline-code {
+  --inline-code-border: var(--hairline);
+  --inline-code-bg: rgb(15 23 42 / 0.04);
+  --inline-code-color: #1f1e33;
+  border: 1px solid var(--inline-code-border);
+  border-radius: 8px;
+  background: var(--inline-code-bg);
+  color: var(--inline-code-color);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
+  font-weight: 600;
+  text-decoration: none;
+  transition: border-color 150ms ease, background-color 150ms ease, transform 150ms ease;
+}
+
+.inline-code-command {
+  display: inline-flex;
+  min-height: 2.25rem;
+  align-items: center;
+  padding-block: 0.5rem;
+  line-height: 1.25rem;
+}
+
+.inline-code-doc-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.inline-code-doc-link code {
+  font: inherit;
+}
+
+.inline-code-doc-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 0.05rem;
+  padding-left: 0.45rem;
+  border-left: 1px solid color-mix(in srgb, var(--inline-code-color) 28%, transparent);
+  color: var(--inline-code-color);
+  opacity: 0.75;
+  transition: opacity 150ms ease;
+}
+
+a.inline-code-doc-link:hover .inline-code-doc-icon {
+  opacity: 1;
+}
+
+a.inline-code:hover {
+  transform: translateY(-1px);
+}
+
+:root[data-theme="dark"] .inline-code {
+  --inline-code-border: var(--hairline);
+  --inline-code-bg: rgb(255 255 255 / 0.05);
+  --inline-code-color: #ffffff;
+}
+
+.inline-code-accent-purple {
+  --inline-code-border: rgb(81 43 212 / 0.2);
+  --inline-code-bg: #f4f0ff;
+  --inline-code-color: #512bd4;
+}
+
+.inline-code-accent-cyan {
+  --inline-code-border: rgb(11 126 132 / 0.22);
+  --inline-code-bg: #ecfeff;
+  --inline-code-color: #0b7e84;
+}
+
+.inline-code-accent-blue {
+  --inline-code-border: rgb(0 120 215 / 0.22);
+  --inline-code-bg: #eff6ff;
+  --inline-code-color: #0067b8;
+}
+
+.inline-code-accent-magenta {
+  --inline-code-border: rgb(179 15 135 / 0.2);
+  --inline-code-bg: #fdf4ff;
+  --inline-code-color: #b30f87;
+}
+
+.inline-code-accent-flamingo {
+  --inline-code-border: rgb(246 81 99 / 0.25);
+  --inline-code-bg: #fff1f2;
+  --inline-code-color: #b62538;
+}
+
+.inline-code-accent-yellow {
+  --inline-code-border: rgb(155 131 8 / 0.24);
+  --inline-code-bg: #fefce8;
+  --inline-code-color: #755f00;
+}
+
+:root[data-theme="dark"] .inline-code-accent-purple {
+  --inline-code-border: rgb(220 213 246 / 0.22);
+  --inline-code-bg: rgb(116 85 221 / 0.18);
+  --inline-code-color: #dcd5f6;
+}
+
+:root[data-theme="dark"] .inline-code-accent-cyan {
+  --inline-code-border: rgb(165 243 252 / 0.22);
+  --inline-code-bg: rgb(11 126 132 / 0.2);
+  --inline-code-color: #a5f3fc;
+}
+
+:root[data-theme="dark"] .inline-code-accent-blue {
+  --inline-code-border: rgb(191 219 254 / 0.22);
+  --inline-code-bg: rgb(0 120 215 / 0.2);
+  --inline-code-color: #bfdbfe;
+}
+
+:root[data-theme="dark"] .inline-code-accent-magenta {
+  --inline-code-border: rgb(245 208 254 / 0.22);
+  --inline-code-bg: rgb(179 15 135 / 0.2);
+  --inline-code-color: #f5d0fe;
+}
+
+:root[data-theme="dark"] .inline-code-accent-flamingo {
+  --inline-code-border: rgb(254 205 211 / 0.24);
+  --inline-code-bg: rgb(246 81 99 / 0.2);
+  --inline-code-color: #fecdd3;
+}
+
+:root[data-theme="dark"] .inline-code-accent-yellow {
+  --inline-code-border: rgb(253 230 138 / 0.24);
+  --inline-code-bg: rgb(155 131 8 / 0.22);
+  --inline-code-color: #fde68a;
+}
+
+.heading-anchor {
+  color: inherit;
+  text-decoration: none;
+}
+
+.heading-anchor-icon {
+  color: #512bd4;
+  opacity: 0;
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+
+.heading-anchor:hover .heading-anchor-icon,
+.heading-anchor:focus-visible .heading-anchor-icon {
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+:root[data-theme="dark"] .heading-anchor-icon {
+  color: #b9aaee;
+}
+
+.theme-toggle .moon-icon {
+  display: none;
+}
+
+:root[data-theme="dark"] .theme-toggle .moon-icon {
+  display: block;
+}
+
+:root[data-theme="dark"] .theme-toggle .sun-icon {
+  display: none;
+}
