@@ -37,7 +37,7 @@ aspire init --language typescript
 
 ## After `aspire init` — Hand Off to `aspireify`
 
-Aspire `init` drops a minimal AppHost skeleton + AppHost configuration into the
+`aspire init` drops a minimal AppHost skeleton + AppHost configuration into the
 repo and installs the **`aspireify`** agent skill alongside it. `aspire init` itself does not
 wire resources, projects, or integrations. Hand off the wiring step to:
 

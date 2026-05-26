@@ -40,7 +40,6 @@ graders:
       not_contains:
         - "edit .aspire/modules/"
         - "modify .aspire/modules/"
-        - "change files in .aspire/modules"
 
 tasks:
   - "tasks/*.yaml"

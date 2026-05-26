@@ -1,13 +1,13 @@
 id: deploy-js-001
 name: JavaScript Publishing Family
 description: >
-  Agent should know the Aspire 13.3 JavaScript publishing family — PublishAsStaticWebsite,
+  Agent should know the current Aspire JavaScript publishing family — PublishAsStaticWebsite,
   PublishAsNodeServer, PublishAsPackageScript, AddNextJsApp, AddViteApp — and pick the right one
   for the user's framework.
 tags:
   - knowledge
   - p1
-  - aspire-13-3
+  - current-aspire
 
 inputs:
   prompt: "I want to publish my Next.js app via my Aspire AppHost — what's the recommended approach?"
@@ -26,14 +26,14 @@ graders:
     config:
       prompt: >
         Does the assistant's response recommend `AddNextJsApp(name, path)` as the first-class Next.js
-        helper introduced in Aspire 13.3? It should also note the requirement that
+        helper? It should also note the requirement that
         `next.config.js` set `output: "standalone"` so the build emits the standalone
         server, since `AddNextJsApp` auto-configures Next.js standalone publishing.
   - name: knows_publishas_family
     type: prompt
     config:
       prompt: >
-        Bonus: does the assistant's response mention or describe the broader 13.3 `PublishAs*` family
+        Bonus: does the assistant's response mention or describe the broader current `PublishAs*` family
         — `PublishAsStaticWebsite` (SPAs / Vite / Next.js export, preview), `PublishAsNodeServer`
         (pre-bundled Node entry-points like SSR / TanStack Start / SvelteKit), and
         `PublishAsPackageScript` (full Nitro Next.js, Remix, Astro SSR)? It does NOT need to mention
