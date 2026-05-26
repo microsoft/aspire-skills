@@ -35,6 +35,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   `aspire do diagnostics`, `--clear-cache`) with prompts aligned to the new content
   (AWS deploy, deployment-plan validation, `--list-steps` pipeline preview).
 
+### Added
+- Added a release bundle generator and `publish.yml` workflow for the verified
+  `aspire-skills-v<version>.tgz` GitHub release asset consumed by `aspire agent init`.
+
 ## [0.0.1] - Unreleased
 
 ### Added
