@@ -2,7 +2,7 @@ id: deploy-js-001
 name: JavaScript Publishing Family
 description: >
   Agent should know the Aspire 13.3 JavaScript publishing family — PublishAsStaticWebsite,
-  PublishAsNodeServer, PublishAsNpmScript, AddNextJsApp, AddViteApp — and pick the right one
+  PublishAsNodeServer, PublishAsPackageScript, AddNextJsApp, AddViteApp — and pick the right one
   for the user's framework.
 tags:
   - knowledge
@@ -36,5 +36,5 @@ graders:
         Bonus: does the assistant's response mention or describe the broader 13.3 `PublishAs*` family
         — `PublishAsStaticWebsite` (SPAs / Vite / Next.js export, preview), `PublishAsNodeServer`
         (pre-bundled Node entry-points like SSR / TanStack Start / SvelteKit), and
-        `PublishAsNpmScript` (full Nitro Next.js, Remix, Astro SSR)? It does NOT need to mention
+        `PublishAsPackageScript` (full Nitro Next.js, Remix, Astro SSR)? It does NOT need to mention
         all three to pass — recognizing at least one alternative shows awareness.

@@ -34,9 +34,9 @@ Structured output for parsing. Note: `aspire start` can interleave human-readabl
 lines with JSON in some scenarios ([#15843](https://github.com/microsoft/aspire/issues/15843)).
 Strip non-JSON lines before parsing.
 
-## Why `--include-hidden` (13.3)
+## Why `--include-hidden`
 
-In 13.3, `aspire ps` and `aspire describe` filter hidden resources (proxies,
+`aspire ps` and `aspire describe` filter hidden resources (proxies,
 helper containers, migration jobs) by default. During validation use
 `--include-hidden` so you don't miss anything that `aspire start` actually started.
 
@@ -61,7 +61,7 @@ container-internal health.
 | `aspire wait` rejects name | Pull `displayName` from `aspire ps --format Json` |
 | Mixed JSON output from `aspire start` | Strip non-JSON lines before parsing |
 | Container-backed resource fails | Confirm Docker / Podman is running; re-run `aspire doctor` |
-| TS AppHost change had no effect | You probably edited `.modules/`. Edit `apphost.ts` only |
+| TS AppHost change had no effect | You probably edited `.aspire/modules/`. Edit `apphost.ts` only |
 
 ## Hand-off Criteria
 
@@ -89,7 +89,8 @@ Aspireify is done.
 If the user plans to deploy next, suggest:
 
 ```bash
-aspire do diagnostics    # 13.3: evaluate the deploy pipeline before running it
+aspire publish --list-steps
+aspire deploy --list-steps
 ```
 
 Then route them to `aspire-deployment` for the actual `aspire deploy` /

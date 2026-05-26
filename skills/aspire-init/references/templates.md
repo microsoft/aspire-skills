@@ -3,7 +3,7 @@
 Reference for choosing and invoking templates with `aspire new`. Source:
 https://aspire.dev/reference/cli/commands/aspire-new/
 
-## Template List (Aspire 13.3)
+## Template List
 
 | Template | Description | AppHost Language |
 |----------|-------------|------------------|
@@ -74,7 +74,7 @@ aspire certs trust
 aspire new aspire-starter
 
 # Non-interactive C# empty scaffold pinned to a specific version
-aspire new aspire-empty --version 13.3.0 --name aspireapp --output ./dev --non-interactive
+aspire new aspire-empty --version <version> --name aspireapp --output ./dev --non-interactive
 
 # Pre-release templates from the daily channel
 aspire new aspire-starter --channel daily

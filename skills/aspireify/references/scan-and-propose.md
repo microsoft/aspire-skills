@@ -25,12 +25,12 @@ Heuristics for the **scan** and **propose** phases of `aspireify`.
 | `package.json` has `"next"` dependency | `AddNextJsApp` — confirm `next.config.js` has `output: 'standalone'` |
 | `package.json` has `"vite"` + SPA bundle | `AddViteApp` + `PublishAsStaticWebsite(apiPath, apiTarget)` |
 | `package.json` has `"vite"` + `.output/server/index.mjs` (TanStack/SvelteKit) | `AddViteApp` (dev) + `PublishAsNodeServer` (publish) |
-| `package.json` has Remix / Astro / Nitro Next | `PublishAsNpmScript` |
+| `package.json` has Remix / Astro / Nitro Next | `PublishAsPackageScript` |
 | `pyproject.toml` with FastAPI/Flask | `AddPythonApp` (or model under TS AppHost) |
 | `Program.cs` reads `ConnectionStrings:Postgres*` / DI calls `AddNpgsql*` | `AddPostgres('pg').AddDatabase('appdb')` + `WithReference` |
 | `Program.cs` calls `AddStackExchangeRedisCache` | `AddRedis('cache')` + `WithReference` |
 | MongoClient / `MongoDB.Driver` | `AddMongoDB('mongo')` |
-| Code refs `RabbitMQ.Client` / `IConnection` | `AddRabbitMQ('mq')` (v7 in 13.3 — pub/sub tracing) |
+| Code refs `RabbitMQ.Client` / `IConnection` | `AddRabbitMQ('mq')` (v7 client — pub/sub tracing) |
 | Code refs `Microsoft.Azure.Cosmos` | `AddAzureCosmosDB('cosmos')` |
 | Code refs `Azure.Messaging.ServiceBus` | `AddAzureServiceBus('sb')` |
 | Frontend hardcodes `http://localhost:5000` | Replace with service discovery: `endpoint.url` (TS) or `WithReference(api)` |
@@ -41,12 +41,12 @@ Heuristics for the **scan** and **propose** phases of `aspireify`.
 
 | Service | C# integration | TS integration | Notes |
 |---------|----------------|----------------|-------|
-| Postgres | `AddPostgres("pg").AddDatabase("appdb")` | `addPostgres('pg').addDatabase('appdb')` | Npgsql metrics align to .NET 10 in 13.3 |
+| Postgres | `AddPostgres("pg").AddDatabase("appdb")` | `addPostgres('pg').addDatabase('appdb')` | Npgsql metrics align to .NET 10 |
 | SQL Server | `AddSqlServer("sql").AddDatabase("appdb")` | `addSqlServer('sql').addDatabase('appdb')` | Container-backed locally |
 | MySQL | `AddMySql("my").AddDatabase("appdb")` | `addMySql('my').addDatabase('appdb')` | |
 | MongoDB | `AddMongoDB("mongo").AddDatabase("app")` | `addMongoDB('mongo').addDatabase('app')` | |
 | Redis | `AddRedis("cache")` | `addRedis('cache')` | |
-| Azure Cache for Redis | `AddAzureRedis("cache")` | `addAzureRedis('cache')` | `Aspire.Microsoft.Azure.StackExchangeRedis` is **GA** in 13.3 |
+| Azure Cache for Redis | `AddAzureRedis("cache")` | `addAzureRedis('cache')` | `Aspire.Microsoft.Azure.StackExchangeRedis` is GA |
 | Cosmos DB | `AddAzureCosmosDB("cosmos")` | `addAzureCosmosDB('cosmos')` | |
 | Azure SQL | `AddAzureSqlServer("sql")` | `addAzureSqlServer('sql')` | |
 | Azure Storage | `AddAzureStorage("storage")` | `addAzureStorage('storage')` | |
@@ -68,7 +68,7 @@ Heuristics for the **scan** and **propose** phases of `aspireify`.
 | Next.js (SSR or static) | `AddNextJsApp("web", "./web")` | Auto — Next.js standalone (set `output: 'standalone'` in `next.config.js`) |
 | Vite SPA | `AddViteApp("web", "./web")` | `PublishAsStaticWebsite(apiPath: "/api", apiTarget: api)` |
 | Vite + TanStack/SvelteKit (SSR via Node) | `AddViteApp("web", "./web")` | `PublishAsNodeServer(entryPoint: ".output/server/index.mjs", outputPath: ".output")` |
-| Remix / Astro SSR / Nitro | `AddNodeApp` or `AddViteApp` | `PublishAsNpmScript(scriptName: "start")` |
+| Remix / Astro SSR / Nitro | `AddNodeApp` or `AddViteApp` | `PublishAsPackageScript(scriptName: "start")` |
 | Plain Node | `AddNodeApp("api", "server.js")` | `PublishAsNodeServer` |
 
 Bun, Yarn, and pnpm are first-class in TS AppHosts (npm remains the default).
@@ -91,7 +91,7 @@ Bun, Yarn, and pnpm are first-class in TS AppHosts (npm remains the default).
 | Docker Compose | `AddDockerComposeEnvironment("compose")` |
 
 Bind a resource: `.WithComputeEnvironment(env)`. **Required** when multiple
-environments are declared — 13.3 enforces explicit binding.
+environments are declared.
 
 ## Proposal Template
 

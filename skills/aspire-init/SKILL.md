@@ -6,7 +6,7 @@ description: >-
   off to `aspireify` for resource wiring.
   USE FOR: aspire init, aspire new, aspire-starter, aspire-ts-starter, aspire-py-starter,
   add Aspire to existing repo, scaffold Aspire app, bootstrap Aspire, no AppHost detected,
-  install aspireify.
+  install aspireify, generated .aspire/modules.
   DO NOT USE FOR: AppHost wiring on an existing AppHost (use aspireify), start/stop/wait
   (use aspire-orchestration), deploy/publish (use aspire-deployment), logs/traces (use
   aspire-monitoring), repo that already has an AppHost.
@@ -33,7 +33,7 @@ metadata:
 | Aspire CLI (NativeAOT global tool) | `dotnet tool install -g Aspire.Cli` (.NET 10 required) |
 | Diagnose missing prerequisites | `aspire doctor` |
 
-> Aspire 13.3 ships the CLI as a NativeAOT .NET global tool — instant startup, no JIT warmup.
+> Aspire ships the CLI as a NativeAOT .NET global tool — instant startup, no JIT warmup.
 > The curl/PowerShell installer remains supported for environments without .NET 10.
 
 ## Detection
@@ -94,8 +94,8 @@ and need an AppHost added alongside them:
    ```
 3. `aspire init` drops:
    - The AppHost skeleton (`apphost.cs` with `#:sdk` directives, **or** `apphost.ts` with the
-     generated `.modules/` folder)
-   - `aspire.config.json` describing language + AppHost path
+     generated `.aspire/modules/` folder)
+   - AppHost configuration describing language + AppHost path
    - The **`aspireify`** agent skill into the project's skill directory (same one
      `aspire agent init` uses)
 4. **Hand off to `aspireify`** — `aspire init` does **not** wire resources, projects, or
@@ -123,7 +123,7 @@ If `.agents/skills/aspire-init/SKILL.md` exists project-locally (legacy install 
 older `aspire init` run), **warn the user and defer to it**. The legacy project-local skill
 may carry repo-specific guidance that should not be overridden by this in-plugin skill.
 
-The project-local `aspireify` skill (installed by 13.3 `aspire init`) takes precedence
+The project-local `aspireify` skill (installed by `aspire init`) takes precedence
 over this plugin's in-plugin `aspireify` for the same reason — defer to the project-local
 copy and warn.
 

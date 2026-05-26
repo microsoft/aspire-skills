@@ -1,15 +1,17 @@
 ---
 name: aspire
 description: >-
-  **WORKFLOW SKILL** - Top-level router for Aspire 13.3 distributed apps. Detects the
+  **WORKFLOW SKILL** - Top-level router for Aspire 13.4 distributed apps. Detects the
   AppHost, enforces safety guardrails, and routes to the right sub-skill.
   USE FOR: Aspire AppHost detected, aspire CLI, distributed app, cloud-native .NET,
-  aspire start, aspire stop, aspire deploy, aspire destroy, aspire publish, aspire init,
-  aspire new, aspire add, aspire wait, aspire describe, aspire ps, aspire dashboard run,
-  aspire doctor, aspire update, aspire logs, aspire otel, --include-hidden, aspireify,
-  WithBrowserLogs.
+  aspire start, aspire stop, aspire resource, aspire deploy, aspire destroy, aspire publish,
+  aspire init, aspire new, aspire add, aspire integration list/search, aspire wait,
+  aspire describe, aspire ps, aspire dashboard run, aspire doctor, aspire update,
+  aspire logs, aspire otel, --include-hidden, aspireify, WithBrowserLogs, custom
+  dashboard/resource commands, .aspire/modules recovery, Playwright URL discovery.
   DO NOT USE FOR: non-Aspire .NET projects (use dotnet directly), Azure provisioning
-  without Aspire (use azure-prepare), container-only repos with no AppHost.
+  without Aspire (use azure-prepare), container-only repos with no AppHost, ordinary
+  build/test tasks.
   INVOKES: aspire-init, aspireify, aspire-orchestration, aspire-deployment, aspire-monitoring.
   FOR SINGLE OPERATIONS: Route directly to the matching sub-skill.
 license: MIT
@@ -37,7 +39,7 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 | Aspire config without AppHost | `aspire.config.json` present **and no AppHost** above | High | Bootstrap → `aspireify` (skeleton dropped, needs wiring) |
 | Aspire config with AppHost | `aspire.config.json` present **and** AppHost above | High | AppHost present → orchestration / deployment / monitoring |
 | Aspire settings | `.aspire/` directory present | High | AppHost present (usually) |
-| Modules directory | `.modules/` directory present | High | AppHost present (TS) |
+| Generated TS modules | `.aspire/modules/` directory present | High | AppHost present (TS) |
 | Service defaults | `Aspire.ServiceDefaults` in project references | Medium | AppHost present |
 | **No AppHost, no `aspire.config.json`** | None of the above and user asks to add Aspire | n/a | Bootstrap → `aspire-init` (skeleton drop) |
 
@@ -48,23 +50,26 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
    but is **unwired** (no resources declared), route to [`aspireify`](../aspireify/SKILL.md).
    Only continue with the steps below once a wired AppHost is present.
 1. Confirm workspace is Aspire — identify the AppHost
-2. `aspire start` (or `aspire start --isolated` in worktrees)
+2. `aspire start` (or `aspire start --isolated` in worktrees or whenever shared local state is risky)
 3. `aspire wait <resource>` before interacting with any resource
-4. Inspect state with `aspire describe`, then work
-5. `aspire resource <name> restart` after code changes (never `dotnet build`)
-6. `aspire stop` when task is complete — **always clean up**
+4. Inspect state with `aspire describe`, `aspire otel logs`, `aspire logs`, `aspire otel traces`, and `aspire export` before making code changes
+5. Before adding integrations, use `aspire integration search <query>` when the package is unknown, then `aspire add <package>` when ready to mutate the AppHost
+6. When code changes, decide whether the AppHost model changed or only one resource changed. Re-run `aspire start` after AppHost changes; otherwise prefer resource commands, runtime watch/HMR, dashboard actions, or IDE-managed debugging as appropriate.
 
 ## Key Rules
 
 - **Always** `aspire start`, **never** `dotnet run` on AppHosts
 - **Always** `aspire wait <resource>`, **never** manual HTTP polling
-- **Always** `aspire resource <name> restart`, **never** `dotnet build` while Aspire is running
-- **Always** `aspire stop` when done — leaving Aspire running causes file locks and port conflicts
+- Use `aspire resource <resource-name> <command>` for resource operations such as `stop`, `start`, or `rebuild` when available
+- Do not stop or restart the whole AppHost just because one resource changed
+- Use `features.defaultWatchEnabled` only for Aspire default watch; do not treat it as per-resource rebuild, restart, or hot reload
+- Prefer a resource's own framework/runtime hot reload, HMR, or watch workflow when it already handles the change
 - **Always** `aspire docs search <topic>` before editing unfamiliar AppHost APIs
 - **Always** `aspire docs api search <query> --language csharp|typescript` for API reference before editing AppHost code
 - **Always** `--non-interactive` for agent execution
+- Use `aspire integration list --format Json` and `aspire integration search <query> --format Json` for read-only integration discovery
 - **Never** install the obsolete Aspire workload
-- **Never** edit `.modules/` directly in TypeScript AppHosts
+- **Never** edit `.aspire/modules/` directly in TypeScript AppHosts
 
 ## Routing
 
@@ -90,11 +95,12 @@ place. Do **not** use it on a repo that already contains an AppHost.
 Agentic AppHost wiring after `aspire init` lands the skeleton. Scans the repo, proposes a
 resource graph (Postgres / Redis / Rabbit / etc.), edits the AppHost (C#, file-based C#, or
 TypeScript), wires `Aspire.ServiceDefaults` + OTel, validates with `aspire start`, then
-self-deactivates. Owns 13.3 AppHost authoring patterns (`AddNextJsApp`, `WithBrowserLogs()`,
-unified TS `withEnvironment`, `ExcludeReferenceEndpoint`).
+self-deactivates. Owns current AppHost authoring patterns (`AddNextJsApp`, `AddViteApp`,
+`WithBrowserLogs()`, generated `.aspire/modules/`, unified TS `withEnvironment`,
+endpoint references, and config/secret migration).
 
 ### aspire-orchestration
-Lifecycle management: start, stop, wait, restart resources, recover from file locks.
+Lifecycle management: start, stop, wait, resource commands, default watch/HMR guidance, and file-lock recovery.
 Safety guardrails that prevent agent self-harm. Owns `aspire ps` / `aspire describe` /
 `--include-hidden` inspection and CLI upgrades (`aspire update --self`). Does **not** edit
 AppHost code — defers to `aspireify` for wiring.
@@ -102,18 +108,18 @@ AppHost code — defers to `aspireify` for wiring.
 ### aspire-deployment
 Multi-target deployment and tear-down: `aspire deploy`, `aspire publish`, `aspire destroy`,
 `aspire do <step>`. Targets: Azure Container Apps, App Service, AKS, Kubernetes (Helm),
-Docker Compose. Owns 13.3 deployment surfaces (Front Door, NSP, AKS hosting, Foundry
-`AddPromptAgent`, JS `PublishAs*`, `--pipeline-log-level`).
+Docker Compose. Owns current deployment surfaces (Front Door, NSP, AKS hosting, Foundry
+`AddPromptAgent`, JS `PublishAs*`, `--pipeline-log-level`) and 13.4 API naming.
 
 ### aspire-monitoring
 Observability: `aspire logs`, `aspire otel`, `aspire describe`, `aspire export`,
 `aspire dashboard run`. Routes between local Aspire CLI diagnostics, AKS workload tooling,
-and deployed-Azure platform tools. Surfaces 13.3 dashboard features (notification center,
+and deployed-Azure platform tools. Surfaces dashboard features (notification center,
 Rebuild command, browser-logs telemetry).
 
 ## Project-Local Skill Override
 
-If any of the following exist project-locally (from `aspire agent init` or 13.3
+If any of the following exist project-locally (from `aspire agent init` or Aspire
 `aspire init`), **warn the user** and **defer to the project-local copy** — repo-specific
 guidance there should not be overridden by the in-plugin sibling:
 

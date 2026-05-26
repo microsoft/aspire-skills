@@ -1,4 +1,4 @@
-# C# AppHost Authoring (13.3)
+# C# AppHost Authoring
 
 Patterns for editing C# AppHosts — both SDK-style (`.csproj` + `Program.cs`) and
 file-based (`apphost.cs` with `#:sdk` / `#:package` directives).
@@ -50,9 +50,9 @@ Top of file uses `#:sdk` and `#:package` directives — no `.csproj` required:
 
 ```csharp
 #:sdk Aspire.AppHost.Sdk
-#:package Aspire.Hosting.PostgreSQL@13.3.*
-#:package Aspire.Hosting.Redis@13.3.*
-#:package Aspire.Hosting.NodeJs@13.3.*
+#:package Aspire.Hosting.PostgreSQL@13.*
+#:package Aspire.Hosting.Redis@13.*
+#:package Aspire.Hosting.NodeJs@13.*
 
 var builder = DistributedApplication.CreateBuilder(args);
 
@@ -82,7 +82,7 @@ the path overload of `AddProject`.
 | `AddContainer(name, image)` | Add a container |
 | `AddDockerfile(name, contextPath)` | Build from a Dockerfile |
 | `AddNodeApp(name, scriptPath)` | Plain Node service |
-| `AddNextJsApp(name, projectPath)` | **13.3** — Next.js with auto standalone publish |
+| `AddNextJsApp(name, projectPath)` | Next.js with auto standalone publish |
 | `AddViteApp(name, projectPath)` | Vite app — pair with `PublishAsStaticWebsite` |
 | `AddPostgres` / `AddRedis` / `AddMongoDB` / `AddRabbitMQ` / `AddSqlServer` / `AddMySql` / `AddKafka` | Datastores & messaging |
 | `AddAzureCosmosDB` / `AddAzureServiceBus` / `AddAzureRedis` / `AddAzureStorage` / `AddAzureSqlServer` | Azure resources |
@@ -90,10 +90,10 @@ the path overload of `AddProject`.
 | `WaitFor(other)` | Block start until target is ready |
 | `WithEnvironment("KEY", value)` | Add env var (any value type — endpoint, parameter, expression) |
 | `WithExternalHttpEndpoints()` | Mark HTTP endpoints as externally reachable |
-| `WithEndpoint(name, e => …)` | Add or **update** (13.3: no longer throws on duplicate) |
+| `WithEndpoint(name, e => …)` | Add or **update** existing endpoints |
 | `WithHttpHealthCheck(path)` | Wire health check used by `WaitFor` |
 
-## Endpoints — 13.3 Behavior
+## Endpoints
 
 `WithEndpoint` updates the existing endpoint when called twice with the same name
 (rather than throwing). Use this to layer endpoint config across helpers.
@@ -106,7 +106,7 @@ var api = builder.AddProject<Projects.Api>("api")
 // Admin endpoint is NOT injected into consumers via WithReference().
 ```
 
-## Compute Environments (13.3)
+## Compute Environments
 
 When multiple environments are declared, every resource **must** explicitly bind
 to one with `.WithComputeEnvironment(env)`.
@@ -120,15 +120,15 @@ builder.AddProject<Projects.Api>("api").WithComputeEnvironment(aca);
 builder.AddProject<Projects.Worker>("worker").WithComputeEnvironment(aks);
 ```
 
-Plain Kubernetes (Helm-based, 13.3): `AddKubernetesEnvironment("k8s")`.
+Plain Kubernetes (Helm-based): `AddKubernetesEnvironment("k8s")`.
 
-## JavaScript Publish Helpers (13.3)
+## JavaScript Publish Helpers
 
 | Helper | Use For |
 |--------|---------|
 | `PublishAsStaticWebsite(apiPath, apiTarget)` | Vite SPA → YARP-served static site, optional API reverse-proxy |
 | `PublishAsNodeServer(entryPoint, outputPath)` | Pre-bundled Node server (TanStack Start, SvelteKit) |
-| `PublishAsNpmScript(scriptName)` | npm `start` / `serve` runtime (full Nitro Next.js, Remix, Astro SSR) |
+| `PublishAsPackageScript(scriptName)` | package-manager `start` / `serve` runtime (full Nitro Next.js, Remix, Astro SSR) |
 
 ```csharp
 #pragma warning disable ASPIREJAVASCRIPT001
@@ -141,14 +141,14 @@ builder.AddViteApp("web", "../web")
 `AddNextJsApp` auto-applies standalone publishing — no explicit `PublishAs*`
 needed. Set `output: "standalone"` in `next.config.js`.
 
-## Browser Logs (13.3)
+## Browser Logs
 
 ```csharp
 builder.AddViteApp("frontend", "../frontend")
     .WithBrowserLogs();   // Aspire.Hosting.Browsers — adds console + screenshots to dashboard
 ```
 
-## Azure-Specific (13.3)
+## Azure-Specific
 
 | API | Purpose |
 |-----|---------|
@@ -158,7 +158,7 @@ builder.AddViteApp("frontend", "../frontend")
 | `AddPromptAgent(...)` | Azure AI Foundry Prompt Agent (replaces non-functional `AddAndPublishPromptAgent`) |
 | `resource.WithPrivateEndpoint()` | Now supported on ACR, Azure OpenAI, AI Foundry |
 
-## Lifecycle Hooks (13.3)
+## Lifecycle Hooks
 
 ```csharp
 builder.SubscribeBeforeStart(async e => { /* runs before resources start */ });

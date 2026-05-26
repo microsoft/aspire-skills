@@ -13,8 +13,7 @@ aspire stop
 - Use `aspire start` for normal background AppHost execution.
 - In git worktrees or when another local instance may already be running, use `aspire start --isolated`.
 - To restart after AppHost changes, rerun the same start command.
-- Use `aspire stop` when the task is complete or explicitly requested.
-- **For agent workflows**: always `aspire stop` at the end — leaving Aspire running causes port conflicts and file locks.
+- Use `aspire stop` when cleanup is explicitly requested, ports/locks need to be released, or you are finished with a started instance that the user did not ask to keep running.
 - Avoid `aspire run` in agent workflows — it blocks the terminal.
 
 ### `aspire run` vs `aspire start`
@@ -38,7 +37,7 @@ aspire init --language typescript
 
 ## After `aspire init` — Hand Off to `aspireify`
 
-In Aspire 13.3, `aspire init` drops a minimal AppHost skeleton + `aspire.config.json` into the
+Aspire `init` drops a minimal AppHost skeleton + AppHost configuration into the
 repo and installs the **`aspireify`** agent skill alongside it. `aspire init` itself does not
 wire resources, projects, or integrations. Hand off the wiring step to:
 
@@ -84,23 +83,26 @@ C# has two sub-modes:
 
 ```bash
 aspire ps
+aspire integration list --format Json
+aspire integration search <query> --format Json
 aspire add <package>
 aspire update --self        # upgrades the Aspire CLI itself (NativeAOT global tool or curl install)
 aspire update               # updates project package references / aspire.config.json
 aspire restore
 ```
 
-- Use `aspire ps` first to discover which AppHost is already running. In 13.3+, `aspire ps` also displays the dashboard URL alongside each running AppHost.
-- Use `aspire add <package>` to add integrations and regenerate AppHost APIs.
+- Use `aspire ps` first to discover which AppHost is already running.
+- Use `aspire integration list --format Json` and `aspire integration search <query> --format Json` for read-only integration discovery.
+- Use `aspire add <package>` to add integrations and regenerate AppHost APIs when you are ready to mutate the AppHost.
 - Use **`aspire update --self`** to upgrade the Aspire CLI itself — the safe, no-side-effect upgrade path agents can run unattended.
 - Use **`aspire update` (no `--self`)** to refresh AppHost package references and bump pinned versions in `aspire.config.json`. This **modifies project files** — get user approval before running unattended (CI / agent flows).
 - Use `aspire restore` after pulls, cleans, or missing generated files.
-- Use `--apphost <path>` when the workspace has multiple AppHosts. The CLI's global config also validates configured AppHost paths in 13.3+ to catch typos early.
+- Use `--apphost <path>` when the workspace has multiple AppHosts. The CLI's global config validates configured AppHost paths to catch typos early.
 
 ## Key Rules
 
 - **Never install the obsolete Aspire workload** (`dotnet workload install aspire`). Use `aspire add`, `aspire init`, or `aspire new` instead.
-- **Never edit `.modules/` directly** in TypeScript AppHosts. Use `aspire add <package>` to regenerate APIs, `aspire restore` if files are missing.
+- **Never edit `.aspire/modules/` directly** in TypeScript AppHosts. Use `aspire add <package>` to regenerate APIs, `aspire restore` if files are missing.
 - For unfamiliar C# AppHost APIs, use `aspire docs search` as primary reference. If the `dotnet-inspect` skill is available, use it to inspect local symbols and overloads — but keep docs as the source of truth.
 - For custom dashboard or resource commands (`WithCommand`), always run `aspire docs search "custom resource commands"` before implementing.
 

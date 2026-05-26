@@ -10,7 +10,7 @@ aspire ps --format Json
 aspire describe --apphost <path>
 aspire describe --apphost <path> --format Json
 
-# When an expected resource is missing (hidden-by-default in 13.3)
+# When an expected resource is missing (hidden-by-default resources)
 aspire ps --include-hidden --format Json
 aspire describe --include-hidden --format Json
 ```

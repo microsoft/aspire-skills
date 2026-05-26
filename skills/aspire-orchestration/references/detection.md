@@ -54,12 +54,12 @@ find . -name "apphost.ts" -not -path "*/node_modules/*"
 
 A TypeScript AppHost uses the `@aspire/apphost` package and defines resources programmatically in TypeScript instead of C#.
 
-### 3. `.modules/` Directory (High Confidence)
+### 3. `.aspire/modules/` Directory (High Confidence)
 
-Aspire generates a `.modules/` directory for module dependencies. Its presence strongly indicates an Aspire project:
+Aspire generates a `.aspire/modules/` directory for TypeScript AppHost support files. Its presence strongly indicates an Aspire project:
 
 ```bash
-[ -d ".modules" ] && echo "Aspire project detected"
+[ -d ".aspire/modules" ] && echo "Aspire project detected"
 ```
 
 ### 4. `aspire.config.json` Configuration (High Confidence)
@@ -101,7 +101,7 @@ When scanning a repository, check signals in this order:
 | 1 | `Aspire.AppHost.Sdk` in `.csproj` | This IS the AppHost — target for `aspire start` |
 | 1b | `apphost.cs` or `#:sdk Aspire.AppHost.Sdk` in `.cs` | File-based C# AppHost — target for `aspire start` |
 | 2 | `apphost.ts` file | TypeScript AppHost — target for `aspire start` |
-| 3 | `.modules/` directory | Aspire project — look for the AppHost |
+| 3 | `.aspire/modules/` directory | Aspire project — look for the AppHost |
 | 4 | `aspire.config.json` or `.aspire/` | Aspire project — look for the AppHost |
 | 5 | `Aspire.ServiceDefaults` references | Part of Aspire solution — AppHost is elsewhere |
 
@@ -135,7 +135,8 @@ MyApp/
 │   └── MyApp.Web.csproj
 ├── MyApp.ServiceDefaults/      ← Shared defaults
 │   └── MyApp.ServiceDefaults.csproj
-├── .modules/                   ← Aspire-generated
+├── .aspire/
+│   └── modules/                ← Aspire-generated
 ├── aspire.config.json
 └── MyApp.sln
 ```
@@ -149,7 +150,8 @@ MyApp/
 ├── src/
 │   ├── api/                    ← Service project
 │   └── web/                    ← Frontend project
-├── .modules/
+├── .aspire/
+│   └── modules/
 └── aspire.config.json
 ```
 

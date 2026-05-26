@@ -26,7 +26,7 @@ Use `blocking` when the PR…
   likely to drop accuracy below the per-skill threshold.
 - Adds a shell snippet to a hook that has unsanitized variable expansion or swallows
   errors.
-- Edits `.modules/` directly in a TypeScript AppHost example.
+- Edits `.aspire/modules/` directly in a TypeScript AppHost example.
 - Surfaces an Aspire CLI command without `--non-interactive` in an agent-facing context.
 - Breaks valid JSON / YAML in a manifest or eval file.
 
@@ -63,7 +63,7 @@ the author might appreciate**.
 
 Use `suggestion` when the PR…
 
-- Has a decision-table row that would be sharper with a 13.3 alternative called out.
+- Has a decision-table row that would be sharper with a current Aspire alternative called out.
 - Has a reference file that's growing toward the token budget and would benefit from a
   split.
 - Could reuse an existing fixture instead of introducing a near-duplicate.

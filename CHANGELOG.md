@@ -5,6 +5,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Synced skill guidance with the current Aspire 13.4 development branch:
+  `.aspire/modules` TypeScript AppHost generated files, `aspire integration list/search`
+  discovery, resource-command/watch/HMR lifecycle guidance, and `PublishAsPackageScript`
+  JavaScript deployment naming.
 - Reset all skill `metadata.version` values to `0.0.1` ahead of the initial release.
 - Synced `aspire-deployment` skill routing description with
   [microsoft/aspire#17209](https://github.com/microsoft/aspire/pull/17209).

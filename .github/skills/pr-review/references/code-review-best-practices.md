@@ -71,7 +71,7 @@ behavior in the agent, not a rhetorical victory.
 |------|-------|------------------------|
 | Must fix | `blocking` | Removed safety guardrail; plugin manifest version out of sync; project-local override deference removed; unsanitized hook command. |
 | Should fix | `important` | New routing without `trigger_tests.yaml` coverage; new eval task missing the "the assistant's response" anchor; SKILL.md frontmatter `INVOKES:` is stale; CHANGELOG entry missing for a user-visible change. |
-| Nice to have | `suggestion` | Decision-table row could call out a 13.3 alternative; reference file could be split for focus; quick-reference table could be reordered for scan-ability. |
+| Nice to have | `suggestion` | Decision-table row could call out a current Aspire alternative; reference file could be split for focus; quick-reference table could be reordered for scan-ability. |
 
 If a finding doesn't fit one of those three tiers, **drop it**. We deliberately do not
 use `nit`, `learning`, or `praise` (see [severity-labels.md](severity-labels.md)).
@@ -116,12 +116,12 @@ Before approving, confirm:
 
 These are quick mental tests that catch most of the bugs we see:
 
-- **"What if `.modules/` was edited?"** TS AppHost edits must regenerate via `aspire add`.
+- **"What if `.aspire/modules/` was edited?"** TS AppHost edits must regenerate via `aspire add`.
 - **"Is `dotnet build` mentioned without `aspire resource <name> restart` nearby?"**
   Probably a guardrail regression.
 - **"Did the SKILL.md description shrink?"** Shrinking trigger keywords usually drops
   routing accuracy — check `trigger_tests.yaml`.
-- **"Does this eval rely on the judge knowing Aspire 13.3?"** State the 13.3 fact in the
+- **"Does this eval rely on the judge knowing Aspire 13.4?"** State the current Aspire fact in the
   grader prompt instead.
 - **"Does this snippet use `--non-interactive`?"** If it's agent-facing, it must.
 

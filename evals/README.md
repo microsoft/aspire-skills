@@ -32,7 +32,7 @@ Shared fixtures live at the **repo-root** `evals/` directory and are referenced 
 ```
 evals/
 ├── csharp-apphost/      # Wired C# AppHost (Aspire.AppHost.Sdk + Program.cs)
-├── ts-apphost/          # TypeScript AppHost (apphost.ts + .modules/)
+├── ts-apphost/          # TypeScript AppHost (apphost.ts + .aspire/modules/)
 └── non-aspire/          # Non-Aspire .NET project (for "should not trigger" tasks)
 ```
 
@@ -80,13 +80,13 @@ Each task runs `config.trials_per_task` times (default 3). Each trial is one exe
 
 ## Test coverage
 
-Counts as of 2026-05-18 (Aspire 13.3 refresh + `aspire-init` + `aspireify` skills):
+Counts as of 2026-05-18 (Aspire 13.4-aligned refresh + `aspire-init` + `aspireify` skills):
 
 | Skill | Tasks | Trigger prompts | Focus |
 |-------|-------|-----------------|-------|
 | `aspire` (router) | 6 | 16 | Routing precision to sub-skills |
 | `aspire-init` | 5 | 15 | Skeleton drop, `aspire new` / `aspire init` decision, aspireify handoff |
-| `aspireify` | 8 | 18 | AppHost wiring (C# / file-based C# / TS), validation, never edit `.modules/` |
+| `aspireify` | 8 | 18 | AppHost wiring (C# / file-based C# / TS), validation, never edit `.aspire/modules/` |
 | `aspire-orchestration` | 16 | 24 | Lifecycle, file lock recovery, `--include-hidden`, `aspire update --self` |
 | `aspire-deployment` | 8 | 21 | Multi-target deploy, `aspire destroy`, JS publishing, pipeline previews |
 | `aspire-monitoring` | 11 | 19 | Diagnostics bridge, standalone dashboard, browser logs, `--include-hidden` |

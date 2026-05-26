@@ -1,0 +1,1 @@
+../../../../../../skills/aspire-init/references/templates.md

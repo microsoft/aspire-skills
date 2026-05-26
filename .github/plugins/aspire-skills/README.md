@@ -14,7 +14,7 @@ aspire-skills/
 ├── gemini-extension.json    → ../../gemini-extension.json
 ├── copilot-hooks.json       → ../../copilot-hooks.json
 ├── hooks/                   → ../../hooks/
-├── skills/aspire/           → ../../skills/aspire/
+├── skills/                  → ../../skills/ runtime skill/reference symlinks
 └── README.md                (this file)
 ```
 

@@ -1,0 +1,1 @@
+../../../../../../skills/aspire-deployment/references/kubernetes.md

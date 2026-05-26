@@ -92,7 +92,7 @@ Single thin skill covering:
 
 - `references/safety-guardrails.md` — Detailed do/don't rules, error recovery patterns
 - `references/diagnostics-bridge.md` — Local vs deployed decision table, azure-diagnostics handoff
-- `references/detection.md` — Project fingerprinting (AppHost SDK, apphost.ts, .modules/)
+- `references/detection.md` — Project fingerprinting (AppHost SDK, apphost.ts, .aspire/modules/)
 
 **Depends on**: `aspire-skill`
 
