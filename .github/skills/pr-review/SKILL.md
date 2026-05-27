@@ -20,6 +20,7 @@ license: MIT
 metadata:
   author: Microsoft
   version: "0.0.1"
+  internal: true
   audience: repo-authors
 ---
 
