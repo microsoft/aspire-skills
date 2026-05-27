@@ -68,7 +68,7 @@ const skillProfiles: Record<string, SkillProfile> = {
     summary: "Turns an AppHost skeleton into a modeled resource graph.",
     command: "aspire add",
     commandHref: `${aspireCliDocsRoot}/aspire-add/`,
-    highlights: ["Scans projects", "Models services", "Never edits .modules"],
+    highlights: ["Scans projects", "Models services", "Never edits .aspire/modules"],
     icon: "lucide:network",
     order: 2
   },
@@ -116,6 +116,10 @@ export type InstallSurface = {
   title: string;
   icon: "aspire" | "claude" | "copilot" | "cursor" | "gemini" | "npm" | "ollama" | "openai" | "opencode";
   notes: string[];
+  links?: Array<{
+    label: string;
+    href: string;
+  }>;
 };
 
 export type Guardrail = {
@@ -170,9 +174,9 @@ export async function getSiteData() {
       },
       {
         label: "Apply code changes",
-        command: "aspire resource <name> restart",
+        command: "aspire resource <name> <command>",
         commandHref: `${aspireCliDocsRoot}/aspire-resource/`,
-        why: "Restart only the changed resource while preserving the running graph.",
+        why: "Operate on a single resource while preserving the running graph.",
         icon: "lucide:refresh-cw"
       },
       {
@@ -304,6 +308,16 @@ function getInstallSurfaces(pluginVersion: string, marketplaceVersion: string): 
       notes: [
         "The official path installs Aspire skill files and MCP configuration into detected agent environments.",
         "Run aspire agent init any time to add, update, or reconfigure Aspire guidance in an existing workspace."
+      ],
+      links: [
+        {
+          label: "Aspire CLI command reference",
+          href: aspireCliDocsRoot
+        },
+        {
+          label: "aspire agent init reference",
+          href: `${aspireCliDocsRoot}/aspire-agent-init/`
+        }
       ]
     },
     {

@@ -69,7 +69,7 @@ From `evals/AUTHORING.md`:
 - `not_contains` lists use full command tokens (e.g., `"azd up"`, `"azd deploy"`), never
   bare nouns (`"azd"`, `"docker"`, `"kubectl"`, `"helm"`) — bare nouns fire on legitimate
   "do not use X" guidance.
-- Aspire 13.3 facts the judge might not know are **stated in the grader prompt**.
+- Aspire 13.4 facts the judge might not know are **stated in the grader prompt**.
 
 **Severity:** `important` — these patterns are the difference between a useful eval and
 one that mis-judges correct responses.
@@ -122,7 +122,7 @@ don't need a CHANGELOG entry — but call them out in the PR description.
 
 Every skill's SKILL.md contains a "Project-Local Skill Override" section that defers to
 `.agents/skills/<skill>/SKILL.md` when present (installed by `aspire agent init` /
-13.3 `aspire init`). This pattern **must survive** edits — the in-plugin skill must
+`aspire init`). This pattern **must survive** edits — the in-plugin skill must
 never silently shadow the project-local copy.
 
 **Severity if a PR removes or weakens the deference:** `blocking`. The plugin's safety
@@ -144,7 +144,7 @@ Plus the rules from `skills/aspire/SKILL.md`:
 
 - `--non-interactive` on every agent-facing CLI snippet.
 - Never install the obsolete Aspire workload.
-- Never edit `.modules/` directly in TypeScript AppHosts.
+- Never edit `.aspire/modules/` directly in TypeScript AppHosts.
 
 **Severity if any guardrail is removed or weakened without a documented reason:**
 `blocking`.

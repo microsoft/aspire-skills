@@ -14,8 +14,11 @@ aspire-skills/
 ├── gemini-extension.json    → ../../gemini-extension.json
 ├── copilot-hooks.json       → ../../copilot-hooks.json
 ├── hooks/                   → ../../hooks/
-├── skills/aspire/           → ../../skills/aspire/
+├── skills/                  → ../../skills/
 └── README.md                (this file)
 ```
+
+Runtime skill and reference entries under `skills/` are symlinked to the root skill
+content.
 
 See the [root README](../../../README.md) for installation and usage.

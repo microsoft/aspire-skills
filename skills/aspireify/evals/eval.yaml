@@ -1,7 +1,7 @@
 name: aspireify-eval
 description: >
   Evaluates the aspireify skill for correct agentic AppHost wiring guidance:
-  language-aware authoring (C#, file-based C#, TypeScript), 13.3 features
+  language-aware authoring (C#, file-based C#, TypeScript), current Aspire features
   (unified withEnvironment, AddNextJsApp, WithBrowserLogs, ExcludeReferenceEndpoint),
   ServiceDefaults wiring, validation flow, and proper hand-off to other Aspire skills.
 skill: aspireify
@@ -21,7 +21,7 @@ metrics:
   - name: trigger_accuracy
     weight: 0.3
     threshold: 0.90
-  - name: thirteen_three_alignment
+  - name: current_aspire_alignment
     weight: 0.3
     threshold: 0.90
 
@@ -38,9 +38,8 @@ graders:
     name: never_edit_modules
     config:
       not_contains:
-        - "edit .modules/"
-        - "modify .modules/"
-        - "change files in .modules"
+        - "edit .aspire/modules/"
+        - "modify .aspire/modules/"
 
 tasks:
   - "tasks/*.yaml"

@@ -19,20 +19,20 @@ aspire wait <resource> --status up --timeout 60
 ```bash
 aspire resource <resource> start
 aspire resource <resource> stop
-aspire resource <resource> restart
 aspire resource <resource> <command>
 ```
 
 - Prefer resource-scoped commands when the task doesn't require an AppHost-wide restart.
-- If one resource is wedged, use `aspire resource <resource> restart` before escalating to full restart.
+- If one resource is wedged, use resource-scoped commands such as `stop`, `start`, or `rebuild` when the resource exposes them before escalating to a full AppHost restart.
 - Use `aspire resource <resource> <command>` when the AppHost exposes resource-specific dashboard or operational commands.
+- If the resource's own framework watch/HMR/debug workflow is already handling the change, do not force an Aspire resource command.
 
 ## What Changed Determines the Action
 
 | What Changed | Action | Command |
 |--------------|--------|---------|
 | AppHost project (Program.cs, .csproj) | Full restart | `aspire stop` → edit → `aspire start` |
-| .NET service project (.cs files) | Rebuild resource | `aspire resource <name> restart` |
-| JavaScript/Python/Go files | No action | File watchers handle it automatically |
+| .NET service project (.cs files) | Rebuild/refresh resource if exposed | `aspire resource <name> rebuild` or the resource's IDE/watch workflow |
+| JavaScript/Python/Go files | Usually no Aspire action | File watchers/HMR handle it automatically |
 | Configuration (appsettings.json) | Check first | `aspire describe` then decide |
 | TypeScript AppHost deps | Restore | `aspire restore` |

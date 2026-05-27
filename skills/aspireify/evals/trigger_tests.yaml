@@ -25,7 +25,7 @@ should_trigger_prompts:
   - prompt: "Help me use the unified withEnvironment API in apphost.ts"
     reason: "TS AppHost authoring is aspireify"
     confidence: high
-  - prompt: "Edit .modules/postgres.module.ts to change the DB config"
+  - prompt: "Edit .aspire/modules/postgres.module.ts to change the DB config"
     reason: "Refuse-and-redirect anti-pattern handling lives in aspireify"
     confidence: high
   - prompt: "Add AddNextJsApp to my AppHost for the web frontend"

@@ -1,7 +1,7 @@
 ---
 name: aspire-monitoring
 description: >-
-  **ANALYSIS SKILL** - Observe Aspire 13.3 apps: logs, traces, metrics, resource state,
+  **ANALYSIS SKILL** - Observe Aspire apps: logs, traces, metrics, resource state,
   telemetry export, browser telemetry, and the standalone dashboard. Routes between local
   Aspire CLI, AKS workload diagnostics, and deployed Azure resource health.
   USE FOR: aspire logs, aspire otel logs, aspire otel traces, aspire otel spans, aspire
@@ -79,7 +79,7 @@ When something is wrong, investigate before editing code:
 | `aspire export` | Portable telemetry bundle | `aspire export` |
 | `aspire dashboard run` | Standalone dashboard (foreground/blocking) | `aspire dashboard run` |
 
-### Hidden resources are filtered by default (13.3)
+### Hidden resources are filtered by default
 
 `aspire ps`, `aspire describe`, and other CLI commands filter out resources marked hidden in the AppHost (proxies, helper containers, migrations). The default output is correct for normal app inspection. Add `--include-hidden` when:
 
@@ -109,7 +109,7 @@ aspire describe --apphost ./src/MyApp.AppHost/
 |-------|---------|-----------|
 | TS AppHost DNS failure ([#15782](https://github.com/microsoft/aspire/issues/15782)) | `aspire otel` "No such host" for `*.dev.localhost` | Use `--dashboard-url localhost:PORT` |
 | `--isolated` mode telemetry ([#16107](https://github.com/microsoft/aspire/issues/16107)) | OTEL port not randomized in isolated mode | Avoid `--isolated` if telemetry is needed |
-| Resource missing from `aspire ps` / `aspire describe` | Hidden-by-default in 13.3 (proxies, helpers, migrations) | Re-run with `--include-hidden` |
+| Resource missing from `aspire ps` / `aspire describe` | Hidden-by-default resources such as proxies, helpers, or migrations | Re-run with `--include-hidden` |
 
 > **Resolved in 13.3**: The standalone-dashboard workaround for [#16236](https://github.com/microsoft/aspire/issues/16236) is obsolete — use `aspire dashboard run` (see below).
 
@@ -158,7 +158,7 @@ The `Aspire.Hosting.Browsers` integration captures **browser console logs, netwo
 
 When parsing telemetry programmatically, browser logs surface as additional OTLP log records associated with the frontend resource — `aspire otel logs <frontend-resource>` returns them alongside server logs.
 
-## Dashboard UX Features (13.3)
+## Dashboard UX Features
 
 Agents inspecting a running dashboard should know:
 
@@ -194,3 +194,4 @@ If `.agents/skills/aspire/SKILL.md` exists (from `aspire agent init`), see its
 
 - [diagnostics-bridge.md](references/diagnostics-bridge.md) — Local vs deployed routing detail
 - [monitoring.md](references/monitoring.md) — Telemetry inspection and export patterns
+- [playwright-handoff.md](references/playwright-handoff.md) — Find the correct Aspire frontend URL before browser testing

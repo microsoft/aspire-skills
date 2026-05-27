@@ -22,7 +22,7 @@ Identifies `.csproj` files referencing `Aspire.AppHost.Sdk`, `apphost.ts` files,
 |---|---|---|
 | `dotnet run` | `aspire start` | Starts the full orchestrator, not just one project |
 | `curl` polling | `aspire wait <resource>` | Waits for actual readiness, not just HTTP 200 |
-| `dotnet build` (while running) | `aspire resource <name> restart` | Avoids file-lock errors on running processes |
+| `dotnet build` (while running) | `aspire stop` first, or resource commands/watch/HMR when available | Avoids file-lock errors on running processes |
 | Leaving processes running | `aspire stop` | Prevents orphaned DCP/dashboard processes |
 
 ### 3. Bridges — Routes diagnostics to the right tool
@@ -111,7 +111,7 @@ Key Aspire CLI commands the plugin enforces and routes to:
 | `aspire start` | Start the AppHost orchestrator |
 | `aspire stop` | Stop all resources and the dashboard |
 | `aspire wait <resource>` | Wait for a resource to be ready |
-| `aspire resource <name> restart` | Restart a changed resource |
+| `aspire resource <name> <command>` | Run resource operations such as `stop`, `start`, or `rebuild` |
 | `aspire logs` | View console logs |
 | `aspire describe` | Show resource state and endpoints |
 | `aspire publish` | Generate deployment artifacts (Bicep, manifests) |

@@ -148,7 +148,7 @@ specific** — adjust the focus column to what the file actually demands.
 
 | Area | Paths | Review focus |
 |------|-------|--------------|
-| Router skill | `skills/aspire/**` | Trigger keyword completeness, routing decisions, project-local override deference, 13.3 alignment |
+| Router skill | `skills/aspire/**` | Trigger keyword completeness, routing decisions, project-local override deference, 13.4 alignment |
 | Sub-skills | `skills/aspire-init/**`, `skills/aspireify/**`, `skills/aspire-orchestration/**`, `skills/aspire-deployment/**`, `skills/aspire-monitoring/**` | Frontmatter, decision tables, safety guardrails, `INVOKES:` accuracy, references hygiene |
 | Eval tasks | `skills/<skill>/evals/tasks/**` | Grader patterns from `evals/AUTHORING.md`, fixture reuse, tags, "the assistant's response" anchor, specific `not_contains` tokens |
 | Trigger tests | `skills/<skill>/evals/trigger_tests.yaml` | Cross-skill prompt collisions, `reason` agrees with bucket, realistic phrasing, calibrated `confidence` |
@@ -181,7 +181,7 @@ Only flag concrete, high-confidence problems. Categories:
    new trigger phrase isn't covered in `trigger_tests.yaml`.
 2. **Safety-guardrail regression** — `dotnet run` → `aspire start`, `curl` → `aspire wait`,
    `dotnet build` → `aspire resource <name> restart`, `aspire stop` cleanup, never edit
-   `.modules/`, never install the obsolete Aspire workload, always `--non-interactive`
+   `.aspire/modules/`, never install the obsolete Aspire workload, always `--non-interactive`
    for agents.
 3. **Project-local override removed or weakened** — the `.agents/skills/<skill>/SKILL.md`
    deference block must survive edits.
@@ -198,7 +198,7 @@ Only flag concrete, high-confidence problems. Categories:
    duplicate keys, off-by-one in tags / IDs, `id`/`name` confusion (`--task` filters by
    `id`).
 8. **CHANGELOG gap** — user-visible change with no entry.
-9. **13.3 staleness** — references to removed surfaces (`AddAndPublishPromptAgent`,
+9. **13.4 staleness** — references to removed surfaces (`AddAndPublishPromptAgent`,
    `NameOutput` instead of `NameOutputReference`, removed `dotnet new aspire-*`
    templates, deprecated `withEnvironment*`).
 10. **Repository convention violations** — author skill drifting into shipped
@@ -308,7 +308,7 @@ Only three:
 |-------|------|----------------|
 | `blocking` | Concrete harm if merged: removed safety guardrail, manifests out of sync, override-deference removed, unsafe hook, broken JSON/YAML in a manifest or eval file, routing change that drops eval threshold. | `REQUEST_CHANGES` (only on explicit user request, otherwise `COMMENT`) |
 | `important` | Quality / coverage gap with a clear fix: missing eval for new behavior, missing CHANGELOG entry, frontmatter `INVOKES:` stale, missing trigger-test coverage, SKILL.md over 5000 tokens. | `COMMENT` |
-| `suggestion` | Optional improvement: decision-table row could call out a 13.3 alternative, reference file could be split, quick-reference table could be reordered. | `COMMENT` or `APPROVE` |
+| `suggestion` | Optional improvement: decision-table row could call out a current Aspire alternative, reference file could be split, quick-reference table could be reordered. | `COMMENT` or `APPROVE` |
 
 No `nit`, `learning`, or `praise`. Rationale and more examples:
 [severity-labels.md](references/severity-labels.md).

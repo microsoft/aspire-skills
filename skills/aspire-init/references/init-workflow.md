@@ -1,8 +1,7 @@
 # `aspire init` Workflow
 
 Reference for the `aspire init` flow on existing repositories. Source:
-https://aspire.dev/reference/cli/commands/aspire-init/ and
-https://aspire.dev/whats-new/aspire-13-3/.
+https://aspire.dev/reference/cli/commands/aspire-init/.
 
 ## What `aspire init` Does
 
@@ -45,7 +44,7 @@ aspire init [options]
 ### TypeScript Path (`--language typescript`)
 
 - **`apphost.ts`** at repo root.
-- **`.modules/`** generated folder (do not edit by hand — regenerate with `aspire add`).
+- **`.aspire/modules/`** generated folder (do not edit by hand — regenerate with `aspire add`).
 - **`aspire.config.json`** at repo root.
 
 ### `aspireify` Skill
@@ -67,7 +66,7 @@ C# has two sub-modes the agent may encounter:
 
 - **Single-file** — `appHost.path` points at `apphost.cs` (uses `#:sdk` directive).
 - **Full project** — `appHost.path` points at a directory containing a `.csproj` plus
-  `Program.cs`. `aspire init` defaults to single-file in 13.3.
+  `Program.cs`. In solution-backed repos, full project mode lets the AppHost participate in IDE and solution workflows.
 
 ## End-to-End Sequence
 
@@ -77,7 +76,7 @@ C# has two sub-modes the agent may encounter:
    ```bash
    aspire init --language <csharp|typescript> --non-interactive
    ```
-3. **Confirm artifacts** — `apphost.cs` (or `apphost.ts` + `.modules/`) and
+3. **Confirm artifacts** — `apphost.cs` (or `apphost.ts` + `.aspire/modules/`) and
    `aspire.config.json` should be in the repo root.
 4. **Confirm `aspireify` skill installed** — the agent's skill directory contains
    `aspireify/SKILL.md`. If missing, run `aspire agent init` to install it.
@@ -93,7 +92,7 @@ C# has two sub-modes the agent may encounter:
 
 ## Project-Local Skill Precedence
 
-In Aspire 13.3, `aspire init` installs `aspireify` into the project's skill directory.
+`aspire init` installs `aspireify` into the project's skill directory when an agent skill location is detected.
 When a project-local `.agents/skills/aspireify/SKILL.md` (or equivalent location) is
 present, **defer to it and warn the user** — the project-local copy may carry repo-specific
 guidance.
@@ -115,7 +114,7 @@ The same precedence applies to a legacy `.agents/skills/aspire-init/SKILL.md` fr
 
 - **Don't run `aspire init` if any AppHost signal already exists** — it duplicates the
   skeleton and confuses subsequent tooling.
-- **Don't edit `.modules/`** in TypeScript AppHosts. Use `aspire add` to regenerate APIs;
+- **Don't edit `.aspire/modules/`** in TypeScript AppHosts. Use `aspire add` to regenerate APIs;
   use `aspire restore` if files are missing.
 - **Don't install the obsolete Aspire workload** (`dotnet workload install aspire`). Use
   `aspire init`, `aspire new`, or `aspire add` instead.

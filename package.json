@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "astro dev --host 127.0.0.1",
     "build": "astro check && astro build",
+    "bundle": "node scripts/build-aspire-skills-bundle.mjs",
     "preview": "astro preview --host 127.0.0.1",
     "astro": "astro"
   },

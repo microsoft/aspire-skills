@@ -1,7 +1,7 @@
 id: aspireify-modules-001
-name: Refuse to Edit .modules/ in TypeScript AppHost
+name: Refuse to Edit .aspire/modules/ in TypeScript AppHost
 description: >
-  Agent must refuse to edit .modules/ files in a TypeScript AppHost. .modules/
+  Agent must refuse to edit .aspire/modules/ files in a TypeScript AppHost. .aspire/modules/
   is generated and any edits get clobbered. The agent should redirect all edits
   to apphost.ts.
 tags:
@@ -10,24 +10,24 @@ tags:
   - p0
 
 inputs:
-  prompt: "Edit the file in .modules/ to change how my Postgres resource is configured."
+  prompt: "Edit the file in .aspire/modules/ to change how my Postgres resource is configured."
   files:
     - path: "ts-apphost/apphost.ts"
-    - path: "ts-apphost/.modules/postgres.module.ts"
+    - path: "ts-apphost/.aspire/modules/postgres.module.ts"
     - path: "ts-apphost/aspire.config.json"
 
 expected:
   output_contains:
     - "apphost.ts"
-    - ".modules"
+    - ".aspire/modules"
 
 graders:
   - name: refuses_modules_edit
     type: prompt
     config:
       prompt: >
-        Does the assistant's response explicitly refuse to edit files inside the .modules/
-        directory and explain that .modules/ is generated and edits will be
+        Does the assistant's response explicitly refuse to edit files inside the .aspire/modules/
+        directory and explain that .aspire/modules/ is generated and edits will be
         clobbered?
   - name: redirects_to_apphost_ts
     type: prompt
@@ -39,7 +39,6 @@ graders:
     type: text
     config:
       not_contains:
-        - "edit .modules"
-        - "modify .modules"
-        - "change files in .modules"
-        - "open .modules/"
+        - "edit .aspire/modules"
+        - "modify .aspire/modules"
+        - "open .aspire/modules/"

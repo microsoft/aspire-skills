@@ -2,7 +2,7 @@ id: aspireify-ts-001
 name: Wire TypeScript AppHost with Unified withEnvironment
 description: >
   Agent should edit apphost.ts using the unified withEnvironment(name, value)
-  API and TS-specific helpers. Must NOT suggest editing .modules/ and must NOT
+  API and TS-specific helpers. Must NOT suggest editing .aspire/modules/ and must NOT
   suggest the deprecated per-kind helpers.
 tags:
   - authoring
@@ -42,12 +42,11 @@ graders:
     type: text
     config:
       not_contains:
-        - "edit .modules"
-        - "modify .modules"
-        - "change files in .modules"
+        - "edit .aspire/modules"
+        - "modify .aspire/modules"
   - name: edits_apphost_ts
     type: prompt
     config:
       prompt: >
         Does the assistant's response edit apphost.ts (and explicitly avoid editing the
-        generated .modules/ directory)?
+        generated .aspire/modules/ directory)?

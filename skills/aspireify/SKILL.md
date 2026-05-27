@@ -8,7 +8,7 @@ description: >-
   USE FOR: wire AppHost, scaffold resource graph, add Postgres/Redis/Rabbit/Mongo to
   Aspire, connect frontend to API, after `aspire init` what next, AddNextJsApp, AddViteApp,
   WithBrowserLogs, file-based apphost.cs, apphost.ts, unified withEnvironment,
-  refuse .modules edit.
+  refuse .aspire/modules edit, migrate .env files, migrate user secrets.
   DO NOT USE FOR: skeleton drop (use aspire-init), start/stop/wait/restart (use
   aspire-orchestration), publish/deploy/destroy (use aspire-deployment), logs/traces
   (use aspire-monitoring).
@@ -26,21 +26,21 @@ metadata:
 > **One-time wiring skill.** `aspire init` drops a skeleton; `aspireify` turns
 > that skeleton into a working AppHost by scanning the repo, proposing a resource
 > graph, editing the AppHost, wiring `Aspire.ServiceDefaults`, and validating end
-> to end. Self-deactivates after a clean `aspire start`. Aligned with Aspire 13.3
-> ([release notes](https://aspire.dev/whats-new/aspire-13-3/)).
+> to end. Self-deactivates after a clean `aspire start`. Aligned with Aspire 13.4
+> guidance from the current Aspire development branch.
 
-## 🚫 Hard Refusal: Never Edit `.modules/`
+## 🚫 Hard Refusal: Never Edit `.aspire/modules/`
 
 > ⛔ **REFUSE** any request to edit, modify, change, open-for-edit, or "tweak" files
-> inside `.modules/` of a TypeScript AppHost. This directory is **generated** by Aspire
+> inside `.aspire/modules/` of a TypeScript AppHost. This directory is **generated** by Aspire
 > from `apphost.ts` and the integration packages — every file in it gets **clobbered
 > on the next build, `aspire add`, or `aspire start`**.
 >
-> If a user asks to edit something in `.modules/` (e.g., `.modules/postgres.module.ts`),
+> If a user asks to edit something in `.aspire/modules/` (e.g., `.aspire/modules/postgres.module.ts`),
 > the correct response is:
 >
-> 1. **Refuse the edit** with a clear "I won't edit `.modules/`" statement.
-> 2. **Explain** that `.modules/` is generated and any changes are clobbered.
+> 1. **Refuse the edit** with a clear "I won't edit `.aspire/modules/`" statement.
+> 2. **Explain** that `.aspire/modules/` is generated and any changes are clobbered.
 > 3. **Redirect** the requested change to `apphost.ts` — the **only** file the user
 >    should hand-edit in a TS AppHost.
 > 4. If the user wants a new integration, suggest `aspire add <package>`; if they want
@@ -48,13 +48,60 @@ metadata:
 
 | ❌ Wrong | ✅ Right |
 |----------|---------|
-| Open `.modules/postgres.module.ts` and tweak the connection options | Edit `apphost.ts` and change `addPostgres('pg', { ... })` options there |
-| Modify a generated `.modules/*.ts` file directly | Re-run `aspire add <package>` after updating `apphost.ts` |
-| Comment out a line in `.modules/` to disable a resource | Remove or guard the resource declaration in `apphost.ts` |
+| Open `.aspire/modules/postgres.module.ts` and tweak the connection options | Edit `apphost.ts` and change `addPostgres('pg', { ... })` options there |
+| Modify a generated `.aspire/modules/*.ts` file directly | Re-run `aspire add <package>` after updating `apphost.ts` |
+| Comment out a line in `.aspire/modules/` to disable a resource | Remove or guard the resource declaration in `apphost.ts` |
 
 This rule applies even if the user insists, even for "one-line" changes, even for
-"just to test something." The TS AppHost regenerates `.modules/` deterministically;
+"just to test something." The TS AppHost regenerates `.aspire/modules/` deterministically;
 edits are unrecoverable noise.
+
+## Guiding Principles From Aspire 13.4
+
+### Minimize changes to the user's code
+
+Adapt the AppHost to fit the app, not the other way around. Prefer `WithEnvironment()`
+to match existing environment variable names, Aspire-managed ports over fixed ports,
+and 1:1 Docker Compose mapping before optimizing. Do not restructure directories,
+rename files, or change build scripts unless the user explicitly chooses that tradeoff.
+
+### Surface tradeoffs; do not decide silently
+
+When a small code change unlocks better Aspire integration, present both options:
+the zero-code-change mapping and the small-change version that enables `WithReference`,
+health checks, service discovery, dynamic ports, or dashboard telemetry. Ask which
+approach the user wants, then implement that choice without complaint.
+
+### Verify APIs before writing AppHost code
+
+Use `aspire docs search <topic>` and `aspire docs get <slug>` for workflow guidance.
+Use `aspire docs api search <query> --language csharp|typescript` and
+`aspire docs api get <id>` for API shape. Use `aspire integration list/search` to
+find integrations before `aspire add`. Do not invent packages, methods, overloads,
+or command shapes; C# and TypeScript AppHost APIs differ.
+
+### Keep configuration visible in the AppHost
+
+Scan `.env`, `.env.local`, `.env.development`, `secrets.json.example`,
+`<UserSecretsId>`, and setup scripts. Propose migrating values into AppHost parameters:
+connection strings become Aspire resources, API keys/tokens become secret parameters,
+and non-secret config becomes plain parameters or `WithEnvironment()` values. Never
+delete `.env` files or remove existing `UserSecretsId` entries without explicit user
+approval because non-Aspire workflows may still depend on them.
+
+### Local development first
+
+This skill optimizes local development, not production deployment. Prefer persistent
+container lifetimes and data volumes for databases/caches, use HTTPS endpoints by
+default, pass endpoint references instead of hardcoded URLs, and model external SaaS
+URLs/API keys as parameters so they are visible in the dashboard.
+
+### Redis TLS edge case
+
+Aspire can automatically provision TLS certificates for container resources. If Redis
+health checks fail with SSL/TLS handshake errors, do not fall back to `AddContainer()`.
+Use `WithoutHttpsCertificate()` on the Redis resource when the consuming app expects
+plain Redis.
 
 ## Project-Local Override
 
@@ -98,7 +145,7 @@ the app → `aspire-orchestration`. If the user wants to **deploy** → `aspire-
 |---------------|-----------|-------------|
 | **C# SDK-style** | `.csproj` containing `<Sdk Name="Aspire.AppHost.Sdk" />` | `Program.cs` (top-level statements) |
 | **File-based C#** | `apphost.cs` with `#:sdk Aspire.AppHost.Sdk` and `#:package` directives | `apphost.cs` itself |
-| **TypeScript** | `apphost.ts` next to `.modules/` directory | `apphost.ts` only — **never edit `.modules/`** |
+| **TypeScript** | `apphost.ts` with generated `.aspire/modules/` | `apphost.ts` only — **never edit `.aspire/modules/`** |
 
 See [references/csharp-authoring.md](references/csharp-authoring.md) and
 [references/typescript-authoring.md](references/typescript-authoring.md).
@@ -112,6 +159,14 @@ See [references/csharp-authoring.md](references/csharp-authoring.md) and
 4. VALIDATE → aspire start --non-interactive → aspire wait <each resource>
 5. DEACTIVATE → confirm clean start, hand off to aspire-orchestration
 ```
+
+For the detailed, upstream-parity workflow, load these references before editing:
+
+- [apphost-wiring.md](references/apphost-wiring.md) — full AppHost wiring workflow, API lookup, endpoint/parameter patterns, validation, solution updates, and cleanup.
+- [docker-compose.md](references/docker-compose.md) — docker-compose migration, profiles, image mapping, ports, volumes, and `depends_on`.
+- [full-solution-apphosts.md](references/full-solution-apphosts.md) — large solution triage, mixed SDK boundaries, solution membership, ServiceDefaults placement, and legacy host migration.
+- [javascript-apps.md](references/javascript-apps.md) — JavaScript resource selection, workspace/monorepo package-manager handling, ports, scripts, and TS AppHost package config.
+- [opentelemetry.md](references/opentelemetry.md) — optional Node.js, Python, and Go OpenTelemetry wiring for non-.NET services.
 
 ### 1. Scan
 
@@ -179,17 +234,17 @@ catalog.
 | Vite SPA | `AddViteApp("web", "./web")` | `addViteApp('web', '../web')` |
 | Plain Node app | `AddNodeApp("api", "server.js")` | `addNodeApp('api', 'server.js')` |
 
-## 13.3 Authoring Rules
+## Current Authoring Rules
 
 | Rule | Why |
 |------|-----|
-| Use **unified `withEnvironment(name, value)`** in TS — never the deprecated per-kind helpers (`withEnvironmentEndpoint`, `withEnvironmentParameter`, etc.) | Single API handles all value kinds; per-kind helpers are `@deprecated` in 13.3 |
+| Use **unified `withEnvironment(name, value)`** in TS — never the deprecated per-kind helpers (`withEnvironmentEndpoint`, `withEnvironmentParameter`, etc.) | Single API handles all value kinds; per-kind helpers are deprecated |
 | Use `AddNextJsApp` / `AddViteApp` over hand-rolled Dockerfiles for JS frontends | First-class lifecycle + `PublishAs*` integration |
-| Use `PublishAsStaticWebsite` / `PublishAsNodeServer` / `PublishAsNpmScript` for JS publish | Replaces hand-rolled Dockerfiles; SPA → static, SSR Node → NodeServer, npm-script SSR → NpmScript |
-| Add `WithBrowserLogs()` to frontend resources for browser console + screenshots in dashboard | New `Aspire.Hosting.Browsers` integration in 13.3 |
-| Bind every resource to a compute environment with `WithComputeEnvironment(env)` when multiple environments exist | 13.3 enforces explicit binding for multi-environment deploys |
-| **Never edit `.modules/`** in TS AppHosts | Generated; edits get clobbered. Edit only `apphost.ts` |
-| Use `WithEndpoint("name", e => ...)` to update endpoints | 13.3 updates rather than throws on duplicates |
+| Use `PublishAsStaticWebsite` / `PublishAsNodeServer` / `PublishAsPackageScript` for JS publish | Replaces hand-rolled Dockerfiles; SPA → static, SSR Node → NodeServer, package-script SSR → PackageScript |
+| Add `WithBrowserLogs()` to frontend resources for browser console + screenshots in dashboard | `Aspire.Hosting.Browsers` surfaces browser telemetry in the dashboard |
+| Bind every resource to a compute environment with `WithComputeEnvironment(env)` when multiple environments exist | Multi-environment deploys require explicit binding |
+| **Never edit `.aspire/modules/`** in TS AppHosts | Generated; edits get clobbered. Edit only `apphost.ts` |
+| Use `WithEndpoint("name", e => ...)` to update endpoints | Endpoint callbacks update existing endpoints rather than throwing on duplicates |
 | Mark admin endpoints with `ExcludeReferenceEndpoint = true` | Prevents consumers from receiving admin URLs via `WithReference()` |
 | Look up unfamiliar API: `aspire docs api search <query> --language csharp\|typescript` | Don't guess overloads or builder chains |
 
@@ -225,7 +280,7 @@ var api = builder.AddProject<Projects.Api>("api")
 builder.AddNextJsApp("web", "./web")
     .WithReference(api)        // injects services__api__http and __https
     .WaitFor(api)
-    .WithBrowserLogs();        // 13.3: browser console + screenshots
+    .WithBrowserLogs();        // browser console + screenshots
 ```
 
 ## Validation & Recovery
@@ -236,7 +291,7 @@ builder.AddNextJsApp("web", "./web")
 | `aspire wait` rejects resource name | Use `displayName` from `aspire ps --format Json` ([#15842](https://github.com/microsoft/aspire/issues/15842)) |
 | File-lock errors during edit | Hand off to `aspire-orchestration` → `aspire stop` → retry |
 | Resource missing from `aspire ps` | May be hidden — re-run with `--include-hidden` |
-| TS AppHost change ignored | Confirm you edited `apphost.ts`, not `.modules/` |
+| TS AppHost change ignored | Confirm you edited `apphost.ts`, not `.aspire/modules/` |
 | Mixed JSON output from `aspire start` | Strip non-JSON lines before parsing ([#15843](https://github.com/microsoft/aspire/issues/15843)) |
 
 Full flow in [references/validation.md](references/validation.md).
@@ -251,10 +306,24 @@ Full flow in [references/validation.md](references/validation.md).
 | Logs, traces, metrics, dashboard, browser log inspection | → `aspire-monitoring` skill |
 | Deployed (Azure/AKS) app diagnostics | → `azure-diagnostics` skill (azure-skills) |
 
+## Key Rules
+
+- **Never overwrite existing files** — always augment or merge.
+- **Ask before modifying service code**, especially OpenTelemetry and ServiceDefaults injection.
+- **Respect existing project structure** — do not reorganize the repo.
+- **If stuck, use `aspire doctor`** to diagnose environment issues.
+- **Never hardcode URLs in `WithEnvironment` / `withEnvironment`** — pass endpoint references such as `api.GetEndpoint("http")` or `api.getEndpoint('http')` instead of string literals.
+- **Never use `WithUrlForEndpoint` / `withUrlForEndpoint` to set `dev.localhost` URLs** — that API is only for dashboard display labels; `dev.localhost` belongs in AppHost launch/profile configuration.
+
 ## References
 
+- [apphost-wiring.md](references/apphost-wiring.md) — Detailed AppHost wiring workflow and API lookup patterns
+- [docker-compose.md](references/docker-compose.md) — Docker Compose migration patterns
+- [full-solution-apphosts.md](references/full-solution-apphosts.md) — Large/full-solution AppHost guidance
+- [javascript-apps.md](references/javascript-apps.md) — JavaScript/TypeScript app and workspace handling
+- [opentelemetry.md](references/opentelemetry.md) — Non-.NET OpenTelemetry setup
 - [scan-and-propose.md](references/scan-and-propose.md) — Repo scan heuristics + integration catalog
-- [csharp-authoring.md](references/csharp-authoring.md) — C# AppHost patterns (incl. 13.3 features)
+- [csharp-authoring.md](references/csharp-authoring.md) — C# AppHost patterns
 - [typescript-authoring.md](references/typescript-authoring.md) — TS AppHost patterns + parity APIs
 - [service-defaults.md](references/service-defaults.md) — Wire OTel, health checks, service discovery
 - [validation.md](references/validation.md) — End-to-end validation + recovery

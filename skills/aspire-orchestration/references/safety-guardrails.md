@@ -17,7 +17,7 @@ The AppHost project is an **orchestrator**, not a regular .NET app. Running it w
 - **Bypasses the Aspire CLI orchestration layer** — resources don't get managed lifecycle
 - **No dashboard** — the Aspire developer dashboard won't launch
 - **No backchannel** — `aspire wait`, `aspire logs`, `aspire describe` won't work
-- **No resource management** — can't rebuild/restart individual resources
+- **No resource management** — can't operate on individual resources
 - **Port conflicts** — resources start without coordinated port allocation
 - **No cleanup** — orphaned processes when the host exits
 
@@ -89,7 +89,7 @@ aspire describe | grep "http"  # fragile, format may change
 
 ---
 
-## Rule 3: ALWAYS `aspire resource restart` — NEVER `dotnet build`
+## Rule 3: Prefer Resource Commands / Watch — NEVER `dotnet build` With Aspire Running
 
 ### Why `dotnet build` Causes File-Lock Errors
 
@@ -116,8 +116,8 @@ When you see `MSB3491` / `CS2012` / "file in use" / "another process is using":
 # ✅ Single correct recovery
 aspire stop              # release all Aspire-held locks
 
-# Then EITHER:
-aspire resource <name> restart   # if Aspire is still up + one resource changed
+# Then EITHER use a resource-scoped command if Aspire is still up + one resource changed:
+aspire resource <name> rebuild
 # OR:
 aspire start             # if AppHost code changed or Aspire was fully stopped
 ```
@@ -133,20 +133,20 @@ aspire start             # if AppHost code changed or Aspire was fully stopped
 | `pkill dotnet` / `kill <PID>` | `aspire stop` (clean shutdown via the CLI) |
 | `rm -rf bin obj` to "force" the build | `aspire stop`, then rebuild |
 | Suggest a reboot | `aspire stop` (single command) |
-| Re-run `dotnet build` with Aspire still up | `aspire stop` first; prefer `aspire resource <name> restart` |
+| Re-run `dotnet build` with Aspire still up | `aspire stop` first; prefer resource commands/watch/HMR/debug workflow |
 
 ### What Changed Determines the Action
 
 | What Changed | Action | Command |
 |--------------|--------|---------|
 | AppHost project (Program.cs, .csproj) | Full restart | `aspire stop` → edit → `aspire start` |
-| .NET service project (.cs files) | Rebuild resource | `aspire resource <name> restart` |
-| JavaScript/Python/Go files | No action | File watchers handle it automatically |
+| .NET service project (.cs files) | Rebuild/refresh resource if exposed | `aspire resource <name> rebuild` or the resource's IDE/watch workflow |
+| JavaScript/Python/Go files | Usually no Aspire action | File watchers/HMR handle it automatically |
 | Configuration (appsettings.json) | Check first | `aspire describe` then decide |
 
 ---
 
-## Rule 4: ALWAYS `aspire stop` — NEVER Leave Processes Running
+## Rule 4: Use `aspire stop` For Cleanup — NEVER Leave Unwanted Processes Running
 
 ### Why Cleanup Matters
 
@@ -161,7 +161,7 @@ Aspire orchestrates multiple processes (your services, databases, message broker
 ### Correct Pattern
 
 ```bash
-# ✅ Always stop when done
+# ✅ Stop when cleanup is requested or the user did not ask to keep it running
 aspire stop
 
 # ✅ Verify everything stopped
@@ -214,8 +214,8 @@ aspire describe --format Json | jq '.resources[] | select(.state == "Running")'
 
 ### Hidden Resources and `--include-hidden`
 
-Starting in Aspire 13.3, `aspire ps`, `aspire describe`, and other CLI commands **filter out
-resources marked as hidden in the AppHost** (proxies, helper containers, migration jobs, etc.).
+`aspire ps`, `aspire describe`, and other CLI commands **filter out resources marked as
+hidden in the AppHost** (proxies, helper containers, migration jobs, etc.).
 This filtering is correct for normal workflows — agents and humans see only the resources they
 care about, not the implementation scaffolding.
 
@@ -268,5 +268,5 @@ aspire agent init --non-interactive
 | Used `dotnet build` and got file locks | `aspire stop`, wait 2s, then `dotnet build` or `aspire start` |
 | Used `curl` polling and got false results | `aspire wait <resource>`, then use endpoints from `aspire describe` |
 | Left Aspire running, now ports conflict | `aspire stop`, then `aspire start` |
-| Resource won't start after code change | Fix code, `aspire resource <name> restart` |
+| Resource won't start after code change | Fix code, then use resource commands/watch/HMR/debug workflow or restart the AppHost if the AppHost model changed |
 | Nothing works, environment broken | `aspire doctor` to diagnose, then follow recommendations |

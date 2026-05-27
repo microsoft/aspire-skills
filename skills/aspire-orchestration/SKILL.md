@@ -5,9 +5,10 @@ description: >-
   port conflicts, and orphaned processes. WHEN: "start my Aspire app", "aspire start",
   "aspire stop", "aspire wait", "restart the API service", "file lock error",
   "MSB3491", "CS2012", "port already in use", "upgrade Aspire CLI", "aspire update --self",
-  "proxies missing in aspire ps", "--include-hidden". INVOKES: aspire CLI (start, stop,
-  wait, ps, resource, add, init, doctor, update). FOR SINGLE OPERATIONS: Run the aspire
-  CLI command directly.
+  "proxies missing in aspire ps", "--include-hidden", "aspire integration list",
+  "aspire integration search", "default watch", "hot reload". INVOKES: aspire CLI
+  (start, stop, wait, ps, resource, integration, add, init, doctor, update, restore).
+  FOR SINGLE OPERATIONS: Run the aspire CLI command directly.
 license: MIT
 metadata:
   author: Microsoft
@@ -41,7 +42,7 @@ Activate when ANY signal is present:
 | TypeScript AppHost | `apphost.ts` file in project | ✅ Definitive |
 | Aspire config | `aspire.config.json` in project root | High |
 | Aspire settings | `.aspire/` directory present | High |
-| Modules directory | `.modules/` directory present | High |
+| Generated TS modules | `.aspire/modules/` directory present | High |
 | Service defaults | `Aspire.ServiceDefaults` in project references | Medium |
 
 See [detection.md](references/detection.md) for detailed fingerprinting.
@@ -52,7 +53,7 @@ See [detection.md](references/detection.md) for detailed fingerprinting.
 |-----------|-------------|------------|
 | Start an Aspire app | `aspire start` | `dotnet run` on AppHost |
 | Wait for resource ready | `aspire wait <resource>` | `curl` / HTTP polling loops |
-| Code changed in a resource | `aspire resource <name> restart` | `dotnet build` against locked files |
+| Code changed in a resource | Prefer resource commands, runtime watch/HMR, dashboard actions, or IDE-managed debugging | `dotnet build` against locked files |
 | Task complete | `aspire stop` | Leave processes running |
 | Check resource status | `aspire describe` / `aspire ps` | Manual process inspection |
 | Working in git worktree | `aspire start --isolated` | `aspire start` without isolation |
@@ -70,8 +71,8 @@ See [safety-guardrails.md](references/safety-guardrails.md) for detailed rules a
 2. `aspire start` (or `aspire start --isolated` in worktrees)
 3. `aspire wait <resource>` before interacting with any resource
 4. `aspire describe` to inspect state, then work
-5. `aspire resource <name> restart` after code changes
-6. `aspire stop` when task is complete
+5. If AppHost code changed, rerun `aspire start`; if only one resource changed, prefer the resource's commands/watch/HMR/debug workflow
+6. `aspire stop` when cleanup is explicitly requested or needed to release locks/ports
 
 ## Quick Reference
 
@@ -81,15 +82,17 @@ See [safety-guardrails.md](references/safety-guardrails.md) for detailed rules a
 | Start app (human) | `aspire run` (foreground, dashboard) |
 | Stop app | `aspire stop` |
 | Wait for resource | `aspire wait <resource>` |
-| Check status | `aspire ps` or `aspire describe` (13.3+ also shows the dashboard URL in `aspire ps`) |
+| Check status | `aspire ps` or `aspire describe` |
 | Show hidden resources (proxies, helpers, migrations) | `aspire ps --include-hidden` / `aspire describe --include-hidden` |
-| Restart one resource | `aspire resource <name> restart` |
+| Resource operation | `aspire resource <resource-name> <command>` such as `stop`, `start`, or `rebuild` when exposed |
 | Create new project | `aspire new aspire-starter` |
 | Add Aspire to existing | `aspire init` (then hand off to `aspireify` skill for wiring) |
 | Add integration | `aspire add <package>` |
+| Discover integrations | `aspire integration list --format Json` / `aspire integration search <query> --format Json` |
 | Upgrade the CLI itself | `aspire update --self` |
 | Update project package refs | `aspire update` (modifies project files — get user approval) |
 | Restore generated files | `aspire restore` |
+| Environment maintenance | `aspire cache clear`, `aspire certs trust`, `aspire certs clean` |
 | Diagnose environment | `aspire doctor` |
 | Machine-readable output | `--format Json` (supported: `ps`, `describe`, `start`) |
 | Look up API reference | `aspire docs api search <query> --language csharp\|typescript` |
@@ -103,7 +106,7 @@ See [safety-guardrails.md](references/safety-guardrails.md) for detailed rules a
 | **File lock errors during build (`MSB3491`, `CS2012`)** | **Aspire is running and holds locks on `bin/`, `obj/`, and assemblies.** | **Run `aspire stop` first**, then rebuild or `aspire start`. Do NOT conclude the project has a permanent build failure. |
 | "Port already in use" | Previous instance running | `aspire stop`, then `aspire start` |
 | Resource not found | App not started or name wrong | `aspire ps` to check |
-| Build errors in resource | Code error, not Aspire issue | Fix code, `aspire resource <name> restart` |
+| Build errors in resource | Code error, not Aspire issue | Fix code, then use resource commands/watch/HMR/debug workflow or rerun `aspire start` if AppHost code changed |
 | Environment issues | Missing SDK or tools | `aspire doctor` to diagnose |
 | JSON parse failure from `aspire start` | Mixed human/JSON output ([#15843](https://github.com/microsoft/aspire/issues/15843)) | Strip non-JSON lines before parsing |
 | `aspire wait` rejects name | Use `displayName` not `name` ([#15842](https://github.com/microsoft/aspire/issues/15842)) | Use `displayName` from `aspire ps --format Json` |
@@ -122,8 +125,8 @@ The recovery is always the same:
 ```bash
 # ✅ Correct recovery sequence
 aspire stop              # release the locks
-# ... then either rebuild ...
-aspire resource <name> restart   # if Aspire is still up and only one resource changed
+# ... then either rebuild / restart one resource if the resource exposes commands ...
+aspire resource <name> rebuild   # example: C# project resource with rebuild command
 # ... or restart the whole AppHost ...
 aspire start             # if AppHost code changed or Aspire was already stopped
 ```
@@ -131,7 +134,7 @@ aspire start             # if AppHost code changed or Aspire was already stopped
 | ❌ NEVER do | ✅ ALWAYS do |
 |------------|-------------|
 | Tell the user the project has a permanent build failure | Recognize the lock as Aspire holding outputs and run `aspire stop` |
-| `dotnet build` again with locks held | `aspire stop` first, then `dotnet build` (or prefer `aspire resource <name> restart`) |
+| `dotnet build` again with locks held | `aspire stop` first, then `dotnet build` (or prefer resource commands/watch/HMR/debug workflow) |
 | Delete `bin/` / `obj/` to "fix" the lock | `aspire stop` — deletion may succeed but the next build relocks |
 | `pkill dotnet` or `kill <PID>` to free locks | `aspire stop` — clean shutdown via the CLI, no orphans |
 | Tell the user to "reboot" or "restart your machine" | `aspire stop` — single command, instant fix |
@@ -152,23 +155,24 @@ The same rule applies to any "file in use", "cannot access the file", or
 | Logs, traces, metrics, dashboard, `aspire dashboard run` | → `aspire-monitoring` skill |
 | Deployed app diagnostics | → `azure-diagnostics` skill (azure-skills) |
 
-## Environment Variables (Aspire 13.3)
+## Runtime Settings And Environment
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `ASPIRE_ENABLE_CONTAINER_TUNNEL` | `true` | Container tunnel is **on by default** in 13.3 — provides uniform host connectivity across Docker Desktop, Docker Engine, and Podman. Set to `false` to opt out. |
+| `ASPIRE_ENABLE_CONTAINER_TUNNEL` | `true` | Container tunnel provides uniform host connectivity across Docker Desktop, Docker Engine, and Podman. Set to `false` to opt out. |
 | `ASPIRE_ENVIRONMENT` | unset | Selects the environment-specific config profile — controls which `appsettings.{environment}.json` is loaded and which environment is reported in dashboard telemetry. |
-| `ASPIRE_DCP_USE_DEVELOPER_CERTIFICATE` | `true` | The Aspire trusted developer certificate is now used by DCP on Windows (replaces the ephemeral cert DCP previously generated). Set to `false` to opt out. |
+| `ASPIRE_DCP_USE_DEVELOPER_CERTIFICATE` | `true` | The Aspire trusted developer certificate is used by DCP on Windows. Set to `false` to opt out. |
+| `features.defaultWatchEnabled` | false unless configured | Enables Aspire default watch for supported C# and TypeScript AppHosts. Do not treat this as per-resource rebuild, restart, or hot reload for resource source changes. |
 
 ## TypeScript AppHost Note
 
 Detection covers TS AppHosts (`apphost.ts`), but **all TS AppHost authoring is delegated to `aspireify`**.
-Key 13.3 rules to apply when handing off:
+Current rules to apply when handing off:
 
 | Rule | Why |
 |------|-----|
-| Prefer unified `withEnvironment(name, value)` over deprecated per-kind helpers (`withEnvironmentEndpoint`, `withEnvironmentParameter`, `withEnvironmentConnectionString`, `withEnvironmentExpression`, `withEnvironmentFromOutput`, `withEnvironmentFromKeyVaultSecret`) | Per-kind helpers are `@deprecated` in 13.3 — single API now handles all value types |
-| Never edit `.modules/` directly | Generated; use `aspire add <package>` to regenerate |
+| Prefer unified `withEnvironment(name, value)` over deprecated per-kind helpers (`withEnvironmentEndpoint`, `withEnvironmentParameter`, `withEnvironmentConnectionString`, `withEnvironmentExpression`, `withEnvironmentFromOutput`, `withEnvironmentFromKeyVaultSecret`) | Per-kind helpers are deprecated — single API now handles all value types |
+| Never edit `.aspire/modules/` directly | Generated; use `aspire add <package>` to regenerate and `aspire restore` to recover missing files |
 | Use `aspire docs api search <query> --language typescript` for API lookup | TS surface differs from C# |
 
 ## Skill Routing — In-Plugin Sibling Skills
@@ -187,7 +191,7 @@ C# AppHost editing, TS AppHost editing, Playwright handoff, investigation workfl
 Safety guardrails from this plugin ALWAYS apply.
 
 If `.agents/skills/aspireify/SKILL.md` exists project-locally (installed by `aspire init` in
-13.3+), **warn the user** that a project-local aspireify skill is present and **defer to it**
+current Aspire), **warn the user** that a project-local aspireify skill is present and **defer to it**
 for AppHost wiring instead of the in-plugin sibling. Same precedence rule as the project-local
 `aspire` skill above: project-local wins, plugin guardrails still apply.
 
@@ -197,3 +201,4 @@ for AppHost wiring instead of the in-plugin sibling. Same precedence rule as the
 - [detection.md](references/detection.md) — Project fingerprinting
 - [app-commands.md](references/app-commands.md) — App lifecycle and bootstrap commands
 - [resource-management.md](references/resource-management.md) — Resource wait, restart, and operations
+- [agent-workflows.md](references/agent-workflows.md) — Common agent investigation, integration, TypeScript, and handoff workflows
