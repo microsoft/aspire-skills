@@ -38,6 +38,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ### Added
 - Added a release bundle generator and `publish.yml` workflow for the verified
   `aspire-skills-v<version>.tgz` GitHub release asset consumed by `aspire agent init`.
+- Restored upstream migration reference content for AppHost wiring, Docker Compose,
+  full-solution AppHosts, JavaScript workspaces, OpenTelemetry, Playwright handoff,
+  agent workflows, and detailed monitoring/search/display guidance.
 
 ## [0.0.1] - Unreleased
 

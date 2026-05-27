@@ -160,6 +160,14 @@ See [references/csharp-authoring.md](references/csharp-authoring.md) and
 5. DEACTIVATE → confirm clean start, hand off to aspire-orchestration
 ```
 
+For the detailed, upstream-parity workflow, load these references before editing:
+
+- [apphost-wiring.md](references/apphost-wiring.md) — full AppHost wiring workflow, API lookup, endpoint/parameter patterns, validation, solution updates, and cleanup.
+- [docker-compose.md](references/docker-compose.md) — docker-compose migration, profiles, image mapping, ports, volumes, and `depends_on`.
+- [full-solution-apphosts.md](references/full-solution-apphosts.md) — large solution triage, mixed SDK boundaries, solution membership, ServiceDefaults placement, and legacy host migration.
+- [javascript-apps.md](references/javascript-apps.md) — JavaScript resource selection, workspace/monorepo package-manager handling, ports, scripts, and TS AppHost package config.
+- [opentelemetry.md](references/opentelemetry.md) — optional Node.js, Python, and Go OpenTelemetry wiring for non-.NET services.
+
 ### 1. Scan
 
 Walk the repo and inventory:
@@ -298,8 +306,22 @@ Full flow in [references/validation.md](references/validation.md).
 | Logs, traces, metrics, dashboard, browser log inspection | → `aspire-monitoring` skill |
 | Deployed (Azure/AKS) app diagnostics | → `azure-diagnostics` skill (azure-skills) |
 
+## Key Rules
+
+- **Never overwrite existing files** — always augment or merge.
+- **Ask before modifying service code**, especially OpenTelemetry and ServiceDefaults injection.
+- **Respect existing project structure** — do not reorganize the repo.
+- **If stuck, use `aspire doctor`** to diagnose environment issues.
+- **Never hardcode URLs in `WithEnvironment` / `withEnvironment`** — pass endpoint references such as `api.GetEndpoint("http")` or `api.getEndpoint('http')` instead of string literals.
+- **Never use `WithUrlForEndpoint` / `withUrlForEndpoint` to set `dev.localhost` URLs** — that API is only for dashboard display labels; `dev.localhost` belongs in AppHost launch/profile configuration.
+
 ## References
 
+- [apphost-wiring.md](references/apphost-wiring.md) — Detailed AppHost wiring workflow and API lookup patterns
+- [docker-compose.md](references/docker-compose.md) — Docker Compose migration patterns
+- [full-solution-apphosts.md](references/full-solution-apphosts.md) — Large/full-solution AppHost guidance
+- [javascript-apps.md](references/javascript-apps.md) — JavaScript/TypeScript app and workspace handling
+- [opentelemetry.md](references/opentelemetry.md) — Non-.NET OpenTelemetry setup
 - [scan-and-propose.md](references/scan-and-propose.md) — Repo scan heuristics + integration catalog
 - [csharp-authoring.md](references/csharp-authoring.md) — C# AppHost patterns
 - [typescript-authoring.md](references/typescript-authoring.md) — TS AppHost patterns + parity APIs

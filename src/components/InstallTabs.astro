@@ -79,6 +79,20 @@ const { surfaces } = Astro.props;
             </li>
           ))}
         </ul>
+
+        {surface.links && surface.links.length > 0 && (
+          <div class="mt-4 flex flex-wrap gap-2">
+            {surface.links.map((link) => (
+              <a
+                class="inline-flex items-center gap-1.5 rounded-lg border border-slate-950/10 bg-white px-3 py-2 text-sm font-semibold text-aspire-black transition hover:-translate-y-0.5 hover:border-slate-950/25 hover:bg-slate-50 dark:border-white/15 dark:bg-white/[0.04] dark:text-white dark:hover:bg-white/[0.08]"
+                href={link.href}
+              >
+                <Icon name="lucide:book-open" class="h-4 w-4" />
+                <span>{link.label}</span>
+              </a>
+            ))}
+          </div>
+        )}
       </div>
     ))}
   </div>

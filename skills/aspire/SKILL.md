@@ -150,3 +150,10 @@ Either install method works. The `dotnet tool install` path produces a NativeAOT
   `--log-level`, dashboard MCP removal, `NameOutput` → `NameOutputReference`,
   `AddAndPublishPromptAgent` removal, TS `withEnvironment*` deprecation, and the full
   13.2 → 13.3 migration checklist).
+- [../aspire-orchestration/references/agent-workflows.md](../aspire-orchestration/references/agent-workflows.md) — Common agent workflows: worktrees, code changes, investigation, integrations, TypeScript generated APIs, secrets, deployment, and Playwright handoff.
+- [../aspire-orchestration/references/app-commands.md](../aspire-orchestration/references/app-commands.md) — App lifecycle, bootstrap, update, restore, docs, and integration discovery commands.
+- [../aspire-orchestration/references/resource-management.md](../aspire-orchestration/references/resource-management.md) — Resource wait and resource-command guidance.
+- [../aspire-monitoring/references/monitoring.md](../aspire-monitoring/references/monitoring.md) — App state, logs, traces, search filtering, dashboard links, and export workflows.
+- [../aspire-monitoring/references/playwright-handoff.md](../aspire-monitoring/references/playwright-handoff.md) — Playwright handoff after Aspire endpoint discovery.
+- [../aspire-deployment/SKILL.md](../aspire-deployment/SKILL.md) — Deployment and pipeline-step workflows.
+- [../aspireify/references/apphost-wiring.md](../aspireify/references/apphost-wiring.md) — C# and TypeScript AppHost API lookup and wiring patterns.

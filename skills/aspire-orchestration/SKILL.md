@@ -201,3 +201,4 @@ for AppHost wiring instead of the in-plugin sibling. Same precedence rule as the
 - [detection.md](references/detection.md) — Project fingerprinting
 - [app-commands.md](references/app-commands.md) — App lifecycle and bootstrap commands
 - [resource-management.md](references/resource-management.md) — Resource wait, restart, and operations
+- [agent-workflows.md](references/agent-workflows.md) — Common agent investigation, integration, TypeScript, and handoff workflows

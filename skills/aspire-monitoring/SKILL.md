@@ -194,3 +194,4 @@ If `.agents/skills/aspire/SKILL.md` exists (from `aspire agent init`), see its
 
 - [diagnostics-bridge.md](references/diagnostics-bridge.md) — Local vs deployed routing detail
 - [monitoring.md](references/monitoring.md) — Telemetry inspection and export patterns
+- [playwright-handoff.md](references/playwright-handoff.md) — Find the correct Aspire frontend URL before browser testing
