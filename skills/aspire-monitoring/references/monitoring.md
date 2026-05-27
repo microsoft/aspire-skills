@@ -48,7 +48,7 @@ Keep these points in mind:
 
 ## Filtering
 
-The `--search` option filters output by matching text against log/span content.
+The `--search` option filters output by matching text against log content and trace/span content.
 
 - Multiple words are AND'd — all fragments must match.
 - Use `"quoted phrases"` for multi-word fragments: `--search "\"connection timeout\""`.
