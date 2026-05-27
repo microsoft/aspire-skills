@@ -312,7 +312,7 @@ function getInstallSurfaces(pluginVersion: string, marketplaceVersion: string): 
       links: [
         {
           label: "Aspire CLI command reference",
-          href: aspireCliDocsRoot
+          href: `${aspireCliDocsRoot}/aspire/`
         },
         {
           label: "aspire agent init reference",
