@@ -17,7 +17,24 @@ It helps agents recognize Aspire workspaces, use the Aspire CLI correctly, and r
 
 ## Install
 
-Choose the command for your agent host:
+Choose the path that matches your agent host.
+
+### Aspire CLI
+
+Aspire's first-party agent setup installs Aspire skill files and MCP configuration into detected agent environments.
+
+```bash
+# Create a new Aspire app and opt into agent guidance when prompted
+aspire new
+
+# Or add Aspire to an existing repo and opt into agent guidance when prompted
+aspire init
+
+# Add, update, or reconfigure Aspire guidance in an existing workspace
+aspire agent init
+```
+
+### Agent plugins and extensions
 
 ```bash
 # GitHub Copilot CLI
@@ -39,13 +56,34 @@ gemini extensions install https://github.com/microsoft/aspire-skills
 # Cursor CLI
 mkdir -p ~/.cursor/skills
 git clone https://github.com/microsoft/aspire-skills ~/.cursor/skills/aspire-skills
+agent
 
 # OpenCode
 apm install microsoft/aspire-skills
+opencode
 
-# skills.sh
+# Ollama + Copilot CLI
+ollama launch copilot
+copilot plugin marketplace add microsoft/aspire-skills
+copilot plugin install aspire@aspire-skills
+```
+
+### skills.sh via NPX
+
+Use the Skills-compatible installer when your agent host supports skills.sh-managed skill locations.
+
+```bash
 npx skills add microsoft/aspire-skills
 ```
+
+For hosts that need an explicit skills directory and target agent, install from the `skills/` folder:
+
+```bash
+npx skills add https://github.com/microsoft/aspire-skills/tree/main/skills \
+  -a github-copilot -g -y
+```
+
+In that command, `-a github-copilot` selects the target agent, `-g` installs globally, and `-y` accepts prompts.
 
 ## Repository layout
 
