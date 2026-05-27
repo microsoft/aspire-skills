@@ -29,7 +29,9 @@ aspire otel traces [resource] --format Json
 aspire otel spans [resource] --format Json
 aspire otel logs --trace-id <id> --format Json
 aspire otel logs [resource] --search "connection timeout"
-aspire otel spans [resource] --search "/api/products"
+aspire otel traces [resource] --search "/api/products"
+aspire otel logs [resource] --search "severity:error"
+aspire otel spans [resource] --search "@http.method:GET duration:>100"
 aspire logs [resource]
 aspire logs [resource] --search "error"
 ```
@@ -43,6 +45,43 @@ Keep these points in mind:
 - Prefer `--format Json` when another tool or script needs to consume the result, such as a Playwright handoff or endpoint extraction.
 - `[resource]` is optional. Include it to filter results to a single resource; omit it to see all resources.
 - `--search` can be combined with other options like `--format Json`, `--trace-id`, `--limit`, and resource filtering.
+
+## Filtering
+
+The `--search` option filters output by matching text against log content and trace/span content.
+
+- Multiple words are AND'd — all fragments must match.
+- Use `"quoted phrases"` for multi-word fragments: `--search "\"connection timeout\""`.
+- Qualifiers support quoted values: `--search "message:\"connection failed\""`.
+
+### Console Logs (`aspire logs --search`)
+
+Matches against log line text content and resource name. Only free-text is supported (no structured qualifiers).
+
+```bash
+aspire logs redis --search "timeout"
+aspire logs --follow --search "\"connection error\""
+```
+
+### Structured Telemetry (`aspire otel logs/traces/spans --search`)
+
+Supports free-text and structured qualifiers in a single query.
+
+**Free-text** matches against message, resource name, scope, trace/span IDs, severity/status, and all attribute keys/values.
+
+**Structured qualifiers** filter on specific fields with `key:value` syntax:
+
+- Log keys: `severity`, `resource`, `scope`, `message`, `trace-id`, `span-id`, `event`
+- Span/Trace keys: `name`, `resource`, `scope`, `status`, `kind`, `trace-id`, `span-id`, `duration`
+- Custom attributes: `@http.method:GET`, `@db.system:redis`
+- Negation: `-severity:debug`, `-@db.system:redis`
+- Comparison: `duration:>100`, `duration:>=50`
+
+```bash
+aspire otel logs --search "severity:error \"connection failed\""
+aspire otel spans --search "@http.method:GET duration:>100 status:error"
+aspire otel logs --search "resource:api -severity:debug"
+```
 
 ## Scenario: I Need A Sharable Diagnostics Bundle
 
