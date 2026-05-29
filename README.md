@@ -1,6 +1,6 @@
 # Aspire Skills
 
-Aspire Skills is a plugin and skill pack for AI coding agents working on .NET Aspire distributed applications.
+Aspire Skills is a plugin and skill pack for AI coding agents working on Aspire distributed applications.
 
 It helps agents recognize Aspire workspaces, use the Aspire CLI correctly, and route common work to focused skills instead of falling back to ad hoc `dotnet`, `curl`, Docker, or shell workflows.
 

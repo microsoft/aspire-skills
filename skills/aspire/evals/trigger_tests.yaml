@@ -16,8 +16,8 @@ should_trigger_prompts:
   - prompt: "How do I use the aspire CLI?"
     reason: "Direct aspire CLI reference"
     confidence: high
-  - prompt: "Add Redis to my cloud-native .NET Aspire app"
-    reason: "Cloud-native .NET integration is the Aspire workflow"
+  - prompt: "Add Redis to my cloud-native Aspire app"
+    reason: "Cloud-native integration is the Aspire workflow"
     confidence: high
   - prompt: "My apphost.ts file needs updating"
     reason: "TypeScript AppHost detection"
