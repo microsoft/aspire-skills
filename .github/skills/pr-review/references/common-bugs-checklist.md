@@ -93,9 +93,9 @@ routing failures and silently degraded agent behavior.
       paraphrase them.
 - [ ] No mixing of `aspire` and `azd` mid-paragraph (`azd` is forbidden in this repo's
       guidance — confirm context).
-- [ ] No stale references to Aspire ≤13.2 surfaces (`aspire publish manifest`,
+- [ ] No stale references to superseded Aspire surfaces (`aspire publish manifest`,
       removed deployment templates, etc.) — see
-      `skills/aspire/references/aspire-13-3-breaking-changes.md`.
+      `skills/aspire/references/aspire-breaking-changes.md`.
 - [ ] No `dotnet new aspire-*` templates (removed in 13.3 in favor of `aspire new`).
 - [ ] CLI snippets include `--non-interactive` for agent-facing flows.
 - [ ] TypeScript AppHost snippets do not edit `.aspire/modules/`.
