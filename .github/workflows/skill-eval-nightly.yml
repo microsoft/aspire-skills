@@ -37,6 +37,7 @@ jobs:
         run: |
           vally eval \
             --suite nightly \
+            --context-dir evals \
             --output-dir ./results
 
       - name: Upload trajectories

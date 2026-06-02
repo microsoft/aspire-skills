@@ -125,19 +125,19 @@ The repo ships three GitHub Actions workflows that drive `vally` automatically:
 | Workflow | Trigger | Command |
 |----------|---------|---------|
 | [`skill-lint.yml`](../.github/workflows/skill-lint.yml) | PR (SKILL.md / *.yaml / `.vally.yaml`) | `vally lint .` + per-spec `vally lint --eval-spec <spec> --strict` |
-| [`skill-eval.yml`](../.github/workflows/skill-eval.yml) | PR (SKILL.md / eval.yaml / task yamls / `.vally.yaml`) | `vally eval --suite ci-gate --output-dir ./results` |
-| [`skill-eval-nightly.yml`](../.github/workflows/skill-eval-nightly.yml) | `cron: "0 6 * * 0"` (Sun 06:00 UTC) + `workflow_dispatch` | `vally eval --suite nightly --output-dir ./results` |
+| [`skill-eval.yml`](../.github/workflows/skill-eval.yml) | PR (SKILL.md / eval.yaml / task yamls / `.vally.yaml`) | `vally eval --suite ci-gate --context-dir evals --output-dir ./results` |
+| [`skill-eval-nightly.yml`](../.github/workflows/skill-eval-nightly.yml) | `cron: "0 6 * * 0"` (Sun 06:00 UTC) + `workflow_dispatch` | `vally eval --suite nightly --context-dir evals --output-dir ./results` |
 
-The suites are declared at the repo root in [`.vally.yaml`](../.vally.yaml):
+The suites are declared at the repo root in [`.vally.yaml`](../.vally.yaml) and filter on the priority **tags** that every task carries (`p0` / `p1` / `p2`):
 
 ```yaml
 suites:
   ci-gate:
     filter:
-      priority: [p0, p1]
+      tags: [p0, p1]
   nightly:
     filter:
-      priority: [p0, p1, p2]
+      tags: [p0, p1, p2]
 ```
 
 For ad-hoc CI scripts:

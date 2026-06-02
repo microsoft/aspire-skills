@@ -41,6 +41,7 @@ jobs:
         run: |
           vally eval \
             --suite ci-gate \
+            --context-dir evals \
             --output-dir ./results
 
       - name: Upload trajectories
