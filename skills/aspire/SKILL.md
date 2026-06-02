@@ -46,8 +46,8 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 ## Default Workflow
 
 0. **Bootstrap branch** — if **no AppHost exists** in the repo, route to
-   [`aspire-init`](../aspire-init/SKILL.md) for the skeleton drop. If an AppHost stub exists
-   but is **unwired** (no resources declared), route to [`aspireify`](../aspireify/SKILL.md).
+   [`aspire-init`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-init/SKILL.md) for the skeleton drop. If an AppHost stub exists
+   but is **unwired** (no resources declared), route to [`aspireify`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md).
    Only continue with the steps below once a wired AppHost is present.
 1. Confirm workspace is Aspire — identify the AppHost
 2. `aspire start` (or `aspire start --isolated` in worktrees or whenever shared local state is risky)
@@ -75,12 +75,12 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 
 | Task | Route To |
 |------|----------|
-| Start, stop, wait, restart, rebuild | → [aspire-orchestration](../aspire-orchestration/SKILL.md) |
-| Create a new Aspire project from a template (`aspire new`) | → [aspire-init](../aspire-init/SKILL.md) (in-plugin) |
-| Add Aspire to an existing repo (`aspire init`, drop skeleton) | → [aspire-init](../aspire-init/SKILL.md) (in-plugin) |
-| Wire AppHost / scaffold resource graph / add integrations after `aspire init` | → [aspireify](../aspireify/SKILL.md) (in-plugin) |
-| Deploy, publish, destroy, pipeline steps | → [aspire-deployment](../aspire-deployment/SKILL.md) |
-| Logs, traces, metrics, dashboard, browser logs | → [aspire-monitoring](../aspire-monitoring/SKILL.md) |
+| Start, stop, wait, restart, rebuild | → [aspire-orchestration](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-orchestration/SKILL.md) |
+| Create a new Aspire project from a template (`aspire new`) | → [aspire-init](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-init/SKILL.md) (in-plugin) |
+| Add Aspire to an existing repo (`aspire init`, drop skeleton) | → [aspire-init](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-init/SKILL.md) (in-plugin) |
+| Wire AppHost / scaffold resource graph / add integrations after `aspire init` | → [aspireify](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md) (in-plugin) |
+| Deploy, publish, destroy, pipeline steps | → [aspire-deployment](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-deployment/SKILL.md) |
+| Logs, traces, metrics, dashboard, browser logs | → [aspire-monitoring](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/SKILL.md) |
 | Deployed app monitoring (Azure) | → `azure-diagnostics` skill (azure-skills plugin) |
 
 ## Sub-Skills
@@ -150,10 +150,10 @@ Either install method works. The `dotnet tool install` path produces a NativeAOT
   `--log-level`, dashboard MCP removal, `NameOutput` → `NameOutputReference`,
   `AddAndPublishPromptAgent` removal, TS `withEnvironment*` deprecation, and the full
   13.2 → 13.3 migration checklist).
-- [../aspire-orchestration/references/agent-workflows.md](../aspire-orchestration/references/agent-workflows.md) — Common agent workflows: worktrees, code changes, investigation, integrations, TypeScript generated APIs, secrets, deployment, and Playwright handoff.
-- [../aspire-orchestration/references/app-commands.md](../aspire-orchestration/references/app-commands.md) — App lifecycle, bootstrap, update, restore, docs, and integration discovery commands.
-- [../aspire-orchestration/references/resource-management.md](../aspire-orchestration/references/resource-management.md) — Resource wait and resource-command guidance.
-- [../aspire-monitoring/references/monitoring.md](../aspire-monitoring/references/monitoring.md) — App state, logs, traces, search filtering, dashboard links, and export workflows.
-- [../aspire-monitoring/references/playwright-handoff.md](../aspire-monitoring/references/playwright-handoff.md) — Playwright handoff after Aspire endpoint discovery.
-- [../aspire-deployment/SKILL.md](../aspire-deployment/SKILL.md) — Deployment and pipeline-step workflows.
-- [../aspireify/references/apphost-wiring.md](../aspireify/references/apphost-wiring.md) — C# and TypeScript AppHost API lookup and wiring patterns.
+- [aspire-orchestration/references/agent-workflows.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-orchestration/references/agent-workflows.md) — Common agent workflows: worktrees, code changes, investigation, integrations, TypeScript generated APIs, secrets, deployment, and Playwright handoff.
+- [aspire-orchestration/references/app-commands.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-orchestration/references/app-commands.md) — App lifecycle, bootstrap, update, restore, docs, and integration discovery commands.
+- [aspire-orchestration/references/resource-management.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-orchestration/references/resource-management.md) — Resource wait and resource-command guidance.
+- [aspire-monitoring/references/monitoring.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/references/monitoring.md) — App state, logs, traces, search filtering, dashboard links, and export workflows.
+- [aspire-monitoring/references/playwright-handoff.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/references/playwright-handoff.md) — Playwright handoff after Aspire endpoint discovery.
+- [aspire-deployment/SKILL.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-deployment/SKILL.md) — Deployment and pipeline-step workflows.
+- [aspireify/references/apphost-wiring.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/references/apphost-wiring.md) — C# and TypeScript AppHost API lookup and wiring patterns.

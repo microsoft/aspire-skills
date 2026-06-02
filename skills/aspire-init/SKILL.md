@@ -22,7 +22,7 @@ metadata:
 
 > **First-run only.** This skill owns the skeleton drop and template choice for repositories
 > that do not yet have an Aspire AppHost. Once the skeleton is in place, hand off to
-> [`aspireify`](../aspireify/SKILL.md) for the actual resource wiring.
+> [`aspireify`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md) for the actual resource wiring.
 
 ## Prerequisites
 
@@ -50,8 +50,8 @@ of the following before running `aspire init`:
 | User intent | Explicit "add Aspire", "scaffold Aspire", "aspire init" | OK to init |
 
 If **any** AppHost signal is already present, **do not run `aspire init`**. Route to
-[`aspireify`](../aspireify/SKILL.md) (re-wire) or
-[`aspire-orchestration`](../aspire-orchestration/SKILL.md) (lifecycle).
+[`aspireify`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md) (re-wire) or
+[`aspire-orchestration`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-orchestration/SKILL.md) (lifecycle).
 
 ## Decision: `aspire new` vs `aspire init`
 
@@ -77,7 +77,7 @@ For brand-new projects in an empty or non-existent directory:
    aspire new aspire-starter --name MyApp --output ./MyApp --non-interactive
    ```
 4. The new directory is fully wired by the template — **no aspireify handoff needed**.
-5. Route to [`aspire-orchestration`](../aspire-orchestration/SKILL.md) for first run
+5. Route to [`aspire-orchestration`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-orchestration/SKILL.md) for first run
    (`aspire start`).
 
 ## Workflow B — `aspire init` (existing repo)
@@ -101,7 +101,7 @@ and need an AppHost added alongside them:
 4. **Hand off to `aspireify`** — `aspire init` does **not** wire resources, projects, or
    integrations on its own.
 5. After `aspireify` finishes wiring, validate via `aspire start`
-   ([`aspire-orchestration`](../aspire-orchestration/SKILL.md)).
+   ([`aspire-orchestration`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-orchestration/SKILL.md)).
 
 See [references/init-workflow.md](references/init-workflow.md) for the full sequence
 including what `aspire.config.json` contains and what to do if `aspire init` fails partway.

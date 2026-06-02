@@ -170,6 +170,28 @@ The workflow's default `secrets.GITHUB_TOKEN` is the wrong token — it has repo
    - Value: the token from step 1
 3. Optionally promote to a **GitHub Environment** (e.g. `aspire-skills-evals`) with required reviewers and protected-branch policy for an extra approval gate — see the [`Azure/azure-functions-skills` setup](https://github.com/Azure/azure-functions-skills/blob/main/evals/README.md#ci-setup--repository--azure-side) for a reference pattern.
 
+## Pending eval-content migration
+
+The current per-skill `eval.yaml` files and `tasks/*.yaml` files are still in the **legacy waza schema**. Vally's eval validator (`vally lint --eval-spec ... --strict`) **rejects them** because vally uses an incompatible structure:
+
+| Concept | Waza (current content) | Vally (target) |
+|---------|------------------------|----------------|
+| Task list | `tasks: ["tasks/*.yaml"]` (glob) | `stimuli: [{...}, {...}]` (inline objects) |
+| Per-task prompt | `inputs.prompt` | `prompt` (top-level on the stimulus) |
+| Per-task fixtures | `inputs.files: [{path: "..."}]` | `environment.files: [{src, dest}]` |
+| Tags | `tags: [p0, routing]` (string array) | `tags: {priority: p0, area: routing}` (record) |
+| Output assertions | `expected.output_contains: [...]` | `graders: [{type: text, config: {contains: [...]}}]` |
+| Aggregate scoring | `metrics: [{name, weight, threshold}]` | `scoring: {weights: {...}, threshold: N}` |
+| Trial count | `config.trials_per_task: 3` | `config.runs: 3` |
+| Timeout | `config.timeout_seconds: 120` | `config.timeout: "120s"` |
+
+Until this migration is done:
+
+- **`skill-lint.yml` → Validate eval specs** is set to `continue-on-error: true` and emits a warning annotation per failing spec, so PRs aren't blocked while the migration is in progress. The diagnostics are still visible in the run UI and step summary.
+- **`skill-eval.yml` → Run CI gate evals** and **`skill-eval-nightly.yml` → Run nightly evals** will also fail once `COPILOT_GITHUB_TOKEN` is provisioned, for the same schema-mismatch reason. They currently soft-skip on the missing secret, so this is masked.
+
+The migration is mechanical but touches every eval file (6 specs + 54 task files). It should be done in a dedicated follow-up PR with the entire suite re-validated end-to-end after the rewrite.
+
 ### Behavior when the secret is missing
 
 - `skill-eval.yml` and `skill-eval-nightly.yml` **soft-skip** with a `::warning::` annotation and a `$GITHUB_STEP_SUMMARY` block pointing back at this section. The job stays green so a missing-secret state never blocks merges or paints scheduled runs red — but the warning + summary are highly visible in the PR / run UI until a maintainer provisions the secret.

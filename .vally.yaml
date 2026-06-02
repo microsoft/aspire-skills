@@ -1,3 +1,9 @@
+paths:
+  # Limit lint / discovery to the shipped plugin directory.
+  # Internal author skills under .github/skills/ (e.g. pr-review) are
+  # intentionally out of plugin scope — see their own SKILL.md headers.
+  skills: skills
+
 suites:
   ci-gate:
     description: "PR gate — p0 + p1 priority tasks"
