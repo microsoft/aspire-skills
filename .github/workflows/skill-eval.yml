@@ -21,6 +21,11 @@ jobs:
   eval:
     name: Run ci-gate eval suite
     runs-on: ubuntu-latest
+    # The Copilot token isn't available to fork PRs (GitHub doesn't expose
+    # secrets to workflows triggered by `pull_request` from a forked repo),
+    # so skip the model-backed eval on those. The skill-lint workflow still
+    # runs on every PR and gates wiring/schema issues without needing a token.
+    if: github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name
     steps:
       - name: Checkout
         # actions/checkout@v6.0.2
@@ -36,9 +41,18 @@ jobs:
         run: npm install -g @microsoft/vally-cli
 
       - name: Run CI gate evals
+        # COPILOT_GITHUB_TOKEN is read by @github/copilot-sdk (the vally
+        # `copilot-sdk` executor) to invoke Copilot models. It is scoped to
+        # this step only so checkout / install / upload never see it.
+        # The secret must be provisioned on the repo as `COPILOT_GITHUB_TOKEN`
+        # — see evals/README.md → "CI authentication" for setup.
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
         run: |
+          if [ -z "${COPILOT_GITHUB_TOKEN:-}" ]; then
+            echo "::error::COPILOT_GITHUB_TOKEN secret is not configured on this repo. See evals/README.md → CI authentication." >&2
+            exit 1
+          fi
           vally eval \
             --suite ci-gate \
             --context-dir evals \

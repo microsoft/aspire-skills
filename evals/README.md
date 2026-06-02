@@ -151,6 +151,30 @@ vally eval --discover --context-dir evals \
 
 `vally` exits non-zero if any task fails or trigger accuracy falls below its `eval.yaml` threshold. PRs gate on the `ci-gate` suite; the comprehensive `nightly` suite runs weekly.
 
+## CI authentication
+
+The `copilot-sdk` executor (declared by every `skills/<skill>/evals/eval.yaml`) invokes Copilot models via the [`@github/copilot-sdk`](https://www.npmjs.com/package/@github/copilot-sdk) package. That package reads the **`COPILOT_GITHUB_TOKEN`** environment variable.
+
+| Context | How auth is supplied |
+|---------|----------------------|
+| **Local** (`vally eval ...`) | Reuses your `gh auth login` session — no env var needed. |
+| **CI** (`skill-eval.yml`, `skill-eval-nightly.yml`) | Reads the **`COPILOT_GITHUB_TOKEN`** repository secret and exposes it as the env var of the same name **at step level only** (so checkout / install / artifact-upload steps never see it). |
+
+The workflow's default `secrets.GITHUB_TOKEN` is the wrong token — it has repo scopes but **no Copilot model access**.
+
+### One-time maintainer setup
+
+1. Mint a Copilot SDK token for the bot / service identity you want CI to run as.
+2. Repo → **Settings → Secrets and variables → Actions → New repository secret**
+   - Name: `COPILOT_GITHUB_TOKEN`
+   - Value: the token from step 1
+3. Optionally promote to a **GitHub Environment** (e.g. `aspire-skills-evals`) with required reviewers and protected-branch policy for an extra approval gate — see the [`Azure/azure-functions-skills` setup](https://github.com/Azure/azure-functions-skills/blob/main/evals/README.md#ci-setup--repository--azure-side) for a reference pattern.
+
+### Behavior when the secret is missing
+
+- `skill-eval.yml` and `skill-eval-nightly.yml` fail fast with an actionable error pointing back at this section.
+- `skill-eval.yml` additionally **skips** for PRs opened from forks (GitHub does not forward secrets to fork-triggered workflows), so external contributors get a green skip rather than a red failure they can't act on. `skill-lint.yml` still runs for forks since it needs no token.
+
 ## Interpreting results
 
 ```bash

@@ -32,9 +32,18 @@ jobs:
         run: npm install -g @microsoft/vally-cli
 
       - name: Run nightly evals
+        # COPILOT_GITHUB_TOKEN is read by @github/copilot-sdk (the vally
+        # `copilot-sdk` executor) to invoke Copilot models. It is scoped to
+        # this step only so checkout / install / upload never see it.
+        # The secret must be provisioned on the repo as `COPILOT_GITHUB_TOKEN`
+        # — see evals/README.md → "CI authentication" for setup.
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
         run: |
+          if [ -z "${COPILOT_GITHUB_TOKEN:-}" ]; then
+            echo "::error::COPILOT_GITHUB_TOKEN secret is not configured on this repo. See evals/README.md → CI authentication." >&2
+            exit 1
+          fi
           vally eval \
             --suite nightly \
             --context-dir evals \
