@@ -275,7 +275,7 @@ Concrete workflows worth copying (sources cited):
 |---|---|---|
 | `publish-to-marketplace.yml` | Cron + `workflow_dispatch` rsync from build to public skills repo, opens PR | [`GitHub-Copilot-for-Azure/.github/workflows/publish-to-marketplace.yml`](https://github.com/microsoft/GitHub-Copilot-for-Azure/blob/main/.github/workflows/publish-to-marketplace.yml) |
 | `pr.yml` | Token analysis (`tokens check` / `compare`), frontmatter validation, plugin version check | [`pr.yml`](https://github.com/microsoft/GitHub-Copilot-for-Azure/blob/main/.github/workflows/pr.yml) |
-| `eval.yml` | Runs `azd waza run evals/...` on PR | [`eval.yml`](https://github.com/microsoft/GitHub-Copilot-for-Azure/blob/main/.github/workflows/eval.yml) |
+| `eval.yml` | Runs `vally eval --suite ci-gate` on PR | [`eval.yml`](https://github.com/microsoft/GitHub-Copilot-for-Azure/blob/main/.github/workflows/eval.yml) |
 | `skill-factory.yml` | `workflow_dispatch` opens an issue assigned to `@copilot` to scaffold new skills | [`skill-factory.yml`](https://github.com/microsoft/GitHub-Copilot-for-Azure/blob/main/.github/workflows/skill-factory.yml) |
 | `pr-plugin-version-check.yml` | Enforces `version` is a placeholder on PRs (NBGV stamps real version at build) | [`pr-plugin-version-check.yml`](https://github.com/microsoft/GitHub-Copilot-for-Azure/blob/main/.github/workflows/pr-plugin-version-check.yml) |
 

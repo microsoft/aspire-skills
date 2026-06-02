@@ -1,0 +1,49 @@
+name: Skill Eval (nightly)
+
+on:
+  schedule:
+    # Sunday 06:00 UTC — weekly comprehensive run.
+    - cron: "0 6 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: skill-eval-nightly
+  cancel-in-progress: false
+
+jobs:
+  eval:
+    name: Run nightly eval suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        # actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Node
+        # actions/setup-node@v6.4.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "22"
+
+      - name: Install vally CLI
+        run: npm install -g @microsoft/vally-cli
+
+      - name: Run nightly evals
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          vally eval \
+            --suite nightly \
+            --output-dir ./results
+
+      - name: Upload trajectories
+        if: always()
+        # actions/upload-artifact@v4 (resolved 2026-06-02)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: eval-results-nightly
+          path: ./results/
+          if-no-files-found: warn

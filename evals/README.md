@@ -1,20 +1,17 @@
 # Evaluations
 
-This plugin uses [waza](https://github.com/microsoft/waza) to evaluate skill quality. Evals exercise each skill's routing, content correctness, and behavior against an LLM-as-judge rubric.
+This plugin uses [vally](https://www.npmjs.com/package/@microsoft/vally-cli) to evaluate skill quality. Evals exercise each skill's routing, content correctness, and behavior against an LLM-as-judge rubric.
 
 > **Authoring a new task or grader?** See [AUTHORING.md](./AUTHORING.md) — it covers task anatomy, grader patterns, fixture conventions, and the do's and don'ts learned from this repo's eval suite.
 
-## Install waza
+## Install vally
 
 ```bash
-# macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/microsoft/waza/main/install.sh | bash
-
-# From source (Go 1.26+)
-git clone https://github.com/microsoft/waza.git && cd waza && go build -o waza ./cmd/waza
+# Requires Node.js 22+
+npm install -g @microsoft/vally-cli
 
 # Verify
-waza -v
+vally --version
 ```
 
 ## Repo structure
@@ -42,16 +39,19 @@ A task's `inputs.files[].path` resolves against the **context directory** (defau
 
 | Goal | Command |
 |------|---------|
-| Run all skills | `waza run --discover --context-dir evals` |
-| Run one skill | `waza run skills/aspire-deployment/evals/eval.yaml --context-dir evals` |
-| Run by tag | `waza run skills/aspire-orchestration/evals/eval.yaml --tags p0 --context-dir evals` |
-| Run one task by ID | `waza run skills/aspire/evals/eval.yaml --task "router-deploy*" --context-dir evals` |
-| Save results JSON | `waza run --discover --context-dir evals -o results.json` |
-| Save per-skill results | `waza run --discover --context-dir evals --output-dir eval-results` |
-| Compare two saved runs | `waza compare results-A.json results-B.json` |
-| Check schema only (no run) | `waza check skills/<skill>` |
-| List planned tasks (no run) | `waza run skills/<skill>/evals/eval.yaml --task "*" --skip-graders` |
-| JUnit reporter (CI) | `waza run --discover --reporter junit:eval-results.xml` |
+| Run CI gate suite (p0 + p1) | `vally eval --suite ci-gate` |
+| Run full nightly suite | `vally eval --suite nightly` |
+| Run all skills | `vally eval --discover --context-dir evals` |
+| Run one skill | `vally eval --eval-spec skills/aspire-deployment/evals/eval.yaml --context-dir evals` |
+| Run by tag | `vally eval --eval-spec skills/aspire-orchestration/evals/eval.yaml --tags p0 --context-dir evals` |
+| Run one task by ID | `vally eval --eval-spec skills/aspire/evals/eval.yaml --task "router-deploy*" --context-dir evals` |
+| Save results JSON | `vally eval --discover --context-dir evals -o results.json` |
+| Save per-skill results | `vally eval --discover --context-dir evals --output-dir eval-results` |
+| Compare two saved runs | `vally compare results-A.json results-B.json` |
+| Lint a skill | `vally lint skills/<skill>` |
+| Validate one eval spec | `vally lint --eval-spec skills/<skill>/evals/eval.yaml --strict` |
+| List planned tasks (no run) | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --task "*" --skip-graders` |
+| JUnit reporter (CI) | `vally eval --discover --reporter junit:eval-results.xml` |
 
 ## Key flags
 
@@ -63,10 +63,10 @@ A task's `inputs.files[].path` resolves against the **context directory** (defau
 | `--discover` | Walk the tree and run every `eval.yaml` it finds. |
 | `--tags <tag>` | Run only tasks with the given tag. Repeatable. |
 | `--task <glob>` | Match tasks by `id` (not `name`) — e.g. `"router-deploy*"`. Repeatable. |
-| `--no-cache` | Force fresh runs; don't reuse `.waza-cache`. |
+| `--no-cache` | Force fresh runs; don't reuse `.vally-cache`. |
 | `--parallel` | Run tasks concurrently. Faster but harder to debug. |
 | `--strict` | With `--discover`, fail if any SKILL.md lacks an `eval.yaml`. |
-| `--skip-graders` | Execute tasks without grading; pair with `waza grade` later. |
+| `--skip-graders` | Execute tasks without grading; pair with `vally grade` later. |
 | `-o <file>` / `--output-dir <dir>` | Persist results. Mutually exclusive. |
 | `--reporter junit:path.xml` | Emit JUnit XML for CI. Repeatable. |
 
@@ -112,28 +112,50 @@ Tasks are tagged for filtered runs:
 
 ```bash
 # Fast pass: only P0 tasks
-waza run --discover --tags p0 --context-dir evals
+vally eval --discover --tags p0 --context-dir evals
 
 # Single-task sanity check (≈4 minutes)
-waza run skills/aspire-deployment/evals/eval.yaml --task "deploy-destroy*" --context-dir evals --no-cache
+vally eval --eval-spec skills/aspire-deployment/evals/eval.yaml --task "deploy-destroy*" --context-dir evals --no-cache
 ```
 
 ## CI integration
 
+The repo ships three GitHub Actions workflows that drive `vally` automatically:
+
+| Workflow | Trigger | Command |
+|----------|---------|---------|
+| [`skill-lint.yml`](../.github/workflows/skill-lint.yml) | PR (SKILL.md / *.yaml / `.vally.yaml`) | `vally lint .` + per-spec `vally lint --eval-spec <spec> --strict` |
+| [`skill-eval.yml`](../.github/workflows/skill-eval.yml) | PR (SKILL.md / eval.yaml / task yamls / `.vally.yaml`) | `vally eval --suite ci-gate --output-dir ./results` |
+| [`skill-eval-nightly.yml`](../.github/workflows/skill-eval-nightly.yml) | `cron: "0 6 * * 0"` (Sun 06:00 UTC) + `workflow_dispatch` | `vally eval --suite nightly --output-dir ./results` |
+
+The suites are declared at the repo root in [`.vally.yaml`](../.vally.yaml):
+
+```yaml
+suites:
+  ci-gate:
+    filter:
+      priority: [p0, p1]
+  nightly:
+    filter:
+      priority: [p0, p1, p2]
+```
+
+For ad-hoc CI scripts:
+
 ```bash
-waza run --discover --context-dir evals \
+vally eval --discover --context-dir evals \
   --reporter json \
   --reporter junit:eval-results.xml \
   --output-dir eval-results
 ```
 
-`waza` exits non-zero if any task fails or trigger accuracy falls below its `eval.yaml` threshold. Use `--tags p0` in CI to keep wall-clock manageable; run the full suite nightly.
+`vally` exits non-zero if any task fails or trigger accuracy falls below its `eval.yaml` threshold. PRs gate on the `ci-gate` suite; the comprehensive `nightly` suite runs weekly.
 
 ## Interpreting results
 
 ```bash
-waza run skills/aspire/evals/eval.yaml --interpret    # plain-language summary
-waza run skills/aspire/evals/eval.yaml --suggest      # generate skill-improvement report
+vally eval --eval-spec skills/aspire/evals/eval.yaml --interpret    # plain-language summary
+vally eval --eval-spec skills/aspire/evals/eval.yaml --suggest      # generate skill-improvement report
 ```
 
 Look for:
