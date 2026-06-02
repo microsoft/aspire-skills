@@ -46,12 +46,30 @@ jobs:
         # this step only so checkout / install / upload never see it.
         # The secret must be provisioned on the repo as `COPILOT_GITHUB_TOKEN`
         # — see evals/README.md → "CI authentication" for setup.
+        #
+        # If the secret is missing, the step soft-skips with a warning rather
+        # than red-X'ing the PR: a maintainer must add the secret once for
+        # the gate to actually run. The skill-lint workflow still hard-gates
+        # schema/wiring correctness without needing a token.
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
         run: |
           if [ -z "${COPILOT_GITHUB_TOKEN:-}" ]; then
-            echo "::error::COPILOT_GITHUB_TOKEN secret is not configured on this repo. See evals/README.md → CI authentication." >&2
-            exit 1
+            echo "::warning title=Eval gate skipped::COPILOT_GITHUB_TOKEN secret is not configured on this repo, so the model-backed eval gate was skipped. A maintainer must add the secret (see evals/README.md → CI authentication) for the gate to run."
+            {
+              echo "### ⚠️ Eval gate skipped"
+              echo ""
+              echo "The \`COPILOT_GITHUB_TOKEN\` repository secret is not configured, so"
+              echo "the model-backed \`ci-gate\` eval suite did not run on this PR."
+              echo ""
+              echo "**To enable the gate**, a maintainer needs to add the secret once —"
+              echo "see [\`evals/README.md\` → CI authentication](../blob/${GITHUB_HEAD_REF:-main}/evals/README.md#ci-authentication)."
+              echo ""
+              echo "Schema and wiring are still gated by the \`Skill Lint\` workflow."
+            } >> "$GITHUB_STEP_SUMMARY"
+            mkdir -p ./results
+            echo '{"skipped":"COPILOT_GITHUB_TOKEN not configured"}' > ./results/skipped.json
+            exit 0
           fi
           vally eval \
             --suite ci-gate \

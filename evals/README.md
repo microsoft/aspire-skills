@@ -172,8 +172,9 @@ The workflow's default `secrets.GITHUB_TOKEN` is the wrong token — it has repo
 
 ### Behavior when the secret is missing
 
-- `skill-eval.yml` and `skill-eval-nightly.yml` fail fast with an actionable error pointing back at this section.
-- `skill-eval.yml` additionally **skips** for PRs opened from forks (GitHub does not forward secrets to fork-triggered workflows), so external contributors get a green skip rather than a red failure they can't act on. `skill-lint.yml` still runs for forks since it needs no token.
+- `skill-eval.yml` and `skill-eval-nightly.yml` **soft-skip** with a `::warning::` annotation and a `$GITHUB_STEP_SUMMARY` block pointing back at this section. The job stays green so a missing-secret state never blocks merges or paints scheduled runs red — but the warning + summary are highly visible in the PR / run UI until a maintainer provisions the secret.
+- `skill-eval.yml` additionally **does not run at all** for PRs opened from forks (GitHub does not forward secrets to fork-triggered workflows), so external contributors get a clean skip rather than a confusing warning they can't act on. `skill-lint.yml` still runs for forks since it needs no token.
+- `skill-lint.yml` always hard-gates schema and wiring correctness regardless of whether the model token is configured.
 
 ## Interpreting results
 

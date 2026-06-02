@@ -37,12 +37,27 @@ jobs:
         # this step only so checkout / install / upload never see it.
         # The secret must be provisioned on the repo as `COPILOT_GITHUB_TOKEN`
         # — see evals/README.md → "CI authentication" for setup.
+        #
+        # If the secret is missing, soft-skip with a warning so the scheduled
+        # nightly run doesn't spam maintainers with red runs until the secret
+        # is provisioned. The summary explains how to enable the real gate.
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
         run: |
           if [ -z "${COPILOT_GITHUB_TOKEN:-}" ]; then
-            echo "::error::COPILOT_GITHUB_TOKEN secret is not configured on this repo. See evals/README.md → CI authentication." >&2
-            exit 1
+            echo "::warning title=Nightly eval skipped::COPILOT_GITHUB_TOKEN secret is not configured on this repo, so the nightly eval suite was skipped. A maintainer must add the secret (see evals/README.md → CI authentication) for the suite to run."
+            {
+              echo "### ⚠️ Nightly eval skipped"
+              echo ""
+              echo "The \`COPILOT_GITHUB_TOKEN\` repository secret is not configured, so"
+              echo "the model-backed \`nightly\` eval suite did not run."
+              echo ""
+              echo "**To enable the suite**, a maintainer needs to add the secret once —"
+              echo "see [\`evals/README.md\` → CI authentication](../blob/main/evals/README.md#ci-authentication)."
+            } >> "$GITHUB_STEP_SUMMARY"
+            mkdir -p ./results
+            echo '{"skipped":"COPILOT_GITHUB_TOKEN not configured"}' > ./results/skipped.json
+            exit 0
           fi
           vally eval \
             --suite nightly \
