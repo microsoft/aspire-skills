@@ -94,17 +94,14 @@ In that command, `-a github-copilot` selects the target agent, `-g` installs glo
 | `.plugin/`, `.claude-plugin/`, `.cursor-plugin/` | Plugin metadata for marketplaces |
 | `.github/plugins/aspire-skills/` | Published plugin mirror |
 | `evals/` | Shared evaluation fixtures and helpers |
-| `src/`, `docs/`, `public/` | Documentation site source and assets |
 
 ## Development
 
 ```bash
-npm install
-npm run build
 npm run bundle
 ```
 
-`npm run build` validates the Astro documentation site. `npm run bundle` builds the published Aspire Skills plugin bundle.
+`npm run bundle` builds the published Aspire Skills plugin bundle.
 
 ## Contributing
 
