@@ -223,8 +223,8 @@ Rules:
    - Optionally a second `prompt` grader for a distinct bonus expectation.
 5. **Apply the grader-pattern rules** above.
 6. **Tag with priority + topic** — at least one of `p0`/`p1` plus a topical tag.
-7. **Run `waza check skills/<skill>`** to confirm schema validity.
-8. **Run the task once** — `waza run skills/<skill>/evals/eval.yaml --task "<id>" --context-dir evals --no-cache` — to confirm it executes and the graders behave as you expect.
+7. **Run `vally lint skills/<skill>`** to confirm schema validity.
+8. **Run the task once** — `vally eval --eval-spec skills/<skill>/evals/eval.yaml --task "<id>" --context-dir evals --no-cache` — to confirm it executes and the graders behave as you expect.
 9. **Update the trigger tests if needed** — if the new task validates a routing decision, add matching entries in `trigger_tests.yaml`.
 10. **Commit with a focused message.**
 
@@ -237,7 +237,7 @@ Rules:
 | `not_contains` fires on legitimate guidance | Substring is too broad (e.g., `"azd"`) | Forbid full commands (`"azd up"`, `"azd deploy"`) |
 | Judge rejects response as outdated | Stale model knowledge of Aspire 13.3 | State the 13.3 fact in the grader prompt |
 | Trigger accuracy below threshold | Description too dense, keywords don't match how users phrase it, or trigger prompts are too generic | Refine SKILL.md `description` triggers and / or trigger_tests.yaml prompts; iterate |
-| `waza run --task "name"` matches 0 tests | `--task` filters by `id`, not `name` | Use the `id:` field with a glob (e.g., `--task "deploy-destroy*"`) |
+| `vally eval --task "name"` matches 0 tests | `--task` filters by `id`, not `name` | Use the `id:` field with a glob (e.g., `--task "deploy-destroy*"`) |
 | Task hangs forever | `config.timeout_seconds` too low for slow models, or judge model unreachable | Raise `timeout_seconds` in `eval.yaml`; check `--judge-model` is available |
 
 ## When to update `eval.yaml`
@@ -253,5 +253,5 @@ Don't touch `tasks: ["tasks/*.yaml"]` — leave it as the wildcard.
 ## See also
 
 - [README.md](./README.md) — how to run evals
-- [waza docs](https://github.com/microsoft/waza)
-- [agentskills.io spec](https://agentskills.io) — frontmatter and SKILL.md rules waza checks against
+- [vally CLI](https://www.npmjs.com/package/@microsoft/vally-cli)
+- [agentskills.io spec](https://agentskills.io) — frontmatter and SKILL.md rules vally checks against

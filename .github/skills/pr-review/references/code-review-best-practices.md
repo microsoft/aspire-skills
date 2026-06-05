@@ -60,8 +60,8 @@ behavior in the agent, not a rhetorical victory.
 
 1. Seek to understand — ask the author what they tried and why this landed.
 2. Acknowledge valid points before pushing back.
-3. Bring data — eval results, `waza` runs, doc citations.
-4. Escalate to the CODEOWNER (`@spboyer`) when stuck.
+3. Bring data — eval results, `vally` runs, doc citations.
+4. Escalate to the CODEOWNER when stuck.
 5. Know when to let go — not every disagreement is worth blocking on. If neither side
    can articulate a concrete harm, default to the author's preference.
 
@@ -126,4 +126,4 @@ These are quick mental tests that catch most of the bugs we see:
 - **"Does this snippet use `--non-interactive`?"** If it's agent-facing, it must.
 
 When in doubt, run the affected skill's eval locally with
-`waza run skills/<skill>/evals/eval.yaml --context-dir evals --no-cache`.
+`vally eval --eval-spec skills/<skill>/evals/eval.yaml --context-dir evals --no-cache`.

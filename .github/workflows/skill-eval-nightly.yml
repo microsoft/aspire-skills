@@ -1,0 +1,82 @@
+name: Skill Eval (nightly)
+
+on:
+  schedule:
+    # Sunday 06:00 UTC — weekly comprehensive run.
+    - cron: "0 6 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: skill-eval-nightly
+  cancel-in-progress: false
+
+jobs:
+  eval:
+    name: Run nightly eval suite
+    runs-on: ubuntu-latest
+    steps:
+      # Fail-fast preflight: if the Copilot token isn't provisioned, exit
+      # the job immediately (as a soft-skip, so scheduled runs don't paint
+      # the Actions UI red) before wasting CI minutes on checkout / setup-
+      # node / install. The secret must be added once on the repo as
+      # `COPILOT_GITHUB_TOKEN` — see evals/README.md → "CI authentication".
+      - name: Preflight COPILOT_GITHUB_TOKEN
+        id: preflight
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+        run: |
+          if [ -z "${COPILOT_GITHUB_TOKEN:-}" ]; then
+            echo "::warning title=Nightly eval skipped::COPILOT_GITHUB_TOKEN secret is not configured on this repo, so the nightly eval suite was skipped. A maintainer must add the secret (see evals/README.md → CI authentication) for the suite to run."
+            {
+              echo "### ⚠️ Nightly eval skipped"
+              echo ""
+              echo "The \`COPILOT_GITHUB_TOKEN\` repository secret is not configured, so"
+              echo "the model-backed \`nightly\` eval suite did not run."
+              echo ""
+              echo "**To enable the suite**, a maintainer needs to add the secret once —"
+              echo "see [\`evals/README.md\` → CI authentication](../blob/main/evals/README.md#ci-authentication)."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "has_token=true" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        if: steps.preflight.outputs.has_token == 'true'
+        # actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Node
+        if: steps.preflight.outputs.has_token == 'true'
+        # actions/setup-node@v6.4.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "22"
+
+      - name: Install vally CLI
+        if: steps.preflight.outputs.has_token == 'true'
+        run: npm install -g @microsoft/vally-cli
+
+      - name: Run nightly evals
+        if: steps.preflight.outputs.has_token == 'true'
+        # COPILOT_GITHUB_TOKEN is read by @github/copilot-sdk (the vally
+        # `copilot-sdk` executor) to invoke Copilot models. It is scoped to
+        # this step only so install / upload never see it.
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+        run: |
+          vally eval \
+            --suite nightly \
+            --output-dir ./results
+
+      - name: Upload trajectories
+        if: always() && steps.preflight.outputs.has_token == 'true'
+        # actions/upload-artifact@v4 (resolved 2026-06-02)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: eval-results-nightly
+          path: ./results/
+          if-no-files-found: warn

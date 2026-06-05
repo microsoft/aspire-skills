@@ -1,0 +1,17 @@
+paths:
+  # Limit lint / discovery to the shipped plugin directory.
+  # Internal author skills under .github/skills/ (e.g. pr-review) are
+  # intentionally out of plugin scope — see their own SKILL.md headers.
+  skills: skills
+
+suites:
+  ci-gate:
+    description: "PR gate — p0 + p1 priority stimuli"
+    filter:
+      # Suite filter semantics: AND across keys, OR within values.
+      # ci-gate matches any stimulus tagged priority: p0 OR p1.
+      priority: [p0, p1]
+  nightly:
+    description: "Comprehensive weekly run — p0, p1, and forward-looking p2"
+    filter:
+      priority: [p0, p1, p2]
