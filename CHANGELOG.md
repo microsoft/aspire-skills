@@ -43,12 +43,29 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   agent workflows, and detailed monitoring/search/display guidance.
 - Adopted [`@microsoft/vally-cli`](https://www.npmjs.com/package/@microsoft/vally-cli)
   as the skill-eval CLI in place of `waza`. Added `.vally.yaml` with `ci-gate`
-  (tags `p0`+`p1`) and `nightly` (tags `p0`+`p1`+`p2`) suites, plus three new
-  GitHub Actions workflows: `skill-lint.yml` (PR-gated lint of `skills/` + eval
+  (`priority: [p0, p1]`) and `nightly` (`priority: [p0, p1, p2]`) suites, plus three
+  new GitHub Actions workflows: `skill-lint.yml` (PR-gated lint of `skills/` + eval
   specs), `skill-eval.yml` (PR-gated `ci-gate` suite), and `skill-eval-nightly.yml`
   (Sunday 06:00 UTC `nightly` suite with trajectory artifact upload). Eval
   workflows soft-skip when `COPILOT_GITHUB_TOKEN` is unset (e.g. fork PRs);
   see `evals/README.md` for the CI authentication contract.
+
+### Changed
+- Migrated all six per-skill eval specs from the legacy `waza` schema to the
+  canonical [vally `EvalSchema`](https://www.npmjs.com/package/@microsoft/vally-cli):
+  folded 54 `evals/tasks/*.yaml` files and 6 `evals/trigger_tests.yaml` files
+  into inline `stimuli:` arrays on each `skills/<skill>/evals/eval.yaml`.
+  Mapped `waza.expected.output_contains` → built-in `output-contains` graders,
+  `waza.tags: [pN, area]` → `tags: { priority: pN, area: <area> }`, `trial_per_task` →
+  `runs`, `timeout_seconds` → ISO-style `timeout`, and folded trigger tests into
+  `skill-invocation` graders. Updated the default executor model from `gpt-4.1`
+  (no longer available via `@github/copilot-sdk`) to `gpt-5-mini`. `vally lint
+  --eval-spec` now passes cleanly on every spec, and `skill-lint.yml` no longer
+  needs `continue-on-error` on the eval-spec validation step.
+- Rewrote `evals/README.md` to reflect the real vally CLI surface (`--suite`,
+  `--tag key=values`, `--skill-dir`, `--workspace`, `--output-dir`, `--junit`,
+  `--skip-grade`, `--workers`, `--runs`, etc.) and documented `vally serve`
+  (local dashboard) and `vally ingest` (SQLite store) workflows.
 
 ## [0.0.1] - Unreleased
 

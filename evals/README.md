@@ -1,8 +1,8 @@
 # Evaluations
 
-This plugin uses [vally](https://www.npmjs.com/package/@microsoft/vally-cli) to evaluate skill quality. Evals exercise each skill's routing, content correctness, and behavior against an LLM-as-judge rubric.
+This plugin uses [vally](https://www.npmjs.com/package/@microsoft/vally-cli) to evaluate skill quality. Evals exercise each skill's routing, content correctness, and behavior against built-in static graders and an LLM-as-judge rubric.
 
-> **Authoring a new task or grader?** See [AUTHORING.md](./AUTHORING.md) — it covers task anatomy, grader patterns, fixture conventions, and the do's and don'ts learned from this repo's eval suite.
+> **Authoring a new stimulus or grader?** See [AUTHORING.md](./AUTHORING.md) — it covers stimulus anatomy, grader patterns, fixture conventions, and the do's and don'ts learned from this repo's eval suite.
 
 ## Install vally
 
@@ -18,22 +18,26 @@ vally --version
 
 ```
 skills/<skill>/evals/
-├── eval.yaml            # Benchmark config: model, metrics, top-level graders
-├── trigger_tests.yaml   # Routing accuracy: should / should-not trigger prompts
-└── tasks/               # One file per scenario
-    └── *.yaml
+└── eval.yaml            # Vally eval spec: config + stimuli (inline)
 ```
 
-Shared fixtures live at the **repo-root** `evals/` directory and are referenced from task `inputs.files` by relative path:
+Each `eval.yaml` is a single canonical [vally `EvalSchema`](https://www.npmjs.com/package/@microsoft/vally-cli) document containing:
+
+- `config` — model, executor (`copilot-sdk`), runs per stimulus, timeout, judge model.
+- `tags` (optional) — record of `{ priority: pN, area: <area> }` inherited by stimuli that don't override.
+- `stimuli` — array of prompts to execute. Each stimulus has `name`, `prompt`, optional `environment.files`, and `graders`.
+- `scoring` (optional) — explicit weights per grader plus a pass-rate threshold. When omitted, vally applies equal weights and threshold `1.0` (every grader must pass).
+
+Shared fixtures live at the **repo-root** `evals/` directory and are referenced from `stimulus.environment.files` by `{ src, dest }` pairs:
 
 ```
 evals/
 ├── csharp-apphost/      # Wired C# AppHost (Aspire.AppHost.Sdk + Program.cs)
 ├── ts-apphost/          # TypeScript AppHost (apphost.ts + .aspire/modules/)
-└── non-aspire/          # Non-Aspire .NET project (for "should not trigger" tasks)
+└── non-aspire/          # Non-Aspire .NET project (for "should not trigger" stimuli)
 ```
 
-A task's `inputs.files[].path` resolves against the **context directory** (defaults to `./fixtures` relative to the eval spec; pass `--context-dir evals` from the repo root to use the shared fixtures above).
+`src` is resolved relative to the eval spec file (so the canonical reference from `skills/<skill>/evals/eval.yaml` is `../../../evals/<fixture-path>`). `dest` is the workspace-relative path the executor sees.
 
 ## Quick commands
 
@@ -41,49 +45,57 @@ A task's `inputs.files[].path` resolves against the **context directory** (defau
 |------|---------|
 | Run CI gate suite (p0 + p1) | `vally eval --suite ci-gate` |
 | Run full nightly suite | `vally eval --suite nightly` |
-| Run all skills | `vally eval --discover --context-dir evals` |
-| Run one skill | `vally eval --eval-spec skills/aspire-deployment/evals/eval.yaml --context-dir evals` |
-| Run by tag | `vally eval --eval-spec skills/aspire-orchestration/evals/eval.yaml --tags p0 --context-dir evals` |
-| Run one task by ID | `vally eval --eval-spec skills/aspire/evals/eval.yaml --task "router-deploy*" --context-dir evals` |
-| Save results JSON | `vally eval --discover --context-dir evals -o results.json` |
-| Save per-skill results | `vally eval --discover --context-dir evals --output-dir eval-results` |
-| Compare two saved runs | `vally compare results-A.json results-B.json` |
-| Lint a skill | `vally lint skills/<skill>` |
-| Validate one eval spec | `vally lint --eval-spec skills/<skill>/evals/eval.yaml --strict` |
-| List planned tasks (no run) | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --task "*" --skip-graders` |
-| JUnit reporter (CI) | `vally eval --discover --reporter junit:eval-results.xml` |
+| Run one skill | `vally eval --eval-spec skills/aspire-deployment/evals/eval.yaml --skill-dir skills/aspire-deployment` |
+| Run one stimulus by tag | `vally eval --eval-spec skills/aspire/evals/eval.yaml --tag area=routing` |
+| Save per-skill results | `vally eval --suite ci-gate --output-dir ./results` |
+| Emit JUnit XML for CI | `vally eval --suite ci-gate --junit ./results/junit.xml` |
+| Browse results in the dashboard | `vally serve ./results` |
+| Persist runs to a SQLite store | `vally ingest ./results --store ./vally.sqlite` |
+| Lint all skills | `vally lint skills` |
+| Validate one eval spec | `vally lint --eval-spec skills/<skill>/evals/eval.yaml` |
+| Plan a run without grading | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --skip-grade` |
 
 ## Key flags
 
 | Flag | Purpose |
 |------|---------|
-| `--model <name>` | Model used to execute the task (repeatable for A/B). Overrides `eval.yaml` `config.model`. |
-| `--judge-model <name>` | Model used by `prompt` graders (LLM-as-judge). Defaults to the execution model. |
-| `--context-dir <dir>` | Where `inputs.files[].path` resolves from. Default `./fixtures` relative to the spec; this repo uses `--context-dir evals`. |
-| `--discover` | Walk the tree and run every `eval.yaml` it finds. |
-| `--tags <tag>` | Run only tasks with the given tag. Repeatable. |
-| `--task <glob>` | Match tasks by `id` (not `name`) — e.g. `"router-deploy*"`. Repeatable. |
-| `--no-cache` | Force fresh runs; don't reuse `.vally-cache`. |
-| `--parallel` | Run tasks concurrently. Faster but harder to debug. |
-| `--strict` | With `--discover`, fail if any SKILL.md lacks an `eval.yaml`. |
-| `--skip-graders` | Execute tasks without grading; pair with `vally grade` later. |
-| `-o <file>` / `--output-dir <dir>` | Persist results. Mutually exclusive. |
-| `--reporter junit:path.xml` | Emit JUnit XML for CI. Repeatable. |
+| `-e, --eval-spec <path>` | Eval spec to run. Repeatable. |
+| `--skill-dir <dir>` | Skill directory the executor surfaces to the model. Defaults to the eval spec's parent. |
+| `--workspace <dir>` | Working directory for the executor (fixtures get copied here). Defaults to a per-stimulus temp dir. |
+| `--suite <name>` | Run only stimuli matching a suite declared in `.vally.yaml`. |
+| `--tag <key=values>` | Run only stimuli whose tag record matches. Comma-separate values; repeat for multiple keys. E.g. `--tag priority=p0,p1 --tag area=routing`. |
+| `--model <name>` | Executor model. Overrides `config.model` in the spec. |
+| `--judge-model <name>` | Model used by `prompt` / `pairwise` graders. Defaults to `claude-sonnet-4.6`. |
+| `--runs <n>` | Override `config.runs` (number of executions per stimulus). |
+| `--timeout <duration>` | Per-stimulus timeout (e.g. `120s`, `2m`). |
+| `--workers <n>` | Parallel stimulus workers. Default 1. |
+| `--max-retries <n>` | Retries for transient executor errors. |
+| `--output-dir <dir>` | Persist `results.jsonl` + `eval-results.md` to this directory. |
+| `--output jsonl` | Stream JSONL records to stdout. |
+| `--junit <path>` | Write JUnit XML alongside the run. |
+| `--skip-grade` | Execute stimuli without running graders. |
+| `--skip-validate` | Skip spec validation before running. |
+| `--keep-executor-session-logs` | Retain raw executor session traces in `--output-dir`. |
+| `--verbose` | Print full stimulus output + grader reasoning. |
+
+For the full surface, run `vally eval --help`, `vally lint --help`, `vally serve --help`.
 
 ## Cost / time
 
-Each task runs `config.trials_per_task` times (default 3). Each trial is one execution call + one judge call per `prompt` grader. Plan for:
+Each stimulus runs `config.runs` times (default 1 in vally; some specs override to 3). Each run is one executor call plus one judge call per `prompt` grader.
 
-- ~200k–300k tokens per task (typical, `executor: copilot-sdk`, `model: gpt-4.1`).
-- ~3–4 minutes per task at default `parallel: false`.
-- A full `--discover` run across all 6 skills = **54 tasks × ~3.5 min ≈ 3+ hours** if serial. Use `--parallel` and `--tags p0` to scope.
+Rough budget with `executor: copilot-sdk` + `model: gpt-5-mini`:
+
+- ~30k–80k tokens per stimulus (routing stimuli are at the lower end; deployment / orchestration stimuli with fixtures sit higher).
+- ~10–45 seconds per stimulus.
+- The `ci-gate` suite (p0 + p1) is the per-PR gate; `nightly` covers p0 + p1 + p2.
+
+Use `--workers 4` to fan stimuli out and shave wall-clock time; expect higher cost-per-second but the same total tokens.
 
 ## Test coverage
 
-Counts as of 2026-05-18 (Aspire 13.4-aligned refresh + `aspire-init` + `aspireify` skills):
-
-| Skill | Tasks | Trigger prompts | Focus |
-|-------|-------|-----------------|-------|
+| Skill | Task stimuli | Routing stimuli | Focus |
+|-------|--------------|-----------------|-------|
 | `aspire` (router) | 6 | 16 | Routing precision to sub-skills |
 | `aspire-init` | 5 | 15 | Skeleton drop, `aspire new` / `aspire init` decision, aspireify handoff |
 | `aspireify` | 8 | 18 | AppHost wiring (C# / file-based C# / TS), validation, never edit `.aspire/modules/` |
@@ -92,30 +104,72 @@ Counts as of 2026-05-18 (Aspire 13.4-aligned refresh + `aspire-init` + `aspireif
 | `aspire-monitoring` | 11 | 19 | Diagnostics bridge, standalone dashboard, browser logs, `--include-hidden` |
 | **Total** | **54** | **113** | |
 
-Run `find skills -path '*evals/tasks/*.yaml' | wc -l` for the live count.
+Run `vally lint --eval-spec skills/<skill>/evals/eval.yaml --verbose` to dump the per-spec stimulus list.
 
 ## Tags
 
-Tasks are tagged for filtered runs:
+Vally tags are **records**, not bare arrays. Stimuli inherit eval-level tags and may override or extend them. Suite filters in `.vally.yaml` match with AND across keys / OR within values.
 
-| Tag | Meaning |
-|-----|---------|
-| `p0` | Critical — must pass for skill to ship |
-| `p1` | Important — should pass |
-| `safety-guardrail` | Tests a [#15801](https://github.com/microsoft/aspire/issues/15801)-class safety rule |
-| `routing` | Tests skill or diagnostics-bridge routing |
-| `aspire-13-3` | New behavior introduced in Aspire 13.3 |
-| `core-flow` | Common day-1 workflow |
-| `known-bug` / `issue-NNNNN` | Tests awareness of a tracked CLI bug |
+| Key | Common values | Meaning |
+|-----|---------------|---------|
+| `priority` | `p0`, `p1`, `p2` | `p0` must pass for the skill to ship, `p1` should pass, `p2` is aspirational. |
+| `area` | `routing`, `safety-guardrail`, `core-flow`, `known-bug`, `aspire-13-3` | Functional area the stimulus probes. |
+
+Filter examples:
+
+```bash
+# All p0 + p1 routing stimuli across every spec
+vally eval --suite ci-gate --tag area=routing
+
+# Only the known-bug regressions for one skill
+vally eval --eval-spec skills/aspire-orchestration/evals/eval.yaml --tag area=known-bug
+```
+
+## Dashboard (`vally serve`)
+
+`vally serve` boots a local Aspire-style dashboard for browsing runs:
+
+```bash
+# After a run
+vally eval --suite ci-gate --output-dir ./results
+
+# Browse pass/fail, per-grader breakdown, full executor traces
+vally serve ./results
+# → http://127.0.0.1:3200
+```
+
+Flags worth knowing:
+
+| Flag | Purpose |
+|------|---------|
+| `--port <n>` | Bind to a custom port. Default `3200`. |
+| `--host <addr>` | Bind address. Default `127.0.0.1`. |
+| `--cors` | Enable CORS (handy for embedding the dashboard in another tool). |
+| `--store <sqlite>` | Serve historical runs from a SQLite store populated by `vally ingest`. |
+
+## Historical mode (`vally ingest` + `--store`)
+
+For longitudinal trend tracking across nightly runs:
+
+```bash
+# In CI, after each nightly:
+vally ingest ./results --store ./vally.sqlite
+
+# Locally, browse the full history:
+vally serve --store ./vally.sqlite
+```
+
+`vally compare <run-dir-A> <run-dir-B>` diff-prints two runs for ad-hoc regression triage without the dashboard.
 
 ## Quick smoke test
 
 ```bash
-# Fast pass: only P0 tasks
-vally eval --discover --tags p0 --context-dir evals
+# Validate every spec without running a model
+vally lint skills
+for spec in skills/*/evals/eval.yaml; do vally lint --eval-spec "$spec"; done
 
-# Single-task sanity check (≈4 minutes)
-vally eval --eval-spec skills/aspire-deployment/evals/eval.yaml --task "deploy-destroy*" --context-dir evals --no-cache
+# Run just the p0 routing stimuli for the router skill (~2 minutes, ~150k tokens)
+vally eval --eval-spec skills/aspire/evals/eval.yaml --tag priority=p0 --tag area=routing
 ```
 
 ## CI integration
@@ -124,32 +178,23 @@ The repo ships three GitHub Actions workflows that drive `vally` automatically:
 
 | Workflow | Trigger | Command |
 |----------|---------|---------|
-| [`skill-lint.yml`](../.github/workflows/skill-lint.yml) | PR (SKILL.md / *.yaml / `.vally.yaml`) | `vally lint .` + per-spec `vally lint --eval-spec <spec> --strict` |
-| [`skill-eval.yml`](../.github/workflows/skill-eval.yml) | PR (SKILL.md / eval.yaml / task yamls / `.vally.yaml`) | `vally eval --suite ci-gate --context-dir evals --output-dir ./results` |
-| [`skill-eval-nightly.yml`](../.github/workflows/skill-eval-nightly.yml) | `cron: "0 6 * * 0"` (Sun 06:00 UTC) + `workflow_dispatch` | `vally eval --suite nightly --context-dir evals --output-dir ./results` |
+| [`skill-lint.yml`](../.github/workflows/skill-lint.yml) | PR (`SKILL.md` / `*.yaml` / `.vally.yaml`) | `vally lint skills` + per-spec `vally lint --eval-spec <spec>` |
+| [`skill-eval.yml`](../.github/workflows/skill-eval.yml) | PR (`SKILL.md` / `eval.yaml` / `.vally.yaml`) | `vally eval --suite ci-gate --output-dir ./results` |
+| [`skill-eval-nightly.yml`](../.github/workflows/skill-eval-nightly.yml) | `cron: "0 6 * * 0"` (Sun 06:00 UTC) + `workflow_dispatch` | `vally eval --suite nightly --output-dir ./results` |
 
-The suites are declared at the repo root in [`.vally.yaml`](../.vally.yaml) and filter on the priority **tags** that every task carries (`p0` / `p1` / `p2`):
+The suites are declared at the repo root in [`.vally.yaml`](../.vally.yaml) and filter on the `priority` tag every stimulus carries:
 
 ```yaml
 suites:
   ci-gate:
     filter:
-      tags: [p0, p1]
+      priority: [p0, p1]
   nightly:
     filter:
-      tags: [p0, p1, p2]
+      priority: [p0, p1, p2]
 ```
 
-For ad-hoc CI scripts:
-
-```bash
-vally eval --discover --context-dir evals \
-  --reporter json \
-  --reporter junit:eval-results.xml \
-  --output-dir eval-results
-```
-
-`vally` exits non-zero if any task fails or trigger accuracy falls below its `eval.yaml` threshold. PRs gate on the `ci-gate` suite; the comprehensive `nightly` suite runs weekly.
+`vally` exits non-zero if any stimulus fails grading. PRs gate on `ci-gate`; the comprehensive `nightly` suite runs weekly and uploads the full `./results` directory as a workflow artifact for later dashboard inspection.
 
 ## CI authentication
 
@@ -157,40 +202,18 @@ The `copilot-sdk` executor (declared by every `skills/<skill>/evals/eval.yaml`) 
 
 | Context | How auth is supplied |
 |---------|----------------------|
-| **Local** (`vally eval ...`) | Reuses your `gh auth login` session — no env var needed. |
-| **CI** (`skill-eval.yml`, `skill-eval-nightly.yml`) | Reads the **`COPILOT_GITHUB_TOKEN`** repository secret and exposes it as the env var of the same name **at step level only** (so checkout / install / artifact-upload steps never see it). |
+| **Local** (`vally eval ...`) | Set `COPILOT_GITHUB_TOKEN` from a Copilot-enabled `gh` login — e.g. `export COPILOT_GITHUB_TOKEN="$(gh auth token)"`. |
+| **CI** (`skill-eval.yml`, `skill-eval-nightly.yml`) | Reads the **`COPILOT_GITHUB_TOKEN`** repository (or org) secret and exposes it as the env var of the same name **at step level only** (so checkout / install / artifact-upload steps never see it). |
 
-The workflow's default `secrets.GITHUB_TOKEN` is the wrong token — it has repo scopes but **no Copilot model access**.
+The workflow's default `secrets.GITHUB_TOKEN` is the **wrong** token — it has repo scopes but **no Copilot model access**, so the SDK 401s on it.
 
 ### One-time maintainer setup
 
-1. Mint a Copilot SDK token for the bot / service identity you want CI to run as.
+1. Mint a Copilot-enabled GitHub token for the bot / service identity you want CI to run as. Personal PATs work for spike testing; a dedicated service account is the right long-term choice so eval history isn't tied to one human.
 2. Repo → **Settings → Secrets and variables → Actions → New repository secret**
    - Name: `COPILOT_GITHUB_TOKEN`
    - Value: the token from step 1
-3. Optionally promote to a **GitHub Environment** (e.g. `aspire-skills-evals`) with required reviewers and protected-branch policy for an extra approval gate — see the [`Azure/azure-functions-skills` setup](https://github.com/Azure/azure-functions-skills/blob/main/evals/README.md#ci-setup--repository--azure-side) for a reference pattern.
-
-## Pending eval-content migration
-
-The current per-skill `eval.yaml` files and `tasks/*.yaml` files are still in the **legacy waza schema**. Vally's eval validator (`vally lint --eval-spec ... --strict`) **rejects them** because vally uses an incompatible structure:
-
-| Concept | Waza (current content) | Vally (target) |
-|---------|------------------------|----------------|
-| Task list | `tasks: ["tasks/*.yaml"]` (glob) | `stimuli: [{...}, {...}]` (inline objects) |
-| Per-task prompt | `inputs.prompt` | `prompt` (top-level on the stimulus) |
-| Per-task fixtures | `inputs.files: [{path: "..."}]` | `environment.files: [{src, dest}]` |
-| Tags | `tags: [p0, routing]` (string array) | `tags: {priority: p0, area: routing}` (record) |
-| Output assertions | `expected.output_contains: [...]` | `graders: [{type: text, config: {contains: [...]}}]` |
-| Aggregate scoring | `metrics: [{name, weight, threshold}]` | `scoring: {weights: {...}, threshold: N}` |
-| Trial count | `config.trials_per_task: 3` | `config.runs: 3` |
-| Timeout | `config.timeout_seconds: 120` | `config.timeout: "120s"` |
-
-Until this migration is done:
-
-- **`skill-lint.yml` → Validate eval specs** is set to `continue-on-error: true` and emits a warning annotation per failing spec, so PRs aren't blocked while the migration is in progress. The diagnostics are still visible in the run UI and step summary.
-- **`skill-eval.yml` → Run CI gate evals** and **`skill-eval-nightly.yml` → Run nightly evals** will also fail once `COPILOT_GITHUB_TOKEN` is provisioned, for the same schema-mismatch reason. They currently soft-skip on the missing secret, so this is masked.
-
-The migration is mechanical but touches every eval file (6 specs + 54 task files). It should be done in a dedicated follow-up PR with the entire suite re-validated end-to-end after the rewrite.
+3. Optionally promote to a **GitHub Environment** (e.g. `aspire-skills-evals`) with required reviewers and protected-branch policy for an extra approval gate.
 
 ### Behavior when the secret is missing
 
@@ -200,16 +223,14 @@ The migration is mechanical but touches every eval file (6 specs + 54 task files
 
 ## Interpreting results
 
-```bash
-vally eval --eval-spec skills/aspire/evals/eval.yaml --interpret    # plain-language summary
-vally eval --eval-spec skills/aspire/evals/eval.yaml --suggest      # generate skill-improvement report
-```
+After a run that wrote `--output-dir ./results`, look at:
 
-Look for:
+- **`results/<timestamp>/eval-results.md`** — human-readable summary table with per-stimulus verdict, grader breakdown, token usage, and footnote-style failure reasons.
+- **`results/<timestamp>/results.jsonl`** — one record per stimulus run, with the full executor trajectory and every grader's reasoning. Pipe into `jq` for ad-hoc queries.
+- **`vally serve ./results`** — same data, rendered as a dashboard with filtering, charts, and trajectory drill-down.
 
-- **Per-task pass_rate** — fraction of trials that passed every grader.
-- **Per-grader breakdown** — which grader(s) failed and why. The judge's reasoning is shown verbatim.
-- **Trigger accuracy** — how well the skill's frontmatter description matches the `should_trigger` / `should_not_trigger` prompts.
-- **Aggregate score** — weighted blend of `metrics` declared in `eval.yaml`.
+Common failure modes to grep for:
 
-If the judge says *"no response found in workspace"* but the agent did respond, the grader prompt is the problem — see [AUTHORING.md → Grader patterns](./AUTHORING.md#grader-patterns-dos-and-donts).
+- **`skill-invocation` grader failed but the agent did invoke a skill** — the grader's `required: [...]` list is an exact match. If the agent picked a sibling skill (e.g. `aspire-orchestration` instead of `aspire`), that counts as a miss. Tune `required` to the set of acceptable skills, or switch to a `prompt` grader if "any of these N skills is fine" is the real intent.
+- **`output-contains` failed despite the substring being in the output** — vally's substring grader is case-sensitive by default. Either lowercase the expected substring or set `case_sensitive: false` in the grader config.
+- **`Timeout after Nms waiting for session.idle`** — bump `config.timeout` (e.g. `"180s"`) or the per-stimulus `timeout`. Long-form authoring stimuli routinely need 90–120 s.

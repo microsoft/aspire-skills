@@ -6,10 +6,12 @@ paths:
 
 suites:
   ci-gate:
-    description: "PR gate — p0 + p1 priority tasks"
+    description: "PR gate — p0 + p1 priority stimuli"
     filter:
-      tags: [p0, p1]
+      # Suite filter semantics: AND across keys, OR within values.
+      # ci-gate matches any stimulus tagged priority: p0 OR p1.
+      priority: [p0, p1]
   nightly:
     description: "Comprehensive weekly run — p0, p1, and forward-looking p2"
     filter:
-      tags: [p0, p1, p2]
+      priority: [p0, p1, p2]
