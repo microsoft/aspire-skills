@@ -29,7 +29,7 @@ Pick the depth from the change surface, not the line count.
 
 | Surface touched | Depth |
 |-----------------|-------|
-| Only `CHANGELOG.md`, `README.md`, or top-level docs | Skim — confirm consistency, no behavior claims that contradict the SKILL.md. |
+| Only `CHANGELOG.md`, `README.md`, or `CONTRIBUTING.md` | Skim — confirm consistency, no behavior claims that contradict the SKILL.md. |
 | Only `evals/` or `skills/<skill>/evals/` | Standard — apply `evals/AUTHORING.md` grader patterns; confirm fixtures are shared. |
 | `skills/<skill>/SKILL.md` or its `references/` | Standard+ — apply [aspire-skills-review-checklist.md](aspire-skills-review-checklist.md) §1–§5 and §10. |
 | `.plugin/plugin.json` / `.claude-plugin/*.json` / `gemini-extension.json` | Deep — version sync, manifest consistency, marketplace metadata. |

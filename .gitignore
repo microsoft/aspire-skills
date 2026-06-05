@@ -2,7 +2,6 @@ eval-results/
 .smoketest-results/
 node_modules/
 dist/
-.astro/
 obj/
 bin/
 *.lscache

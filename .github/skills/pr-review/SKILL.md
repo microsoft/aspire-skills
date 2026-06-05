@@ -157,7 +157,7 @@ specific** — adjust the focus column to what the file actually demands.
 | Shared fixtures | `evals/{csharp-apphost,ts-apphost,non-aspire}/**` | Realistic representativeness, no skill-specific contamination |
 | Plugin manifests | `.plugin/plugin.json`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `gemini-extension.json` | Version sync across all four, identical metadata, valid JSON, `skills` glob unchanged at `./skills/` |
 | Hooks / MCP | `copilot-hooks.json`, `.mcp.json`, `hooks/**` | Shell injection, error propagation, `--non-interactive`, no `dotnet run` on AppHost |
-| CHANGELOG / docs | `CHANGELOG.md`, `README.md`, `CONTRIBUTING.md`, `docs/**` | Accuracy only; consistency with shipped behavior |
+| Project docs | `CHANGELOG.md`, `README.md`, `CONTRIBUTING.md` | Accuracy only; consistency with shipped behavior |
 | Author skills | `.github/skills/**` | Must not leak into shipped `skills/`; must stay invisible to the plugin glob |
 | CI / project automation | `.github/workflows/**`, `.github/CODEOWNERS` | Eval invocation correctness, no secrets, expected runner labels, hermetic execution |
 

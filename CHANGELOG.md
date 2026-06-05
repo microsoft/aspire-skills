@@ -41,6 +41,14 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Restored upstream migration reference content for AppHost wiring, Docker Compose,
   full-solution AppHosts, JavaScript workspaces, OpenTelemetry, Playwright handoff,
   agent workflows, and detailed monitoring/search/display guidance.
+- Adopted [`@microsoft/vally-cli`](https://www.npmjs.com/package/@microsoft/vally-cli)
+  as the skill-eval CLI in place of `waza`. Added `.vally.yaml` with `ci-gate`
+  (tags `p0`+`p1`) and `nightly` (tags `p0`+`p1`+`p2`) suites, plus three new
+  GitHub Actions workflows: `skill-lint.yml` (PR-gated lint of `skills/` + eval
+  specs), `skill-eval.yml` (PR-gated `ci-gate` suite), and `skill-eval-nightly.yml`
+  (Sunday 06:00 UTC `nightly` suite with trajectory artifact upload). Eval
+  workflows soft-skip when `COPILOT_GITHUB_TOKEN` is unset (e.g. fork PRs);
+  see `evals/README.md` for the CI authentication contract.
 
 ## [0.0.1] - Unreleased
 
