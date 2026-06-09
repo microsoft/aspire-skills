@@ -145,11 +145,19 @@ Either install method works. The `dotnet tool install` path produces a NativeAOT
 
 ## References
 
+- [aspire-13-4-breaking-changes.md](references/aspire-13-4-breaking-changes.md) — Every 13.4
+  breaking change to scrub from agent-generated code, scripts, and CI snippets (`aspire exec`
+  removal, `aspire ps` flag removals, `Ingress.WithRoute` → `WithPath`,
+  `PublishAsNpmPackageScript` → `PublishAsPackageScript`, Foundry
+  `WithComputeEnvironment`, and the full 13.3 → 13.4 migration checklist).
 - [aspire-13-3-breaking-changes.md](references/aspire-13-3-breaking-changes.md) — Every 13.3
   breaking change to scrub from agent-generated code, scripts, and CI snippets (rename of
   `--log-level`, dashboard MCP removal, `NameOutput` → `NameOutputReference`,
   `AddAndPublishPromptAgent` removal, TS `withEnvironment*` deprecation, and the full
   13.2 → 13.3 migration checklist).
+- [aspire-breaking-changes.md](references/aspire-breaking-changes.md) — Version index that
+  points to local per-version scrub lists when this bundle includes one, then to the upstream
+  Aspire "What's new" pages for newer or intervening breaking changes.
 - [aspire-orchestration/references/agent-workflows.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-orchestration/references/agent-workflows.md) — Common agent workflows: worktrees, code changes, investigation, integrations, TypeScript generated APIs, secrets, deployment, and Playwright handoff.
 - [aspire-orchestration/references/app-commands.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-orchestration/references/app-commands.md) — App lifecycle, bootstrap, update, restore, docs, and integration discovery commands.
 - [aspire-orchestration/references/resource-management.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-orchestration/references/resource-management.md) — Resource wait and resource-command guidance.
