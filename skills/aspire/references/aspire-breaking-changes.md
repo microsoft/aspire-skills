@@ -1,18 +1,28 @@
-# Aspire Breaking Changes — Agent Reference
+# Aspire Breaking Changes — Version Index
 
-Version-independent pointer to the **authoritative, always-current** list of Aspire breaking
-changes. Aspire ships breaking changes in most releases, so this reference deliberately links
-to the upstream release notes instead of pinning a single version — that way the guidance never
-goes stale as new Aspire versions land.
+Version-aware entry point for Aspire breaking-change scrubs. Prefer the local per-version
+agent references when this bundle includes one because they are grep-friendly, offline, and
+written for code-review / code-generation workflows. Use the upstream release notes for newer
+or intervening Aspire versions that do not yet have a local scrub file.
 
 > Use this page before reviewing or generating AppHost code, CI YAML, or shell snippets.
-> Agents must scrub against the breaking-change list for the **installed** Aspire version
-> before recommending or generating code.
+> Agents must scrub against the breaking-change list for the installed Aspire version and any
+> intervening versions before recommending or generating code.
 
-## Where the breaking changes live
+## Local scrub lists
 
-The breaking changes for each release are published under the **"Breaking changes"** heading
-of that version's "What's new" page:
+- [Aspire 13.4 breaking changes](aspire-13-4-breaking-changes.md) — `aspire exec` removal,
+  `aspire ps` flag removals, TypeScript `.aspire/modules/`, persistent lifetimes, Kubernetes
+  route / Helm changes, Azure Front Door naming, Foundry hosted-agent API changes,
+  `PublishAsPackageScript`, Keycloak HTTPS, and behavior audits.
+- [Aspire 13.3 breaking changes](aspire-13-3-breaking-changes.md) — pipeline log-level
+  rename, dashboard MCP removal, Azure `NameOutputReference`, removed / renamed hosting APIs,
+  TypeScript `withEnvironment`, and the 13.2 → 13.3 migration checklist.
+
+## Upstream release notes
+
+The authoritative breaking changes for each release are published under the **"Breaking
+changes"** heading of that version's "What's new" page:
 
 - **What's new index (all versions):** <https://aspire.dev/whats-new/>
 - **Per-version page:** `https://aspire.dev/whats-new/aspire-<major>-<minor>/`
@@ -24,19 +34,14 @@ of that version's "What's new" page:
 
 1. **Find the installed version** — run `aspire --version` (or check `Aspire.AppHost.Sdk` /
    `aspire.config.json`).
-2. **Open that version's "What's new" page** and read the **Breaking changes** section.
-   If the repo is several versions behind, read every intervening version's breaking changes,
-   not just the newest one.
-3. **Scrub the AppHost, CI/CD scripts, and shell snippets** for the removed/renamed APIs,
-   environment variables, CLI flags, and templates called out there before recommending or
-   generating code.
-4. **Update the CLI and projects** when migrating across versions: `aspire update --self`
+2. **Read every relevant local scrub list** in order when the repo is migrating across one of
+   the versions above.
+3. **Fetch upstream release notes for gaps** — if the installed version is newer than the
+   latest local scrub list, read every intervening **Breaking changes** section on
+   `aspire.dev`.
+4. **Scrub the AppHost, CI/CD scripts, and shell snippets** for removed/renamed APIs,
+   environment variables, CLI flags, generated paths, endpoint assumptions, and image-version
+   behavior changes before recommending or generating code.
+5. **Update the CLI and projects** when migrating across versions: `aspire update --self`
    (CLI) and `aspire update` from the repo root (project package references — get user
    approval before running in CI).
-
-## Why link instead of inline
-
-Inlining a single version's scrub list goes out of date the moment a new Aspire version ships
-(this skill bundle targets the current Aspire CLI/SDK, which moves forward). Linking to the
-upstream "What's new" pages keeps agents pointed at the complete, current breaking-change list
-for whatever version is actually installed.
