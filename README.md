@@ -85,6 +85,8 @@ npx skills add https://github.com/microsoft/aspire-skills/tree/main/skills \
 
 In that command, `-a github-copilot` selects the target agent, `-g` installs globally, and `-y` accepts prompts.
 
+### skills via DNX
+
 **On .NET 10 or later?** `dnx` ships with the .NET 10 SDK and runs [`skillz`](https://www.nuget.org/packages/skillz), which is like `skills` but natively a .NET tool, no Node.js required:
 
 ```bash
