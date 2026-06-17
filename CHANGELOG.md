@@ -72,4 +72,3 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ### Added
 - Initial `aspire` skill with detection, safety guardrails, diagnostics bridge
 - Plugin manifests for Copilot CLI, Claude Code, Gemini CLI, Cursor
-- Telemetry hooks (placeholder)

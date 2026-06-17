@@ -2,8 +2,8 @@
 
 > **Adapted from [`awesome-skills/code-review-skill`](https://github.com/awesome-skills/code-review-skill/blob/main/reference/common-bugs-checklist.md)
 > (MIT-licensed).** Pruned to the stacks actually used in `microsoft/aspire-skills`:
-> YAML (evals), Markdown (SKILL.md), JSON (manifests, hooks), TypeScript (AppHost
-> snippets), C# / .NET (AppHost snippets), and Shell/CLI (hook commands). Vue/Svelte/
+> YAML (evals), Markdown (SKILL.md), JSON (manifests, MCP), TypeScript (AppHost
+> snippets), C# / .NET (AppHost snippets), and Shell/CLI. Vue/Svelte/
 > Kotlin/Qt and the like are intentionally omitted.
 
 Use this list during **Phase 4 — Bug scan** of the review workflow. For each touched
@@ -102,11 +102,10 @@ routing failures and silently degraded agent behavior.
 
 ---
 
-## JSON — manifests and hooks
+## JSON — manifests and MCP
 
 Files: `.plugin/plugin.json`, `.claude-plugin/plugin.json`,
-`.claude-plugin/marketplace.json`, `gemini-extension.json`, `.mcp.json`,
-`copilot-hooks.json`.
+`.claude-plugin/marketplace.json`, `gemini-extension.json`, `.mcp.json`.
 
 - [ ] Valid JSON (no trailing commas, no comments — these silently break some loaders).
 - [ ] `version` fields are consistent across all four plugin manifests (see
@@ -117,16 +116,8 @@ Files: `.plugin/plugin.json`, `.claude-plugin/plugin.json`,
 - [ ] `skills` glob in `.plugin/plugin.json` and `.claude-plugin/plugin.json` is still
       `./skills/` (never `./.github/skills/` — author skills must stay invisible to the
       published plugin).
-- [ ] `mcpServers` and `hooks` paths are correct relative paths.
+- [ ] `mcpServers` paths are correct relative paths.
 - [ ] No secrets, tokens, or environment-specific paths committed.
-
-### `copilot-hooks.json` / hook scripts
-
-- [ ] No unsanitized shell variable expansion (`$INPUT`, `$ARGS`, `$ENV{...}`).
-- [ ] No `eval` / `iex` on untrusted strings.
-- [ ] Each command propagates the child process exit code rather than swallowing.
-- [ ] Aspire CLI calls include `--non-interactive`.
-- [ ] No `dotnet run` on AppHosts (safety guardrail #1).
 
 ---
 
@@ -165,7 +156,7 @@ Files: `.plugin/plugin.json`, `.claude-plugin/plugin.json`,
 
 ## Shell / CLI snippets
 
-Anywhere shell appears (SKILL.md examples, `copilot-hooks.json`, README, eval prompts):
+Anywhere shell appears (SKILL.md examples, README, eval prompts):
 
 - [ ] Quoted variables to handle spaces and globs (`"$path"`, not `$path`).
 - [ ] `set -euo pipefail` (or PowerShell `$ErrorActionPreference = 'Stop'`) on

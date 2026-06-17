@@ -161,11 +161,11 @@ adds a new reference file:
 
 **Severity:** `suggestion` unless the new file is unlinked, which is `important`.
 
-## 11. Hooks and MCP
+## 11. MCP
 
-- `copilot-hooks.json` and `.mcp.json` changes need a CHANGELOG note **and** a quick
+- `.mcp.json` changes need a CHANGELOG note **and** a quick
   scan for shell-injection or path-traversal risk in any new shell snippet.
-- New hook commands must use `--non-interactive` on Aspire CLI calls and must not
+- New MCP commands must use `--non-interactive` on Aspire CLI calls and must not
   swallow errors.
 
 **Severity:** `important`; `blocking` for any unsanitized shell snippet or missing error
@@ -195,5 +195,5 @@ first:
 5. SKILL.md frontmatter (§1) + token budget (§2).
 6. Fixtures (§5).
 7. CHANGELOG (§7).
-8. Hooks / MCP (§11).
+8. MCP (§11).
 9. References hygiene (§10).

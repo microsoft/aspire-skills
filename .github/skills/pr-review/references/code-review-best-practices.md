@@ -33,7 +33,6 @@ Pick the depth from the change surface, not the line count.
 | Only `evals/` or `skills/<skill>/evals/` | Standard — apply `evals/AUTHORING.md` grader patterns; confirm fixtures are shared. |
 | `skills/<skill>/SKILL.md` or its `references/` | Standard+ — apply [aspire-skills-review-checklist.md](aspire-skills-review-checklist.md) §1–§5 and §10. |
 | `.plugin/plugin.json` / `.claude-plugin/*.json` / `gemini-extension.json` | Deep — version sync, manifest consistency, marketplace metadata. |
-| `copilot-hooks.json`, `.mcp.json`, `hooks/` | Deep — shell-injection scan, error propagation, `--non-interactive`. |
 
 ## Communication
 
