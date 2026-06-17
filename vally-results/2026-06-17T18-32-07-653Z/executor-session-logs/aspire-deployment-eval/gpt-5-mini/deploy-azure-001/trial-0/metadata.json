@@ -1,0 +1,15 @@
+{
+  "evalName": "aspire-deployment-eval",
+  "evalFilePath": "/home/runner/work/aspire-skills/aspire-skills/skills/aspire-deployment/evals/eval.yaml",
+  "stimulusName": "deploy-azure-001",
+  "executorName": "copilot-sdk",
+  "model": "gpt-5-mini",
+  "trialIndex": 0,
+  "startedAt": "2026-06-17T18:32:07.826Z",
+  "status": "success",
+  "trajectoryId": "4c86220a-b3f4-469a-b20c-95aef07fc749",
+  "executorSessionId": "de6d577a-c68d-4412-9085-4e07ee5a7ced",
+  "completedAt": "2026-06-17T18:32:41.620Z",
+  "logSource": "native",
+  "eventsPath": "/home/runner/work/aspire-skills/aspire-skills/vally-results/2026-06-17T18-32-07-653Z/executor-session-logs/aspire-deployment-eval/gpt-5-mini/deploy-azure-001/trial-0/events.jsonl"
+}

@@ -1,0 +1,15 @@
+{
+  "evalName": "aspire-router-eval",
+  "evalFilePath": "/home/runner/work/aspire-skills/aspire-skills/skills/aspire/evals/eval.yaml",
+  "stimulusName": "router-deploy-001",
+  "executorName": "copilot-sdk",
+  "model": "gpt-5-mini",
+  "trialIndex": 2,
+  "startedAt": "2026-06-17T18:28:07.600Z",
+  "status": "success",
+  "trajectoryId": "3d56b19f-f433-4acf-b444-82aa70179324",
+  "executorSessionId": "707cc659-959a-41d6-8569-4ffd7fddcd76",
+  "completedAt": "2026-06-17T18:28:15.130Z",
+  "logSource": "native",
+  "eventsPath": "/home/runner/work/aspire-skills/aspire-skills/vally-results/2026-06-17T18-27-58-175Z/executor-session-logs/aspire-router-eval/gpt-5-mini/router-deploy-001/trial-2/events.jsonl"
+}
