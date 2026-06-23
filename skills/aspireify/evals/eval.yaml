@@ -7,7 +7,7 @@ version: "1.0"
 type: capability
 tags:
   skill: aspireify
-config:
+defaults:
   runs: 3
   timeout: 120s
   executor: copilot-sdk

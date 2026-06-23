@@ -12,8 +12,6 @@ aspire-skills/
 ├── .cursor-plugin/          → ../../.cursor-plugin/
 ├── .mcp.json                → ../../.mcp.json
 ├── gemini-extension.json    → ../../gemini-extension.json
-├── copilot-hooks.json       → ../../copilot-hooks.json
-├── hooks/                   → ../../hooks/
 ├── skills/                  → ../../skills/
 └── README.md                (this file)
 ```

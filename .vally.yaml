@@ -3,6 +3,9 @@ paths:
   # Internal author skills under .github/skills/ (e.g. pr-review) are
   # intentionally out of plugin scope — see their own SKILL.md headers.
   skills: skills
+  # Eval specs live under skills/<skill>/evals/eval.yaml; point vally at the
+  # skills tree so it discovers them recursively (default would look in evals/).
+  evals: skills
 
 suites:
   ci-gate:

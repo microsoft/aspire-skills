@@ -9,8 +9,7 @@ description: >-
   comments as a review.
   USE FOR: review this PR, review the current branch, review pull request, gh pr view,
   gh pr diff, "what should I check before merging", PR review of changes to skills/,
-  evals/, hooks/, .plugin/, .claude-plugin/, gemini-extension.json, CHANGELOG.md,
-  copilot-hooks.json.
+  evals/, .plugin/, .claude-plugin/, gemini-extension.json, CHANGELOG.md.
   DO NOT USE FOR: reviewing application code in *consumer* Aspire projects (this skill
   is scoped to microsoft/aspire-skills authoring); end-user Aspire workflows (use the
   shipped `aspire` router and its sub-skills); generic code review on unrelated repos.
@@ -156,7 +155,7 @@ specific** — adjust the focus column to what the file actually demands.
 | Eval config | `skills/<skill>/evals/eval.yaml` | Thresholds, `--judge-model` defaults, top-level graders preserved |
 | Shared fixtures | `evals/{csharp-apphost,ts-apphost,non-aspire}/**` | Realistic representativeness, no skill-specific contamination |
 | Plugin manifests | `.plugin/plugin.json`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `gemini-extension.json` | Version sync across all four, identical metadata, valid JSON, `skills` glob unchanged at `./skills/` |
-| Hooks / MCP | `copilot-hooks.json`, `.mcp.json`, `hooks/**` | Shell injection, error propagation, `--non-interactive`, no `dotnet run` on AppHost |
+| MCP | `.mcp.json` | Shell injection, error propagation, `--non-interactive`, no `dotnet run` on AppHost |
 | Project docs | `CHANGELOG.md`, `README.md`, `CONTRIBUTING.md` | Accuracy only; consistency with shipped behavior |
 | Author skills | `.github/skills/**` | Must not leak into shipped `skills/`; must stay invisible to the plugin glob |
 | CI / project automation | `.github/workflows/**`, `.github/CODEOWNERS` | Eval invocation correctness, no secrets, expected runner labels, hermetic execution |
@@ -193,19 +192,17 @@ Only flag concrete, high-confidence problems. Categories:
    `"docker"`).
 5. **Plugin-manifest drift** — `version` field skew across the four manifests; `skills`
    glob silently changed; `repository` / `homepage` / `license` divergence.
-6. **Hook unsafety** — unsanitized variable expansion, swallowed errors, `dotnet run` on
-   AppHost, missing `--non-interactive`.
-7. **Bugs** — invalid YAML/JSON, broken cross-skill links (`../<wrong-name>/SKILL.md`),
+6. **Bugs** — invalid YAML/JSON, broken cross-skill links (`../<wrong-name>/SKILL.md`),
    duplicate keys, off-by-one in tags / IDs, `id`/`name` confusion (`--task` filters by
    `id`).
-8. **CHANGELOG gap** — user-visible change with no entry.
-9. **13.4 staleness** — references to removed surfaces (`AddAndPublishPromptAgent`,
+7. **CHANGELOG gap** — user-visible change with no entry.
+8. **13.4 staleness** — references to removed surfaces (`AddAndPublishPromptAgent`,
    `NameOutput` instead of `NameOutputReference`, removed `dotnet new aspire-*`
    templates, deprecated `withEnvironment*`).
-10. **Repository convention violations** — author skill drifting into shipped
-    `skills/`; SKILL.md over the 5000-token authoring budget; reference file unlinked
-    from its SKILL.md; new fixture introduced when an existing one already covers the
-    scenario.
+9. **Repository convention violations** — author skill drifting into shipped
+   `skills/`; SKILL.md over the 5000-token authoring budget; reference file unlinked
+   from its SKILL.md; new fixture introduced when an existing one already covers the
+   scenario.
 
 ### What NOT to flag
 
