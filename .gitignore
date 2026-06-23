@@ -1,4 +1,5 @@
 eval-results/
+vally-results/
 .smoketest-results/
 node_modules/
 dist/
