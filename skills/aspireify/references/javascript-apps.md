@@ -23,14 +23,14 @@ Use `.WithRunScript()` to control which package.json script runs during developm
 
 ```typescript
 // Express API with TypeScript: uses ts-node-dev for hot reload in dev
-const api = await builder
+const api = builder
     .addNodeApp("api", "./api", "src/index.ts")
     .withRunScript("start:dev")                      // runs "yarn start:dev" (ts-node-dev)
     .withYarn()
     .withHttpEndpoint({ env: "PORT" });
 
 // Vite frontend: default "dev" script is fine, just add yarn
-const web = await builder
+const web = builder
     .addViteApp("web", "./frontend")
     .withYarn();
 ```
@@ -62,16 +62,16 @@ In monorepos that use **yarn workspaces** or **pnpm workspaces**, all workspace 
 
 ```typescript
 // ❌ WRONG for workspace monorepos — concurrent installs cause file locking errors
-const app = await builder.addViteApp("app", "./packages/frontend")
+const app = builder.addViteApp("app", "./packages/frontend")
     .withYarn();  // triggers yarn install at startup → EPERM on Windows
 
-const api = await builder.addNodeApp("api", "./packages/api", "src/index.ts")
+const api = builder.addNodeApp("api", "./packages/api", "src/index.ts")
     .withYarn();  // second concurrent yarn install → file lock conflict
 
 // ✅ CORRECT for workspace monorepos — deps already installed at root
-const app = await builder.addViteApp("app", "./packages/frontend");
+const app = builder.addViteApp("app", "./packages/frontend");
 
-const api = await builder.addNodeApp("api", "./packages/api", "src/index.ts")
+const api = builder.addNodeApp("api", "./packages/api", "src/index.ts")
     .withRunScript("start:dev");
 ```
 

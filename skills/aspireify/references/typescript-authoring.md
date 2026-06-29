@@ -56,19 +56,59 @@ const builder = await createBuilder();
 const pg = builder.addPostgres('pg').addDatabase('appdb');
 const cache = builder.addRedis('cache');
 
-const api = await builder.addProject('api', '../Api/Api.csproj')
+const api = builder.addProject('api', '../Api/Api.csproj')
     .withReference(pg)
     .withReference(cache)
     .waitFor(pg)
     .withExternalHttpEndpoints();
 
-await builder.addNextJsApp('web', '../web')
+builder.addNextJsApp('web', '../web')
     .withReference(api)
     .waitFor(api)
     .withBrowserLogs();
 
 await builder.build().run();
 ```
+
+## Promise-fluent return types — when you actually need `await`
+
+Every `add*` and `with*` method on the TypeScript builder returns a `*ResourcePromise`
+(e.g. `JavaScriptAppResourcePromise`, `ViteAppResourcePromise`, `ProjectResourcePromise`).
+These types are **both**:
+
+1. A `PromiseLike<TheResource>` — `await` works and yields the concrete resource.
+2. A fluent builder — every `with*` / `getEndpoint` / `waitFor` / `waitForCompletion` is
+   exposed directly and returns another `*ResourcePromise`.
+
+So you only ever need `await` in **two** places in `apphost.ts`:
+
+| Where | Why |
+|-------|-----|
+| `const builder = await createBuilder();` | The builder is constructed asynchronously. |
+| `await builder.build().run();` | The final entry point. |
+
+Intermediate `add*` calls are assigned to `const` and chained **without** `await`:
+
+```ts
+const api = builder.addProject('api', '../Api/Api.csproj')
+    .withReference(db)
+    .waitFor(db)
+    .withExternalHttpEndpoints();
+
+builder.addViteApp('web', '../web')
+    .withEnvironment('VITE_API_URL', api.getEndpoint('http'))
+    .waitFor(api)
+    .withExternalHttpEndpoints()
+    .withBrowserLogs();
+```
+
+`api.getEndpoint('http')` returns an `EndpointReferencePromise`, which `withEnvironment`,
+`withReference`, and friends accept directly — no `await` needed.
+
+If you *do* `await` an `add*` call you get the raw resource (synchronous surface,
+`.getEndpoint()` returns `EndpointReference`). Both paths work — `withEnvironment` accepts
+either — but **prefer the un-awaited form** for readability, and to keep the AppHost focused
+on declaration rather than orchestration.
 
 ## Unified `withEnvironment` API
 
@@ -81,8 +121,7 @@ const apiKey = builder.addParameter('apiKey', { secret: true });
 const cache = builder.addRedis('cache');
 const db = builder.addPostgres('pg').addDatabase('appdb');
 
-const api = await builder.addProject('api', '../Api/Api.csproj');
-await api
+const api = builder.addProject('api', '../Api/Api.csproj')
     .withEnvironment('SERVICE_URL', cache.primaryEndpoint)   // endpoint
     .withEnvironment('API_KEY', apiKey)                       // parameter
     .withEnvironment('DB', db);                               // connection string
@@ -100,10 +139,10 @@ await api
 Endpoints expose `url`, `host`, and `port` properties usable inside expressions:
 
 ```ts
-const api = await builder.addProject('api', '../Api/Api.csproj');
+const api = builder.addProject('api', '../Api/Api.csproj');
 const httpEndpoint = api.getEndpoint('http');
 
-await builder.addNodeApp('worker', 'worker.js')
+builder.addNodeApp('worker', 'worker.js')
     .withEnvironment('API_BASE', httpEndpoint.url)
     .withEnvironment('API_HOST', httpEndpoint.host)
     .withEnvironment('API_PORT', httpEndpoint.port);
@@ -116,7 +155,7 @@ Use the `excludeReferenceEndpoint` flag to keep admin endpoints out of
 `withReference()`:
 
 ```ts
-await builder.addProject('api', '../Api/Api.csproj')
+builder.addProject('api', '../Api/Api.csproj')
     .withEndpoint('admin', e => { e.excludeReferenceEndpoint = true; });
 ```
 
@@ -134,23 +173,23 @@ Publish hooks (mirror C# `PublishAs*`):
 
 ```ts
 // Vite SPA → static website with optional API proxy
-await builder.addViteApp('web', '../web')
+builder.addViteApp('web', '../web')
     .withReference(api)
     .publishAsStaticWebsite({ apiPath: '/api', apiTarget: api });
 
 // Pre-bundled Node server (TanStack Start, SvelteKit)
-await builder.addViteApp('web', '../web')
+builder.addViteApp('web', '../web')
     .publishAsNodeServer({ entryPoint: '.output/server/index.mjs', outputPath: '.output' });
 
 // package-script SSR (Remix, Astro, full Nitro Next.js)
-await builder.addViteApp('web', '../web')
+builder.addViteApp('web', '../web')
     .publishAsPackageScript({ scriptName: 'start' });
 ```
 
 ## Docker Compose Hooks
 
 ```ts
-await builder.addContainer('netshoot', 'nicolaka/netshoot')
+builder.addContainer('netshoot', 'nicolaka/netshoot')
     .publishAsDockerComposeService((resource, service) => {
         service.privileged = true;
     });
@@ -160,7 +199,7 @@ await builder.addContainer('netshoot', 'nicolaka/netshoot')
 
 ```ts
 // Diagnostic ASPIREDOCKERFILEBUILDER001 — experimental warning
-await builder.addDockerfileBuilder('myimage')
+builder.addDockerfileBuilder('myimage')
     .withDockerfileBuilder(b => b
         .from('node:20-alpine')
         .workdir('/app')
@@ -173,8 +212,8 @@ await builder.addDockerfileBuilder('myimage')
 ## YARP Routing
 
 ```ts
-const api = await builder.addProject('api', '../Api/Api.csproj');
-const yarp = await builder.addYarp('gateway')
+const api = builder.addProject('api', '../Api/Api.csproj');
+const yarp = builder.addYarp('gateway')
     .addRoute('/api/{**catch-all}', api.getEndpoint('http'))
     .addCatchAllRoute(web.getEndpoint('http'));
 ```
@@ -185,14 +224,14 @@ const yarp = await builder.addYarp('gateway')
 const aca = builder.addAzureContainerAppEnvironment('aca');
 const aks = builder.addAzureKubernetesEnvironment('aks');
 
-await builder.addProject('api', '../Api/Api.csproj')
+builder.addProject('api', '../Api/Api.csproj')
     .withComputeEnvironment(aca);
 ```
 
 ACA custom domain configuration is exposed in TS:
 
 ```ts
-await api.withComputeEnvironment(aca, e => {
+api.withComputeEnvironment(aca, e => {
     e.customDomains = [{ name: 'api.example.com', certificate: cert }];
 });
 ```
@@ -205,7 +244,7 @@ well-known values:
 ```ts
 import { FoundryModels } from '@aspire/hosting-azure';
 
-await builder.addAzureFoundry('foundry')
+builder.addAzureFoundry('foundry')
     .addModel('chat', FoundryModels.OpenAI.Gpt41Mini);
 ```
 
@@ -222,7 +261,7 @@ await builder.addAzureFoundry('foundry')
 ## Browser Logs
 
 ```ts
-await builder.addViteApp('frontend', '../frontend')
+builder.addViteApp('frontend', '../frontend')
     .withBrowserLogs();
 ```
 
@@ -244,3 +283,4 @@ await builder.addViteApp('frontend', '../frontend')
 | Use `addNextJsApp` / `addViteApp` over hand-rolled Dockerfiles | First-class lifecycle + publish helpers |
 | Use `publishAs*` for JS publish — never raw Dockerfile when a helper fits | Maintained, tested, and works with `aspire deploy` |
 | `package.json` `engines.node` no longer drives Node image selection | Pin via publish helper options instead |
+| Don't wrap `await builder.add*(...)` in parens to keep chaining | The `*ResourcePromise` already exposes the fluent surface — assign to `const` and chain **without** `await` (only `createBuilder()` and `build().run()` need it) |

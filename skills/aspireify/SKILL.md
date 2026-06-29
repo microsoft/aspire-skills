@@ -253,7 +253,7 @@ catalog.
 | Concept | C# | TypeScript |
 |---------|----|------------|
 | Builder | `var builder = DistributedApplication.CreateBuilder(args);` | `const builder = await createBuilder();` |
-| Add project | `builder.AddProject<Projects.Api>("api")` (SDK) or `AddProject("api", "../Api/Api.csproj")` | `await builder.addProject('api', '../Api/Api.csproj')` |
+| Add project | `builder.AddProject<Projects.Api>("api")` (SDK) or `AddProject("api", "../Api/Api.csproj")` | `builder.addProject('api', '../Api/Api.csproj')` |
 | Wire env var (any value type) | `.WithEnvironment("KEY", value)` | `.withEnvironment('KEY', value)` ← unified API |
 | Wait for dependency | `.WaitFor(db)` | `.waitFor(db)` |
 | Pass connection | `.WithReference(db)` | `.withReference(db)` |

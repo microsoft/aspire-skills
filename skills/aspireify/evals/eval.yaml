@@ -536,6 +536,53 @@ stimuli:
       - type: output-not-contains
         config:
           substring: modify .aspire/modules/
+  - name: aspireify-fluent-ts-001
+    description: "Codifies the fluent (no-over-await) TypeScript AppHost style: only
+      createBuilder() and build().run() are awaited; intermediate add*/with* calls are
+      assigned to a const and chained without await via the *ResourcePromise surface (issue #31)."
+    prompt: >-
+      In my apphost.ts, add a Postgres database and a Vite frontend in ./web, wire the
+      frontend to the API via service discovery, and have the frontend wait for the
+      database. Show me the full apphost.ts.
+    tags:
+      priority: p1
+      issue: "31"
+      area:
+        - authoring
+        - typescript
+    environment:
+      files:
+        - src: ../../../evals/ts-apphost/apphost.ts
+          dest: ts-apphost/apphost.ts
+        - src: ../../../evals/ts-apphost/aspire.config.json
+          dest: ts-apphost/aspire.config.json
+    graders:
+      - type: output-not-contains
+        name: no_over_await_on_add
+        config:
+          substring: "await builder.add"
+      - type: output-not-contains
+        name: no_paren_wrapped_await
+        config:
+          substring: "(await builder"
+      - type: prompt
+        name: fluent_resource_promise_style
+        config:
+          prompt: >-
+            In the TypeScript apphost.ts the assistant produced, is `await` used in ONLY
+            two places — `const builder = await createBuilder();` and
+            `await builder.build().run();` — while every intermediate add*/with* call
+            (addPostgres, addViteApp, addProject, etc.) is assigned to a const and chained
+            WITHOUT await (relying on the fluent *ResourcePromise surface)? Answer yes only
+            if no intermediate add* or with* call is awaited.
+      - type: output-contains
+        name: awaits_create_builder
+        config:
+          substring: "await createBuilder"
+      - type: output-contains
+        name: calls_build_run
+        config:
+          substring: "build().run()"
   - name: should_trigger_01
     description: "Reason: Direct wiring request — aspireify owns AppHost wiring"
     prompt: Wire up my Aspire AppHost
