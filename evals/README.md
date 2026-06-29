@@ -23,9 +23,10 @@ skills/<skill>/evals/
 
 Each `eval.yaml` is a single canonical [vally `EvalSchema`](https://www.npmjs.com/package/@microsoft/vally-cli) document containing:
 
-- `config` — model, executor (`copilot-sdk`), runs per stimulus, timeout, judge model.
-- `tags` (optional) — record of `{ priority: pN, area: <area> }` inherited by stimuli that don't override.
-- `stimuli` — array of prompts to execute. Each stimulus has `name`, `prompt`, optional `environment.files`, and `graders`.
+- `defaults` — model, executor (`copilot-sdk`), runs per stimulus, timeout.
+- `environment.skills` — **(vally 0.6.0)** the skill directories loaded for this spec. See [Skills & baselines](#skills--baselines-vally-060). Omit it and the stimuli run with **no skills** (the baseline).
+- `tags` (optional) — record of `{ skill: <name>, priority: pN, area: <area> }` inherited by stimuli that don't override.
+- `stimuli` — array of prompts to execute. Each stimulus has `name`, `prompt`, optional `tags`, optional `environment.files` (and may add `environment.skills`), and `graders`.
 - `scoring` (optional) — explicit weights per grader plus a pass-rate threshold. When omitted, vally applies equal weights and threshold `1.0` (every grader must pass).
 
 Shared fixtures live at the **repo-root** `evals/` directory and are referenced from `stimulus.environment.files` by `{ src, dest }` pairs:
@@ -39,14 +40,60 @@ evals/
 
 `src` is resolved relative to the eval spec file (so the canonical reference from `skills/<skill>/evals/eval.yaml` is `../../../evals/<fixture-path>`). `dest` is the workspace-relative path the executor sees.
 
+## Skills & baselines (vally 0.6.0)
+
+Starting in vally **0.6.0**, a run loads **no skills by default**. Each spec declares the skills it exercises via a top-level `environment.skills` list of skill **directories** (each containing a `SKILL.md`), resolved relative to the eval file:
+
+```yaml
+environment:
+  skills:
+    - ../../aspireify            # the skill under test
+    - ../../aspire-orchestration # its in-repo dependency
+```
+
+Eval-level `environment.skills` is **union-merged** into every stimulus, so you declare the set once. A stimulus may *add* siblings (e.g. routing stimuli that need the full candidate set) but cannot remove them.
+
+**Hybrid loading convention used here:**
+
+- **Capability specs** load the skill under test **plus its transitive in-repo dependencies** (whatever its `SKILL.md` `INVOKES:`). E.g. `aspireify` loads `aspireify` + `aspire-orchestration` because it validates wiring by running `aspire start`.
+- **Routing stimuli** (the `aspire` router spec, and `area: routing` stimuli) load the **full set** of six skills so routing decisions are made against the real siblings.
+
+**Activation assertions:** `environment.expect_skills` / `environment.reject_skills` assert which skills the agent actually invoked — use them to make routing tests first-class rather than relying only on response-content graders.
+
+### Comparative baselines (`vally experiment`)
+
+[`skill-lift.experiment.yaml`](../skill-lift.experiment.yaml) (repo root) runs every spec **twice** along a single axis — `/environment/skills` — to measure each skill's *lift* over a no-skill baseline:
+
+```yaml
+name: skill-lift
+evals: [skills/*/evals/eval.yaml]
+vary: [/environment/skills]
+baseline: no-skills
+variants:
+  no-skills:   { environment: { skills: [] } }  # strip all skills
+  with-skills: {}                               # inherit each spec's skills
+```
+
+```bash
+# Plan only (no model calls)
+vally experiment run skill-lift.experiment.yaml --dry-run
+
+# Full run
+vally experiment run skill-lift.experiment.yaml --output-dir ./results
+```
+
+The `with-skills` − `no-skills` pass-rate delta is the measured lift. The experiment is **informational, never a gate**: the no-skills baseline is *expected* to fail grading, so `vally experiment run` exits non-zero by design. The PR gate stays `skill-eval.yml` (the `ci-gate` suite); CI runs the experiment weekly via [`skill-experiment.yml`](../.github/workflows/skill-experiment.yml).
+
 ## Quick commands
 
 | Goal | Command |
 |------|---------|
 | Run CI gate suite (p0 + p1) | `vally eval --suite ci-gate` |
 | Run full nightly suite | `vally eval --suite nightly` |
-| Run one skill | `vally eval --eval-spec skills/aspire-deployment/evals/eval.yaml --skill-dir skills/aspire-deployment` |
+| Run one skill | `vally eval --eval-spec skills/aspire-deployment/evals/eval.yaml` |
 | Run one stimulus by tag | `vally eval --eval-spec skills/aspire/evals/eval.yaml --tag area=routing` |
+| Run the skill-lift baseline experiment | `vally experiment run skill-lift.experiment.yaml --output-dir ./results` |
+| Plan the experiment (no model calls) | `vally experiment run skill-lift.experiment.yaml --dry-run` |
 | Save per-skill results | `vally eval --suite ci-gate --output-dir ./results` |
 | Emit JUnit XML for CI | `vally eval --suite ci-gate --junit ./results/junit.xml` |
 | Browse results in the dashboard | `vally serve ./results` |
@@ -60,7 +107,7 @@ evals/
 | Flag | Purpose |
 |------|---------|
 | `-e, --eval-spec <path>` | Eval spec to run. Repeatable. |
-| `--skill-dir <dir>` | Skill directory the executor surfaces to the model. Defaults to the eval spec's parent. |
+| `--skill-dir <dir>` | **(vally 0.6.0)** Extra skill dir(s) loaded on top of each spec's `environment.skills`. With no `--skill-dir` **and** no `environment.skills`, vally loads **no skills** (the baseline) — prefer declaring `environment.skills` in the spec. |
 | `--workspace <dir>` | Working directory for the executor (fixtures get copied here). Defaults to a per-stimulus temp dir. |
 | `--suite <name>` | Run only stimuli matching a suite declared in `.vally.yaml`. |
 | `--tag <key=values>` | Run only stimuli whose tag record matches. Comma-separate values; repeat for multiple keys. E.g. `--tag priority=p0,p1 --tag area=routing`. |
@@ -159,7 +206,7 @@ vally ingest ./results --store ./vally.sqlite
 vally serve --store ./vally.sqlite
 ```
 
-`vally compare <run-dir-A> <run-dir-B>` diff-prints two runs for ad-hoc regression triage without the dashboard.
+`vally compare --run-a <run-dir-A> --run-b <run-dir-B>` diff-prints two runs for ad-hoc regression triage without the dashboard (add `-e <spec>` to apply pairwise graders).
 
 ## Quick smoke test
 
@@ -181,6 +228,7 @@ The repo ships three GitHub Actions workflows that drive `vally` automatically:
 | [`skill-lint.yml`](../.github/workflows/skill-lint.yml) | PR (`SKILL.md` / `*.yaml` / `.vally.yaml`) | `vally lint skills` + per-spec `vally lint --eval-spec <spec>` |
 | [`skill-eval.yml`](../.github/workflows/skill-eval.yml) | PR (`SKILL.md` / `eval.yaml` / `.vally.yaml`) | `vally eval --suite ci-gate --output-dir ./results` |
 | [`skill-eval-nightly.yml`](../.github/workflows/skill-eval-nightly.yml) | `cron: "0 6 * * 0"` (Sun 06:00 UTC) + `workflow_dispatch` | `vally eval --suite nightly --output-dir ./results` |
+| [`skill-experiment.yml`](../.github/workflows/skill-experiment.yml) | `cron: "0 6 * * 6"` (Sat 06:00 UTC) + `workflow_dispatch` | `vally experiment run skill-lift.experiment.yaml --output-dir ./results` — informational baseline (skills vs no-skills), never gates |
 
 The suites are declared at the repo root in [`.vally.yaml`](../.vally.yaml) and filter on the `priority` tag every stimulus carries:
 
