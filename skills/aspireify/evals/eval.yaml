@@ -12,6 +12,13 @@ defaults:
   timeout: 120s
   executor: copilot-sdk
   model: gpt-5-mini
+environment:
+  # vally 0.6.0 loads no skills unless declared here (paths resolve relative to
+  # this eval file). Load aspireify plus its in-repo dependency: aspireify
+  # validates wiring by running `aspire start` (aspire-orchestration territory).
+  skills:
+    - ../../aspireify
+    - ../../aspire-orchestration
 stimuli:
   - name: aspireify-nextjs-001
     prompt: Add my Next.js frontend in ./web to my Aspire AppHost and wire it to talk to my API.

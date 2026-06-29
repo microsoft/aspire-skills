@@ -11,6 +11,14 @@ defaults:
   timeout: 120s
   executor: copilot-sdk
   model: gpt-5-mini
+environment:
+  # vally 0.6.0 loads no skills unless declared here (paths resolve relative to
+  # this eval file). Load aspire-init plus its transitive in-repo dependencies:
+  # init hands off to aspireify, which in turn validates via aspire-orchestration.
+  skills:
+    - ../../aspire-init
+    - ../../aspireify
+    - ../../aspire-orchestration
 stimuli:
   - name: init-cli-install-001
     prompt: I tried `aspire init` but it says command not found. How do I install the Aspire CLI?

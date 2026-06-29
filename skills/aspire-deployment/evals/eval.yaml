@@ -10,6 +10,12 @@ defaults:
   timeout: 120s
   executor: copilot-sdk
   model: gpt-5-mini
+environment:
+  # vally 0.6.0 loads no skills unless declared here (paths resolve relative to
+  # this eval file). aspire-deployment is self-contained (INVOKES the aspire CLI
+  # and target cloud/container CLIs, no in-repo skill deps).
+  skills:
+    - ../../aspire-deployment
 stimuli:
   - name: deploy-destroy-001
     prompt: I'm done with this preview deployment — how do I tear down everything Aspire provisioned?

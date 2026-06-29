@@ -11,6 +11,12 @@ defaults:
   timeout: 120s
   executor: copilot-sdk
   model: gpt-5-mini
+environment:
+  # vally 0.6.0 loads no skills unless declared here (paths resolve relative to
+  # this eval file). aspire-monitoring is self-contained in-repo (its other
+  # INVOKES targets — azure-diagnostics, kubectl — are external to this plugin).
+  skills:
+    - ../../aspire-monitoring
 stimuli:
   - name: mon-browser-logs-001
     prompt: I want to see browser console logs and network requests from my Vite frontend in the Aspire

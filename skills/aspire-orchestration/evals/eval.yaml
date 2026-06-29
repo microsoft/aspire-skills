@@ -10,6 +10,12 @@ defaults:
   timeout: 120s
   executor: copilot-sdk
   model: gpt-5-mini
+environment:
+  # vally 0.6.0 loads no skills unless declared here (paths resolve relative to
+  # this eval file). aspire-orchestration is self-contained (INVOKES only the
+  # aspire CLI), so it loads on its own.
+  skills:
+    - ../../aspire-orchestration
 stimuli:
   - name: orch-update-self-001
     prompt: How do I upgrade my Aspire CLI to the latest 13.3?

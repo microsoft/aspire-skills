@@ -11,6 +11,17 @@ defaults:
   timeout: 120s
   executor: copilot-sdk
   model: gpt-5-mini
+environment:
+  # vally 0.6.0 loads no skills unless declared here (paths resolve relative to
+  # this eval file). The router fans out to every sub-skill (see SKILL.md
+  # INVOKES:), so routing stimuli need the full set present to choose among them.
+  skills:
+    - ../../aspire
+    - ../../aspire-init
+    - ../../aspireify
+    - ../../aspire-orchestration
+    - ../../aspire-deployment
+    - ../../aspire-monitoring
 stimuli:
   - name: router-init-001
     prompt: I want better AI agent support for my Aspire project
