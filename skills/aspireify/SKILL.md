@@ -167,6 +167,7 @@ For the detailed, upstream-parity workflow, load these references before editing
 - [full-solution-apphosts.md](references/full-solution-apphosts.md) — large solution triage, mixed SDK boundaries, solution membership, ServiceDefaults placement, and legacy host migration.
 - [javascript-apps.md](references/javascript-apps.md) — JavaScript resource selection, workspace/monorepo package-manager handling, ports, scripts, and TS AppHost package config.
 - [opentelemetry.md](references/opentelemetry.md) — optional Node.js, Python, and Go OpenTelemetry wiring for non-.NET services.
+- [bicep-to-apphost.md](references/bicep-to-apphost.md) — convert exported Azure Bicep / ARM IaC into AppHost resources: native `AddAzure*` mapping, `ConfigureInfrastructure` tweaks, custom `AddBicepTemplate` fallback, and provision-new vs reference-existing decisions.
 
 ### 1. Scan
 
@@ -182,8 +183,15 @@ Walk the repo and inventory:
 | Integration packages | `dotnet list package` per project; package.json `dependencies` |
 | Existing endpoints | hardcoded ports in `launchSettings.json`, `next.config.js`, `vite.config.ts` |
 | Workspace shared packages | root `package.json` with a `workspaces` field **and** a member whose `main`/`exports` points at `dist/` that another member depends on (`"@scope/shared": "*"`) → model a one-shot `shared-build` resource ([javascript-apps.md](references/javascript-apps.md#shared-library-packages-in-monorepos)) |
+| Azure IaC | `*.bicep`, `main.bicep`, ARM `*.json`, or `az group export` output → convert to AppHost resources ([bicep-to-apphost.md](references/bicep-to-apphost.md)) |
 
 Full heuristics in [references/scan-and-propose.md](references/scan-and-propose.md).
+
+> **If the scan (or the user's prompt) surfaces Bicep / ARM / exported Azure IaC, you MUST open
+> [references/bicep-to-apphost.md](references/bicep-to-apphost.md) before proposing.** Don't
+> answer a Bicep-conversion request from memory: that reference has the authoritative Bicep
+> `type` → `AddAzure*` map, the `AddBicepTemplate` fallback for unmodeled resources, and the
+> provision-new vs reference-existing decision you must raise for production infrastructure.
 
 ### 2. Propose
 
@@ -193,6 +201,7 @@ Present a resource graph **before editing**. Ask clarifying questions:
 - "Your React app hardcodes `http://localhost:5000` — replace with Aspire service discovery (`endpoint.url`)?"
 - "Your API has an `/admin` endpoint — exclude it from `WithReference()` so consumers don't see it?"
 - "Your monorepo has a source-linked shared package (`packages/shared` → `dist/`) — model it as a one-shot `shared-build` resource that consumers `waitForCompletion` on? (`tsc --incremental` can silently skip emit, so I'll add a `prebuild` clean step.)"
+- "I found Bicep/ARM IaC under `infra/` — should I model these as Aspire resources (provisioned and **owned** by the AppHost) or reference your existing production resources (`AddConnectionString` / `AsExisting`)? I'll map each to a native `AddAzure*` API where one exists and embed the rest as `AddBicepTemplate`."
 
 ### 3. Edit
 
@@ -324,6 +333,7 @@ Full flow in [references/validation.md](references/validation.md).
 - [full-solution-apphosts.md](references/full-solution-apphosts.md) — Large/full-solution AppHost guidance
 - [javascript-apps.md](references/javascript-apps.md) — JavaScript/TypeScript app and workspace handling
 - [opentelemetry.md](references/opentelemetry.md) — Non-.NET OpenTelemetry setup
+- [bicep-to-apphost.md](references/bicep-to-apphost.md) — Convert Azure Bicep / ARM IaC into AppHost resources
 - [scan-and-propose.md](references/scan-and-propose.md) — Repo scan heuristics + integration catalog
 - [csharp-authoring.md](references/csharp-authoring.md) — C# AppHost patterns
 - [typescript-authoring.md](references/typescript-authoring.md) — TS AppHost patterns + parity APIs

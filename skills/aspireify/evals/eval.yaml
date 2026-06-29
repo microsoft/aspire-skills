@@ -633,6 +633,60 @@ stimuli:
             tsconfig.tsbuildinfo) can make the build exit 0 without emitting dist/, and
             recommend a fix such as a prebuild step that wipes dist/ and
             tsconfig.tsbuildinfo (or `tsc --build --clean`)?
+  - name: aspireify-bicep-convert-001
+    description: "Convert exported Azure Bicep IaC into an AppHost: map native resources to
+      AddAzure* APIs, fall back to AddBicepTemplate for unsupported resources, and surface the
+      provision-new vs reference-existing decision for a production app (issue #29)."
+    prompt: >-
+      I exported the infrastructure for my production app to Bicep — it's checked in at
+      `infra/main.bicep`. Read it and convert it into my Aspire AppHost.
+    tags:
+      priority: p1
+      issue: "29"
+      area:
+        - authoring
+        - azure
+        - bicep
+    environment:
+      files:
+        - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
+          dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
+        - src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs
+          dest: csharp-apphost/MyApp.AppHost/Program.cs
+        - src: ../../../evals/csharp-apphost/aspire.config.json
+          dest: csharp-apphost/aspire.config.json
+        - src: ../../../evals/azure-bicep/infra/main.bicep
+          dest: infra/main.bicep
+    graders:
+      - type: output-contains
+        name: mentions_add_azure_service_bus
+        config:
+          substring: AddAzureServiceBus
+      - type: prompt
+        name: custom_bicep_fallback_for_unsupported
+        config:
+          prompt: >-
+            Does the response recognize that Azure Maps (`Microsoft.Maps/accounts`) has no
+            first-class Aspire integration and fall back to `AddBicepTemplate` (or
+            `AddAzureInfrastructure`) for it, rather than inventing a non-existent
+            `AddAzureMaps` API?
+      - type: prompt
+        name: surfaces_provision_vs_existing
+        config:
+          prompt: >-
+            Because this is a production app's exported infrastructure, does the response surface
+            the provision-new vs reference-existing trade-off — i.e. that Aspire will provision
+            and own NEW resources by default, and offer to point at the existing resources
+            instead (e.g. `AddConnectionString`, `AsExisting` / `PublishAsExisting`) — rather
+            than silently creating parallel resources?
+      - type: output-contains
+        name: mentions_add_bicep_template
+        config:
+          substring: AddBicepTemplate
+      - type: output-contains
+        name: mentions_add_azure_storage
+        config:
+          substring: AddAzureStorage
   - name: should_trigger_01
     description: "Reason: Direct wiring request — aspireify owns AppHost wiring"
     prompt: Wire up my Aspire AppHost
