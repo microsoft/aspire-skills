@@ -494,7 +494,9 @@ stimuli:
             - aspire-monitoring
   - name: should_trigger_08
     description: "Reason: aspire dashboard run is a monitoring concern"
-    prompt: Run aspire dashboard run to open a standalone dashboard
+    # Phrased as a question: `aspire dashboard run` is a foreground daemon that
+    # would never let the agent turn go idle. Monitoring must still activate.
+    prompt: How do I open a standalone Aspire dashboard with aspire dashboard run?
     tags:
       priority: p1
       area: routing
@@ -578,7 +580,7 @@ stimuli:
             - aspire-monitoring
   - name: should_not_trigger_04
     description: "Reason: Adding integrations routes to aspireify"
-    prompt: Add PostgreSQL to my Aspire AppHost
+    prompt: How do I add PostgreSQL to my Aspire AppHost?
     tags:
       priority: p1
       area: routing

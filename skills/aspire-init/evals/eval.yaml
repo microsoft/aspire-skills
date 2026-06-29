@@ -266,7 +266,9 @@ stimuli:
           substring: dotnet workload install aspire
   - name: should_trigger_01
     description: "Reason: Existing repo without AppHost — first-run init flow"
-    prompt: Add Aspire to this Express + .NET API repo
+    # Phrased as a question so the agent routes/advises instead of running a slow
+    # `aspire new` template restore to completion (which can exceed the timeout).
+    prompt: What's the first thing I should do to add Aspire to this Express + .NET API repo?
     tags:
       priority: p1
       area: routing

@@ -1096,7 +1096,10 @@ stimuli:
             - aspire-orchestration
   - name: should_not_trigger_13
     description: "Reason: aspire dashboard run routes to aspire-monitoring"
-    prompt: Run aspire dashboard run standalone
+    # Phrased as a question: the eval executor waits for the agent turn to go
+    # idle, but `aspire dashboard run` is a foreground daemon that never returns.
+    # Routing intent (orchestration must NOT activate) is unchanged.
+    prompt: How do I run the Aspire dashboard in standalone mode?
     tags:
       priority: p1
       area: routing

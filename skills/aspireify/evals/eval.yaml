@@ -727,7 +727,9 @@ stimuli:
             - aspireify
   - name: should_not_trigger_07
     description: "Reason: Dashboard / monitoring routes to aspire-monitoring"
-    prompt: Open the Aspire dashboard
+    # Phrased as a question: an imperative "open the dashboard" can launch the
+    # foreground `aspire dashboard run` daemon and hang the executor.
+    prompt: How do I open the Aspire dashboard?
     tags:
       priority: p1
       area: routing
