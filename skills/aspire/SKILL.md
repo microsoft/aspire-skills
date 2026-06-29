@@ -172,6 +172,15 @@ Either install method works. The `dotnet tool install` path produces a NativeAOT
 
 ## References
 
+- [aspire-breaking-changes.md](references/aspire-breaking-changes.md) — Version-aware index:
+  pick the right per-version scrub list for the installed Aspire version, with upstream
+  release-notes fallbacks for gaps.
+- [aspire-13-4-breaking-changes.md](references/aspire-13-4-breaking-changes.md) — Every 13.4
+  breaking change to scrub from agent-generated code, scripts, CI, and deployment snippets
+  (`aspire exec` removal, `aspire ps` flag removals, TypeScript `.aspire/modules/`, persistent
+  lifetimes, Kubernetes route / `WithHelm` changes, Azure Front Door naming, Foundry
+  `WithComputeEnvironment`, `PublishAsPackageScript`, Keycloak HTTPS, the PostgreSQL 18
+  data-volume incompatibility, and the 13.3 → 13.4 migration checklist).
 - [aspire-13-3-breaking-changes.md](references/aspire-13-3-breaking-changes.md) — Every 13.3
   breaking change to scrub from agent-generated code, scripts, and CI snippets (rename of
   `--log-level`, dashboard MCP removal, `NameOutput` → `NameOutputReference`,
