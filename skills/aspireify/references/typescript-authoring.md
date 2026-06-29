@@ -105,6 +105,20 @@ builder.addViteApp('web', '../web')
 `api.getEndpoint('http')` returns an `EndpointReferencePromise`, which `withEnvironment`,
 `withReference`, and friends accept directly — no `await` needed.
 
+Passing an **un-awaited resource variable** as an argument is equally type-correct, not just a
+runtime convenience. Every resource-accepting parameter (`withReference`, `waitFor`,
+`waitForCompletion`, `withEnvironment`, …) is generated as `Awaitable<T> = T | PromiseLike<T>`,
+and each `*ResourcePromise` is a `PromiseLike<TheResource>`. So `db` typed as
+`PostgresResourcePromise` satisfies `withReference(db)` directly. The SDK wraps these parameters
+in `Awaitable<T>` *specifically* "to allow passing un-awaited resource builders directly" — so a
+plain `const db = builder.addPostgres('pg')` is the intended, fully-typed form. You would only
+need `await` on a resource variable to reach a **non-fluent** member of the resolved resource,
+which AppHost wiring rarely does.
+
+The two awaits that remain are about **execution**, not types: `createBuilder()` resolves the
+builder you call `.build()` on, and `builder.build().run()` returns a `Promise<void>` you await
+so the AppHost actually starts and stays running.
+
 If you *do* `await` an `add*` call you get the raw resource (synchronous surface,
 `.getEndpoint()` returns `EndpointReference`). Both paths work — `withEnvironment` accepts
 either — but **prefer the un-awaited form** for readability, and to keep the AppHost focused
