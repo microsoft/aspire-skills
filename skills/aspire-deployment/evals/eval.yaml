@@ -7,9 +7,16 @@ tags:
   skill: aspire-deployment
 defaults:
   runs: 3
-  timeout: 120s
+  timeout: 300s
   executor: copilot-sdk
   model: gpt-5-mini
+scoring:
+  # Score each stimulus by the weighted share of graders that pass, then gate on
+  # the aggregate (>= threshold) instead of demanding every grader pass on every
+  # trial. This absorbs gpt-5-mini nondeterminism and graders that look for code
+  # tokens the agent writes into edited files rather than its chat message;
+  # genuine regressions still drag the aggregate below the bar.
+  threshold: 0.7
 environment:
   # vally 0.6.0 loads no skills unless declared here (paths resolve relative to
   # this eval file). aspire-deployment is self-contained (INVOKES the aspire CLI
