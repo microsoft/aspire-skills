@@ -79,6 +79,72 @@ Tell the user: *"This is a yarn workspace monorepo — I'll skip `.withYarn()` o
 
 **This only applies to workspace monorepos with shared `node_modules`.** For standalone apps or apps with independent `node_modules` directories, `.withYarn()` / `.withPnpm()` is correct and should be used — it ensures deps are installed before the resource starts.
 
+## Shared library packages in monorepos
+
+Many brownfield JS/TS monorepos have a shared package (`packages/shared`, `libs/common`, etc.)
+compiled to `dist/` and consumed by sibling services/apps via npm-workspaces, yarn workspaces,
+or pnpm workspaces. Vite, Express, and other consumers fail at first request if `dist/` doesn't
+exist when they start.
+
+Model the build as an `addJavaScriptApp` resource that runs the library's `build` script, and
+have every consumer `.waitForCompletion(shared)`:
+
+> **⚠️ The single most common failure here is a `tsc --incremental` build that exits 0 without
+> emitting `dist/`** — the consumers then fail at first request even though the build "succeeded".
+> Always pair the shared-build resource with a clean `prebuild` step (see the pitfall below).
+
+```ts
+const shared = builder.addJavaScriptApp("shared-build", "../packages/shared", { runScriptName: "build" });
+
+const api = builder.addJavaScriptApp("api", "../services/api", { runScriptName: "dev" })
+    .withHttpEndpoint({ name: "http", env: "PORT" })
+    .waitForCompletion(shared);
+
+builder.addViteApp("web", "../apps/web")
+    .withReference(api)
+    .waitForCompletion(shared)
+    .waitFor(api);
+```
+
+**`waitForCompletion` vs `waitFor`**: use `waitForCompletion(shared)` because the build is a
+one-shot process that exits when done. `waitFor` blocks until a resource is *healthy* and would
+never resolve for a process that exits.
+
+### ⚠️ tsc incremental emit pitfall
+
+If the shared package uses `tsc --incremental` (the default for `composite: true` projects), the
+build can succeed (exit 0) without emitting anything, leaving `dist/` empty even though
+`aspire wait shared-build` returns healthy. The symptom is consumers failing at request time:
+
+```
+Failed to resolve entry for package "@yourorg/shared".
+```
+
+The fix is to wipe the incremental cache before each build:
+
+```json
+{
+  "scripts": {
+    "prebuild": "node -e \"const fs=require('node:fs');fs.rmSync('dist',{recursive:true,force:true});fs.rmSync('tsconfig.tsbuildinfo',{force:true})\"",
+    "build": "tsc -p tsconfig.json"
+  }
+}
+```
+
+npm/yarn/pnpm all run `prebuild` automatically before `build`. This makes the shared-build
+resource self-healing whether it's invoked by Aspire, by CI, or by the user's existing
+`npm run build:shared`.
+
+Alternative: use `tsc --build --clean && tsc --build` in the `build` script directly. Slower but
+doesn't require a separate `prebuild` step.
+
+### When NOT to use this pattern
+
+If the shared package is published to a registry (private or public npm) and consumers depend on
+the published version, no AppHost build step is needed — `npm install` handles it. The pattern
+above is only for **source-linked** shared packages (npm-workspaces, yarn workspaces, pnpm
+workspaces, or `npm link`).
+
 ## TypeScript AppHost dependency configuration (Step 6)
 
 ### package.json

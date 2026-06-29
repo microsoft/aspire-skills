@@ -181,6 +181,7 @@ Walk the repo and inventory:
 | Connection strings | grep `appsettings*.json`, `.env*`, `config/*` for `Postgres`, `Redis`, `Mongo`, `RabbitMQ`, `Cosmos`, `ServiceBus` |
 | Integration packages | `dotnet list package` per project; package.json `dependencies` |
 | Existing endpoints | hardcoded ports in `launchSettings.json`, `next.config.js`, `vite.config.ts` |
+| Workspace shared packages | root `package.json` with a `workspaces` field **and** a member whose `main`/`exports` points at `dist/` that another member depends on (`"@scope/shared": "*"`) → model a one-shot `shared-build` resource ([javascript-apps.md](references/javascript-apps.md#shared-library-packages-in-monorepos)) |
 
 Full heuristics in [references/scan-and-propose.md](references/scan-and-propose.md).
 
@@ -191,6 +192,7 @@ Present a resource graph **before editing**. Ask clarifying questions:
 - "I see Postgres in `docker-compose.yml` — should I model it as `AddPostgres('db')` or use Azure Database for PostgreSQL?"
 - "Your React app hardcodes `http://localhost:5000` — replace with Aspire service discovery (`endpoint.url`)?"
 - "Your API has an `/admin` endpoint — exclude it from `WithReference()` so consumers don't see it?"
+- "Your monorepo has a source-linked shared package (`packages/shared` → `dist/`) — model it as a one-shot `shared-build` resource that consumers `waitForCompletion` on? (`tsc --incremental` can silently skip emit, so I'll add a `prebuild` clean step.)"
 
 ### 3. Edit
 

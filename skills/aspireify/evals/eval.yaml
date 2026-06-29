@@ -583,6 +583,56 @@ stimuli:
         name: calls_build_run
         config:
           substring: "build().run()"
+  - name: aspireify-monorepo-shared-001
+    description: "Monorepo with a source-linked shared TS package compiled to dist/:
+      model a one-shot shared-build resource that consumers waitForCompletion on, and
+      warn about the tsc --incremental skip-emit pitfall (issue #23)."
+    prompt: >-
+      I have a yarn-workspaces monorepo: packages/shared is a TypeScript library
+      compiled to dist/ and imported by both services/api (Express) and apps/web
+      (Vite). Wire this into my Aspire apphost.ts so the API and web app don't start
+      before the shared library has been built.
+    tags:
+      priority: p1
+      issue: "23"
+      area:
+        - authoring
+        - javascript
+        - typescript
+    environment:
+      files:
+        - src: ../../../evals/ts-apphost/apphost.ts
+          dest: ts-apphost/apphost.ts
+        - src: ../../../evals/ts-apphost/aspire.config.json
+          dest: ts-apphost/aspire.config.json
+    graders:
+      - type: prompt
+        name: models_shared_build_resource
+        config:
+          prompt: >-
+            Does the response model the shared TypeScript library as its own build
+            resource (e.g. addJavaScriptApp("shared-build", ...) running the library's
+            build script) that the api and web consumers depend on, rather than ignoring
+            the build ordering?
+      - type: prompt
+        name: uses_wait_for_completion
+        config:
+          prompt: >-
+            Do the consuming resources use waitForCompletion(shared) (because the build
+            is a one-shot process that exits) rather than waitFor(shared) (which waits
+            for a healthy long-running resource and would never resolve)?
+      - type: output-contains
+        name: mentions_wait_for_completion
+        config:
+          substring: waitForCompletion
+      - type: prompt
+        name: warns_tsc_incremental_pitfall
+        config:
+          prompt: >-
+            Does the response warn that tsc --incremental (or a checked-in
+            tsconfig.tsbuildinfo) can make the build exit 0 without emitting dist/, and
+            recommend a fix such as a prebuild step that wipes dist/ and
+            tsconfig.tsbuildinfo (or `tsc --build --clean`)?
   - name: should_trigger_01
     description: "Reason: Direct wiring request — aspireify owns AppHost wiring"
     prompt: Wire up my Aspire AppHost
