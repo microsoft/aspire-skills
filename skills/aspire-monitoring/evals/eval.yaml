@@ -8,7 +8,10 @@ tags:
   skill: aspire-monitoring
 defaults:
   runs: 3
-  timeout: 300s
+  # Per-trial wall-clock budget. Kept generous because runs >= 2 disables
+  # vally's timeout/rate-limit retries, so one slow trial would hard-fail the
+  # whole eval (evalHadExecutionErrors) even when the aggregate score passes.
+  timeout: 600s
   executor: copilot-sdk
   model: gpt-5-mini
 scoring:
