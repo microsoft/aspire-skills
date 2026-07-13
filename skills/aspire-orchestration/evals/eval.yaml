@@ -18,7 +18,7 @@ scoring:
   # genuine regressions still drag the aggregate below the bar.
   threshold: 0.7
 environment:
-  # vally 0.6.0 loads no skills unless declared here (paths resolve relative to
+  # vally 0.8.0 loads no skills unless declared here (paths resolve relative to
   # this eval file). aspire-orchestration is self-contained (INVOKES only the
   # aspire CLI), so it loads on its own.
   skills:

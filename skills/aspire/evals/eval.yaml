@@ -19,7 +19,7 @@ scoring:
   # genuine regressions still drag the aggregate below the bar.
   threshold: 0.7
 environment:
-  # vally 0.6.0 loads no skills unless declared here (paths resolve relative to
+  # vally 0.8.0 loads no skills unless declared here (paths resolve relative to
   # this eval file). The router fans out to every sub-skill (see SKILL.md
   # INVOKES:), so routing stimuli need the full set present to choose among them.
   skills:

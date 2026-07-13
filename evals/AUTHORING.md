@@ -43,7 +43,7 @@ stimuli:
           required: [aspire-deployment]
 ```
 
-> **Skills must be declared.** Under vally 0.6.0 a run loads **no skills** unless the spec sets a top-level `environment.skills` list. See [README → Skills & baselines](./README.md#skills--baselines-vally-060) for the hybrid-loading convention this repo follows.
+> **Skills must be declared.** As of vally 0.8.0 a run loads **no skills** unless the spec sets a top-level `environment.skills` list. See [README → Skills & baselines](./README.md#skills--baselines-vally-080) for the hybrid-loading convention this repo follows.
 
 ## Stimulus field reference
 
@@ -54,7 +54,7 @@ stimuli:
 | `tags` | record | Merged over the eval-level `tags`. Always include a `priority` (`p0`/`p1`/`p2`) and at least one `area` (a single value or a list). |
 | `environment.files[]` | `{ src, dest }[]` | `src` resolves **relative to the eval spec file** (shared fixtures: `../../../evals/<fixture>`); `dest` is the workspace-relative path the executor sees. Reference the **shared fixtures** rather than copy-pasting per skill. |
 | `environment.skills[]` | string[] | (Optional) skill dirs to **add** for this stimulus on top of the eval-level set — used by routing stimuli to pull in siblings. Union-merged; cannot remove. |
-| `environment.expect_skills` / `reject_skills` | string[] | (Optional, 0.6.0) assert the agent *did* / *did not* activate these skills. |
+| `constraints.expect_skills` / `reject_skills` | string[] | (Optional) assert the agent *did* / *did not* activate these skills. |
 | `graders[]` | object[] | One or more graders. See below. |
 | `scoring` | object | (Optional) per-grader weights + pass threshold. Omitted → equal weights, threshold `1.0` (every grader must pass). |
 
@@ -193,10 +193,10 @@ Routing is graded **inline** with the `skill-invocation` grader (there is no sep
 
 Rules:
 
-- **Routing stimuli must load the full skill set** so the decision is made against real siblings — add the siblings via stimulus-level `environment.skills` (union-merged on top of the eval-level list). See [README → Skills & baselines](./README.md#skills--baselines-vally-060).
+- **Routing stimuli must load the full skill set** so the decision is made against real siblings — add the siblings via stimulus-level `environment.skills` (union-merged on top of the eval-level list). See [README → Skills & baselines](./README.md#skills--baselines-vally-080).
 - **A skill cannot be in both `required` and `disallowed`** (vally errors). For an "any of these N is fine" intent, list them all in `required` only if all are acceptable, or fall back to a `prompt` grader on the response content.
 - **Pair routing with a content check.** `skill-invocation` proves *which* skill ran; add a `prompt` or `output-contains` grader if the *answer* also matters.
-- **`environment.expect_skills` / `reject_skills`** (0.6.0) are a lighter-weight alternative when you only need an activation assertion and no scoring weight.
+- **`constraints.expect_skills` / `reject_skills`** are a lighter-weight alternative when you only need an activation assertion and no scoring weight.
 - **Phrase like a real user.** "I want to ship this" is more realistic than "Invoke aspire deploy."
 
 ## Adding a new stimulus — checklist
@@ -210,7 +210,7 @@ Rules:
    - Optionally a `skill-invocation` grader for the routing decision, or a second `prompt` grader for a distinct bonus expectation.
 5. **Apply the grader-pattern rules** above.
 6. **Tag with priority + area** — at least one of `p0`/`p1`/`p2` plus a topical `area`.
-7. **Confirm skills are loaded** — the spec's `environment.skills` must include the skill under test (capability) or the full set (routing). See [README → Skills & baselines](./README.md#skills--baselines-vally-060).
+7. **Confirm skills are loaded** — the spec's `environment.skills` must include the skill under test (capability) or the full set (routing). See [README → Skills & baselines](./README.md#skills--baselines-vally-080).
 8. **Run `vally lint --eval-spec skills/<skill>/evals/eval.yaml`** to confirm schema validity (or `vally lint skills` for all).
 9. **Run the stimulus once** — `vally eval --eval-spec skills/<skill>/evals/eval.yaml --tag <key>=<value> --runs 1` (with `COPILOT_GITHUB_TOKEN` set) — to confirm it executes and the graders behave as you expect. `--tag` filters by the stimulus's `tags` record.
 10. **Commit with a focused message.**
@@ -219,7 +219,7 @@ Rules:
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
-| Every stimulus runs with **no skill loaded** (`Skills used 0`) | Spec is missing top-level `environment.skills` (vally 0.6.0 default) | Declare `environment.skills` — see [README → Skills & baselines](./README.md#skills--baselines-vally-060) |
+| Every stimulus runs with **no skill loaded** (`Skills used 0`) | Spec is missing top-level `environment.skills` (vally 0.8.0 default) | Declare `environment.skills` — see [README → Skills & baselines](./README.md#skills--baselines-vally-080) |
 | Grader says *"no response found in workspace"* | `prompt` grader doesn't tell the judge to look at the response | Add "the assistant's response" to the grader prompt |
 | Grader fails when response is correct | Combined positive + negative in one prompt | Split into a focused `prompt` grader + `output-not-contains` grader(s) |
 | `output-not-contains` fires on legitimate guidance | Substring is too broad (e.g., `"azd"`) | Forbid full commands (`"azd up"`, `"azd deploy"`) |

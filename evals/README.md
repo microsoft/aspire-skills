@@ -24,7 +24,7 @@ skills/<skill>/evals/
 Each `eval.yaml` is a single canonical [vally `EvalSchema`](https://www.npmjs.com/package/@microsoft/vally-cli) document containing:
 
 - `defaults` — model, executor (`copilot-sdk`), runs per stimulus, timeout.
-- `environment.skills` — **(vally 0.6.0)** the skill directories loaded for this spec. See [Skills & baselines](#skills--baselines-vally-060). Omit it and the stimuli run with **no skills** (the baseline).
+- `environment.skills` — **(vally 0.8.0)** the skill directories loaded for this spec. See [Skills & baselines](#skills--baselines-vally-080). Omit it and the stimuli run with **no skills** (the baseline).
 - `tags` (optional) — record of `{ skill: <name>, priority: pN, area: <area> }` inherited by stimuli that don't override.
 - `stimuli` — array of prompts to execute. Each stimulus has `name`, `prompt`, optional `tags`, optional `environment.files` (and may add `environment.skills`), and `graders`.
 - `scoring` (optional) — explicit weights per grader plus a pass-rate threshold. When omitted, vally applies equal weights and threshold `1.0` (every grader must pass).
@@ -40,9 +40,9 @@ evals/
 
 `src` is resolved relative to the eval spec file (so the canonical reference from `skills/<skill>/evals/eval.yaml` is `../../../evals/<fixture-path>`). `dest` is the workspace-relative path the executor sees.
 
-## Skills & baselines (vally 0.6.0)
+## Skills & baselines (vally 0.8.0)
 
-Starting in vally **0.6.0**, a run loads **no skills by default**. Each spec declares the skills it exercises via a top-level `environment.skills` list of skill **directories** (each containing a `SKILL.md`), resolved relative to the eval file:
+As of vally **0.8.0**, a run loads **no skills by default**. Each spec declares the skills it exercises via a top-level `environment.skills` list of skill **directories** (each containing a `SKILL.md`), resolved relative to the eval file:
 
 ```yaml
 environment:
@@ -107,13 +107,13 @@ The `with-skills` − `no-skills` pass-rate delta is the measured lift. The expe
 | Flag | Purpose |
 |------|---------|
 | `-e, --eval-spec <path>` | Eval spec to run. Repeatable. |
-| `--skill-dir <dir>` | **(vally 0.6.0)** Extra skill dir(s) loaded on top of each spec's `environment.skills`. With no `--skill-dir` **and** no `environment.skills`, vally loads **no skills** (the baseline) — prefer declaring `environment.skills` in the spec. |
+| `--skill-dir <dir>` | **(vally 0.8.0)** Extra skill dir(s) loaded on top of each spec's `environment.skills`. With no `--skill-dir` **and** no `environment.skills`, vally loads **no skills** (the baseline) — prefer declaring `environment.skills` in the spec. |
 | `--workspace <dir>` | Working directory for the executor (fixtures get copied here). Defaults to a per-stimulus temp dir. |
 | `--suite <name>` | Run only stimuli matching a suite declared in `.vally.yaml`. |
 | `--tag <key=values>` | Run only stimuli whose tag record matches. Comma-separate values; repeat for multiple keys. E.g. `--tag priority=p0,p1 --tag area=routing`. |
-| `--model <name>` | Executor model. Overrides `config.model` in the spec. |
+| `--model <name>` | Executor model. Overrides `defaults.model` in the spec. |
 | `--judge-model <name>` | Model used by `prompt` / `pairwise` graders. Defaults to `claude-sonnet-4.6`. |
-| `--runs <n>` | Override `config.runs` (number of executions per stimulus). |
+| `--runs <n>` | Override `defaults.runs` (number of executions per stimulus). |
 | `--timeout <duration>` | Per-stimulus timeout (e.g. `120s`, `2m`). |
 | `--workers <n>` | Parallel stimulus workers. Default 1. |
 | `--max-retries <n>` | Retries for transient executor errors. |
@@ -129,7 +129,7 @@ For the full surface, run `vally eval --help`, `vally lint --help`, `vally serve
 
 ## Cost / time
 
-Each stimulus runs `config.runs` times (default 1 in vally; some specs override to 3). Each run is one executor call plus one judge call per `prompt` grader.
+Each stimulus runs `defaults.runs` times (default 1 in vally; some specs override to 3). Each run is one executor call plus one judge call per `prompt` grader.
 
 Rough budget with `executor: copilot-sdk` + `model: gpt-5-mini`:
 

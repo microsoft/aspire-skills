@@ -19,7 +19,7 @@ scoring:
   # genuine regressions still drag the aggregate below the bar.
   threshold: 0.7
 environment:
-  # vally 0.6.0 loads no skills unless declared here (paths resolve relative to
+  # vally 0.8.0 loads no skills unless declared here (paths resolve relative to
   # this eval file). aspire-monitoring is self-contained in-repo (its other
   # INVOKES targets — azure-diagnostics, kubectl — are external to this plugin).
   skills:
