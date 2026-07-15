@@ -15,11 +15,14 @@ defaults:
   executor: copilot-sdk
   model: gpt-5-mini
 scoring:
-  # Score each stimulus by the weighted share of graders that pass, then gate on
-  # the aggregate (>= threshold) instead of demanding every grader pass on every
-  # trial. This absorbs gpt-5-mini nondeterminism and graders that look for code
-  # tokens the agent writes into edited files rather than its chat message;
-  # genuine regressions still drag the aggregate below the bar.
+  # Routing is a yes/no decision, so every prompt grader here uses
+  # `scoring: binary` (0 or 1) rather than vally's default scale_1_5. Under
+  # scale_1_5 an "adequate" 3/5 answer normalises to 0.5 — below this eval's
+  # 0.7 per-trial gate — so a correctly routed response could still fail the
+  # trial. Binary scoring makes the grader verdict ("did it route correctly?")
+  # match the trial gate. Each stimulus is then scored by the weighted share of
+  # graders that pass and gated on the aggregate (>= threshold); genuine
+  # regressions still drag the aggregate below the bar.
   threshold: 0.7
 environment:
   # vally 0.8.0 loads no skills unless declared here (paths resolve relative to
@@ -50,12 +53,14 @@ stimuli:
       - type: prompt
         name: recommends_agent_init
         config:
+          scoring: binary
           prompt: Does the assistant's response recommend running 'aspire agent init' (or an equivalent
             command to generate project-local Aspire agent skills)? Answer based on the intent, not
             exact string matching.
       - type: prompt
         name: explains_value
         config:
+          scoring: binary
           prompt: The assistant's response should recommend running 'aspire agent init' to generate
             project-local skills with richer, scenario-based guidance. It should mention that this
             provides deeper coverage for C# AppHost editing, TypeScript AppHosts, and investigation
@@ -78,6 +83,7 @@ stimuli:
       - type: prompt
         name: uses_dotnet_not_aspire
         config:
+          scoring: binary
           prompt: The assistant's response should recognize this is a standard .NET project (no
             Aspire.AppHost.Sdk) and suggest 'dotnet run' rather than 'aspire start'. Aspire-specific
             guardrails should not be applied to a non-Aspire project. Answer based on intent.
@@ -109,6 +115,7 @@ stimuli:
       - type: prompt
         name: routes_to_azure_diagnostics
         config:
+          scoring: binary
           prompt: The assistant's response should recognize this is a deployed app and route to
             azure-diagnostics or platform-specific tools. It should explain that Aspire CLI cannot
             connect to deployed apps (local backchannel only). Answer based on intent.
@@ -136,11 +143,13 @@ stimuli:
       - type: prompt
         name: routes_to_deployment
         config:
+          scoring: binary
           prompt: "The assistant's response should route this to aspire-deployment concerns: using 'aspire
             deploy' for production deployment. Answer based on intent."
       - type: prompt
         name: uses_aspire_deploy
         config:
+          scoring: binary
           prompt: Does the assistant's response recommend using 'aspire deploy' (or an equivalent Aspire CLI
             deployment command) for production deployment? Answer based on the intent, not exact
             string matching.
@@ -184,6 +193,7 @@ stimuli:
       - type: prompt
         name: routes_to_monitoring
         config:
+          scoring: binary
           prompt: "The assistant's response should route this to aspire-monitoring concerns: suggesting
             'aspire describe' for state, 'aspire otel logs' or 'aspire logs' for diagnostics. It
             should suggest investigation before code changes."
@@ -207,12 +217,14 @@ stimuli:
       - type: prompt
         name: routes_correctly
         config:
+          scoring: binary
           prompt: "The assistant's response should route this to aspire-orchestration concerns: using 'aspire
             start' to launch and 'aspire wait' for resource readiness as the primary action. Answer
             based on intent."
       - type: prompt
         name: correct_commands
         config:
+          scoring: binary
           prompt: Does the assistant's response recommend using 'aspire start' to launch the application and
             'aspire wait' (or an equivalent readiness-check command) for resource readiness? Answer
             based on the intent, not exact string matching.
@@ -233,7 +245,12 @@ stimuli:
   # skill-invocation `disallowed` to guard against over-triggering.
   - name: should_trigger_01
     description: "Reason: Direct aspire CLI invocation"
-    prompt: Run aspire start on my AppHost
+    # Phrased as a "how do I" question: an imperative "Run aspire start" makes the
+    # agent execute `aspire start` — a foreground daemon that never returns — so the
+    # eval executor times out waiting for session.idle (an errored trial hard-fails
+    # the eval). The grader accepts explaining the command, so the engagement intent
+    # is unchanged.
+    prompt: How do I run my AppHost with aspire start?
     tags:
       priority: p1
       area: routing
@@ -241,6 +258,7 @@ stimuli:
       - type: prompt
         name: engages_aspire_start
         config:
+          scoring: binary
           prompt: The user asked to run 'aspire start' on their AppHost. A correct response recognizes
             this as an Aspire task and engages the aspire start workflow — running or explaining the
             `aspire start` command against the AppHost (for example detecting the AppHost and using a
@@ -256,6 +274,7 @@ stimuli:
       - type: prompt
         name: engages_aspire_deploy
         config:
+          scoring: binary
           prompt: The user asked to deploy their Aspire distributed app. A correct response engages the
             Aspire deployment workflow — explaining or running `aspire deploy` (and related publish
             steps) rather than reaching for raw azd or treating it as a non-Aspire deployment. Answer
@@ -270,6 +289,7 @@ stimuli:
       - type: prompt
         name: engages_aspire_diagnostics
         config:
+          scoring: binary
           prompt: The user asked to check the aspire logs for their AppHost resources. A correct response
             engages Aspire diagnostics — using `aspire logs`, `aspire describe`, or OTEL/structured logs
             to inspect resource state and output — rather than treating it as a generic logging task.
@@ -284,6 +304,7 @@ stimuli:
       - type: prompt
         name: engages_aspire_run
         config:
+          scoring: binary
           prompt: The user has an Aspire.AppHost.Sdk project and asks how to run it. A correct response
             recognizes this as an Aspire AppHost and explains running it with the aspire CLI (`aspire run`
             or `aspire start`) rather than recommending a plain `dotnet run`. Answer based on intent.
@@ -297,6 +318,7 @@ stimuli:
       - type: prompt
         name: provides_aspire_cli_guidance
         config:
+          scoring: binary
           prompt: The user asked how to use the aspire CLI. A correct response provides Aspire CLI guidance
             (commands such as `aspire start`, `aspire run`, `aspire add`, or `aspire deploy`) rather than
             treating the request as unrelated to Aspire. Answer based on intent.
@@ -310,6 +332,7 @@ stimuli:
       - type: prompt
         name: engages_aspire_integration_wiring
         config:
+          scoring: binary
           prompt: The user asked to add Redis to their cloud-native Aspire app. A correct response engages
             the Aspire integration-wiring workflow — adding a Redis resource to the AppHost model (for
             example AddRedis and referencing it from a project) rather than hand-rolling a raw Redis client
@@ -324,6 +347,7 @@ stimuli:
       - type: prompt
         name: engages_typescript_apphost
         config:
+          scoring: binary
           prompt: The user said their apphost.ts file needs updating. A correct response recognizes apphost.ts
             as a TypeScript Aspire AppHost and engages with editing it — opening or locating the file, or
             asking for its path/contents when it is not present — rather than treating apphost.ts as a
@@ -338,6 +362,7 @@ stimuli:
       - type: prompt
         name: engages_aspire_doctor
         config:
+          scoring: binary
           prompt: The user asked to run 'aspire doctor' to check their setup. A correct response engages that
             Aspire workflow — running or explaining `aspire doctor` to diagnose the environment — rather
             than refusing or treating it as unrelated to Aspire. Answer based on intent.
@@ -351,12 +376,17 @@ stimuli:
       - type: prompt
         name: engages_aspire_init
         config:
+          scoring: binary
           prompt: The user asked to run 'aspire init' to add Aspire to the repo. A correct response engages
             that Aspire workflow — running or explaining `aspire init` to scaffold Aspire into the
             repository — rather than refusing or treating it as unrelated to Aspire. Answer based on intent.
   - name: should_trigger_10
     description: "Reason: aspire destroy is part of the Aspire workflow"
-    prompt: Run aspire destroy to tear down my deployment
+    # Phrased as a "how do I" question: an imperative "Run aspire destroy" makes the
+    # agent execute an interactive command that blocks on a confirmation prompt and
+    # times out (an errored trial hard-fails the eval). The grader accepts explaining
+    # the command, so the engagement intent is unchanged.
+    prompt: How do I run aspire destroy to tear down my deployment?
     tags:
       priority: p1
       area: routing
@@ -364,6 +394,7 @@ stimuli:
       - type: prompt
         name: engages_aspire_destroy
         config:
+          scoring: binary
           prompt: The user asked to run 'aspire destroy' to tear down their deployment. A correct response
             engages that Aspire workflow — running or explaining `aspire destroy` to tear down the deployed
             resources — rather than refusing or treating it as unrelated to Aspire. Answer based on intent.

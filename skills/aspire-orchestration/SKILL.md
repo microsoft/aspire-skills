@@ -8,6 +8,9 @@ description: >-
   "proxies missing in aspire ps", "--include-hidden", "aspire integration list",
   "aspire integration search", "default watch", "hot reload". INVOKES: aspire CLI
   (start, stop, wait, ps, resource, integration, add, init, doctor, update, restore).
+  DO NOT USE FOR: deploy / publish / destroy / pipeline steps (use aspire-deployment),
+  logs / traces / metrics / dashboard run (use aspire-monitoring), AppHost code edits or
+  resource wiring (use aspireify).
   FOR SINGLE OPERATIONS: Run the aspire CLI command directly.
 license: MIT
 metadata:

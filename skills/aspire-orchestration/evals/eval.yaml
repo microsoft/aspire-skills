@@ -779,7 +779,13 @@ stimuli:
         config:
           substring: curl.*health
   - name: orch-worktree-001
-    prompt: I'm working in a git worktree and need to start the app
+    # Phrased as a "what's the recommended way" question: the eval executor waits
+    # for the agent turn to go idle, but an imperative "start the app" makes the
+    # agent run `aspire start` — a foreground daemon that never returns (600s
+    # session.idle timeout). Asking for the recommended approach keeps the agent
+    # in explanatory mode; the --isolated guidance being tested is unchanged.
+    prompt: I'm working in a git worktree. What's the recommended way to start my Aspire app so it
+      doesn't collide with my main checkout's ports and local state?
     tags:
       priority: p1
       area: best-practice
@@ -959,6 +965,12 @@ stimuli:
     tags:
       priority: p1
       area: routing
+    environment:
+      # Present the sibling this should route to (merges with the eval-level
+      # aspire-orchestration) so the agent has a correct home; otherwise, with
+      # only orchestration loaded, it grabs the sole Aspire skill available.
+      skills:
+        - ../../aspire-deployment
     graders:
       - type: skill-invocation
         name: does_not_invoke_aspire_orchestration
@@ -995,6 +1007,9 @@ stimuli:
     tags:
       priority: p1
       area: routing
+    environment:
+      skills:
+        - ../../aspire-deployment
     graders:
       - type: skill-invocation
         name: does_not_invoke_aspire_orchestration
@@ -1091,6 +1106,9 @@ stimuli:
     tags:
       priority: p1
       area: routing
+    environment:
+      skills:
+        - ../../aspire-deployment
     graders:
       - type: skill-invocation
         name: does_not_invoke_aspire_orchestration
@@ -1106,6 +1124,9 @@ stimuli:
     tags:
       priority: p1
       area: routing
+    environment:
+      skills:
+        - ../../aspire-monitoring
     graders:
       - type: skill-invocation
         name: does_not_invoke_aspire_orchestration
