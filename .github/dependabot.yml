@@ -1,0 +1,28 @@
+﻿version: 2
+updates:
+  # npm: TypeScript AppHost eval fixture
+  - package-ecosystem: "npm"
+    directory: "/evals/ts-apphost"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+    open-pull-requests-limit: 10
+
+  # nuget: C# AppHost / ApiService / ServiceDefaults eval fixtures
+  - package-ecosystem: "nuget"
+    directory: "/evals/csharp-apphost"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+    open-pull-requests-limit: 10
+
+  # github-actions: keep workflow action SHAs up to date
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+    open-pull-requests-limit: 10
