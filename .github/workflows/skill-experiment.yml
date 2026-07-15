@@ -47,7 +47,7 @@ jobs:
               echo "the comparative baseline experiment did not run."
               echo ""
               echo "**To enable it**, a maintainer needs to add the secret once —"
-              echo "see [\`evals/README.md\` → CI authentication](../blob/main/evals/README.md#ci-authentication)."
+              echo "see [\`evals/README.md\` → CI authentication](${{ github.server_url }}/${{ github.repository }}/blob/main/evals/README.md#ci-authentication)."
             } >> "$GITHUB_STEP_SUMMARY"
             echo "has_token=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -85,6 +85,20 @@ jobs:
           vally experiment run skill-lift.experiment.yaml \
             --output-dir ./results 2>&1 | tee experiment-output.txt || true
 
+          # Defense-in-depth: Actions masks registered secrets in logs and job
+          # summaries, but NOT in uploaded artifacts. This job both summarizes
+          # and uploads the captured output, so redact the token from anything
+          # we persist in case the CLI ever echoes it on an error path. The
+          # token contains no '|', so it is safe as the sed delimiter.
+          if [ -n "${COPILOT_GITHUB_TOKEN:-}" ]; then
+            [ -f experiment-output.txt ] && \
+              sed -i "s|${COPILOT_GITHUB_TOKEN}|***|g" experiment-output.txt
+            if [ -d ./results ]; then
+              grep -rIlZ -- "$COPILOT_GITHUB_TOKEN" ./results 2>/dev/null \
+                | xargs -0 -r sed -i "s|${COPILOT_GITHUB_TOKEN}|***|g"
+            fi
+          fi
+
       - name: Summarize lift
         if: always() && steps.preflight.outputs.has_token == 'true'
         run: |
@@ -94,8 +108,14 @@ jobs:
             echo "Per-variant pass summary (\`with-skills\` treatment vs \`no-skills\` baseline):"
             echo ""
             echo '```'
-            # The per-variant "✔/✘ <variant>: N/M evals passed" lines.
-            grep -E 'evals passed|Run ID' experiment-output.txt || cat experiment-output.txt
+            # The per-variant "✔/✘ <variant>: N/M evals passed" lines. The run
+            # step swallows failures, so the file may be missing/empty if vally
+            # never started — degrade gracefully instead of failing this step.
+            if [ -s experiment-output.txt ]; then
+              grep -E 'evals passed|Run ID' experiment-output.txt || cat experiment-output.txt || true
+            else
+              echo "(no experiment output captured — the run may have failed before writing experiment-output.txt; see the step logs)"
+            fi
             echo '```'
             echo ""
             REPORT="$(find ./results -name report.md 2>/dev/null | head -1)"

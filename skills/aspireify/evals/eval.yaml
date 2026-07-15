@@ -24,8 +24,8 @@ scoring:
   threshold: 0.7
 environment:
   # vally 0.8.0 loads no skills unless declared here (paths resolve relative to
-  # this eval file). Load aspireify plus its in-repo dependency: aspireify
-  # validates wiring by running `aspire start` (aspire-orchestration territory).
+  # this eval file). Load aspireify plus its in-repo dependency aspire-orchestration:
+  # aspireify validates wiring by running `aspire start` (aspire-orchestration territory).
   skills:
     - ../../aspireify
     - ../../aspire-orchestration
