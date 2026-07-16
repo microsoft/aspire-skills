@@ -168,26 +168,36 @@ stimuli:
       files:
         - src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs
           dest: csharp-apphost/MyApp.AppHost/Program.cs
+        - src: ../../../evals/csharp-apphost/MyApp.ApiService/Program.cs
+          dest: csharp-apphost/MyApp.ApiService/Program.cs
+        - src: ../../../evals/csharp-apphost/MyApp.Web/Program.cs
+          dest: csharp-apphost/MyApp.Web/Program.cs
+        - src: ../../../evals/csharp-apphost/MyApp.ServiceDefaults/MyApp.ServiceDefaults.csproj
+          dest: csharp-apphost/MyApp.ServiceDefaults/MyApp.ServiceDefaults.csproj
     graders:
       - type: prompt
         name: adds_service_defaults
         config:
+          scoring: binary
           prompt: Does the assistant's response add builder.AddServiceDefaults() to each service's Program.cs
-            (Api and Worker)?
+            (the ApiService and Web projects)?
       - type: prompt
         name: maps_default_endpoints
         config:
+          scoring: binary
           prompt: Does the assistant's response add app.MapDefaultEndpoints() so /health and /alive are
             exposed for use by AppHost's WaitFor / HealthChecks?
       - type: prompt
         name: mentions_otel_health_discovery
         config:
+          scoring: binary
           prompt: Does the assistant's response explain that AddServiceDefaults wires OpenTelemetry (tracing,
             metrics, logs), health checks, service discovery, and HTTP resilience — i.e., the agent
             understands what they are configuring?
       - type: prompt
         name: project_reference
         config:
+          scoring: binary
           prompt: Does the assistant's response add a ProjectReference from each service project to the
             Aspire.ServiceDefaults project (or equivalent NuGet package)?
       - type: output-contains
