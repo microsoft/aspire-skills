@@ -70,17 +70,73 @@ jobs:
         if: steps.preflight.outputs.has_token == 'true'
         run: npm install -g @microsoft/vally-cli
 
-      - name: Run CI gate evals
+      - name: Determine changed skill eval specs
+        id: changed
         if: steps.preflight.outputs.has_token == 'true'
+        # Scope the PR gate to only the skills this PR actually touches. The
+        # full suite still runs in the scheduled `Skill Eval (nightly)`
+        # workflow. Beyond keeping the gate fast, this stops a PR from being
+        # blocked by a flaky trial in an unrelated skill it never modified.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Skills whose files changed in this PR, derived from paths of the
+          # form `skills/<skill>/...` and de-duplicated.
+          changed_skills="$(
+            gh pr diff "${{ github.event.pull_request.number }}" \
+              --repo "${{ github.repository }}" --name-only \
+              | sed -n 's#^skills/\([^/]*\)/.*#\1#p' \
+              | sort -u
+          )"
+
+          spec_args=""
+          matched=""
+          for skill in $changed_skills; do
+            spec="skills/${skill}/evals/eval.yaml"
+            if [ -f "$spec" ]; then
+              spec_args="${spec_args} -e ${spec}"
+              matched="${matched} ${skill}"
+            fi
+          done
+
+          if [ -z "$spec_args" ]; then
+            echo "has_specs=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_specs=true" >> "$GITHUB_OUTPUT"
+            echo "spec_args=${spec_args# }" >> "$GITHUB_OUTPUT"
+            echo "matched=${matched# }" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run CI gate evals
+        if: steps.preflight.outputs.has_token == 'true' && steps.changed.outputs.has_specs == 'true'
         # COPILOT_GITHUB_TOKEN is read by @github/copilot-sdk (the vally
         # `copilot-sdk` executor) to invoke Copilot models. It is scoped to
         # this step only so install / upload never see it.
+        #
+        # Run the changed specs directly via `-e`, applying the same priority
+        # filter as the `ci-gate` suite (p0 + p1) so forward-looking p2 stimuli
+        # stay out of the PR gate. `--suite` can't be combined with `-e`, so the
+        # filter is expressed with `--tag` instead.
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
         run: |
+          echo "Evaluating changed skills: ${{ steps.changed.outputs.matched }}"
           vally eval \
-            --suite ci-gate \
+            ${{ steps.changed.outputs.spec_args }} \
+            --tag priority=p0,p1 \
             --output-dir ./results
+
+      - name: Note no skills changed
+        if: steps.preflight.outputs.has_token == 'true' && steps.changed.outputs.has_specs == 'false'
+        run: |
+          {
+            echo "### ℹ️ ci-gate eval skipped"
+            echo ""
+            echo "No skill eval specs (\`skills/<skill>/evals/eval.yaml\`) were modified in"
+            echo "this PR, so the model-backed ci-gate had nothing to evaluate. The full"
+            echo "suite still runs in the scheduled **Skill Eval (nightly)** workflow."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload trajectories
         if: always() && steps.preflight.outputs.has_token == 'true'
