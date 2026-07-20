@@ -13,10 +13,12 @@ aspire-skills/
 ├── .mcp.json                → ../../.mcp.json
 ├── gemini-extension.json    → ../../gemini-extension.json
 ├── skills/                  → ../../skills/
+├── extensions/              → ../../extensions/
 └── README.md                (this file)
 ```
 
 Runtime skill and reference entries under `skills/` are symlinked to the root skill
-content.
+content. Runtime canvas extension entries under `extensions/` are symlinked to the
+root extension content.
 
 See the [root README](../../../README.md) for installation and usage.
