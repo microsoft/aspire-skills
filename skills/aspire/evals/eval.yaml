@@ -234,15 +234,12 @@ stimuli:
       - type: output-contains
         config:
           substring: aspire wait
-  # Positive-routing stimuli. These assert that an Aspire prompt is recognized
-  # and handled with the correct Aspire workflow. We grade the OUTCOME (did the
-  # assistant engage the right aspire CLI / AppHost behavior) rather than a
-  # skill-activation event: under the copilot-sdk executor the agent frequently
-  # satisfies these by running the aspire CLI directly (a `bash` tool call),
-  # which is correct behavior but emits no `skill_activation` event — so a
-  # skill-invocation grader produces false negatives even when the task is done
-  # perfectly. The complementary should_not_trigger stimuli still use
-  # skill-invocation `disallowed` to guard against over-triggering.
+  # Positive-routing stimuli assert both activation and outcome. Because this
+  # spec tests the top-level router, model knowledge that merely produces an
+  # Aspire-flavored answer is insufficient: `constraints.expect_skills` requires
+  # an actual `aspire` activation, while the prompt grader checks the workflow.
+  # The complementary should_not_trigger stimuli use skill-invocation
+  # `disallowed` to guard against over-triggering.
   - name: should_trigger_01
     description: "Reason: Direct aspire CLI invocation"
     # Phrased as a "how do I" question: an imperative "Run aspire start" makes the
@@ -254,6 +251,9 @@ stimuli:
     tags:
       priority: p1
       area: routing
+    constraints:
+      expect_skills:
+        - aspire
     graders:
       - type: prompt
         name: engages_aspire_start
@@ -270,6 +270,9 @@ stimuli:
     tags:
       priority: p1
       area: routing
+    constraints:
+      expect_skills:
+        - aspire
     graders:
       - type: prompt
         name: engages_aspire_deploy
@@ -285,6 +288,9 @@ stimuli:
     tags:
       priority: p1
       area: routing
+    constraints:
+      expect_skills:
+        - aspire
     graders:
       - type: prompt
         name: engages_aspire_diagnostics
@@ -300,6 +306,9 @@ stimuli:
     tags:
       priority: p1
       area: routing
+    constraints:
+      expect_skills:
+        - aspire
     graders:
       - type: prompt
         name: engages_aspire_run
@@ -314,6 +323,9 @@ stimuli:
     tags:
       priority: p1
       area: routing
+    constraints:
+      expect_skills:
+        - aspire
     graders:
       - type: prompt
         name: provides_aspire_cli_guidance
@@ -328,6 +340,9 @@ stimuli:
     tags:
       priority: p1
       area: routing
+    constraints:
+      expect_skills:
+        - aspire
     graders:
       - type: prompt
         name: engages_aspire_integration_wiring
@@ -343,6 +358,9 @@ stimuli:
     tags:
       priority: p1
       area: routing
+    constraints:
+      expect_skills:
+        - aspire
     graders:
       - type: prompt
         name: engages_typescript_apphost
@@ -358,6 +376,9 @@ stimuli:
     tags:
       priority: p1
       area: routing
+    constraints:
+      expect_skills:
+        - aspire
     graders:
       - type: prompt
         name: engages_aspire_doctor
@@ -372,6 +393,9 @@ stimuli:
     tags:
       priority: p1
       area: routing
+    constraints:
+      expect_skills:
+        - aspire
     graders:
       - type: prompt
         name: engages_aspire_init
@@ -390,6 +414,9 @@ stimuli:
     tags:
       priority: p1
       area: routing
+    constraints:
+      expect_skills:
+        - aspire
     graders:
       - type: prompt
         name: engages_aspire_destroy

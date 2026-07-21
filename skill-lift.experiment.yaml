@@ -20,9 +20,11 @@ name: skill-lift
 evals:
   - skills/*/evals/eval.yaml
 
-# The only field allowed to differ between variants. Subtree-prefix semantics:
-# authorizes any change at or below /environment/skills. Any other difference in
-# the effective resolved config is a hard error.
+# The only field allowed to differ between variants. Subtree-prefix semantics
+# authorize any change at or below /environment/skills. At the experiment layer,
+# this field replaces the effective list after eval- and stimulus-level skills
+# are unioned, so [] also strips stimulus-level additions. Any other difference
+# in the effective resolved config is a hard error.
 vary:
   - /environment/skills
 
@@ -30,7 +32,7 @@ vary:
 baseline: no-skills
 
 variants:
-  # Baseline: no skills loaded at all. Replaces each eval's skills list with [].
+  # Baseline: no skills loaded at all. Replaces each resolved skills list with [].
   no-skills:
     environment:
       skills: []

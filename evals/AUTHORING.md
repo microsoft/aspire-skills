@@ -53,7 +53,7 @@ stimuli:
 | `prompt` | string | The user prompt the executor sends. Phrase like a real user, not like a spec. |
 | `tags` | record | Merged over the eval-level `tags`. Always include a `priority` (`p0`/`p1`/`p2`) and at least one `area` (a single value or a list). |
 | `environment.files[]` | `{ src, dest }[]` | `src` resolves **relative to the eval spec file** (shared fixtures: `../../../evals/<fixture>`); `dest` is the workspace-relative path the executor sees. Reference the **shared fixtures** rather than copy-pasting per skill. |
-| `environment.skills[]` | string[] | (Optional) skill dirs to **add** for this stimulus on top of the eval-level set — used by routing stimuli to pull in siblings. Union-merged; cannot remove. |
+| `environment.skills[]` | string[] | (Optional) skill dirs to **add** for this stimulus on top of the eval-level set — used by routing stimuli to pull in siblings. Union-merged during normal eval runs; experiment variants replace the resolved list wholesale. |
 | `constraints.expect_skills` / `reject_skills` | string[] | (Optional) assert the agent *did* / *did not* activate these skills. |
 | `graders[]` | object[] | One or more graders. See below. |
 | `scoring` | object | (Optional) per-grader weights + pass threshold. Omitted → equal weights, threshold `1.0` (every grader must pass). |

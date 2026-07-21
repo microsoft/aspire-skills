@@ -51,14 +51,14 @@ environment:
     - ../../aspire-orchestration # its in-repo dependency
 ```
 
-Eval-level `environment.skills` is **union-merged** into every stimulus, so you declare the set once. A stimulus may *add* siblings (e.g. routing stimuli that need the full candidate set) but cannot remove them.
+Eval-level `environment.skills` is **union-merged** into every stimulus, so you declare the set once. During a normal eval run, a stimulus may *add* siblings (e.g. routing stimuli that need the full candidate set) but cannot remove them. Experiment variants are applied after that merge: a variant's `environment.skills` replaces the effective list wholesale, so `skills: []` also removes stimulus-level additions.
 
 **Hybrid loading convention used here:**
 
 - **Capability specs** load the skill under test **plus its transitive in-repo dependencies** (whatever its `SKILL.md` `INVOKES:`). E.g. `aspireify` loads `aspireify` + `aspire-orchestration` because it validates wiring by running `aspire start`.
 - **Routing stimuli** (the `aspire` router spec, and `area: routing` stimuli) load the **full set** of six skills so routing decisions are made against the real siblings.
 
-**Activation assertions:** `environment.expect_skills` / `environment.reject_skills` assert which skills the agent actually invoked — use them to make routing tests first-class rather than relying only on response-content graders.
+**Activation assertions:** `constraints.expect_skills` / `constraints.reject_skills` assert which skills the agent actually invoked — use them to make routing tests first-class rather than relying only on response-content graders.
 
 ### Comparative baselines (`vally experiment`)
 
@@ -70,7 +70,7 @@ evals: [skills/*/evals/eval.yaml]
 vary: [/environment/skills]
 baseline: no-skills
 variants:
-  no-skills:   { environment: { skills: [] } }  # strip all skills
+  no-skills:   { environment: { skills: [] } }  # replace the effective list
   with-skills: {}                               # inherit each spec's skills
 ```
 
@@ -82,20 +82,21 @@ vally experiment run skill-lift.experiment.yaml --dry-run
 vally experiment run skill-lift.experiment.yaml --output-dir ./results
 ```
 
-The `with-skills` − `no-skills` pass-rate delta is the measured lift. The experiment is **informational, never a gate**: the no-skills baseline is *expected* to fail grading, so `vally experiment run` exits non-zero by design. The PR gate stays `skill-eval.yml` (the `ci-gate` suite); CI runs the experiment weekly via [`skill-experiment.yml`](../.github/workflows/skill-experiment.yml).
+The `with-skills` − `no-skills` pass-rate delta is the measured lift. The experiment is **informational, never a gate**: the no-skills baseline is *expected* to fail grading, so `vally experiment run` exits non-zero by design. The PR gate in `skill-eval.yml` discovers the changed skill specs and runs their p0 + p1 stimuli directly; CI runs the experiment weekly via [`skill-experiment.yml`](../.github/workflows/skill-experiment.yml).
 
 ## Quick commands
 
 | Goal | Command |
 |------|---------|
-| Run CI gate suite (p0 + p1) | `vally eval --suite ci-gate` |
+| Reproduce the PR gate for one changed skill | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --tag priority=p0,p1` |
+| Run p0 + p1 across all skills | `vally eval --suite ci-gate` |
 | Run full nightly suite | `vally eval --suite nightly` |
 | Run one skill | `vally eval --eval-spec skills/aspire-deployment/evals/eval.yaml` |
 | Run one stimulus by tag | `vally eval --eval-spec skills/aspire/evals/eval.yaml --tag area=routing` |
 | Run the skill-lift baseline experiment | `vally experiment run skill-lift.experiment.yaml --output-dir ./results` |
 | Plan the experiment (no model calls) | `vally experiment run skill-lift.experiment.yaml --dry-run` |
-| Save per-skill results | `vally eval --suite ci-gate --output-dir ./results` |
-| Emit JUnit XML for CI | `vally eval --suite ci-gate --junit ./results/junit.xml` |
+| Save PR-gate results for one skill | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --tag priority=p0,p1 --output-dir ./results` |
+| Emit JUnit XML for the all-skill p0 + p1 suite | `vally eval --suite ci-gate --junit ./results/junit.xml` |
 | Browse results in the dashboard | `vally serve ./results` |
 | Persist runs to a SQLite store | `vally ingest ./results --store ./vally.sqlite` |
 | Lint all skills | `vally lint skills` |
@@ -135,7 +136,7 @@ Rough budget with `executor: copilot-sdk` + `model: gpt-5-mini`:
 
 - ~30k–80k tokens per stimulus (routing stimuli are at the lower end; deployment / orchestration stimuli with fixtures sit higher).
 - ~10–45 seconds per stimulus.
-- The `ci-gate` suite (p0 + p1) is the per-PR gate; `nightly` covers p0 + p1 + p2.
+- Each PR runs p0 + p1 for the skill specs it changes; the all-skill `ci-gate` suite covers the same priorities, and `nightly` adds p2.
 
 Use `--workers 4` to fan stimuli out and shave wall-clock time; expect higher cost-per-second but the same total tokens.
 
@@ -221,16 +222,16 @@ vally eval --eval-spec skills/aspire/evals/eval.yaml --tag priority=p0 --tag are
 
 ## CI integration
 
-The repo ships three GitHub Actions workflows that drive `vally` automatically:
+The repo ships four GitHub Actions workflows that drive `vally` automatically:
 
 | Workflow | Trigger | Command |
 |----------|---------|---------|
 | [`skill-lint.yml`](../.github/workflows/skill-lint.yml) | PR (`SKILL.md` / `*.yaml` / `.vally.yaml`) | `vally lint skills` + per-spec `vally lint --eval-spec <spec>` |
-| [`skill-eval.yml`](../.github/workflows/skill-eval.yml) | PR (`SKILL.md` / `eval.yaml` / `.vally.yaml`) | `vally eval --suite ci-gate --output-dir ./results` |
+| [`skill-eval.yml`](../.github/workflows/skill-eval.yml) | PR (`SKILL.md` / `eval.yaml` / `.vally.yaml`) | `vally eval -e <changed-spec> [...] --tag priority=p0,p1 --output-dir ./results` |
 | [`skill-eval-nightly.yml`](../.github/workflows/skill-eval-nightly.yml) | `cron: "0 6 * * 0"` (Sun 06:00 UTC) + `workflow_dispatch` | `vally eval --suite nightly --output-dir ./results` |
 | [`skill-experiment.yml`](../.github/workflows/skill-experiment.yml) | `cron: "0 6 * * 6"` (Sat 06:00 UTC) + `workflow_dispatch` | `vally experiment run skill-lift.experiment.yaml --output-dir ./results` — informational baseline (skills vs no-skills), never gates |
 
-The suites are declared at the repo root in [`.vally.yaml`](../.vally.yaml) and filter on the `priority` tag every stimulus carries:
+The all-skill suites are declared at the repo root in [`.vally.yaml`](../.vally.yaml) and filter on the `priority` tag every stimulus carries:
 
 ```yaml
 suites:
@@ -242,7 +243,7 @@ suites:
       priority: [p0, p1, p2]
 ```
 
-`vally` exits non-zero if any stimulus fails grading. PRs gate on `ci-gate`; the comprehensive `nightly` suite runs weekly and uploads the full `./results` directory as a workflow artifact for later dashboard inspection.
+`vally` exits non-zero if any stimulus fails grading. Because `--suite` cannot be combined with explicit `-e` specs, the PR workflow discovers changed skill specs and applies the `ci-gate`-equivalent `priority=p0,p1` filter only to them. The comprehensive `nightly` suite runs weekly and uploads the full `./results` directory as a workflow artifact for later dashboard inspection.
 
 ## CI authentication
 
