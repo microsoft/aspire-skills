@@ -70,6 +70,11 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 - Use `aspire integration list --format Json` and `aspire integration search <query> --format Json` for read-only integration discovery
 - **Never** install the obsolete Aspire workload
 - **Never** edit `.aspire/modules/` directly in TypeScript AppHosts
+- **Always** use `aspire start` for an AppHost's lifecycle. When diagnosing or repairing
+  a TypeScript AppHost's package-manager toolchain, defer to
+  [`aspireify`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md)
+  and its package-manager rules; do not substitute a raw package-manager launcher for
+  `aspire start`.
 
 ## Routing
 

@@ -1,0 +1,37 @@
+id: aspireify-package-manager-fallback-001
+name: Fall Back to npm Without Changing Metadata
+description: >
+  Agent should explicitly select Aspire's npm fallback when a TypeScript AppHost has no
+  package-manager metadata or lockfile and must not generate package-manager files.
+tags:
+  - typescript
+  - package-manager
+  - p1
+
+inputs:
+  prompt: >
+    My TypeScript AppHost has no package manager or lockfile. How should I repair its
+    dependencies without changing repository conventions?
+  files:
+    - path: "ts-apphost/apphost.ts"
+    - path: "ts-apphost/package.json"
+    - path: "ts-apphost/aspire.config.json"
+
+expected:
+  output_contains:
+    - "npm install"
+
+graders:
+  - name: explains_npm_fallback
+    type: prompt
+    config:
+      prompt: >
+        Aspire defaults to npm when no recognized packageManager field or package-manager
+        marker exists. Does the assistant's response explicitly select npm as that fallback?
+        Answer based on intent.
+  - name: preserves_package_metadata
+    type: prompt
+    config:
+      prompt: >
+        Does the assistant's response avoid recommending creation or replacement of
+        package.json, a lockfile, or package-manager metadata? Answer based on intent.

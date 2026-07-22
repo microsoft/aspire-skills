@@ -86,6 +86,8 @@ C# has two sub-modes the agent may encounter:
      whether to map env vars or switch to Aspire service discovery)
    - Wire resources with `WithReference`, `WaitFor`, endpoints, volumes
    - Optionally configure OpenTelemetry
+   - For a TypeScript AppHost toolchain problem, detect and preserve the repository's
+     existing package-manager convention before recommending a dependency command
    - Validate with a smoke-test `aspire start`
 6. **Validate** — once `aspireify` finishes wiring, run `aspire start` (handled by
    `aspire-orchestration`) and confirm resources reach a healthy state.
