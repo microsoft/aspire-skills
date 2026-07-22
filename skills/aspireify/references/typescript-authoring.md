@@ -146,8 +146,9 @@ higher because a home or unrelated repository marker must not influence the AppH
 
 Within each directory, use this order:
 
-1. A recognized `packageManager` field in `package.json` (`npm`, `pnpm`, `yarn`, or `bun`).
-   Ignore an unknown, malformed, or unreadable value and continue.
+1. A recognized `packageManager` field in `package.json` (`npm`, `pnpm`, `yarn`, or `bun`,
+   optionally followed by an `@version` suffix). Ignore an unknown, malformed, or unreadable
+   value and continue.
 2. `bun.lock`
 3. `bun.lockb`
 4. `pnpm-lock.yaml`
@@ -164,7 +165,8 @@ field, generate a lockfile, or replace package-manager files to make detection s
 ### Commands and Yarn Classic
 
 Use the detected manager only when dependency repair or the TypeScript AppHost toolchain
-requires it:
+requires it. These commands diagnose dependencies and toolchains; they do not replace
+`aspire start --non-interactive` for normal AppHost execution:
 
 | Manager | Dependency command | Type-check | AppHost execution |
 |---------|--------------------|------------|-------------------|

@@ -809,7 +809,7 @@ stimuli:
           dest: ts-apphost-package-managers/yarn-classic/package.json
     graders:
       - type: output-not-contains
-        name: no_silent_npm_fallback
+        name: does_not_recommend_npm_install
         config:
           substring: npm install
       - type: prompt
