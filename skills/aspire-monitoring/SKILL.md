@@ -75,7 +75,6 @@ When something is wrong, investigate before editing code:
 | `aspire describe` | Resource state, endpoints, health | `aspire describe --format Json` |
 | `aspire describe --include-hidden` | Include proxies, helper containers, migrations | `aspire describe --include-hidden --format Json` |
 | `aspire resources` | Resource list with state | `aspire resources` |
-| `aspire describe --include-hidden` | Inspect hidden resources when needed | `aspire describe --include-hidden --format Json` |
 | `aspire export` | Portable telemetry bundle | `aspire export` |
 | `aspire dashboard run` | Standalone dashboard (foreground/blocking) | `aspire dashboard run` |
 

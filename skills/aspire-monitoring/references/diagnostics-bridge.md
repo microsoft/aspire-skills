@@ -65,7 +65,6 @@ The Aspire CLI communicates with the running AppHost through a **backchannel soc
 | `aspire describe` | Resource state, endpoints, health (filtered) | `aspire describe --format Json` |
 | `aspire describe --include-hidden` | Include hidden resources (proxies, helpers, migrations) | `aspire describe --include-hidden --format Json` |
 | `aspire resources` | Resource list with state | `aspire resources` |
-| `aspire describe --include-hidden` | Include hidden resources when needed | `aspire describe --include-hidden --format Json` |
 | `aspire export` | Export portable telemetry bundle | `aspire export` |
 | `aspire dashboard run` | Run the Aspire Dashboard standalone (foreground/blocking) | `aspire dashboard run` |
 
