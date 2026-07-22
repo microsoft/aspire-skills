@@ -735,3 +735,84 @@ stimuli:
         config:
           disallowed:
             - aspireify
+  - name: aspireify-package-manager-pnpm-001
+    prompt: My TypeScript AppHost cannot restore dependencies. What package-manager command should I use, and how should I start the app afterwards?
+    tags:
+      priority: p1
+      area:
+        - typescript
+        - package-manager
+    environment:
+      files:
+        - src: ../../../evals/ts-apphost-package-managers/pnpm/apphost.ts
+          dest: ts-apphost-package-managers/pnpm/apphost.ts
+        - src: ../../../evals/ts-apphost-package-managers/pnpm/package.json
+          dest: ts-apphost-package-managers/pnpm/package.json
+        - src: ../../../evals/ts-apphost-package-managers/pnpm/pnpm-lock.yaml
+          dest: ts-apphost-package-managers/pnpm/pnpm-lock.yaml
+        - src: ../../../evals/ts-apphost-package-managers/package.json
+          dest: ts-apphost-package-managers/package.json
+    graders:
+      - type: output-contains
+        name: uses_pnpm_install
+        config:
+          substring: pnpm install --ignore-workspace
+      - type: output-contains
+        name: retains_aspire_lifecycle
+        config:
+          substring: aspire start
+      - type: prompt
+        name: selects_local_pnpm
+        config:
+          prompt: The AppHost-local pnpm-lock.yaml takes precedence over a parent package.json declaring Yarn. Does the assistant's response select pnpm and explain why? Answer based on intent.
+      - type: prompt
+        name: preserves_package_metadata
+        config:
+          prompt: Does the assistant's response preserve the existing package-manager metadata and lockfiles rather than recommending that they be created, replaced, or regenerated? Answer based on intent.
+  - name: aspireify-package-manager-fallback-001
+    prompt: My TypeScript AppHost has no package manager or lockfile. How should I repair its dependencies without changing repository conventions?
+    tags:
+      priority: p1
+      area:
+        - typescript
+        - package-manager
+    environment:
+      files:
+        - src: ../../../evals/ts-apphost/apphost.ts
+          dest: ts-apphost/apphost.ts
+        - src: ../../../evals/ts-apphost/package.json
+          dest: ts-apphost/package.json
+        - src: ../../../evals/ts-apphost/aspire.config.json
+          dest: ts-apphost/aspire.config.json
+    graders:
+      - type: output-contains
+        name: explains_npm_fallback
+        config:
+          substring: npm install
+      - type: prompt
+        name: preserves_package_metadata
+        config:
+          prompt: Aspire defaults to npm when no recognized packageManager field or package-manager marker exists. Does the assistant's response select that fallback and avoid recommending creation or replacement of package metadata or lockfiles? Answer based on intent.
+  - name: aspireify-package-manager-yarn-classic-001
+    prompt: My TypeScript AppHost uses Yarn. Help me repair its dependency setup.
+    tags:
+      priority: p1
+      area:
+        - typescript
+        - package-manager
+        - safety
+    environment:
+      files:
+        - src: ../../../evals/ts-apphost-package-managers/yarn-classic/apphost.ts
+          dest: ts-apphost-package-managers/yarn-classic/apphost.ts
+        - src: ../../../evals/ts-apphost-package-managers/yarn-classic/package.json
+          dest: ts-apphost-package-managers/yarn-classic/package.json
+    graders:
+      - type: output-not-contains
+        name: no_silent_npm_fallback
+        config:
+          substring: npm install
+      - type: prompt
+        name: rejects_yarn_classic
+        config:
+          prompt: packageManager yarn@1.22.22 identifies Yarn Classic, which is unsupported for TypeScript AppHosts. Does the assistant's response explicitly reject it and explain that it must be upgraded to Yarn 4+ or changed to npm, pnpm, or Bun? Answer based on intent.
