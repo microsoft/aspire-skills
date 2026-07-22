@@ -89,7 +89,7 @@ When something is wrong, investigate before editing code:
 ### Tips for Agents
 
 ```bash
-# ✅ Use --format Json for machine parsing (supported: ps, describe, start)
+# ✅ Use --format Json for machine parsing (supported: describe, start)
 aspire describe --format Json
 
 # ✅ When a resource you expect is missing, retry with --include-hidden
