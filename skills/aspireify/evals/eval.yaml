@@ -744,8 +744,8 @@ stimuli:
         - package-manager
     environment:
       files:
-        - src: ../../../evals/ts-apphost-package-managers/pnpm/apphost.ts
-          dest: ts-apphost-package-managers/pnpm/apphost.ts
+        - src: ../../../evals/ts-apphost-package-managers/pnpm/apphost.mts
+          dest: ts-apphost-package-managers/pnpm/apphost.mts
         - src: ../../../evals/ts-apphost-package-managers/pnpm/package.json
           dest: ts-apphost-package-managers/pnpm/package.json
         - src: ../../../evals/ts-apphost-package-managers/pnpm/pnpm-lock.yaml
@@ -803,8 +803,8 @@ stimuli:
         - safety
     environment:
       files:
-        - src: ../../../evals/ts-apphost-package-managers/yarn-classic/apphost.ts
-          dest: ts-apphost-package-managers/yarn-classic/apphost.ts
+        - src: ../../../evals/ts-apphost-package-managers/yarn-classic/apphost.mts
+          dest: ts-apphost-package-managers/yarn-classic/apphost.mts
         - src: ../../../evals/ts-apphost-package-managers/yarn-classic/package.json
           dest: ts-apphost-package-managers/yarn-classic/package.json
     graders:

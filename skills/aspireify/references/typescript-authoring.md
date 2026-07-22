@@ -170,10 +170,13 @@ requires it. These commands diagnose dependencies and toolchains; they do not re
 
 | Manager | Dependency command | Type-check | Diagnostic AppHost run |
 |---------|--------------------|------------|-----------------------|
-| npm | `npm install` | `npx --no-install tsc --noEmit -p tsconfig.json` | `npx --no-install tsx --tsconfig tsconfig.json apphost.ts` |
-| Bun | `bun install` | `bun run tsc --noEmit -p tsconfig.json` | `bun run apphost.ts` |
-| Yarn 4+ | `yarn install` | `yarn run tsc --noEmit -p tsconfig.json` | `yarn run tsx --tsconfig tsconfig.json apphost.ts` |
-| pnpm | `pnpm install` | `pnpm exec tsc --noEmit -p tsconfig.json` | `pnpm exec tsx --tsconfig tsconfig.json apphost.ts` |
+| npm | `npm install` | `npx --no-install tsc --noEmit -p tsconfig.apphost.json` | `npx --no-install tsx --tsconfig tsconfig.apphost.json apphost.mts` |
+| Bun | `bun install` | `bun run tsc --noEmit -p tsconfig.apphost.json` | `bun run apphost.mts` |
+| Yarn 4+ | `yarn install` | `yarn run tsc --noEmit -p tsconfig.apphost.json` | `yarn run tsx --tsconfig tsconfig.apphost.json apphost.mts` |
+| pnpm | `pnpm install` | `pnpm exec tsc --noEmit -p tsconfig.apphost.json` | `pnpm exec tsx --tsconfig tsconfig.apphost.json apphost.mts` |
+
+`apphost.mts` is the default entry point. When the AppHost configuration selects a
+different file, use that configured entry point instead.
 
 `--ignore-workspace` applies only to the generated brownfield pnpm AppHost package. It
 prevents pnpm from requiring an edit to the user's workspace configuration. Use
