@@ -168,16 +168,17 @@ Use the detected manager only when dependency repair or the TypeScript AppHost t
 requires it. These commands diagnose dependencies and toolchains; they do not replace
 `aspire start --non-interactive` for normal AppHost execution:
 
-| Manager | Dependency command | Type-check | AppHost execution |
-|---------|--------------------|------------|-------------------|
+| Manager | Dependency command | Type-check | Diagnostic AppHost run |
+|---------|--------------------|------------|-----------------------|
 | npm | `npm install` | `npx --no-install tsc --noEmit -p tsconfig.json` | `npx --no-install tsx --tsconfig tsconfig.json apphost.ts` |
 | Bun | `bun install` | `bun run tsc --noEmit -p tsconfig.json` | `bun run apphost.ts` |
 | Yarn 4+ | `yarn install` | `yarn run tsc --noEmit -p tsconfig.json` | `yarn run tsx --tsconfig tsconfig.json apphost.ts` |
-| pnpm | `pnpm install --ignore-workspace` | `pnpm exec tsc --noEmit -p tsconfig.json` | `pnpm exec tsx --tsconfig tsconfig.json apphost.ts` |
+| pnpm | `pnpm install` | `pnpm exec tsc --noEmit -p tsconfig.json` | `pnpm exec tsx --tsconfig tsconfig.json apphost.ts` |
 
 `--ignore-workspace` applies only to the generated brownfield pnpm AppHost package. It
-prevents pnpm from requiring an edit to the user's workspace configuration; do not
-generalize it to arbitrary application dependency installs.
+prevents pnpm from requiring an edit to the user's workspace configuration. Use
+`pnpm install --ignore-workspace` only in that scenario; do not generalize it to
+arbitrary application dependency installs.
 
 Yarn Classic is unsupported for TypeScript AppHosts. If `packageManager` is `yarn@1...`
 or the first lines of `yarn.lock` identify lockfile v1, stop and tell the user to upgrade
