@@ -452,8 +452,10 @@ async function handleRequest(entry, req, res) {
             return sendJson(res, 400, { ok: false, error: `Invalid request: ${err.message}` });
         }
         const check = body?.check ?? body;
-        if (!check || (!check.fix && !check.message)) {
-            return sendJson(res, 400, { ok: false, error: "No fix details provided." });
+        const hasCheckDetails = check && [check.name, check.status, check.category, check.message, check.fix]
+            .some(value => String(value ?? "").trim().length > 0);
+        if (!hasCheckDetails) {
+            return sendJson(res, 400, { ok: false, error: "No check details provided." });
         }
         try {
             const result = await dispatchFixAndRefresh(entry, check);
