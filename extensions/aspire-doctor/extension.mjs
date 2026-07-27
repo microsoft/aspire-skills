@@ -143,7 +143,8 @@ function broadcast(entry, payload) {
 function resolveCli() {
     const override = process.env.ASPIRE_CLI?.trim();
     if (override) {
-        return { command: override, useShell: false };
+        const useShell = process.platform === "win32" && [".cmd", ".bat"].includes(extname(override).toLowerCase());
+        return { command: useShell ? `"${override}"` : override, useShell };
     }
     // Bare "aspire" relies on PATH. On Windows the CLI is `aspire.cmd`/`aspire.exe`,
     // which execFile-style spawning won't resolve via PATHEXT — so route through
