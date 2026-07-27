@@ -122,7 +122,7 @@ function buildSkill(skillDirectory) {
 
 function buildExtensions() {
   if (!existsSync(extensionsRoot)) {
-    return [];
+    throw new Error(`${relative(repoRoot, extensionsRoot)} does not exist; cannot build the extensions bundle.`);
   }
 
   const extensions = listExtensionDirectories(extensionsRoot).map(extensionDirectory => buildExtension(extensionDirectory));
