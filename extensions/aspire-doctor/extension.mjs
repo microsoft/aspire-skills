@@ -12,7 +12,7 @@ import { joinSession, createCanvas, CanvasError } from "@github/copilot-sdk/exte
 const CANVAS_ID = "aspire-doctor";
 const DEFAULT_INSTANCE = "doctor-main";
 
-const DOCTOR_TOOL_HINT = "doctor";
+const ASPIRE_DOCTOR_TOOL_NAME = "aspire-doctor";
 
 const UI_DIR = new URL("./ui/", import.meta.url);
 const UI_ROOT = fileURLToPath(UI_DIR);
@@ -632,8 +632,7 @@ function onSessionStart() {
 }
 
 function onPostToolUse(input) {
-    const toolName = String(input?.toolName ?? "").toLowerCase();
-    if (!toolName.includes(DOCTOR_TOOL_HINT)) {
+    if (!isAspireDoctorTool(input?.toolName)) {
         return;
     }
     return {
@@ -642,6 +641,12 @@ function onPostToolUse(input) {
             "report, open the Aspire Doctor canvas with the 'open_aspire_doctor' tool — it renders these " +
             "checks as a pass/warning/fail checklist with actionable fixes and detected CLI installations.",
     };
+}
+
+function isAspireDoctorTool(toolName) {
+    const normalized = String(toolName ?? "").toLowerCase();
+    const leafName = normalized.split(/[.:/]/).at(-1);
+    return leafName === ASPIRE_DOCTOR_TOOL_NAME;
 }
 
 sessionRef = await joinSession({

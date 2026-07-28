@@ -371,34 +371,18 @@ function renderPathValue(value, variant = "default") {
 }
 
 async function openPath(path, btn) {
-    if (btn.dataset.busy === "true") {
-        return;
-    }
-    btn.dataset.busy = "true";
-    btn.disabled = true;
-    btn.classList.remove("is-error", "is-opened");
-
-    try {
-        const res = await fetch("/api/open-path", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ path }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (res.ok && data.ok) {
+    await runButtonAction(btn, {
+        stateClasses: ["is-error", "is-opened"],
+        resetDelay: 1800,
+        action: () => postJson("/api/open-path", { path }),
+        onSuccess: () => {
             btn.classList.add("is-opened");
-        } else {
+        },
+        onFailure: (data) => {
             btn.classList.add("is-error");
             btn.title = data.error || "Couldn't open this path";
-        }
-    } catch {
-        btn.classList.add("is-error");
-        btn.title = "Couldn't open this path";
-    } finally {
-        btn.dataset.busy = "false";
-        btn.disabled = false;
-        setTimeout(() => btn.classList.remove("is-error", "is-opened"), 1800);
-    }
+        },
+    });
 }
 
 function renderFixBlock(check) {
@@ -445,44 +429,67 @@ function renderFixBlock(check) {
 }
 
 async function openTerminalForCheck(check, btn) {
+    await runButtonAction(btn, {
+        stateClasses: ["is-error", "is-sent"],
+        busyLabel: "Opening…",
+        resetLabel: "Open terminal",
+        action: () => postJson("/api/open-terminal", {
+            check: {
+                category: check.category,
+                name: check.name,
+                status: check.status,
+            },
+        }),
+        onSuccess: () => {
+            btn.classList.add("is-sent");
+            setSendLabel(btn, "Opened terminal");
+        },
+        onFailure: () => {
+            btn.classList.add("is-error");
+            setSendLabel(btn, "Couldn't open");
+        },
+    });
+}
+
+async function postJson(path, body) {
+    const res = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    return { ...data, ok: res.ok && data.ok };
+}
+
+async function runButtonAction(btn, options) {
     if (btn.dataset.busy === "true") {
         return;
     }
     btn.dataset.busy = "true";
     btn.disabled = true;
-    btn.classList.remove("is-error", "is-sent");
-    setSendLabel(btn, "Opening…");
+    btn.classList.remove(...options.stateClasses);
+    if (options.busyLabel) {
+        setSendLabel(btn, options.busyLabel);
+    }
 
     try {
-        const res = await fetch("/api/open-terminal", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                check: {
-                    category: check.category,
-                    name: check.name,
-                    status: check.status,
-                },
-            }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (res.ok && data.ok) {
-            btn.classList.add("is-sent");
-            setSendLabel(btn, "Opened terminal");
+        const data = await options.action();
+        if (data.ok) {
+            options.onSuccess?.(data);
         } else {
-            btn.classList.add("is-error");
-            setSendLabel(btn, "Couldn't open");
+            options.onFailure?.(data);
         }
-    } catch {
-        btn.classList.add("is-error");
-        setSendLabel(btn, "Couldn't open");
+    } catch (err) {
+        options.onFailure?.({ error: err?.message ?? String(err) });
     } finally {
         btn.dataset.busy = "false";
         btn.disabled = false;
         setTimeout(() => {
-            btn.classList.remove("is-error", "is-sent");
-            setSendLabel(btn, btn.dataset.restingLabel || "Open terminal");
-        }, 3200);
+            btn.classList.remove(...options.stateClasses);
+            if (options.resetLabel || btn.dataset.restingLabel) {
+                setSendLabel(btn, options.resetLabel || btn.dataset.restingLabel);
+            }
+        }, options.resetDelay ?? 3200);
     }
 }
 
@@ -494,45 +501,26 @@ function setSendLabel(btn, text) {
 }
 
 async function sendFixToAgent(check, btn) {
-    if (btn.dataset.busy === "true") {
-        return;
-    }
-    btn.dataset.busy = "true";
-    btn.disabled = true;
-    btn.classList.remove("is-error", "is-sent");
-    setSendLabel(btn, "Asking…");
-
-    try {
-        const res = await fetch("/api/ask-copilot", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                name: check.name,
-                status: check.status,
-                category: check.category,
-                message: check.message,
-                fix: check.fix,
-            }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (res.ok && data.ok) {
+    await runButtonAction(btn, {
+        stateClasses: ["is-error", "is-sent"],
+        busyLabel: "Asking…",
+        resetLabel: "Ask Copilot",
+        action: () => postJson("/api/ask-copilot", {
+            name: check.name,
+            status: check.status,
+            category: check.category,
+            message: check.message,
+            fix: check.fix,
+        }),
+        onSuccess: () => {
             btn.classList.add("is-sent");
             setSendLabel(btn, "Queued for Copilot");
-        } else {
+        },
+        onFailure: () => {
             btn.classList.add("is-error");
             setSendLabel(btn, "Couldn't send");
-        }
-    } catch {
-        btn.classList.add("is-error");
-        setSendLabel(btn, "Couldn't send");
-    } finally {
-        btn.dataset.busy = "false";
-        btn.disabled = false;
-        setTimeout(() => {
-            btn.classList.remove("is-error", "is-sent");
-            setSendLabel(btn, btn.dataset.restingLabel || "Ask Copilot");
-        }, 3200);
-    }
+        },
+    });
 }
 
 function renderCheck(check) {
