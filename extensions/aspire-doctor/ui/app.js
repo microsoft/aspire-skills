@@ -15,6 +15,7 @@ const CATEGORY_LABEL = {
     environment: "Environment",
     container: "Container runtime",
 };
+const apiToken = new URLSearchParams(window.location.search).get("token") || "";
 
 /* ---------------- Octicon paths (16x16) ---------------- */
 const ICONS = {
@@ -454,7 +455,10 @@ async function openTerminalForCheck(check, btn) {
 async function postJson(path, body) {
     const res = await fetch(path, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+            "Content-Type": "application/json",
+            "X-Aspire-Doctor-Token": apiToken,
+        },
         body: JSON.stringify(body),
     });
     const data = await res.json().catch(() => ({}));
@@ -724,7 +728,12 @@ async function loadDiagnostics({ initial = false } = {}) {
     }
 
     try {
-        const res = await fetch("/api/diagnostics", { headers: { Accept: "application/json" } });
+        const res = await fetch("/api/diagnostics", {
+            headers: {
+                Accept: "application/json",
+                "X-Aspire-Doctor-Token": apiToken,
+            },
+        });
         const result = await res.json();
         applyResult(result);
     } catch (err) {
@@ -741,7 +750,7 @@ async function loadDiagnostics({ initial = false } = {}) {
 function connectEvents() {
     let es;
     try {
-        es = new EventSource("/events");
+        es = new EventSource(`/events?token=${encodeURIComponent(apiToken)}`);
     } catch {
         return; // SSE is an enhancement; the initial fetch already populated the UI.
     }

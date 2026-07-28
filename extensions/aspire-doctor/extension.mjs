@@ -4,6 +4,7 @@
 
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { basename, dirname, extname, isAbsolute, normalize, relative, resolve, sep } from "node:path";
@@ -27,6 +28,8 @@ const CONTENT_TYPES = {
 };
 
 const DOCTOR_TIMEOUT_MS = 60_000;
+const TOKEN_BYTES = 32;
+const AUTH_HEADER = "x-aspire-doctor-token";
 
 const EDITOR_FILE_EXTENSIONS = new Set([
     ".cs",
@@ -87,6 +90,57 @@ function sendJson(res, status, payload) {
         "Cache-Control": "no-store",
     });
     res.end(JSON.stringify(payload));
+}
+
+function sendForbidden(res, message = "Forbidden") {
+    sendJson(res, 403, { ok: false, error: message });
+}
+
+function createToken() {
+    return randomBytes(TOKEN_BYTES).toString("base64url");
+}
+
+function tokensMatch(actual, expected) {
+    const actualBuffer = Buffer.from(String(actual ?? ""), "utf8");
+    const expectedBuffer = Buffer.from(String(expected ?? ""), "utf8");
+    return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer);
+}
+
+function getRequestToken(req, url) {
+    const headerValue = req.headers[AUTH_HEADER];
+    if (Array.isArray(headerValue)) {
+        return headerValue[0] ?? "";
+    }
+    return headerValue || url.searchParams.get("token") || "";
+}
+
+function isProtectedPath(path) {
+    return path === "/events" || path.startsWith("/api/");
+}
+
+function isAllowedHost(req, entry) {
+    return String(req.headers.host ?? "").toLowerCase() === entry.host;
+}
+
+function isAllowedOrigin(req, entry) {
+    const origin = req.headers.origin;
+    if (!origin) {
+        return true;
+    }
+    return String(origin).toLowerCase() === entry.origin;
+}
+
+function authorizeRequest(entry, req, url, path) {
+    if (!isAllowedHost(req, entry)) {
+        return "Unexpected request host.";
+    }
+    if (!isAllowedOrigin(req, entry)) {
+        return "Unexpected request origin.";
+    }
+    if (isProtectedPath(path) && !tokensMatch(getRequestToken(req, url), entry.token)) {
+        return "Missing or invalid Aspire Doctor token.";
+    }
+    return null;
 }
 
 const MAX_BODY_BYTES = 64 * 1024;
@@ -425,8 +479,12 @@ async function openPath(value) {
 /* ---------------- request routing ---------------- */
 
 async function handleRequest(entry, req, res) {
-    const url = new URL(req.url, "http://127.0.0.1");
+    const url = new URL(req.url, entry.origin);
     const path = url.pathname;
+    const authorizationError = authorizeRequest(entry, req, url, path);
+    if (authorizationError) {
+        return sendForbidden(res, authorizationError);
+    }
 
     if (req.method === "GET" && (path === "/" || path === "/index.html")) {
         return serveAsset(res, "index.html");
@@ -501,6 +559,9 @@ async function startServer(instanceId) {
         instanceId,
         server: null,
         url: "",
+        origin: "",
+        host: "",
+        token: createToken(),
         clients: new Set(),
     };
 
@@ -524,7 +585,9 @@ async function startServer(instanceId) {
     const port = typeof address === "object" && address ? address.port : 0;
 
     entry.server = server;
-    entry.url = `http://127.0.0.1:${port}/`;
+    entry.origin = `http://127.0.0.1:${port}`;
+    entry.host = `127.0.0.1:${port}`;
+    entry.url = `${entry.origin}/?token=${encodeURIComponent(entry.token)}`;
     instances.set(instanceId, entry);
     return entry;
 }
