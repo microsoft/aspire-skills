@@ -599,7 +599,13 @@ const openTool = {
     handler: async (args) => {
         const instanceId = (args?.instanceId ?? "").trim() || DEFAULT_INSTANCE;
         try {
-            await sessionRef?.rpc?.canvas?.open?.({ canvasId: CANVAS_ID, instanceId, input: {} });
+            if (typeof sessionRef?.rpc?.canvas?.open !== "function") {
+                return {
+                    textResultForLlm: "Failed to open the Aspire Doctor canvas: the canvas host is not available.",
+                    resultType: "failure",
+                };
+            }
+            await sessionRef.rpc.canvas.open({ canvasId: CANVAS_ID, instanceId, input: {} });
             return `Opened the Aspire Doctor canvas (instance '${instanceId}'). Use its Re-run button or the run_diagnostics action to refresh checks.`;
         } catch (err) {
             return {
