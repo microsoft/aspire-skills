@@ -5,6 +5,7 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Corrected Aspire monitoring guidance for `WithBrowserLogs()` child-resource diagnostics.
 - Synced skill guidance with the current Aspire 13.4 development branch:
   `.aspire/modules` TypeScript AppHost generated files, `aspire integration list/search`
   discovery, resource-command/watch/HMR lifecycle guidance, and `PublishAsPackageScript`

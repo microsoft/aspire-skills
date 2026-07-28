@@ -212,7 +212,7 @@ For dashboards configured with API-key authentication, pass `--api-key` alongsid
 aspire otel logs --dashboard-url https://my-dashboard.example.com --api-key "$DASHBOARD_API_KEY" --follow
 ```
 
-## Browser Telemetry
+## Browser Logs
 
 `WithBrowserLogs()` creates a `<frontend>-browser-logs` child resource for the frontend. Its
 console stream contains browser console logs, errors, exceptions, and network diagnostics. Use

@@ -145,7 +145,7 @@ aspire otel logs --dashboard-url https://my-dashboard.example.com --api-key "$DA
 
 The container-image standalone dashboard still works for environments where the CLI isn't available.
 
-## Browser Telemetry (`Aspire.Hosting.Browsers`)
+## Browser Logs (`Aspire.Hosting.Browsers`)
 
 When a frontend has already opted into `WithBrowserLogs()`, Aspire creates a child resource named
 `<frontend>-browser-logs`. Browser console messages, errors, exceptions, and network diagnostics

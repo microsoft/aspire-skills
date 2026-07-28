@@ -124,7 +124,7 @@ The container-image standalone dashboard is still available where the CLI isn't 
 
 ---
 
-## Browser Telemetry (`Aspire.Hosting.Browsers`)
+## Browser Logs (`Aspire.Hosting.Browsers`)
 
 When a frontend opts into `WithBrowserLogs()`, Aspire creates a child resource named
 `<frontend>-browser-logs`. Browser console messages, errors, exceptions, and network diagnostics
@@ -216,4 +216,4 @@ No additional configuration is needed — Aspire wires the connection string dur
 | "Why is this resource unhealthy?" | `aspire describe` + `aspire logs` | AppLens / azure-diagnostics / `kubectl describe pod` |
 | "What metrics are available?" | Aspire Dashboard (auto-launched or `aspire dashboard run`) | Azure Monitor / App Insights / Container Insights |
 | "Export telemetry for analysis" | `aspire export` | App Insights export / KQL query |
-| "Browser console / network logs" | `aspire resource <frontend>-browser-logs open-tracked-browser`, then `aspire logs <frontend>-browser-logs` (with `WithBrowserLogs()` enabled) — N/A in production |
+| "Browser console / network logs" | `aspire resource <frontend>-browser-logs open-tracked-browser`, then `aspire logs <frontend>-browser-logs` (with `WithBrowserLogs()` enabled) | N/A in production |
