@@ -385,7 +385,7 @@ function revealInFileManager(absolutePath, stats) {
         args = [stats.isDirectory() ? absolutePath : dirname(absolutePath)];
     }
 
-    const child = spawn(command, args, { detached: true, stdio: "ignore", windowsHide: true });
+    const child = spawn(command, args, { detached: true, stdio: "ignore" });
     child.unref();
 }
 
