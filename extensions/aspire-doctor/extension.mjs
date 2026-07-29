@@ -424,7 +424,7 @@ function shouldOpenInEditor(absolutePath, stats) {
     return stats.isFile() && EDITOR_FILE_EXTENSIONS.has(extname(absolutePath).toLowerCase());
 }
 
-function revealInFileManager(absolutePath, stats) {
+async function revealInFileManager(absolutePath, stats) {
     let command;
     let args;
 
@@ -439,8 +439,14 @@ function revealInFileManager(absolutePath, stats) {
         args = [stats.isDirectory() ? absolutePath : dirname(absolutePath)];
     }
 
-    const child = spawn(command, args, { detached: true, stdio: "ignore" });
-    child.unref();
+    await new Promise((resolve, reject) => {
+        const child = spawn(command, args, { detached: true, stdio: "ignore" });
+        child.once("error", reject);
+        child.once("spawn", () => {
+            child.unref();
+            resolve();
+        });
+    });
 }
 
 async function openPath(value) {
@@ -472,7 +478,7 @@ async function openPath(value) {
         return { ok: true, mode: "editor", path: repoRelativePath };
     }
 
-    revealInFileManager(absolutePath, stats);
+    await revealInFileManager(absolutePath, stats);
     return { ok: true, mode: "file-manager", path: absolutePath };
 }
 
