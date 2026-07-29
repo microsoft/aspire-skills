@@ -292,7 +292,11 @@ stimuli:
         config:
           substring: --include-hidden
   - name: mon-investigate-001
-    prompt: Something is wrong with my app, requests are failing
+    # Question phrasing that asks for the investigation approach: the prior scenario wording led
+    # the executor to actually run the AppHost and probe live, timing out the trial. The graders
+    # check intent (investigate before editing), so asking how to investigate keeps the workflow
+    # signal without launching the app.
+    prompt: Something is wrong with my app and requests are failing. How should I investigate?
     tags:
       priority: p0
       area: workflow
@@ -320,7 +324,11 @@ stimuli:
             describe, aspire logs, aspire otel) to investigate the issue before suggesting code
             changes? Answer based on the intent, not exact string matching.
   - name: mon-logs-001
-    prompt: Show me what the API service is logging
+    # Question phrasing that asks for the recommended command: the prior "show me" wording led
+    # the executor to actually run the AppHost and hunt/tail resource logs on disk (a long
+    # probe that never returns), timing out the trial. Asking how to view the logs elicits the
+    # `aspire logs` recommendation without launching the app.
+    prompt: How do I view what the API service is logging?
     tags:
       priority: p0
       area: local-diagnostics

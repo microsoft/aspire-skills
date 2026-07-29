@@ -177,7 +177,11 @@ stimuli:
         config:
           substring: aspire deploy
   - name: router-mon-001
-    prompt: Something is wrong with my app, show me what's happening
+    # Question phrasing for the routing check: the prior "show me what's happening" wording led
+    # the executor to actually run the AppHost and probe live, timing out the trial. The grader
+    # only checks that the response routes to aspire-monitoring, so asking how to see what's
+    # happening preserves the routing signal without launching the app.
+    prompt: Something is wrong with my app. How do I see what's happening?
     tags:
       priority: p0
       area: routing
