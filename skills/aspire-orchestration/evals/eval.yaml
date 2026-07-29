@@ -518,7 +518,11 @@ stimuli:
         config:
           substring: curl.*health
   - name: orch-rebuild-001
-    prompt: I changed some code in the API service, how do I see my changes?
+    # Question phrasing that asks for the command: the prior wording led the executor to
+    # actually `dotnet run` the AppHost (a foreground daemon that never returns), timing
+    # out the trial. Asking which Aspire command elicits the recommended `aspire resource
+    # restart` guidance without launching the app.
+    prompt: I changed some code in the API service and my app is already running. How do I get my changes to show up — which Aspire command should I use?
     tags:
       priority: p0
       area:

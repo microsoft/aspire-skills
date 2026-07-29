@@ -562,7 +562,10 @@ stimuli:
             - aspireify
   - name: should_trigger_03
     description: "Reason: Resource graph scaffolding is the core aspireify flow"
-    prompt: Scaffold the resource graph for my Aspire app
+    # Question phrasing: an imperative makes the executor run the interactive resource
+    # scaffolder, which blocks and times out the trial; the skill-invocation grader
+    # only checks routing, so intent is unchanged.
+    prompt: How do I scaffold the resource graph for my Aspire app?
     tags:
       priority: p1
       area: routing
@@ -670,7 +673,10 @@ stimuli:
             - aspireify
   - name: should_not_trigger_02
     description: "Reason: App lifecycle routes to aspire-orchestration"
-    prompt: Start my Aspire app
+    # Question phrasing: an imperative makes the executor launch a foreground app run
+    # that never returns, timing out the trial; the skill-invocation grader only checks
+    # routing, so intent is unchanged.
+    prompt: How do I start my Aspire app?
     tags:
       priority: p1
       area: routing
@@ -694,7 +700,10 @@ stimuli:
             - aspireify
   - name: should_not_trigger_04
     description: "Reason: Skeleton drop routes to aspire-init"
-    prompt: Create a new Aspire project from scratch
+    # Question phrasing: an imperative makes the executor run the interactive scaffolder
+    # (`aspire new`), which blocks and times out the trial; the skill-invocation grader
+    # only checks routing, so intent is unchanged.
+    prompt: How do I create a new Aspire project from scratch?
     tags:
       priority: p1
       area: routing
@@ -744,7 +753,10 @@ stimuli:
             - aspireify
   - name: should_not_trigger_08
     description: "Reason: aspire init (skeleton drop) routes to aspire-init"
-    prompt: Run aspire init to scaffold a new AppHost
+    # Question phrasing: an imperative makes the executor run interactive `aspire init`,
+    # which blocks and times out the trial; the skill-invocation grader only checks
+    # routing, so intent is unchanged.
+    prompt: How do I run aspire init to scaffold a new AppHost?
     tags:
       priority: p1
       area: routing

@@ -372,7 +372,10 @@ stimuli:
             generic TypeScript file unrelated to Aspire. Answer based on intent.
   - name: should_trigger_08
     description: "Reason: Direct aspire CLI command"
-    prompt: Run aspire doctor to check my setup
+    # Question phrasing: an imperative makes the executor install then run `aspire
+    # doctor`, blocking the trial to timeout; the grader accepts explaining, so
+    # routing intent is unchanged.
+    prompt: How do I run aspire doctor to check my setup?
     tags:
       priority: p1
       area: routing
@@ -389,7 +392,10 @@ stimuli:
             than refusing or treating it as unrelated to Aspire. Answer based on intent.
   - name: should_trigger_09
     description: "Reason: aspire init is part of the Aspire workflow"
-    prompt: Run aspire init to add Aspire to this repo
+    # Question phrasing: an imperative makes the executor run interactive `aspire
+    # init`, which blocks and times out the trial; the grader accepts explaining, so
+    # routing intent is unchanged.
+    prompt: How do I run aspire init to add Aspire to this repo?
     tags:
       priority: p1
       area: routing

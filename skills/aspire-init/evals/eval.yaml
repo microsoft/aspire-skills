@@ -283,7 +283,10 @@ stimuli:
             - aspire-init
   - name: should_trigger_02
     description: "Reason: Brand-new project — aspire new template selection"
-    prompt: Scaffold a new Aspire app from scratch
+    # Question phrasing: an imperative makes the executor run the interactive scaffolder
+    # (`aspire new`), which blocks and times out the trial; the skill-invocation grader
+    # only checks routing, so intent is unchanged.
+    prompt: How do I scaffold a new Aspire app from scratch?
     tags:
       priority: p1
       area: routing
@@ -307,7 +310,10 @@ stimuli:
             - aspire-init
   - name: should_trigger_04
     description: "Reason: Direct template scaffold request"
-    prompt: Run aspire new aspire-starter to create a new project
+    # Question phrasing: an imperative makes the executor run the interactive scaffolder
+    # (`aspire new`), which blocks and times out the trial; the skill-invocation grader
+    # only checks routing, so intent is unchanged.
+    prompt: How do I run aspire new aspire-starter to create a new project?
     tags:
       priority: p1
       area: routing
@@ -319,7 +325,10 @@ stimuli:
             - aspire-init
   - name: should_trigger_05
     description: "Reason: Direct init request on existing repo"
-    prompt: Run aspire init in this repo
+    # Question phrasing: an imperative makes the executor run interactive `aspire init`,
+    # which blocks and times out the trial; the skill-invocation grader only checks
+    # routing, so intent is unchanged.
+    prompt: How do I run aspire init in this repo?
     tags:
       priority: p1
       area: routing
@@ -343,7 +352,10 @@ stimuli:
             - aspire-init
   - name: should_trigger_07
     description: "Reason: Greenfield TS AppHost — aspire new aspire-ts-starter"
-    prompt: Create a new Aspire TypeScript starter app
+    # Question phrasing: an imperative makes the executor run the interactive scaffolder
+    # (`aspire new`), which blocks and times out the trial; the skill-invocation grader
+    # only checks routing, so intent is unchanged.
+    prompt: How do I create a new Aspire TypeScript starter app?
     tags:
       priority: p1
       area: routing
@@ -367,7 +379,10 @@ stimuli:
             - aspire-init
   - name: should_not_trigger_01
     description: "Reason: App lifecycle routes to aspire-orchestration"
-    prompt: Start my Aspire app
+    # Question phrasing: an imperative makes the executor launch a foreground app run
+    # that never returns, timing out the trial; the skill-invocation grader only checks
+    # routing, so intent is unchanged.
+    prompt: How do I start my Aspire app?
     tags:
       priority: p1
       area: routing
@@ -439,7 +454,10 @@ stimuli:
             - aspire-init
   - name: should_not_trigger_07
     description: "Reason: aspire wait routes to aspire-orchestration"
-    prompt: Wait for my API to be ready
+    # Question phrasing: an imperative makes the executor run blocking `aspire wait`,
+    # which hangs until the resource is ready and times out the trial; the
+    # skill-invocation grader only checks routing, so intent is unchanged.
+    prompt: How do I wait for my API to be ready?
     tags:
       priority: p1
       area: routing

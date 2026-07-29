@@ -547,7 +547,10 @@ stimuli:
             - aspire-monitoring
   - name: should_not_trigger_01
     description: "Reason: Start routes to aspire-orchestration"
-    prompt: Start my Aspire app
+    # Question phrasing: an imperative makes the executor launch a foreground app run
+    # that never returns, timing out the trial; the skill-invocation grader only checks
+    # routing, so intent is unchanged.
+    prompt: How do I start my Aspire app?
     tags:
       priority: p1
       area: routing

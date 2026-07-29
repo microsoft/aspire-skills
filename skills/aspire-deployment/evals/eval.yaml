@@ -570,7 +570,10 @@ stimuli:
             - aspire-deployment
   - name: should_trigger_08
     description: "Reason: Direct aspire destroy invocation"
-    prompt: Run aspire destroy to remove my preview environment
+    # Question phrasing: an imperative makes the executor run `aspire destroy`, which
+    # blocks on a confirmation prompt and times out the trial; the skill-invocation
+    # grader only checks routing, so intent is unchanged.
+    prompt: How do I run aspire destroy to remove my preview environment?
     tags:
       priority: p1
       area: routing
@@ -642,7 +645,10 @@ stimuli:
             - aspire-deployment
   - name: should_not_trigger_01
     description: "Reason: Local start routes to aspire-orchestration"
-    prompt: Start my Aspire app locally
+    # Question phrasing: an imperative makes the executor launch a foreground app run
+    # that never returns, timing out the trial; the skill-invocation grader only checks
+    # routing, so intent is unchanged.
+    prompt: How do I start my Aspire app locally?
     tags:
       priority: p1
       area: routing
@@ -666,7 +672,10 @@ stimuli:
             - aspire-deployment
   - name: should_not_trigger_03
     description: "Reason: Resource wait routes to aspire-orchestration"
-    prompt: Wait for the database to be ready
+    # Question phrasing: an imperative makes the executor run blocking `aspire wait`,
+    # which hangs until the resource is ready and times out the trial; the
+    # skill-invocation grader only checks routing, so intent is unchanged.
+    prompt: How do I wait for the database to be ready?
     tags:
       priority: p1
       area: routing
