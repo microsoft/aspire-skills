@@ -478,7 +478,7 @@ stimuli:
         config:
           substring: curl.*health
   - name: orch-noninteractive-001
-    prompt: Run the Aspire app in my CI pipeline
+    prompt: How should I run the Aspire app in my CI pipeline?
     tags:
       priority: p1
       area: agent-mode
@@ -576,7 +576,7 @@ stimuli:
         config:
           substring: curl.*health
   - name: orch-start-001
-    prompt: I want to run my Aspire application for development
+    prompt: What's the recommended way to run my Aspire application for development?
     tags:
       priority: p0
       area:
@@ -827,9 +827,16 @@ stimuli:
       - type: output-not-contains
         config:
           substring: curl.*health
+  # Routing stimuli below are phrased as explanatory questions ("How do I run
+  # aspire start?") rather than bare imperatives ("Run aspire start"). The
+  # skill-invocation graders only verify that the prompt routes to
+  # aspire-orchestration; an imperative phrasing tempts the executor to actually
+  # run the foreground command (`aspire start`, `aspire wait`, running an
+  # apphost) which never returns, timing the trial out at `defaults.timeout` and
+  # tripping `evalHadExecutionErrors` — a hard gate failure independent of score.
   - name: should_trigger_01
-    description: "Reason: Direct aspire start invocation — orchestration"
-    prompt: Run aspire start on my AppHost
+    description: "Reason: aspire start request routes to orchestration"
+    prompt: How do I run aspire start on my AppHost?
     tags:
       priority: p1
       area: routing
@@ -841,7 +848,7 @@ stimuli:
             - aspire-orchestration
   - name: should_trigger_02
     description: "Reason: Direct start request"
-    prompt: Start my Aspire app
+    prompt: How do I start my Aspire app?
     tags:
       priority: p1
       area: routing
@@ -853,7 +860,7 @@ stimuli:
             - aspire-orchestration
   - name: should_trigger_03
     description: "Reason: aspire stop is orchestration"
-    prompt: Run aspire stop to clean up
+    prompt: How do I run aspire stop to clean up?
     tags:
       priority: p1
       area: routing
@@ -913,7 +920,7 @@ stimuli:
             - aspire-orchestration
   - name: should_trigger_08
     description: "Reason: aspire wait is orchestration"
-    prompt: Run aspire wait on my postgres resource
+    prompt: How do I run aspire wait on my postgres resource?
     tags:
       priority: p1
       area: routing
@@ -925,7 +932,7 @@ stimuli:
             - aspire-orchestration
   - name: should_trigger_09
     description: "Reason: aspire update --self is orchestration (CLI lifecycle)"
-    prompt: Upgrade my Aspire CLI with aspire update --self
+    prompt: How do I upgrade my Aspire CLI with aspire update --self?
     tags:
       priority: p1
       area: routing
@@ -949,7 +956,7 @@ stimuli:
             - aspire-orchestration
   - name: should_trigger_11
     description: "Reason: File-based C# AppHost should trigger orchestration (start/run lifecycle)"
-    prompt: Run my apphost.cs file
+    prompt: How do I run my apphost.cs file?
     tags:
       priority: p1
       area: routing

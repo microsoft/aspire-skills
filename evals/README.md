@@ -96,7 +96,7 @@ The `with-skills` − `no-skills` pass-rate delta is the measured lift. The expe
 | Run the skill-lift baseline experiment | `vally experiment run skill-lift.experiment.yaml --output-dir ./results` |
 | Plan the experiment (no model calls) | `vally experiment run skill-lift.experiment.yaml --dry-run` |
 | Save PR-gate results for one skill | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --tag priority=p0,p1 --output-dir ./results` |
-| Emit JUnit XML for the all-skill p0 + p1 suite | `vally eval --suite ci-gate --junit ./results/junit.xml` |
+| Emit JUnit XML for the all-skill p0 + p1 suite | `vally eval --suite ci-gate --junit --output-dir ./results` |
 | Browse results in the dashboard | `vally serve ./results` |
 | Persist runs to a SQLite store | `vally ingest ./results --store ./vally.sqlite` |
 | Lint all skills | `vally lint skills` |
@@ -108,7 +108,7 @@ The `with-skills` − `no-skills` pass-rate delta is the measured lift. The expe
 | Flag | Purpose |
 |------|---------|
 | `-e, --eval-spec <path>` | Eval spec to run. Repeatable. |
-| `--skill-dir <dir>` | **(vally 0.8.0)** Extra skill dir(s) loaded on top of each spec's `environment.skills`. With no `--skill-dir` **and** no `environment.skills`, vally loads **no skills** (the baseline) — prefer declaring `environment.skills` in the spec. |
+| `--skill-dir <dir>` | **(vally 0.8.0)** Discover skills from this directory. A spec's `environment.skills` takes precedence: when present it **replaces** `--skill-dir` discovery (it is not additive), so `--skill-dir` only applies to specs that omit `environment.skills`. With neither set, vally loads **no skills** (the baseline) — prefer declaring `environment.skills` in the spec. |
 | `--workspace <dir>` | Working directory for the executor (fixtures get copied here). Defaults to a per-stimulus temp dir. |
 | `--suite <name>` | Run only stimuli matching a suite declared in `.vally.yaml`. |
 | `--tag <key=values>` | Run only stimuli whose tag record matches. Comma-separate values; repeat for multiple keys. E.g. `--tag priority=p0,p1 --tag area=routing`. |
@@ -120,7 +120,7 @@ The `with-skills` − `no-skills` pass-rate delta is the measured lift. The expe
 | `--max-retries <n>` | Retries for transient executor errors. |
 | `--output-dir <dir>` | Persist `results.jsonl` + `eval-results.md` to this directory. |
 | `--output jsonl` | Stream JSONL records to stdout. |
-| `--junit <path>` | Write JUnit XML alongside the run. |
+| `--junit` | Write a JUnit XML report into `--output-dir` (boolean flag; default off). |
 | `--skip-grade` | Execute stimuli without running graders. |
 | `--skip-validate` | Skip spec validation before running. |
 | `--keep-executor-session-logs` | Retain raw executor session traces in `--output-dir`. |

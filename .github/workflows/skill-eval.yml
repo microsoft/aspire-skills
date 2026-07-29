@@ -77,15 +77,35 @@ jobs:
         # full suite still runs in the scheduled `Skill Eval (nightly)`
         # workflow. Beyond keeping the gate fast, this stops a PR from being
         # blocked by a flaky trial in an unrelated skill it never modified.
+        #
+        # Global changes are the exception: a PR that touches `.vally.yaml`
+        # (suite / tag / path definitions) or this gate workflow itself can
+        # affect every evaluation, so it falls back to the full `ci-gate` suite
+        # rather than a per-skill subset (which would otherwise soft-skip green
+        # and hide a regression a global change introduced).
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          changed_files="$(
+            gh pr diff "${{ github.event.pull_request.number }}" \
+              --repo "${{ github.repository }}" --name-only
+          )"
+
+          # Global eval config / gate-workflow change -> evaluate everything.
+          if printf '%s\n' "$changed_files" \
+              | grep -Eq '^(\.vally\.yaml|\.github/workflows/skill-eval\.yml)$'; then
+            echo "Global eval config changed — running the full ci-gate suite."
+            echo "run_full=true" >> "$GITHUB_OUTPUT"
+            echo "has_specs=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "run_full=false" >> "$GITHUB_OUTPUT"
+
           # Skills whose files changed in this PR, derived from paths of the
           # form `skills/<skill>/...` and de-duplicated.
           changed_skills="$(
-            gh pr diff "${{ github.event.pull_request.number }}" \
-              --repo "${{ github.repository }}" --name-only \
+            printf '%s\n' "$changed_files" \
               | sed -n 's#^skills/\([^/]*\)/.*#\1#p' \
               | sort -u
           )"
@@ -108,8 +128,22 @@ jobs:
             echo "matched=${matched# }" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Run full ci-gate suite (global change)
+        if: steps.preflight.outputs.has_token == 'true' && steps.changed.outputs.run_full == 'true'
+        # A `.vally.yaml` / gate-workflow change landed us here. `--suite ci-gate`
+        # applies the p0 + p1 priority filter across every skill. (`--suite`
+        # can't be combined with `-e`, which is why the scoped path below
+        # expresses the same filter with `--tag` instead.)
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+        run: |
+          echo "Global eval config changed — evaluating the full ci-gate suite."
+          vally eval \
+            --suite ci-gate \
+            --output-dir ./results
+
       - name: Run CI gate evals
-        if: steps.preflight.outputs.has_token == 'true' && steps.changed.outputs.has_specs == 'true'
+        if: steps.preflight.outputs.has_token == 'true' && steps.changed.outputs.run_full == 'false' && steps.changed.outputs.has_specs == 'true'
         # COPILOT_GITHUB_TOKEN is read by @github/copilot-sdk (the vally
         # `copilot-sdk` executor) to invoke Copilot models. It is scoped to
         # this step only so install / upload never see it.
@@ -128,7 +162,7 @@ jobs:
             --output-dir ./results
 
       - name: Note no skills changed
-        if: steps.preflight.outputs.has_token == 'true' && steps.changed.outputs.has_specs == 'false'
+        if: steps.preflight.outputs.has_token == 'true' && steps.changed.outputs.run_full == 'false' && steps.changed.outputs.has_specs == 'false'
         run: |
           {
             echo "### ℹ️ ci-gate eval skipped"
