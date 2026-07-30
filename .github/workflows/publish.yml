@@ -1,4 +1,4 @@
-name: Publish Aspire skills bundle
+name: Publish Aspire bundles
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   publish:
-    name: Publish bundle
+    name: Publish bundles
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -44,31 +44,36 @@ jobs:
           fi
 
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "asset=dist/aspire-skills-v$version.tgz" >> "$GITHUB_OUTPUT"
+          echo "skills_asset=dist/aspire-skills-v$version.tgz" >> "$GITHUB_OUTPUT"
+          echo "extensions_asset=dist/aspire-extensions-v$version.tgz" >> "$GITHUB_OUTPUT"
 
-      - name: Build bundle
+      - name: Build bundles
         run: npm run bundle -- --version "${{ steps.version.outputs.version }}" --out dist
 
-      - name: Attest bundle
+      - name: Attest bundles
         # actions/attest-build-provenance@v3
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
         with:
-          subject-path: ${{ steps.version.outputs.asset }}
+          subject-path: |
+            ${{ steps.version.outputs.skills_asset }}
+            ${{ steps.version.outputs.extensions_asset }}
 
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ github.ref_name }}
           VERSION: ${{ steps.version.outputs.version }}
-          ASSET: ${{ steps.version.outputs.asset }}
+          SKILLS_ASSET: ${{ steps.version.outputs.skills_asset }}
+          EXTENSIONS_ASSET: ${{ steps.version.outputs.extensions_asset }}
         shell: bash
         run: |
           set -euo pipefail
+          assets=("$SKILLS_ASSET" "$EXTENSIONS_ASSET")
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
-            gh release upload "$TAG_NAME" "$ASSET" --clobber
+            gh release upload "$TAG_NAME" "${assets[@]}" --clobber
           else
-            gh release create "$TAG_NAME" "$ASSET" \
+            gh release create "$TAG_NAME" "${assets[@]}" \
               --verify-tag \
               --title "$TAG_NAME" \
-              --notes "Aspire skills bundle $VERSION"
+              --notes "Aspire bundles $VERSION"
           fi
