@@ -304,23 +304,61 @@ function syncServiceResource(state, service, { rename = false, updateType = fals
 }
 
 function isValidResourceName(name) {
-    return /^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(name) && !name.endsWith("-") && !name.includes("--");
+    return resourceNameIssues(name).length === 0;
+}
+
+function resourceNameIssues(value) {
+    const name = String(value ?? "").trim();
+    const issues = [];
+    if (!name) {
+        return ["Enter a resource name."];
+    }
+    if (name.length > 64) {
+        issues.push(`Use at most 64 characters; this name has ${name.length}.`);
+    }
+    if (!/^[A-Za-z]/.test(name)) {
+        issues.push("Start with a letter.");
+    }
+    if (/[^A-Za-z0-9-]/.test(name)) {
+        issues.push("Use only letters, digits, and hyphens.");
+    }
+    if (name.endsWith("-")) {
+        issues.push("Do not end with a hyphen.");
+    }
+    if (name.includes("--")) {
+        issues.push("Do not use consecutive hyphens.");
+    }
+    return issues;
+}
+
+function duplicateNameGroups(items, nameSelector) {
+    const groups = new Map();
+    for (const item of items) {
+        const name = String(nameSelector(item) ?? "").trim();
+        if (!name) {
+            continue;
+        }
+        const key = name.toLowerCase();
+        const group = groups.get(key) ?? [];
+        group.push(item);
+        groups.set(key, group);
+    }
+    return groups;
 }
 
 function validateResourceNames(services) {
     const issues = {};
-    const names = new Map();
-    for (const service of services.filter((candidate) => candidate.include)) {
+    const included = services.filter((candidate) => candidate.include);
+    const duplicateGroups = duplicateNameGroups(included, (service) => service.resourceName);
+    for (const service of included) {
         const name = service.resourceName.trim();
-        const messages = [];
-        if (!isValidResourceName(name)) {
-            messages.push("Use 1-64 letters, digits, or hyphens; start with a letter.");
-        }
-        const duplicate = names.get(name.toLowerCase());
-        if (duplicate) {
-            messages.push(`Duplicates ${duplicate}.`);
-        } else if (name) {
-            names.set(name.toLowerCase(), service.name);
+        const messages = resourceNameIssues(name);
+        const duplicates = duplicateGroups.get(name.toLowerCase()) ?? [];
+        if (name && duplicates.length > 1) {
+            const peers = duplicates
+                .filter((candidate) => candidate.id !== service.id)
+                .map((candidate) => candidate.name);
+            messages.push(`Also used by ${peers.join(", ")}.`);
         }
         if (messages.length) {
             issues[service.id] = messages;
@@ -329,21 +367,47 @@ function validateResourceNames(services) {
     return issues;
 }
 
-function validateProposal(proposal) {
+function formatServiceNameIssues(services, issues) {
+    return Object.entries(issues)
+        .map(([serviceId, messages]) => {
+            const service = services.find((candidate) => candidate.id === serviceId);
+            const name = service?.resourceName || service?.name || serviceId;
+            return `Resource "${name}": ${messages.join(" ")}`;
+        })
+        .join(" ");
+}
+
+function resourceNameConflict(resources, name, excludedId = "") {
+    const key = String(name ?? "").trim().toLowerCase();
+    return resources.find(
+        (candidate) =>
+            candidate.id !== excludedId &&
+            candidate.include &&
+            candidate.name.toLowerCase() === key,
+    );
+}
+
+function validateProposalDetails(proposal) {
     const issues = [];
+    const resourceIssues = {};
     const included = proposal.resources.filter((resource) => resource.include);
-    const names = new Set();
+    const duplicateGroups = duplicateNameGroups(included, (resource) => resource.name);
+    const names = new Set(included.map((resource) => resource.name.toLowerCase()));
     const allNames = new Set(proposal.resources.map((resource) => resource.name.toLowerCase()));
     for (const resource of included) {
-        const key = resource.name.toLowerCase();
-        if (!isValidResourceName(resource.name)) {
-            issues.push(`Resource "${resource.name || "(empty)"}" has an invalid name.`);
-        } else if (names.has(key)) {
-            issues.push(`Resource name "${resource.name}" is duplicated.`);
+        const key = resource.name.trim().toLowerCase();
+        const messages = resourceNameIssues(resource.name);
+        if (resource.name && (duplicateGroups.get(key)?.length ?? 0) > 1) {
+            messages.push(`The name "${resource.name}" is used by more than one resource.`);
         }
-        names.add(key);
         if (!resource.type) {
-            issues.push(`Resource "${resource.name || resource.id}" needs a type.`);
+            messages.push("Choose a resource type.");
+        }
+        if (messages.length) {
+            resourceIssues[resource.id] = messages;
+            issues.push(
+                `Resource "${resource.name || resource.id || "(unnamed)"}": ${messages.join(" ")}`,
+            );
         }
     }
     if (included.length === 0) {
@@ -361,7 +425,11 @@ function validateProposal(proposal) {
             issues.push(`Connection "${edge.from}" cannot target itself.`);
         }
     }
-    return issues;
+    return { issues, resourceIssues };
+}
+
+function validateProposal(proposal) {
+    return validateProposalDetails(proposal).issues;
 }
 
 function confirmedProposal(proposal) {
@@ -400,7 +468,11 @@ function isConfirmed(snapshot) {
 
 function snapshotForClient(snapshot) {
     const { confirmation, ...clientSnapshot } = snapshot;
-    return { ...clientSnapshot, confirmed: isConfirmed(snapshot) };
+    return {
+        ...clientSnapshot,
+        confirmed: isConfirmed(snapshot),
+        validation: validateProposalDetails(snapshot.proposal),
+    };
 }
 
 function broadcast(domainId) {
@@ -654,8 +726,25 @@ async function handlePost(entry, path, body, response) {
     }
 
     if (path === "/api/service/name" && service) {
+        const name = String(body.value ?? "").trim();
+        const nameIssues = resourceNameIssues(name);
+        const duplicate = snapshot.services.find(
+            (candidate) =>
+                candidate.id !== service.id &&
+                candidate.include &&
+                candidate.resourceName.toLowerCase() === name.toLowerCase(),
+        );
+        if (duplicate) {
+            nameIssues.push(`Also used by ${duplicate.name}.`);
+        }
+        if (nameIssues.length) {
+            return sendJson(response, duplicate ? 409 : 400, {
+                ok: false,
+                error: `Resource "${name || service.name}": ${nameIssues.join(" ")}`,
+            });
+        }
         updateSnapshot(domainId, (state) => {
-            service.resourceName = String(body.value ?? "").trim();
+            service.resourceName = name;
             state.confirmed = false;
             syncServiceResource(state, service, { rename: true });
         });
@@ -693,7 +782,7 @@ async function handlePost(entry, path, body, response) {
         if (Object.keys(issues).length) {
             return sendJson(response, 400, {
                 ok: false,
-                error: "Fix duplicate or invalid resource names before continuing.",
+                error: formatServiceNameIssues(snapshot.services, issues),
             });
         }
         if (!snapshot.services.some((candidate) => candidate.include)) {
@@ -739,6 +828,23 @@ async function handlePost(entry, path, body, response) {
         const linkedService = snapshot.services.find(
             (candidate) => candidate.id === proposalResource.serviceId,
         );
+        const nextName =
+            typeof body.name === "string" ? body.name.trim() : proposalResource.name;
+        const nameIssues = resourceNameIssues(nextName);
+        const duplicate = resourceNameConflict(
+            snapshot.proposal.resources,
+            nextName,
+            proposalResource.id,
+        );
+        if (duplicate) {
+            nameIssues.push(`The name "${nextName}" is already used by another resource.`);
+        }
+        if (nameIssues.length) {
+            return sendJson(response, duplicate ? 409 : 400, {
+                ok: false,
+                error: `Resource "${nextName || proposalResource.id}": ${nameIssues.join(" ")}`,
+            });
+        }
         if (
             linkedService &&
             typeof body.type === "string" &&
@@ -752,7 +858,7 @@ async function handlePost(entry, path, body, response) {
         updateSnapshot(domainId, (state) => {
             const previousName = proposalResource.name;
             if (typeof body.name === "string") {
-                proposalResource.name = body.name.trim();
+                proposalResource.name = nextName;
                 replaceResourceName(state, previousName, proposalResource.name);
             }
             if (typeof body.type === "string") {
@@ -778,10 +884,14 @@ async function handlePost(entry, path, body, response) {
     if (path === "/api/proposal/resource/add") {
         const name = String(body.name ?? "").trim();
         const type = normalizeResourceType(body.type);
-        if (!isValidResourceName(name) || !type) {
+        const nameIssues = resourceNameIssues(name);
+        if (nameIssues.length || !type) {
+            if (!type) {
+                nameIssues.push("Choose a resource type.");
+            }
             return sendJson(response, 400, {
                 ok: false,
-                error: "Resource needs a valid name and type.",
+                error: `Resource "${name || "(unnamed)"}": ${nameIssues.join(" ")}`,
             });
         }
         if (
@@ -1035,7 +1145,7 @@ async function handlePost(entry, path, body, response) {
         if (Object.keys(issues).length) {
             return sendJson(response, 400, {
                 ok: false,
-                error: "Fix duplicate or invalid resource names before confirmation.",
+                error: formatServiceNameIssues(snapshot.services, issues),
                 issues,
             });
         }

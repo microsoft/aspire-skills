@@ -203,6 +203,10 @@ input[type="checkbox"] {
     accent-color: var(--accent);
 }
 
+input[aria-invalid="true"] {
+    border-color: var(--danger);
+}
+
 .toolbar {
     position: sticky;
     z-index: 5;
@@ -671,6 +675,31 @@ body.is-loading .progress > span {
     padding-left: 24px;
 }
 
+.resource-validation {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-left: 24px;
+    color: var(--danger);
+    font-size: 11.5px;
+    line-height: 16px;
+}
+
+.resource-validation-icon {
+    display: inline-grid;
+    width: 14px;
+    height: 14px;
+    flex: 0 0 14px;
+    place-items: center;
+    margin-top: 1px;
+    border-radius: 50%;
+    background: var(--danger);
+    color: var(--accent-fg);
+    font-size: 9px;
+    font-weight: var(--font-weight-semibold, 600);
+    line-height: 1;
+}
+
 .resource-metadata,
 .connection-chips {
     display: flex;
@@ -765,6 +794,10 @@ body.is-loading .progress > span {
 .footer-note {
     margin-right: auto;
     font-size: 11.5px;
+}
+
+.footer-note:not([hidden]) {
+    color: var(--danger);
 }
 
 dialog {

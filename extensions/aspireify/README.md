@@ -23,9 +23,11 @@ The canvas only:
    atomically, rename or retype resources, enable Service Defaults, and manage
    connections from each resource editor using constrained Aspire-aware
    resource-type selectors;
-7. requests a regenerated proposal when a service-level choice changes while
+7. identifies every invalid or duplicate resource name on its card, explains the
+   violated naming rule, and prevents invalid edits from being saved;
+8. requests a regenerated proposal when a service-level choice changes while
    preserving user-added resources and connections; and
-8. returns the confirmed service choices and edited plan through
+9. returns the confirmed service choices and edited plan through
    `get_confirmation`.
 
 After confirmation, the canvas becomes read-only and `get_confirmation` returns

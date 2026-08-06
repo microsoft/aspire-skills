@@ -109,9 +109,23 @@ document.addEventListener("DOMContentLoaded", () => {
     elements.retry.addEventListener("click", () => void loadSnapshot());
     elements.confirm.addEventListener("click", () => void confirmSnapshot());
     elements.resourceForm.addEventListener("submit", saveResource);
+    elements.resourceName.addEventListener("input", () =>
+        validateResourceNameField(
+            elements.resourceName,
+            elements.resourceId.value,
+            elements.resourceDialogError,
+        ),
+    );
     elements.addResourceConnection.addEventListener("click", openResourceConnectionDialog);
     elements.deleteResource.addEventListener("click", () => void deleteResource());
     elements.addResourceForm.addEventListener("submit", addResource);
+    elements.addResourceName.addEventListener("input", () =>
+        validateResourceNameField(
+            elements.addResourceName,
+            "",
+            elements.addResourceDialogError,
+        ),
+    );
     elements.addResourceConnectionRow.addEventListener("click", () =>
         addResourceConnectionRow(),
     );
@@ -340,6 +354,7 @@ function renderResourcePlan() {
     const resources = proposal.resources.filter((resource) => resource.include);
     const names = new Set(resources.map((resource) => resource.name));
     const edges = proposal.edges.filter((edge) => names.has(edge.from) && names.has(edge.to));
+    const resourceIssues = proposalValidation().resourceIssues;
     elements.resourcePlanPanel.hidden = false;
     elements.resourceGroups.replaceChildren();
 
@@ -435,7 +450,9 @@ function renderResourcePlan() {
             );
         } else {
             for (const resource of groupedResources) {
-                cards.append(renderResourceCard(resource, edges));
+                cards.append(
+                    renderResourceCard(resource, edges, resourceIssues[resource.id] ?? []),
+                );
             }
         }
         body.append(cards);
@@ -444,7 +461,7 @@ function renderResourcePlan() {
     }
 }
 
-function renderResourceCard(resource, edges) {
+function renderResourceCard(resource, edges, issues = []) {
     const service = serviceForResource(resource);
     const collapsed = collapsedCards.has(resource.id);
     const card = createElement("article", {
@@ -499,7 +516,29 @@ function renderResourceCard(resource, edges) {
     edit.addEventListener("click", () => openResourceDialog(resource.id));
     header.append(identity, edit);
     card.classList.toggle("is-collapsed", collapsed);
-    card.append(header, body);
+    card.append(header);
+    if (issues.length > 0) {
+        const validationId = `${bodyId}-validation`;
+        const validation = createElement("div", {
+            className: "resource-validation",
+            attrs: {
+                id: validationId,
+            },
+        });
+        validation.append(
+            createElement("span", {
+                className: "resource-validation-icon",
+                text: "!",
+                attrs: { "aria-hidden": "true" },
+            }),
+            createElement("span", {
+                text: issues.join(" "),
+            }),
+        );
+        toggle.setAttribute("aria-describedby", validationId);
+        card.append(validation);
+    }
+    card.append(body);
 
     const metadata = [
         service?.framework,
@@ -581,9 +620,8 @@ function relationshipText(relationship) {
 
 function renderStatus() {
     const resources = snapshot.proposal.resources ?? [];
-    const includedNames = new Set(
-        resources.filter((resource) => resource.include).map((resource) => resource.name),
-    );
+    const includedResources = resources.filter((resource) => resource.include);
+    const includedNames = new Set(includedResources.map((resource) => resource.name));
     const activeEdges = snapshot.proposal.edges.filter(
         (edge) => includedNames.has(edge.from) && includedNames.has(edge.to),
     ).length;
@@ -596,52 +634,130 @@ function renderStatus() {
     } else if (snapshot.confirmed) {
         elements.statusLine.textContent = "Resource plan confirmed";
     } else {
-        elements.statusLine.textContent = `${includedNames.size} resource${
-            includedNames.size === 1 ? "" : "s"
+        elements.statusLine.textContent = `${includedResources.length} resource${
+            includedResources.length === 1 ? "" : "s"
         } · ${activeEdges} connection${activeEdges === 1 ? "" : "s"} · No files changed`;
     }
 }
 
 function renderConfirmation() {
     const issues = confirmationIssues();
+    const resourceIssueCount = Object.keys(proposalValidation().resourceIssues).length;
+    const nonResourceIssues = issues.filter((issue) => !issue.startsWith('Resource "'));
     elements.confirm.disabled =
         !snapshot.proposalLoaded || snapshot.proposalStale || issues.length > 0 || snapshot.confirmed;
     elements.confirm.textContent = snapshot.confirmed ? "Confirmed" : "Confirm & wire";
     elements.footerNote.hidden = issues.length === 0;
-    elements.footerNote.textContent = issues.join(" ");
+    elements.footerNote.textContent = resourceIssueCount
+        ? `${resourceIssueCount} resource${resourceIssueCount === 1 ? "" : "s"} need attention before confirmation.${
+              nonResourceIssues.length ? ` ${nonResourceIssues.join(" ")}` : ""
+          }`
+        : (issues[0] ?? "");
 }
 
 function confirmationIssues() {
     if (!snapshot.proposalLoaded || snapshot.proposalStale) {
         return [];
     }
+    return [...new Set(proposalValidation().issues)];
+}
+
+function proposalValidation() {
+    if (
+        snapshot.validation &&
+        Array.isArray(snapshot.validation.issues) &&
+        snapshot.validation.resourceIssues
+    ) {
+        return snapshot.validation;
+    }
+
     const issues = [];
+    const resourceIssues = {};
     const included = snapshot.proposal.resources.filter((resource) => resource.include);
-    const names = new Set();
+    const duplicateCounts = new Map();
+    for (const resource of included) {
+        const key = resource.name.trim().toLowerCase();
+        if (key) {
+            duplicateCounts.set(key, (duplicateCounts.get(key) ?? 0) + 1);
+        }
+    }
     if (included.length === 0) {
         issues.push("Include at least one resource.");
     }
     for (const resource of included) {
-        const key = resource.name.toLowerCase();
-        if (
-            !/^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(resource.name) ||
-            resource.name.endsWith("-") ||
-            resource.name.includes("--") ||
-            !resource.type.trim() ||
-            names.has(key)
-        ) {
-            issues.push("Fix invalid or duplicate resource names and types.");
-            break;
+        const messages = resourceNameIssues(resource.name);
+        const key = resource.name.trim().toLowerCase();
+        if (key && (duplicateCounts.get(key) ?? 0) > 1) {
+            messages.push(`The name "${resource.name}" is used by more than one resource.`);
         }
-        names.add(key);
+        if (!resource.type.trim()) {
+            messages.push("Choose a resource type.");
+        }
+        if (messages.length > 0) {
+            resourceIssues[resource.id] = messages;
+            issues.push(
+                `Resource "${resource.name || resource.id || "(unnamed)"}": ${messages.join(" ")}`,
+            );
+        }
     }
     for (const edge of snapshot.proposal.edges) {
         if (edge.from === edge.to) {
-            issues.push("A resource cannot connect to itself.");
-            break;
+            issues.push(`Connection "${edge.from}" cannot target itself.`);
         }
     }
+    return { issues, resourceIssues };
+}
+
+function resourceNameIssues(value) {
+    const name = String(value ?? "").trim();
+    const issues = [];
+    if (!name) {
+        return ["Enter a resource name."];
+    }
+    if (name.length > 64) {
+        issues.push(`Use at most 64 characters; this name has ${name.length}.`);
+    }
+    if (!/^[A-Za-z]/.test(name)) {
+        issues.push("Start with a letter.");
+    }
+    if (/[^A-Za-z0-9-]/.test(name)) {
+        issues.push("Use only letters, digits, and hyphens.");
+    }
+    if (name.endsWith("-")) {
+        issues.push("Do not end with a hyphen.");
+    }
+    if (name.includes("--")) {
+        issues.push("Do not use consecutive hyphens.");
+    }
     return issues;
+}
+
+function resourceNameFieldIssues(value, resourceId) {
+    const name = String(value ?? "").trim();
+    const issues = resourceNameIssues(name);
+    const duplicate = snapshot?.proposal?.resources?.find(
+        (resource) =>
+            resource.id !== resourceId &&
+            resource.include &&
+            resource.name.trim().toLowerCase() === name.toLowerCase(),
+    );
+    if (name && duplicate) {
+        issues.push(`The name "${name}" is already used by another resource.`);
+    }
+    return issues;
+}
+
+function validateResourceNameField(input, resourceId, errorElement, report = false) {
+    const issues = resourceNameFieldIssues(input.value, resourceId);
+    const message = issues.join(" ");
+    input.setCustomValidity(message);
+    input.setAttribute("aria-invalid", String(issues.length > 0));
+    errorElement.textContent = message;
+    errorElement.hidden = issues.length === 0;
+    if (report && issues.length > 0) {
+        input.reportValidity();
+    }
+    return issues.length === 0;
 }
 
 function openResourceDialog(resourceId) {
@@ -665,6 +781,11 @@ function openResourceDialog(resourceId) {
     elements.defaultsField.hidden = service?.type !== "dotnet";
     elements.resourceDefaults.checked = Boolean(service?.serviceDefaults);
     renderResourceDialogConnections(resource);
+    validateResourceNameField(
+        elements.resourceName,
+        resource.id,
+        elements.resourceDialogError,
+    );
     elements.resourceDialog.showModal();
 }
 
@@ -743,6 +864,16 @@ async function saveResource(event) {
     if (!resource) {
         return;
     }
+    if (
+        !validateResourceNameField(
+            elements.resourceName,
+            id,
+            elements.resourceDialogError,
+            true,
+        )
+    ) {
+        return;
+    }
     const service = serviceForResource(resource);
     await runBusy(event.submitter, async () => {
         await post("/api/proposal/resource", {
@@ -795,6 +926,16 @@ function openAddResourceDialog(groupId) {
 
 async function addResource(event) {
     event.preventDefault();
+    if (
+        !validateResourceNameField(
+            elements.addResourceName,
+            "",
+            elements.addResourceDialogError,
+            true,
+        )
+    ) {
+        return;
+    }
     await runBusy(event.submitter, async () => {
         collapsedGroups.delete(elements.addResourceGroup.value);
         await post("/api/proposal/resource/add", {
