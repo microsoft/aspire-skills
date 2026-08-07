@@ -107,23 +107,28 @@
                     <span>Resource type</span>
                     <select id="resource-type" required>
                         <optgroup label="Applications">
-                            <option value=".NET project">.NET project</option>
-                            <option value="Next.js">Next.js</option>
-                            <option value="Vite">Vite</option>
-                            <option value="Node.js">Node.js</option>
-                            <option value="Python">Python</option>
-                            <option value="Executable">Executable</option>
+                            <option value=".NET project" data-group="applications">.NET project</option>
+                            <option value="Next.js" data-group="applications">Next.js</option>
+                            <option value="Vite" data-group="applications">Vite</option>
+                            <option value="Node.js" data-group="applications">Node.js</option>
+                            <option value="Python" data-group="applications">Python</option>
+                            <option value="Executable" data-group="applications">Executable</option>
+                        </optgroup>
+                        <optgroup label="Data &amp; messaging">
+                            <option value="Postgres" data-group="data">Postgres</option>
+                            <option value="Redis" data-group="data">Redis</option>
+                            <option value="RabbitMQ" data-group="data">RabbitMQ</option>
+                            <option value="MongoDB" data-group="data">MongoDB</option>
+                            <option value="SQL Server" data-group="data">SQL Server</option>
+                            <option value="MySQL" data-group="data">MySQL</option>
+                            <option value="Azure Cosmos DB" data-group="data">Azure Cosmos DB</option>
+                            <option value="Azure Service Bus" data-group="data">Azure Service Bus</option>
                         </optgroup>
                         <optgroup label="Infrastructure">
-                            <option value="Container">Container</option>
-                            <option value="Postgres">Postgres</option>
-                            <option value="Redis">Redis</option>
-                            <option value="RabbitMQ">RabbitMQ</option>
-                            <option value="MongoDB">MongoDB</option>
-                            <option value="SQL Server">SQL Server</option>
-                            <option value="MySQL">MySQL</option>
-                            <option value="Azure Cosmos DB">Azure Cosmos DB</option>
-                            <option value="Azure Service Bus">Azure Service Bus</option>
+                            <option value="Container" data-group="infrastructure">Container</option>
+                        </optgroup>
+                        <optgroup label="External dependencies">
+                            <option value="External service" data-group="external">External service</option>
                         </optgroup>
                     </select>
                 </label>
@@ -204,6 +209,13 @@
                 <label class="field">
                     <span>Details <small class="muted">(optional)</small></span>
                     <input id="add-resource-detail" />
+                </label>
+                <label class="check-field" id="add-defaults-field" hidden>
+                    <input id="add-resource-defaults" type="checkbox" />
+                    <span>
+                        <strong>Service Defaults</strong>
+                        <small class="muted">Telemetry, health checks, discovery, and HTTP resilience</small>
+                    </span>
                 </label>
                 <section class="dialog-section">
                     <div class="dialog-section-heading">

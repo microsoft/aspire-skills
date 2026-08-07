@@ -85,6 +85,8 @@ const elements = {
     addResourceName: document.getElementById("add-resource-name"),
     addResourceType: document.getElementById("add-resource-type"),
     addResourceDetail: document.getElementById("add-resource-detail"),
+    addDefaultsField: document.getElementById("add-defaults-field"),
+    addResourceDefaults: document.getElementById("add-resource-defaults"),
     addResourceConnections: document.getElementById("add-resource-connections"),
     addResourceConnectionRow: document.getElementById("add-resource-connection-row"),
     connectionDialog: document.getElementById("connection-dialog"),
@@ -109,6 +111,13 @@ document.addEventListener("DOMContentLoaded", () => {
     elements.retry.addEventListener("click", () => void loadSnapshot());
     elements.confirm.addEventListener("click", () => void confirmSnapshot());
     elements.resourceForm.addEventListener("submit", saveResource);
+    elements.resourceType.addEventListener("change", () =>
+        syncDefaultsField(
+            elements.resourceType,
+            elements.defaultsField,
+            elements.resourceDefaults,
+        ),
+    );
     elements.resourceName.addEventListener("input", () =>
         validateResourceNameField(
             elements.resourceName,
@@ -119,6 +128,13 @@ document.addEventListener("DOMContentLoaded", () => {
     elements.addResourceConnection.addEventListener("click", openResourceConnectionDialog);
     elements.deleteResource.addEventListener("click", () => void deleteResource());
     elements.addResourceForm.addEventListener("submit", addResource);
+    elements.addResourceType.addEventListener("change", () =>
+        syncDefaultsField(
+            elements.addResourceType,
+            elements.addDefaultsField,
+            elements.addResourceDefaults,
+        ),
+    );
     elements.addResourceName.addEventListener("input", () =>
         validateResourceNameField(
             elements.addResourceName,
@@ -543,7 +559,7 @@ function renderResourceCard(resource, edges, issues = []) {
     const metadata = [
         service?.framework,
         service?.exposesHttp ? "HTTP" : "",
-        service?.serviceDefaults ? "Service Defaults" : "",
+        resource.serviceDefaults ? "Service Defaults" : "",
     ].filter(Boolean);
     if (metadata.length > 0) {
         const metadataRow = createElement("div", { className: "resource-metadata" });
@@ -769,17 +785,24 @@ function openResourceDialog(resourceId) {
         return;
     }
     const service = serviceForResource(resource);
+    const group = resourceGroupDefinition(resource);
     clearDialogError(elements.resourceDialogError);
     elements.resourceType.disabled = Boolean(service);
     elements.resourceId.value = resource.id;
     elements.resourceName.value = resource.name;
+    filterResourceTypeOptions(elements.resourceType, group.id);
     setSelectValue(elements.resourceType, resource.type);
     elements.resourceDialogDetail.textContent =
         [service?.name, service?.framework, service?.path].filter(Boolean).join(" · ") ||
         resource.detail ||
-        "Infrastructure resource";
-    elements.defaultsField.hidden = service?.type !== "dotnet";
-    elements.resourceDefaults.checked = Boolean(service?.serviceDefaults);
+        group.resourceDescription;
+    elements.resourceDefaults.checked = Boolean(resource.serviceDefaults);
+    syncDefaultsField(
+        elements.resourceType,
+        elements.defaultsField,
+        elements.resourceDefaults,
+        false,
+    );
     renderResourceDialogConnections(resource);
     validateResourceNameField(
         elements.resourceName,
@@ -874,19 +897,13 @@ async function saveResource(event) {
     ) {
         return;
     }
-    const service = serviceForResource(resource);
     await runBusy(event.submitter, async () => {
         await post("/api/proposal/resource", {
             id,
             name: elements.resourceName.value,
             type: elements.resourceType.value,
+            serviceDefaults: elements.resourceDefaults.checked,
         });
-        if (service?.type === "dotnet" && service.serviceDefaults !== elements.resourceDefaults.checked) {
-            await post("/api/service/defaults", {
-                id: service.id,
-                value: elements.resourceDefaults.checked,
-            });
-        }
         elements.resourceDialog.close();
     });
 }
@@ -912,13 +929,16 @@ function openAddResourceDialog(groupId) {
     elements.addResourceGroup.value = groupId;
     elements.addResourceDialogTitle.textContent = definition.addTitle;
     elements.addResourceDialogDetail.textContent = definition.addDescription;
-    for (const option of elements.addResourceType.options) {
-        const matches = option.dataset.group === groupId;
-        option.hidden = !matches;
-        option.disabled = !matches;
-    }
+    filterResourceTypeOptions(elements.addResourceType, groupId);
     const firstOption = [...elements.addResourceType.options].find((option) => !option.disabled);
     elements.addResourceType.value = firstOption?.value ?? "";
+    elements.addResourceDefaults.checked = elements.addResourceType.value === ".NET project";
+    syncDefaultsField(
+        elements.addResourceType,
+        elements.addDefaultsField,
+        elements.addResourceDefaults,
+        false,
+    );
     resetAddResourceConnections();
     elements.addResourceDialog.showModal();
     elements.addResourceName.focus();
@@ -942,6 +962,7 @@ async function addResource(event) {
             name: elements.addResourceName.value,
             type: elements.addResourceType.value,
             detail: elements.addResourceDetail.value,
+            serviceDefaults: elements.addResourceDefaults.checked,
             connections: [...elements.addResourceConnections.querySelectorAll(".add-connection-row")].map(
                 (row) => ({
                     direction: row.querySelector("[data-add-connection-direction]").value,
@@ -1119,6 +1140,49 @@ function resourceKind(resource) {
     if (/rabbit|broker|service bus|messag/.test(type)) return "broker";
     if (/container|docker/.test(type)) return "container";
     return resource.serviceId ? "project" : "external";
+}
+
+function resourceGroupDefinition(resource) {
+    const kind = resourceKind(resource);
+    const group = RESOURCE_GROUPS.find((candidate) => candidate.kinds.has(kind));
+    if (!group) {
+        return {
+            id: "external",
+            resourceDescription: "External dependency",
+        };
+    }
+    return {
+        ...group,
+        resourceDescription:
+            {
+                applications: "Application resource",
+                data: "Data or messaging resource",
+                infrastructure: "Infrastructure resource",
+                external: "External dependency",
+            }[group.id] ?? "Resource",
+    };
+}
+
+function filterResourceTypeOptions(select, groupId) {
+    for (const option of select.options) {
+        const matches = option.dataset.group === groupId || option.dataset.detected === "true";
+        option.hidden = !matches;
+        option.disabled = !matches;
+    }
+    for (const optgroup of select.querySelectorAll("optgroup")) {
+        optgroup.hidden = [...optgroup.querySelectorAll("option")].every(
+            (option) => option.hidden,
+        );
+    }
+}
+
+function syncDefaultsField(select, field, checkbox, defaultWhenShown = true) {
+    const wasHidden = field.hidden;
+    const isDotNet = select.value === ".NET project";
+    field.hidden = !isDotNet;
+    if (isDotNet && wasHidden && defaultWhenShown) {
+        checkbox.checked = true;
+    }
 }
 
 function showLoading() {

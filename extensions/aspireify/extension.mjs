@@ -186,13 +186,17 @@ function normalizeResourceType(value) {
 }
 
 function normalizeProposalResource(resource, index, userAdded = false) {
+    const type = normalizeResourceType(resource?.type);
     const normalized = {
         id: String(resource?.id ?? `resource-${index + 1}`),
         name: String(resource?.name ?? `resource-${index + 1}`).trim(),
-        type: normalizeResourceType(resource?.type),
+        type,
         serviceId: String(resource?.serviceId ?? "").trim(),
         detail: String(resource?.detail ?? "").trim(),
         include: typeof resource?.include === "boolean" ? resource.include : true,
+        serviceDefaults:
+            type === ".NET project" &&
+            (typeof resource?.serviceDefaults === "boolean" ? resource.serviceDefaults : true),
         userAdded: Boolean(resource?.userAdded ?? userAdded),
         userEdited: Boolean(resource?.userEdited),
     };
@@ -299,6 +303,7 @@ function syncServiceResource(state, service, { rename = false, updateType = fals
         resource.type = serviceResourceType(service.type);
     }
     resource.include = service.include;
+    resource.serviceDefaults = service.include && service.type === "dotnet" && service.serviceDefaults;
     state.proposalEdited = true;
     return true;
 }
@@ -444,6 +449,16 @@ function confirmedProposal(proposal) {
 }
 
 function confirmationResult(snapshot, confirmed = snapshot.confirmed) {
+    const serviceDefaults = new Set(
+        snapshot.proposal.resources
+            .filter(
+                (resource) =>
+                    resource.include &&
+                    resource.type === ".NET project" &&
+                    resource.serviceDefaults,
+            )
+            .map((resource) => resource.name),
+    );
     return {
         confirmed: Boolean(confirmed),
         discoveryLoaded: snapshot.discoveryLoaded,
@@ -455,9 +470,7 @@ function confirmationResult(snapshot, confirmed = snapshot.confirmed) {
         excluded: snapshot.services
             .filter((service) => !service.include)
             .map(({ id, name, type }) => ({ id, name, type })),
-        serviceDefaults: snapshot.services
-            .filter((service) => service.include && service.serviceDefaults)
-            .map((service) => service.resourceName),
+        serviceDefaults: [...serviceDefaults],
         proposal: confirmedProposal(snapshot.proposal),
     };
 }
@@ -764,6 +777,7 @@ async function handlePost(entry, path, body, response) {
     if (path === "/api/service/defaults" && service && service.include && service.type === "dotnet") {
         updateSnapshot(domainId, (state) => {
             service.serviceDefaults = Boolean(body.value);
+            syncServiceResource(state, service);
             state.confirmed = false;
             state.proposalStale = true;
             state.proposalRequestNeeded = true;
@@ -855,6 +869,19 @@ async function handlePost(entry, path, body, response) {
                 error: "Detected service types come from Aspireify discovery and cannot be changed in the proposal.",
             });
         }
+        const nextType =
+            typeof body.type === "string"
+                ? normalizeResourceType(body.type)
+                : proposalResource.type;
+        const previousType = proposalResource.type;
+        const nextServiceDefaults =
+            nextType === ".NET project" &&
+            (typeof body.serviceDefaults === "boolean"
+                ? body.serviceDefaults
+                : proposalResource.serviceDefaults);
+        const serviceDefaultsChanged =
+            Boolean(linkedService) &&
+            linkedService.serviceDefaults !== nextServiceDefaults;
         updateSnapshot(domainId, (state) => {
             const previousName = proposalResource.name;
             if (typeof body.name === "string") {
@@ -862,7 +889,14 @@ async function handlePost(entry, path, body, response) {
                 replaceResourceName(state, previousName, proposalResource.name);
             }
             if (typeof body.type === "string") {
-                proposalResource.type = normalizeResourceType(body.type);
+                proposalResource.type = nextType;
+            }
+            if (nextType !== ".NET project") {
+                proposalResource.serviceDefaults = false;
+            } else if (typeof body.serviceDefaults === "boolean") {
+                proposalResource.serviceDefaults = body.serviceDefaults;
+            } else if (previousType !== ".NET project") {
+                proposalResource.serviceDefaults = true;
             }
             if (typeof body.include === "boolean") {
                 proposalResource.include = body.include;
@@ -873,10 +907,17 @@ async function handlePost(entry, path, body, response) {
                 linkedService.include = proposalResource.include;
                 if (!linkedService.include) {
                     linkedService.serviceDefaults = false;
+                    proposalResource.serviceDefaults = false;
+                } else if (typeof body.serviceDefaults === "boolean") {
+                    linkedService.serviceDefaults = nextServiceDefaults;
                 }
             }
             state.confirmed = false;
             state.proposalEdited = true;
+            if (serviceDefaultsChanged) {
+                state.proposalStale = true;
+                state.proposalRequestNeeded = true;
+            }
         });
         return sendJson(response, 200, { ok: true });
     }
@@ -958,6 +999,11 @@ async function handlePost(entry, path, body, response) {
                     type,
                     detail: String(body.detail ?? "").trim(),
                     include: true,
+                    serviceDefaults:
+                        type === ".NET project" &&
+                        (typeof body.serviceDefaults === "boolean"
+                            ? body.serviceDefaults
+                            : true),
                 },
                 state.proposal.resources.length,
                 true,
@@ -1501,6 +1547,11 @@ const aspireifyCanvas = createCanvas({
                                 serviceId: { type: "string" },
                                 detail: { type: "string" },
                                 include: { type: "boolean" },
+                                serviceDefaults: {
+                                    type: "boolean",
+                                    description:
+                                        "Whether this .NET project should receive Aspire Service Defaults.",
+                                },
                             },
                             required: ["id", "name", "type"],
                         },
@@ -1595,6 +1646,15 @@ const aspireifyCanvas = createCanvas({
                                       );
                                       generated.serviceId = linkedService?.id ?? "";
                                   }
+                                  const linkedService = state.services.find(
+                                      (service) => service.id === generated.serviceId,
+                                  );
+                                  if (linkedService) {
+                                      generated.serviceDefaults =
+                                          linkedService.include &&
+                                          linkedService.type === "dotnet" &&
+                                          linkedService.serviceDefaults;
+                                  }
                                   return generated;
                               })
                               .map((generated) => {
@@ -1623,6 +1683,9 @@ const aspireifyCanvas = createCanvas({
                                           type: generated.serviceId ? generated.type : existing.type,
                                           detail: existing.detail,
                                           include: existing.include,
+                                          serviceDefaults: generated.serviceId
+                                              ? generated.serviceDefaults
+                                              : existing.serviceDefaults,
                                           userEdited: true,
                                       };
                                   }

@@ -20,9 +20,9 @@ The canvas only:
 5. organizes resources into collapsible sections and cards with contextual add
    controls, with empty sections collapsed by default;
 6. lets the user add or remove plan resources, add their initial connections
-   atomically, rename or retype resources, enable Service Defaults, and manage
-   connections from each resource editor using constrained Aspire-aware
-   resource-type selectors;
+   atomically, rename or retype resources within their section, enable Service
+   Defaults on any .NET project, and manage connections from each resource
+   editor using constrained Aspire-aware resource-type selectors;
 7. identifies every invalid or duplicate resource name on its card, explains the
    violated naming rule, and prevents invalid edits from being saved;
 8. requests a regenerated proposal when a service-level choice changes while
