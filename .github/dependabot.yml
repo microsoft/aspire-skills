@@ -1,4 +1,4 @@
-﻿version: 2
+version: 2
 updates:
   # npm: TypeScript AppHost eval fixture
   - package-ecosystem: "npm"
