@@ -10,7 +10,6 @@ aspire-skills/
 ├── .plugin/plugin.json      → ../../.plugin/plugin.json
 ├── .claude-plugin/          → ../../.claude-plugin/
 ├── .cursor-plugin/          → ../../.cursor-plugin/
-├── .mcp.json                → ../../.mcp.json
 ├── gemini-extension.json    → ../../gemini-extension.json
 ├── skills/                  → ../../skills/
 ├── extensions/              → ../../extensions/

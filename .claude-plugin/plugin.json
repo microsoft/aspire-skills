@@ -18,6 +18,5 @@
     "deployment",
     "microsoft"
   ],
-  "skills": "./skills/",
-  "mcpServers": "./.mcp.json"
+  "skills": "./skills/"
 }

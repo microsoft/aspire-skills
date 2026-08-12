@@ -19,6 +19,5 @@
     "microsoft"
   ],
   "skills": "./skills/",
-  "mcpServers": "./.mcp.json",
   "extensions": "./extensions/"
 }
