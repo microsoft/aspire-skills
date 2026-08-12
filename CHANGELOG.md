@@ -5,6 +5,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Prefer VS Code's `aspire_apphost_start` and `aspire_apphost_stop` tools over
+  terminal lifecycle commands when available, with exact-path CLI fallback for
+  externally controlled AppHosts, bounded recovery for unknown controllers,
+  explicit multi-AppHost disambiguation, and isolated CLI starts in worktrees.
 - Synced skill guidance with the current Aspire 13.4 development branch:
   `.aspire/modules` TypeScript AppHost generated files, `aspire integration list/search`
   discovery, resource-command/watch/HMR lifecycle guidance, and `PublishAsPackageScript`

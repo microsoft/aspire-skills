@@ -8,7 +8,7 @@ Issue [#15801](https://github.com/microsoft/aspire/issues/15801) documented 5 sp
 
 ---
 
-## Rule 1: ALWAYS `aspire start` — NEVER `dotnet run`
+## Rule 1: Use Aspire Lifecycle Routing — NEVER `dotnet run`
 
 ### Why `dotnet run` Is Dangerous for AppHosts
 
@@ -23,9 +23,15 @@ The AppHost project is an **orchestrator**, not a regular .NET app. Running it w
 
 ### Correct Pattern
 
+In VS Code, prefer `aspire_apphost_start` for a discovered AppHost. Load the tool first
+when it is deferred. Use mode `run` unless the user explicitly asks to attach a debugger.
+
+The exception is a git worktree: the editor tool cannot currently request isolated Aspire
+state, so use the exact discovered path with the CLI.
+
 ```bash
-# ✅ Start the Aspire app
-aspire start
+# ✅ Worktree or editor-tool-unavailable fallback
+aspire start --non-interactive --isolated --apphost <path>
 
 # ✅ Verify it's running
 aspire ps
@@ -36,17 +42,18 @@ aspire ps
 | Command | Mode | Dashboard | Use Case |
 |---------|------|-----------|----------|
 | `aspire run` | Foreground (interactive) | Yes, in terminal | Human developer at terminal |
-| `aspire start` | Background (detached) | No terminal output | **AI agents — always prefer this** |
+| `aspire start` | Background (detached) | No terminal output | AI agent CLI fallback |
 | `aspire run --detach` | Background (same as start) | Yes, separate window | Alternative to `aspire start` |
 
-For AI agents, **always use `aspire start`** — it runs in the background and returns control to the agent.
+For AI agents outside the editor lifecycle, use `aspire start --non-interactive` so it
+runs in the background and returns control to the agent.
 
 ### Recovery If `dotnet run` Was Used
 
 ```bash
 # Kill the dotnet process manually (find PID first)
 # Then start correctly:
-aspire start
+aspire start --non-interactive --apphost <path>
 ```
 
 ---
@@ -112,41 +119,44 @@ The agent then concludes the project is "un-buildable" — a false conclusion.
 
 When you see `MSB3491` / `CS2012` / "file in use" / "another process is using":
 
-```bash
-# ✅ Single correct recovery
-aspire stop              # release all Aspire-held locks
+Resolve the exact AppHost, then stop and restart it through the lifecycle routing in
+Rule 4. If that routing permits a CLI fallback, keep both commands scoped to the same
+AppHost:
 
-# Then EITHER use a resource-scoped command if Aspire is still up + one resource changed:
-aspire resource <name> rebuild
-# OR:
-aspire start             # if AppHost code changed or Aspire was fully stopped
+```bash
+# ✅ CLI fallback only; prefer aspire_apphost_stop when available
+aspire stop --non-interactive --apphost <path>
+
+# After rebuilding, restart only when needed
+aspire start --non-interactive --apphost <path>
 ```
 
-> 🔒 **`aspire stop` is the ONLY first step.** Do not `pkill dotnet`, do not delete
+> 🔒 **Stopping the AppHost is the ONLY first step.** Prefer `aspire_apphost_stop` when
+> VS Code exposes it. Do not `pkill dotnet`, do not delete
 > `bin/`/`obj/`, do not "reboot to release the lock", and do not tell the user the
 > project has a permanent build failure. The cause is always the same — Aspire is
-> holding the output files — and the fix is always `aspire stop`.
+> holding the output files — and the fix is always to stop it cleanly.
 
 | ❌ NEVER (file-lock recovery) | ✅ ALWAYS |
 |------------------------------|----------|
-| Say the project has a permanent build failure when you see `MSB3491`/`CS2012` | Recognize Aspire is holding locks and run `aspire stop` |
-| `pkill dotnet` / `kill <PID>` | `aspire stop` (clean shutdown via the CLI) |
-| `rm -rf bin obj` to "force" the build | `aspire stop`, then rebuild |
-| Suggest a reboot | `aspire stop` (single command) |
-| Re-run `dotnet build` with Aspire still up | `aspire stop` first; prefer resource commands/watch/HMR/debug workflow |
+| Say the project has a permanent build failure when you see `MSB3491`/`CS2012` | Recognize Aspire is holding locks and stop the AppHost through lifecycle routing |
+| `pkill dotnet` / `kill <PID>` | Editor stop tool or exact-path CLI fallback |
+| `rm -rf bin obj` to "force" the build | Stop the AppHost, then rebuild |
+| Suggest a reboot | Stop the AppHost through lifecycle routing |
+| Re-run `dotnet build` with Aspire still up | Stop the AppHost first; prefer resource commands/watch/HMR/debug workflow |
 
 ### What Changed Determines the Action
 
 | What Changed | Action | Command |
 |--------------|--------|---------|
-| AppHost project (Program.cs, .csproj) | Full restart | `aspire stop` → edit → `aspire start` |
+| AppHost project (Program.cs, .csproj) | Full restart | Stop and restart through lifecycle routing |
 | .NET service project (.cs files) | Rebuild/refresh resource if exposed | `aspire resource <name> rebuild` or the resource's IDE/watch workflow |
 | JavaScript/Python/Go files | Usually no Aspire action | File watchers/HMR handle it automatically |
 | Configuration (appsettings.json) | Check first | `aspire describe` then decide |
 
 ---
 
-## Rule 4: Use `aspire stop` For Cleanup — NEVER Leave Unwanted Processes Running
+## Rule 4: Use Aspire Lifecycle Routing For Cleanup — NEVER Leave Unwanted Processes Running
 
 ### Why Cleanup Matters
 
@@ -160,9 +170,20 @@ Aspire orchestrates multiple processes (your services, databases, message broker
 
 ### Correct Pattern
 
+If VS Code exposes `aspire_apphost_stop`, load and call it first with the exact discovered
+path. `run` mode is still editor-owned even though no debugger is attached.
+
+| Tool result | Required action |
+|-------------|-----------------|
+| `notEditorOwned`, controller `external` | Use exact-path `aspire stop --non-interactive` when the user requested that target be stopped |
+| `failed`, controller `unknown` | Retry the tool once; use the same exact-path fallback only if that result repeats |
+| `ambiguousSession` | Stop nothing and have the user disambiguate in the editor; never run or offer a CLI fallback, even with confirmation |
+| Any other refusal or failure | Resolve or report it without changing mechanisms |
+| Unclear target among multiple AppHosts | Ask which one and take no lifecycle action |
+
 ```bash
-# ✅ Stop when cleanup is requested or the user did not ask to keep it running
-aspire stop
+# ✅ Only after notEditorOwned/external or a repeated failed/unknown result
+aspire stop --non-interactive --apphost <path>
 
 # ✅ Verify everything stopped
 aspire ps  # should show no running resources
@@ -176,7 +197,7 @@ aspire ps
 
 # If aspire ps shows nothing but ports are blocked:
 # The previous instance may have crashed. Start fresh:
-aspire start  # will clean up orphaned state
+aspire start --non-interactive --apphost <path>  # editor-tool-unavailable fallback
 ```
 
 ---
@@ -264,9 +285,9 @@ aspire agent init --non-interactive
 
 | Mistake Made | Recovery Steps |
 |-------------|---------------|
-| Used `dotnet run` on AppHost | Kill the process, run `aspire start` |
-| Used `dotnet build` and got file locks | `aspire stop`, wait 2s, then `dotnet build` or `aspire start` |
+| Used `dotnet run` on AppHost | Kill the process, then start through lifecycle routing |
+| Used `dotnet build` and got file locks | Stop through lifecycle routing, wait 2s, then `dotnet build` or restart |
 | Used `curl` polling and got false results | `aspire wait <resource>`, then use endpoints from `aspire describe` |
-| Left Aspire running, now ports conflict | `aspire stop`, then `aspire start` |
+| Left Aspire running, now ports conflict | Stop and restart through lifecycle routing |
 | Resource won't start after code change | Fix code, then use resource commands/watch/HMR/debug workflow or restart the AppHost if the AppHost model changed |
 | Nothing works, environment broken | `aspire doctor` to diagnose, then follow recommendations |
