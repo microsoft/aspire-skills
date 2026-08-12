@@ -181,13 +181,23 @@ stimuli:
         name: uses_isolated_cli_start_in_worktree
         config:
           prompt: >
-            Does the assistant's response use `aspire start --isolated` as the
-            exception for a git worktree because `aspire_apphost_start` cannot
-            request isolation? Answer based on intent.
+            Does the assistant's response use
+            `aspire start --non-interactive --isolated --apphost <path>` with
+            the exact supplied AppHost path as the exception for a git worktree
+            because `aspire_apphost_start` cannot request isolation? Answer
+            based on intent; all three flags are required.
       - type: output-contains
         name: includes_isolated
         config:
           substring: --isolated
+      - type: output-contains
+        name: scopes_worktree_start
+        config:
+          substring: --apphost
+      - type: output-contains
+        name: uses_non_interactive_worktree_start
+        config:
+          substring: --non-interactive
       - type: skill-invocation
         name: invokes_orchestration
         config:

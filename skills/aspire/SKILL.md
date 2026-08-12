@@ -67,7 +67,7 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
    but is **unwired** (no resources declared), route to [`aspireify`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md).
    Only continue with the steps below once a wired AppHost is present.
 1. Confirm workspace is Aspire — identify the AppHost
-2. Route lifecycle work to `aspire-orchestration`: prefer `aspire_apphost_start` when the VS Code tool is available; use exact-path `aspire start --non-interactive --isolated` in worktrees
+2. Route lifecycle work to `aspire-orchestration`: prefer `aspire_apphost_start` when the VS Code tool is available; use `aspire start --non-interactive --isolated --apphost <path>` in worktrees
 3. `aspire wait <resource>` before interacting with any resource
 4. Inspect state with `aspire describe`, `aspire otel logs`, `aspire logs`, `aspire otel traces`, and `aspire export` before making code changes
 5. Before adding integrations, use `aspire integration search <query>` when the package is unknown, then `aspire add <package>` when ready to mutate the AppHost

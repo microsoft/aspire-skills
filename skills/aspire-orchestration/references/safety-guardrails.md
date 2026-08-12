@@ -30,8 +30,11 @@ The exception is a git worktree: the editor tool cannot currently request isolat
 state, so use the exact discovered path with the CLI.
 
 ```bash
-# ✅ Worktree or editor-tool-unavailable fallback
+# ✅ Worktree fallback
 aspire start --non-interactive --isolated --apphost <path>
+
+# ✅ Editor-tool-unavailable fallback outside a worktree
+aspire start --non-interactive --apphost <path>
 
 # ✅ Verify it's running
 aspire ps
@@ -45,8 +48,9 @@ aspire ps
 | `aspire start` | Background (detached) | No terminal output | AI agent CLI fallback |
 | `aspire run --detach` | Background (same as start) | Yes, separate window | Alternative to `aspire start` |
 
-For AI agents outside the editor lifecycle, use `aspire start --non-interactive` so it
-runs in the background and returns control to the agent.
+For AI agents outside the editor lifecycle, use
+`aspire start --non-interactive --apphost <path>` so it runs in the background and
+returns control to the agent.
 
 ### Recovery If `dotnet run` Was Used
 
@@ -175,7 +179,7 @@ path. `run` mode is still editor-owned even though no debugger is attached.
 
 | Tool result | Required action |
 |-------------|-----------------|
-| `notEditorOwned`, controller `external` | Use exact-path `aspire stop --non-interactive` when the user requested that target be stopped |
+| `notEditorOwned`, controller `external` | Use `aspire stop --non-interactive --apphost <path>` when the user requested that target be stopped |
 | `failed`, controller `unknown` | Retry the tool once; use the same exact-path fallback only if that result repeats |
 | `ambiguousSession` | Stop nothing and have the user disambiguate in the editor; never run or offer a CLI fallback, even with confirmation |
 | Any other refusal or failure | Resolve or report it without changing mechanisms |
@@ -272,7 +276,7 @@ AI agents run in non-interactive terminals. Some Aspire CLI commands may prompt 
 
 ```bash
 # ✅ Agent-safe commands
-aspire start --non-interactive
+aspire start --non-interactive --apphost <path>
 aspire deploy --non-interactive
 aspire agent init --non-interactive
 ```

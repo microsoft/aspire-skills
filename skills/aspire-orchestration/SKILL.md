@@ -95,7 +95,7 @@ for isolated worktree starts, or for a stop result explicitly marked as allowed 
 
 | Situation | ✅ ALWAYS Do | ❌ NEVER Do |
 |-----------|-------------|------------|
-| Start an Aspire app | `aspire_apphost_start` when available; use `aspire start --isolated` in a worktree | `dotnet run` on AppHost |
+| Start an Aspire app | `aspire_apphost_start` when available; use `aspire start --non-interactive --isolated --apphost <path>` in a worktree | `dotnet run` on AppHost |
 | Wait for resource ready | `aspire wait <resource>` | `curl` / HTTP polling loops |
 | Code changed in a resource | Prefer resource commands, runtime watch/HMR, dashboard actions, or IDE-managed debugging | `dotnet build` against locked files |
 | Task complete | `aspire_apphost_stop` when available; follow its result matrix | Use an unapproved CLI fallback |
@@ -112,11 +112,11 @@ See [safety-guardrails.md](references/safety-guardrails.md) for detailed rules a
 ## Default Workflow
 
 1. Confirm workspace is Aspire — identify the AppHost
-2. Start with `aspire_apphost_start` when available; in a worktree use exact-path `aspire start --non-interactive --isolated` instead
+2. Start with `aspire_apphost_start` when available; in a worktree use `aspire start --non-interactive --isolated --apphost <path>` instead
 3. `aspire wait <resource>` before interacting with any resource
 4. `aspire describe` to inspect state, then work
 5. If AppHost code changed, restart through the same lifecycle routing; if only one resource changed, prefer the resource's commands/watch/HMR/debug workflow
-6. Stop with `aspire_apphost_stop` when available; use exact-path `aspire stop` only for the documented fallback outcomes
+6. Stop with `aspire_apphost_stop` when available; use `aspire stop --non-interactive --apphost <path>` only for the documented fallback outcomes
 
 ## Quick Reference
 
@@ -124,7 +124,7 @@ See [safety-guardrails.md](references/safety-guardrails.md) for detailed rules a
 |------|---------|
 | Start app (agents) | `aspire_apphost_start`; worktree fallback: `aspire start --non-interactive --isolated --apphost <path>` |
 | Start app (human) | `aspire run` (foreground, dashboard) |
-| Stop app | `aspire_apphost_stop`; exact-path CLI only for result-matrix fallbacks |
+| Stop app | `aspire_apphost_stop`; result-matrix fallback: `aspire stop --non-interactive --apphost <path>` |
 | Wait for resource | `aspire wait <resource>` |
 | Check status | `aspire ps` or `aspire describe` |
 | Show hidden resources (proxies, helpers, migrations) | `aspire ps --include-hidden` / `aspire describe --include-hidden` |
