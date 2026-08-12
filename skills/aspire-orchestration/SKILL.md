@@ -118,7 +118,7 @@ its filesystem path first.
 
 | Situation | ✅ ALWAYS Do | ❌ NEVER Do |
 |-----------|-------------|------------|
-| Start an Aspire app | `aspire_apphost_start` with mode `run` and the exact selected `appHostPath` when available; use `aspire start --non-interactive --isolated --apphost <filesystem-path>` in a worktree | `dotnet run` on AppHost |
+| Start an Aspire app | `aspire_apphost_start` with mode `run` and the exact selected `appHostPath` when available; in a git worktree, use `aspire start --non-interactive --isolated --apphost <filesystem-path>` even when `aspire_apphost_start` is available | `dotnet run` on AppHost |
 | Wait for resource ready | `aspire wait <resource>` | `curl` / HTTP polling loops |
 | Code changed in a resource | Prefer resource commands, runtime watch/HMR, dashboard actions, or IDE-managed debugging | `dotnet build` against locked files |
 | Task complete | `aspire_apphost_stop` with the exact selected `appHostPath` when available; follow its result matrix | Use an unapproved CLI fallback |
