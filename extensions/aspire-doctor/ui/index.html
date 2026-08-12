@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Aspire Doctor</title>
+        <link rel="stylesheet" href="/styles.css" />
+    </head>
+    <body class="is-loading">
+        <!-- Toolbar: title + summary pills + re-run -->
+        <header class="toolbar">
+            <div class="tb-row">
+                <div class="tb-title">
+                    <div>
+                        <div class="tb-heading">Aspire Doctor</div>
+                        <div class="tb-sub muted" id="tb-sub">Checking your environment…</div>
+                    </div>
+                </div>
+                <div class="tb-actions">
+                    <button class="btn btn-outline btn-sm" id="rerun" type="button">
+                        <span class="btn-ico" aria-hidden="true">
+                            <svg width="14" height="14" viewBox="0 0 16 16">
+                                <path
+                                    fill="currentColor"
+                                    d="M8 2.5a5.5 5.5 0 1 0 5.478 6.03.75.75 0 0 1 1.492.148A7 7 0 1 1 8 1c1.79 0 3.42.67 4.66 1.77V1.75a.75.75 0 0 1 1.5 0v3.5a.75.75 0 0 1-.75.75h-3.5a.75.75 0 0 1 0-1.5h1.72A5.48 5.48 0 0 0 8 2.5Z"
+                                />
+                            </svg>
+                        </span>
+                        <span class="rerun-label">Re-run</span>
+                    </button>
+                </div>
+            </div>
+            <!-- Worded status pills on their own row so they never crowd the
+                 title/re-run row in a narrow side panel. -->
+            <div class="tb-summary" id="summary-pills" hidden>
+                <span class="pill ok" id="pill-ok" title="Passed">
+                    <span class="pill-dot"></span><span class="pill-num" id="count-ok">0</span
+                    ><span class="pill-lbl">passed</span>
+                </span>
+                <span class="pill warn" id="pill-warn" title="Warnings">
+                    <span class="pill-dot"></span><span class="pill-num" id="count-warn">0</span
+                    ><span class="pill-lbl" id="lbl-warn">warnings</span>
+                </span>
+                <span class="pill req" id="pill-req" title="Failed">
+                    <span class="pill-dot"></span><span class="pill-num" id="count-req">0</span
+                    ><span class="pill-lbl">failed</span>
+                </span>
+            </div>
+            <div class="progress" id="progress" aria-hidden="true"><span></span></div>
+        </header>
+
+        <main class="content">
+            <!-- Loading skeleton -->
+            <section id="skeleton" class="diag-groups">
+                <div class="diag-section">
+                    <div class="diag-sec-head">
+                        <span class="skeleton sk-line" style="width: 120px; height: 13px"></span>
+                    </div>
+                    <div class="diag-list">
+                        <div class="diag-item">
+                            <div class="diag-row">
+                                <span class="skeleton" style="width: 16px; height: 16px; border-radius: 999px"></span>
+                                <span class="skeleton sk-line" style="flex: 1; max-width: 260px"></span>
+                            </div>
+                        </div>
+                        <div class="diag-item">
+                            <div class="diag-row">
+                                <span class="skeleton" style="width: 16px; height: 16px; border-radius: 999px"></span>
+                                <span class="skeleton sk-line" style="flex: 1; max-width: 200px"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Rendered check groups -->
+            <section id="diagnostics" class="diag-groups" hidden></section>
+
+            <!-- Error state -->
+            <section id="error" class="state-card" hidden>
+                <div class="state-ico req" aria-hidden="true">
+                    <svg width="22" height="22" viewBox="0 0 16 16">
+                        <path
+                            fill="currentColor"
+                            d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0Zm.75 4.75a.75.75 0 0 0-1.5 0v3.5a.75.75 0 0 0 1.5 0Zm-.75 7a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"
+                        />
+                    </svg>
+                </div>
+                <div class="state-title">Couldn't run <code>aspire doctor</code></div>
+                <div class="state-msg muted" id="error-msg"></div>
+                <pre class="state-raw" id="error-raw" hidden></pre>
+            </section>
+        </main>
+
+        <script src="/app.js"></script>
+    </body>
+</html>

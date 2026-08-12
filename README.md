@@ -1,10 +1,12 @@
 # Aspire Skills
 
-Aspire Skills is a plugin and skill pack for AI coding agents working on Aspire distributed applications.
+Aspire Skills is a plugin, skill pack, and extension pack for AI coding agents working on Aspire distributed applications.
 
-It helps agents recognize Aspire workspaces, use the Aspire CLI correctly, and route common work to focused skills instead of falling back to ad hoc `dotnet`, `curl`, Docker, or shell workflows.
+It helps agents recognize Aspire workspaces, use the Aspire CLI correctly, route common work to focused skills instead of ad hoc `dotnet`, `curl`, Docker, or shell workflows, and surface focused visual tools for Aspire-specific tasks.
 
 ## What's included
+
+### Skills
 
 | Skill | Purpose |
 |-------|---------|
@@ -15,13 +17,19 @@ It helps agents recognize Aspire workspaces, use the Aspire CLI correctly, and r
 | `aspire-deployment` | Publishes, deploys, and tears down Aspire apps |
 | `aspire-monitoring` | Routes logs, traces, dashboard, telemetry, and diagnostics work |
 
+### Extensions
+
+| Extension | Purpose |
+|-----------|---------|
+| `aspire-doctor` | Opens a Copilot canvas for `aspire doctor` results, showing environment checks, fixes, and detected CLI installations |
+
 ## Install
 
 Choose the path that matches your agent host.
 
 ### Aspire CLI
 
-Aspire's first-party agent setup installs Aspire skill files and MCP configuration into detected agent environments.
+Aspire's first-party agent setup installs Aspire skill files, extension files, and MCP configuration into detected agent environments.
 
 ```bash
 # Create a new Aspire app and opt into agent guidance when prompted
@@ -90,6 +98,7 @@ In that command, `-a github-copilot` selects the target agent, `-g` installs glo
 | Path | Purpose |
 |------|---------|
 | `skills/` | Source skill files, references, and evals |
+| `extensions/` | Source Copilot CLI canvas extensions |
 | `.plugin/`, `.claude-plugin/`, `.cursor-plugin/` | Plugin metadata for marketplaces |
 | `.github/plugins/aspire-skills/` | Published plugin mirror |
 | `evals/` | Shared evaluation fixtures and helpers |
@@ -100,7 +109,14 @@ In that command, `-a github-copilot` selects the target agent, `-g` installs glo
 npm run bundle
 ```
 
-`npm run bundle` builds the published Aspire Skills plugin bundle.
+`npm run bundle` builds both published release artifacts:
+
+| Artifact | Contents |
+|----------|----------|
+| `aspire-skills-v<version>.tgz` | Agent skill files and `skill-manifest.json` |
+| `aspire-extensions-v<version>.tgz` | Copilot CLI extension files and `extension-manifest.json` |
+
+Use `npm run bundle:skills` or `npm run bundle:extensions` to build one bundle type.
 
 ## Contributing
 

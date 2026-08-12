@@ -6,6 +6,11 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 
 ### Changed
 - Corrected Aspire monitoring guidance for `WithBrowserLogs()` child-resource diagnostics.
+- Prefer VS Code's `aspire_apphost_start` and `aspire_apphost_stop` tools over
+  terminal lifecycle commands when available, with multi-root tool selectors
+  resolved to exact CLI filesystem paths for CLI fallbacks, bounded recovery
+  for unknown controllers, explicit multi-AppHost disambiguation, and isolated
+  CLI starts in worktrees.
 - Synced skill guidance with the current Aspire 13.4 development branch:
   `.aspire/modules` TypeScript AppHost generated files, `aspire integration list/search`
   discovery, resource-command/watch/HMR lifecycle guidance, and `PublishAsPackageScript`
@@ -37,8 +42,11 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   (AWS deploy, deployment-plan validation, `--list-steps` pipeline preview).
 
 ### Added
+- Added the `aspire-doctor` GitHub App canvas extension for viewing `aspire doctor`
+  results as a live checklist in a side panel.
 - Added a release bundle generator and `publish.yml` workflow for the verified
-  `aspire-skills-v<version>.tgz` GitHub release asset consumed by `aspire agent init`.
+  `aspire-skills-v<version>.tgz` and `aspire-extensions-v<version>.tgz` GitHub
+  release assets consumed by `aspire agent init`.
 - Restored upstream migration reference content for AppHost wiring, Docker Compose,
   full-solution AppHosts, JavaScript workspaces, OpenTelemetry, Playwright handoff,
   agent workflows, and detailed monitoring/search/display guidance.
