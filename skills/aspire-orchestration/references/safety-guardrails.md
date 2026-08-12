@@ -24,17 +24,31 @@ The AppHost project is an **orchestrator**, not a regular .NET app. Running it w
 ### Correct Pattern
 
 In VS Code, prefer `aspire_apphost_start` for a discovered AppHost. Load the tool first
-when it is deferred. Use mode `run` unless the user explicitly asks to attach a debugger.
+when it is deferred. Use mode `run` with the exact selected `appHostPath` unless the user
+explicitly asks to attach a debugger.
+
+In a multi-root workspace, that tool-only `appHostPath` may look like
+`repo-a~1/MyApp.AppHost/MyApp.AppHost.csproj`. The CLI `--apphost` flag does not
+understand that selector namespace. Before any CLI fallback, resolve the same selected
+AppHost to its actual filesystem path.
+
+| Use | Example |
+|-----|---------|
+| Tool-only selector | `repo-a~1/MyApp.AppHost/MyApp.AppHost.csproj` |
+| CLI fallback path | `/workspaces/repo-a/MyApp.AppHost/MyApp.AppHost.csproj` |
+
+If the selected `appHostPath` is already a normal project path such as
+`MyApp.AppHost/MyApp.AppHost.csproj`, reuse it unchanged for CLI fallbacks.
 
 The exception is a git worktree: the editor tool cannot currently request isolated Aspire
-state, so use the exact discovered path with the CLI.
+state, so use the resolved filesystem path with the CLI.
 
 ```bash
 # ✅ Worktree fallback
-aspire start --non-interactive --isolated --apphost <path>
+aspire start --non-interactive --isolated --apphost <filesystem-path>
 
 # ✅ Editor-tool-unavailable fallback outside a worktree
-aspire start --non-interactive --apphost <path>
+aspire start --non-interactive --apphost <filesystem-path>
 
 # ✅ Verify it's running
 aspire ps
@@ -49,15 +63,21 @@ aspire ps
 | `aspire run --detach` | Background (same as start) | Yes, separate window | Alternative to `aspire start` |
 
 For AI agents outside the editor lifecycle, use
-`aspire start --non-interactive --apphost <path>` so it runs in the background and
+`aspire start --non-interactive --apphost <filesystem-path>` so it runs in the background and
 returns control to the agent.
 
 ### Recovery If `dotnet run` Was Used
 
+Restart through lifecycle routing: prefer `aspire_apphost_start` with mode `run` and the
+exact selected `appHostPath`. Use the CLI only when the editor tool is unavailable, or
+when a git worktree requires `--isolated`.
+
 ```bash
 # Kill the dotnet process manually (find PID first)
-# Then start correctly:
-aspire start --non-interactive --apphost <path>
+# If the editor tool is unavailable:
+aspire start --non-interactive --apphost <filesystem-path>
+# In a git worktree:
+aspire start --non-interactive --isolated --apphost <filesystem-path>
 ```
 
 ---
@@ -124,18 +144,18 @@ The agent then concludes the project is "un-buildable" — a false conclusion.
 When you see `MSB3491` / `CS2012` / "file in use" / "another process is using":
 
 Resolve the exact AppHost, then stop and restart it through the lifecycle routing in
-Rule 4. If that routing permits a CLI fallback, keep both commands scoped to the same
-AppHost:
+Rule 4. If that routing permits a CLI fallback, resolve the selected AppHost to its
+filesystem path and keep both commands scoped to the same AppHost:
 
 ```bash
 # ✅ CLI stop only after Rule 4 permits fallback
-aspire stop --non-interactive --apphost <path>
+aspire stop --non-interactive --apphost <filesystem-path>
 
 # After rebuilding, restart only when needed and the editor tool is unavailable
-aspire start --non-interactive --apphost <path>
+aspire start --non-interactive --apphost <filesystem-path>
 
 # Worktree restart
-aspire start --non-interactive --isolated --apphost <path>
+aspire start --non-interactive --isolated --apphost <filesystem-path>
 ```
 
 > 🔒 **Stopping the AppHost is the ONLY first step.** Prefer `aspire_apphost_stop` when
@@ -147,7 +167,7 @@ aspire start --non-interactive --isolated --apphost <path>
 | ❌ NEVER (file-lock recovery) | ✅ ALWAYS |
 |------------------------------|----------|
 | Say the project has a permanent build failure when you see `MSB3491`/`CS2012` | Recognize Aspire is holding locks and stop the AppHost through lifecycle routing |
-| `pkill dotnet` / `kill <PID>` | Editor stop tool or exact-path CLI fallback |
+| `pkill dotnet` / `kill <PID>` | Editor stop tool or exact-target CLI fallback |
 | `rm -rf bin obj` to "force" the build | Stop the AppHost, then rebuild |
 | Suggest a reboot | Stop the AppHost through lifecycle routing |
 | Re-run `dotnet build` with Aspire still up | Stop the AppHost first; prefer resource commands/watch/HMR/debug workflow |
@@ -177,25 +197,31 @@ Aspire orchestrates multiple processes (your services, databases, message broker
 
 ### Correct Pattern
 
-If VS Code exposes `aspire_apphost_stop`, load and call it first with the exact discovered
-path. `run` mode is still editor-owned even though no debugger is attached.
+If VS Code exposes `aspire_apphost_stop`, load and call it first with the exact selected
+`appHostPath`. `run` mode is still editor-owned even though no debugger is attached.
+If the stop tool is unavailable, resolve the selected AppHost to its filesystem path and
+use `aspire stop --non-interactive --apphost <filesystem-path>`.
 
 | Tool result | Required action |
 |-------------|-----------------|
+| `stopped` or `notRunning` | Report the result and take no further stop action |
 | `alreadyStopping`, controller `editor` | Report that the editor stop is already in progress and take no further stop action |
 | `alreadyStarting`, controller `editor` | Retry `aspire_apphost_stop` once; if it repeats, report that startup is still in progress and do not use the CLI |
-| `notEditorOwned`, controller `external` | Use `aspire stop --non-interactive --apphost <path>` when the user requested that target be stopped |
-| `failed`, controller `unknown` | Retry the tool once; use the same exact-path fallback only if that result repeats |
+| `notEditorOwned`, controller `external` | Resolve the selected AppHost to its filesystem path, then use `aspire stop --non-interactive --apphost <filesystem-path>` when the user requested that target be stopped |
+| `failed`, controller `unknown` | Retry the tool once; use the same exact-target fallback only if that result repeats |
 | `ambiguousSession` | Stop nothing and have the user disambiguate in the editor; never run or offer a CLI fallback, even with confirmation |
 | Any other refusal or failure | Resolve or report it without changing mechanisms |
 | Unclear target among multiple AppHosts | Ask which one and take no lifecycle action |
 
 These rows are mutually exclusive. Act only on the current result and do not offer a
-command from another row as a speculative future workaround.
+command from another row as a speculative future workaround. When a CLI fallback is
+allowed, keep the target exact by reusing the same selected AppHost after resolving it to
+the CLI filesystem path.
 
 ```bash
-# ✅ Only after notEditorOwned/external or a repeated failed/unknown result
-aspire stop --non-interactive --apphost <path>
+# ✅ If the stop tool is unavailable, or after notEditorOwned/external,
+# ✅ or a repeated failed/unknown result
+aspire stop --non-interactive --apphost <filesystem-path>
 
 # ✅ Verify everything stopped
 aspire ps  # should show no running resources
@@ -209,7 +235,7 @@ aspire ps
 
 # If aspire ps shows nothing but ports are blocked:
 # The previous instance may have crashed. Start fresh:
-aspire start --non-interactive --apphost <path>  # editor-tool-unavailable fallback
+aspire start --non-interactive --apphost <filesystem-path>  # editor-tool-unavailable fallback
 ```
 
 ---
@@ -284,7 +310,7 @@ AI agents run in non-interactive terminals. Some Aspire CLI commands may prompt 
 
 ```bash
 # ✅ Agent-safe commands
-aspire start --non-interactive --apphost <path>
+aspire start --non-interactive --apphost <filesystem-path>
 aspire deploy --non-interactive
 aspire agent init --non-interactive
 ```
