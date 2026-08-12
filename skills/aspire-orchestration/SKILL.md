@@ -64,14 +64,18 @@ multi-root workspace, that tool contract may require a selector such as
 `repo-a~1/MyApp.AppHost/MyApp.AppHost.csproj`.
 
 The CLI `--apphost` flag does not understand that selector namespace. Before any CLI
-start/stop fallback, resolve the selected AppHost to its actual filesystem path and pass
-that filesystem path to `--apphost`; never copy a multi-root selector verbatim. If
-several AppHosts are discovered and the user's target is unclear, ask which one to use
-instead of guessing, invoking the tool for every AppHost, or issuing an unscoped CLI
-command.
+start/stop fallback, resolve the selected AppHost to its actual filesystem project path
+and pass that path to `--apphost`; never copy a multi-root selector verbatim. That CLI
+project path may be workspace-relative (`MyApp.AppHost/MyApp.AppHost.csproj`) or
+absolute (`/workspaces/repo-a/MyApp.AppHost/MyApp.AppHost.csproj` or
+`C:\workspaces\repo-a\MyApp.AppHost\MyApp.AppHost.csproj`); use the current platform's
+native path syntax. If several AppHosts are discovered and the user's target is unclear,
+ask which one to use instead of guessing, invoking the tool for every AppHost, or
+issuing an unscoped CLI command.
 
-If the selected `appHostPath` is already a normal project path such as
-`MyApp.AppHost/MyApp.AppHost.csproj`, reuse it unchanged for CLI fallbacks.
+If the selected `appHostPath` is already a normal workspace-relative project path such
+as `MyApp.AppHost/MyApp.AppHost.csproj`, reuse it unchanged for CLI fallbacks; do not
+convert it to an absolute path just for the CLI.
 
 **An unclear target is a hard stop.** Ask one clarifying question and wait for the user to
 name an AppHost. Do not call a lifecycle tool or terminal command until the target is
@@ -131,7 +135,7 @@ See [safety-guardrails.md](references/safety-guardrails.md) for detailed rules a
 ## Default Workflow
 
 1. Confirm workspace is Aspire — identify the AppHost
-2. Start with `aspire_apphost_start` in mode `run` using the exact selected `appHostPath` when available; otherwise resolve the selected AppHost to a filesystem path and use `aspire start --non-interactive --apphost <filesystem-path>` (`--isolated` in a worktree)
+2. If the workspace is a git worktree, resolve the selected AppHost to a filesystem project path and use `aspire start --non-interactive --isolated --apphost <filesystem-path>` even when `aspire_apphost_start` is available, because the editor tool cannot request isolation. Otherwise, start with `aspire_apphost_start` in mode `run` using the exact selected `appHostPath` when available; if that tool is unavailable, resolve the selected AppHost to a filesystem project path and use `aspire start --non-interactive --apphost <filesystem-path>`
 3. `aspire wait <resource>` before interacting with any resource
 4. `aspire describe` to inspect state, then work
 5. If AppHost code changed, restart through the same lifecycle routing; if only one resource changed, prefer the resource's commands/watch/HMR/debug workflow
@@ -141,7 +145,7 @@ See [safety-guardrails.md](references/safety-guardrails.md) for detailed rules a
 
 | Task | Command |
 |------|---------|
-| Start app (agents) | `aspire_apphost_start` (mode `run`, exact selected `appHostPath`); CLI fallback: `aspire start --non-interactive --apphost <filesystem-path>` (`--isolated` in a worktree) |
+| Start app (agents) | Git worktree: `aspire start --non-interactive --isolated --apphost <filesystem-path>` even if `aspire_apphost_start` is available, because the tool cannot request isolation. Otherwise: `aspire_apphost_start` (mode `run`, exact selected `appHostPath`); CLI fallback when the tool is unavailable: `aspire start --non-interactive --apphost <filesystem-path>` |
 | Start app (human) | `aspire run` (foreground, dashboard) |
 | Stop app | `aspire_apphost_stop` (exact selected `appHostPath`); result-matrix fallback: `aspire stop --non-interactive --apphost <filesystem-path>` |
 | Wait for resource | `aspire wait <resource>` |

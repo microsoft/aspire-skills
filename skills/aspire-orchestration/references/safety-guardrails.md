@@ -30,14 +30,17 @@ explicitly asks to attach a debugger.
 In a multi-root workspace, that tool-only `appHostPath` may look like
 `repo-a~1/MyApp.AppHost/MyApp.AppHost.csproj`. The CLI `--apphost` flag does not
 understand that selector namespace. Before any CLI fallback, resolve the same selected
-AppHost to its actual filesystem path.
+AppHost to its actual filesystem project path.
 
 | Use | Example |
 |-----|---------|
 | Tool-only selector | `repo-a~1/MyApp.AppHost/MyApp.AppHost.csproj` |
-| CLI fallback path | `/workspaces/repo-a/MyApp.AppHost/MyApp.AppHost.csproj` |
+| CLI fallback path (POSIX) | `/workspaces/repo-a/MyApp.AppHost/MyApp.AppHost.csproj` |
+| CLI fallback path (Windows) | `C:\workspaces\repo-a\MyApp.AppHost\MyApp.AppHost.csproj` |
 
-If the selected `appHostPath` is already a normal project path such as
+That CLI project path may be workspace-relative (`MyApp.AppHost/MyApp.AppHost.csproj`)
+or absolute; use the current platform's native path syntax. If the selected
+`appHostPath` is already a normal workspace-relative project path such as
 `MyApp.AppHost/MyApp.AppHost.csproj`, reuse it unchanged for CLI fallbacks.
 
 The exception is a git worktree: the editor tool cannot currently request isolated Aspire

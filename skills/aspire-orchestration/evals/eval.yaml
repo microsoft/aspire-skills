@@ -117,11 +117,11 @@ stimuli:
       stop; state the routing decision.
     tags:
       priority: p1
+      scenario: review-regression
       area:
         - agent-mode
         - lifecycle-tools
         - multi-root
-        - review-regression
     environment:
       files:
         - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
@@ -189,10 +189,10 @@ stimuli:
       decision.
     tags:
       priority: p0
+      scenario: review-regression
       area:
         - agent-mode
         - lifecycle-tools
-        - review-regression
     environment:
       files:
         - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
@@ -291,11 +291,11 @@ stimuli:
       state the routing decision.
     tags:
       priority: p1
+      scenario: review-regression
       area:
         - agent-mode
         - lifecycle-tools
         - tool-unavailable
-        - review-regression
     environment:
       files:
         - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
