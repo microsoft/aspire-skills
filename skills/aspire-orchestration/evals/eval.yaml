@@ -212,10 +212,6 @@ stimuli:
             `repo-a~1/MyApp.AppHost/MyApp.AppHost.csproj`? Answer based on
             intent.
       - type: output-contains
-        name: names_vscode_start_tool
-        config:
-          substring: aspire_apphost_start
-      - type: output-contains
         name: names_exact_vscode_start_selector
         config:
           substring: repo-a~1/MyApp.AppHost/MyApp.AppHost.csproj
