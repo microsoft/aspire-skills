@@ -5,7 +5,7 @@ description: >-
   WHEN: "start or stop my Aspire app", "aspire_apphost_start",
   "aspire_apphost_stop", "notEditorOwned", "ambiguousSession", "aspire start",
   "aspire stop", "aspire wait", resource restart, file-lock errors (MSB3491 or
-  CS2012), port conflicts, "aspire update --self", "--include-hidden",
+  CS2012), port conflicts, git worktrees, "--isolated", "aspire update --self", "--include-hidden",
   integration discovery, default watch, or hot reload.
   INVOKES: VS Code lifecycle tools first when exposed; Aspire CLI for readiness,
   inspection, resource operations, isolated worktree starts, and allowed fallbacks.
@@ -79,10 +79,16 @@ isolated state. Use `aspire start --non-interactive --isolated --apphost <path>`
 | Tool result | Next action | CLI stop allowed? |
 |-------------|-------------|-------------------|
 | `stopped` or `notRunning` | Report the result; take no further stop action | No |
+| `alreadyStopping`, controller `editor` | Report that the editor stop is already in progress; take no further stop action | No |
+| `alreadyStarting`, controller `editor` | Retry `aspire_apphost_stop` once; if it repeats, report that startup is still in progress and take no further stop action | No |
 | `notEditorOwned`, controller `external` | If the user requested that exact AppHost be stopped, run `aspire stop --non-interactive --apphost <path>` | Yes |
 | `failed`, controller `unknown` | Retry `aspire_apphost_stop` once; if the same result repeats, use the exact-path command above | Only after the retry |
 | `ambiguousSession` | Stop nothing and have the user disambiguate in the editor | **Never** |
 | Any other refusal or failure | Resolve or report that result; do not change mechanisms | No |
+
+The rows are mutually exclusive. Act only on the current result; do not offer a command
+from another row as a speculative future workaround. Re-evaluate only after a new tool
+result is returned.
 
 **`ambiguousSession` is a terminal safety refusal.** Do not run or offer a CLI fallback,
 and do not ask whether the user wants one. User confirmation cannot make an ambiguous
@@ -166,13 +172,19 @@ When a build fails with `error MSB3491: Could not write to output file ...` or
 **Aspire is running and holding file locks** on the resource's output assemblies.
 The recovery is always the same:
 
+Resolve the exact AppHost and call `aspire_apphost_stop` first when available. Use the
+CLI stop below only when the result matrix permits it; `ambiguousSession` and all other
+no-fallback results end the recovery attempt.
+
 ```bash
-# ✅ CLI fallback recovery sequence; prefer aspire_apphost_stop when available
+# ✅ CLI stop only after the result matrix permits fallback
 aspire stop --non-interactive --apphost <path>  # release the locks
 # ... then either rebuild / restart one resource if the resource exposes commands ...
 aspire resource <name> rebuild   # example: C# project resource with rebuild command
-# ... or restart the whole AppHost ...
-aspire start --non-interactive --apphost <path> # if the editor tool is unavailable
+# ... or restart the whole AppHost through aspire_apphost_start. If unavailable:
+aspire start --non-interactive --apphost <path>
+# In a git worktree:
+aspire start --non-interactive --isolated --apphost <path>
 ```
 
 | ❌ NEVER do | ✅ ALWAYS do |

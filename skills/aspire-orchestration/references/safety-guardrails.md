@@ -128,11 +128,14 @@ Rule 4. If that routing permits a CLI fallback, keep both commands scoped to the
 AppHost:
 
 ```bash
-# ✅ CLI fallback only; prefer aspire_apphost_stop when available
+# ✅ CLI stop only after Rule 4 permits fallback
 aspire stop --non-interactive --apphost <path>
 
-# After rebuilding, restart only when needed
+# After rebuilding, restart only when needed and the editor tool is unavailable
 aspire start --non-interactive --apphost <path>
+
+# Worktree restart
+aspire start --non-interactive --isolated --apphost <path>
 ```
 
 > 🔒 **Stopping the AppHost is the ONLY first step.** Prefer `aspire_apphost_stop` when
@@ -179,11 +182,16 @@ path. `run` mode is still editor-owned even though no debugger is attached.
 
 | Tool result | Required action |
 |-------------|-----------------|
+| `alreadyStopping`, controller `editor` | Report that the editor stop is already in progress and take no further stop action |
+| `alreadyStarting`, controller `editor` | Retry `aspire_apphost_stop` once; if it repeats, report that startup is still in progress and do not use the CLI |
 | `notEditorOwned`, controller `external` | Use `aspire stop --non-interactive --apphost <path>` when the user requested that target be stopped |
 | `failed`, controller `unknown` | Retry the tool once; use the same exact-path fallback only if that result repeats |
 | `ambiguousSession` | Stop nothing and have the user disambiguate in the editor; never run or offer a CLI fallback, even with confirmation |
 | Any other refusal or failure | Resolve or report it without changing mechanisms |
 | Unclear target among multiple AppHosts | Ask which one and take no lifecycle action |
+
+These rows are mutually exclusive. Act only on the current result and do not offer a
+command from another row as a speculative future workaround.
 
 ```bash
 # ✅ Only after notEditorOwned/external or a repeated failed/unknown result

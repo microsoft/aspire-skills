@@ -52,6 +52,7 @@ stimuli:
       - type: prompt
         name: uses_vscode_stop_tool_first
         config:
+          scoring: binary
           prompt: >
             Does the assistant's response choose `aspire_apphost_stop` as the
             first stop mechanism because it is available as a deferred VS Code
@@ -90,6 +91,7 @@ stimuli:
       - type: prompt
         name: uses_exact_cli_fallback_for_external_apphost
         config:
+          scoring: binary
           prompt: >
             Does the assistant's response fall back to a non-interactive
             `aspire stop` command scoped with `--apphost` to the exact supplied
@@ -120,6 +122,7 @@ stimuli:
       - type: prompt
         name: disambiguates_multiple_apphosts
         config:
+          scoring: binary
           prompt: >
             Does the assistant's response ask which exact AppHost should be
             stopped instead of guessing, invoking an unscoped terminal stop,
@@ -150,6 +153,7 @@ stimuli:
       - type: prompt
         name: uses_vscode_start_tool_in_run_mode
         config:
+          scoring: binary
           prompt: >
             Does the assistant's response choose `aspire_apphost_start` first
             with mode `run`, rather than choosing a terminal `aspire start`
@@ -180,6 +184,7 @@ stimuli:
       - type: prompt
         name: uses_isolated_cli_start_in_worktree
         config:
+          scoring: binary
           prompt: >
             Does the assistant's response use
             `aspire start --non-interactive --isolated --apphost <path>` with
@@ -187,17 +192,9 @@ stimuli:
             because `aspire_apphost_start` cannot request isolation? Answer
             based on intent; all three flags are required.
       - type: output-contains
-        name: includes_isolated
-        config:
-          substring: --isolated
-      - type: output-contains
         name: scopes_worktree_start
         config:
           substring: --apphost
-      - type: output-contains
-        name: uses_non_interactive_worktree_start
-        config:
-          substring: --non-interactive
       - type: skill-invocation
         name: invokes_orchestration
         config:
@@ -219,6 +216,7 @@ stimuli:
       - type: prompt
         name: stops_editor_owned_run_session_with_tool
         config:
+          scoring: binary
           prompt: >
             Does the assistant's response choose `aspire_apphost_stop` first
             and explain or rely on the fact that `run` mode still has an
@@ -248,6 +246,7 @@ stimuli:
       - type: prompt
         name: refuses_ambiguous_session_fallback
         config:
+          scoring: binary
           prompt: >
             Does the assistant's response stop nothing, avoid a CLI fallback,
             and require the user to disambiguate the editor sessions? Answer
@@ -277,6 +276,7 @@ stimuli:
       - type: prompt
         name: retries_then_uses_exact_unknown_fallback
         config:
+          scoring: binary
           prompt: >
             Does the assistant's response retry `aspire_apphost_stop` once and,
             only if the same failed/unknown result repeats, fall back to a
@@ -285,6 +285,70 @@ stimuli:
         name: scopes_unknown_fallback
         config:
           substring: --apphost
+      - type: skill-invocation
+        name: invokes_orchestration
+        config:
+          required: [aspire-orchestration]
+  - name: orch-vscode-stop-starting-001
+    prompt: >
+      Use the `aspire-orchestration` skill before answering. I invoked
+      `aspire_apphost_stop` for `MyApp.AppHost/MyApp.AppHost.csproj`, and it
+      returned `alreadyStarting` with controller `editor`. I still want it
+      stopped. What should happen next? Do not perform the retry; state the
+      routing decision.
+    tags:
+      priority: p1
+      scenario: already-starting-stop
+      area:
+        - agent-mode
+        - lifecycle-tools
+    constraints:
+      expect_skills: [aspire-orchestration]
+    graders:
+      - type: prompt
+        name: retries_starting_stop_without_cli_fallback
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response state that `aspire_apphost_stop`
+            should be retried once and, if `alreadyStarting` repeats, report
+            that startup is still in progress without using, offering, or
+            speculating about a CLI stop fallback?
+      - type: output-not-contains
+        name: no_cli_stop_for_starting
+        config:
+          substring: aspire stop --non-interactive
+      - type: skill-invocation
+        name: invokes_orchestration
+        config:
+          required: [aspire-orchestration]
+  - name: orch-vscode-stop-stopping-001
+    prompt: >
+      Use the `aspire-orchestration` skill before answering. I invoked
+      `aspire_apphost_stop` for `MyApp.AppHost/MyApp.AppHost.csproj`, and it
+      returned `alreadyStopping` with controller `editor`. What should happen
+      next? Do not perform another action; state the routing decision.
+    tags:
+      priority: p1
+      scenario: already-stopping-stop
+      area:
+        - agent-mode
+        - lifecycle-tools
+    constraints:
+      expect_skills: [aspire-orchestration]
+    graders:
+      - type: prompt
+        name: reports_stopping_without_another_action
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response report that the editor stop is
+            already in progress and take no further stop action, without using,
+            offering, or speculating about a CLI fallback?
+      - type: output-not-contains
+        name: no_cli_stop_for_stopping
+        config:
+          substring: aspire stop --non-interactive
       - type: skill-invocation
         name: invokes_orchestration
         config:
@@ -399,9 +463,14 @@ stimuli:
         config:
           substring: curl.*health
   - name: orch-cleanup-001
-    prompt: I'm done working on this feature, what should I do to clean up?
+    prompt: >
+      Use the `aspire-orchestration` skill before answering. I'm done working on
+      this feature in VS Code. `aspire_apphost_stop` is available as a deferred
+      tool. What should I do to clean up? Do not perform the cleanup; state the
+      routing decision and briefly explain why cleanup matters.
     tags:
       priority: p0
+      scenario: lifecycle-tool-cleanup
       area:
         - safety-guardrail
         - issue-15801
@@ -413,38 +482,28 @@ stimuli:
           dest: csharp-apphost/MyApp.AppHost/Program.cs
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: csharp-apphost/aspire.config.json
+    constraints:
+      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
-        name: uses_aspire_stop
+        name: uses_vscode_stop_tool
         config:
-          prompt: Does the assistant's response recommend using 'aspire stop' (or an equivalent Aspire CLI
-            cleanup command) to stop the running application? Answer based on the intent, not exact
-            string matching.
+          scoring: binary
+          prompt: >
+            Does the assistant's response choose `aspire_apphost_stop` first
+            because the VS Code tool is available, rather than choosing a
+            terminal `aspire stop` command first?
       - type: prompt
         name: explains_cleanup
         config:
-          prompt: The assistant's response should recommend running 'aspire stop' and explain that leaving
-            Aspire running causes port conflicts, file locks, and resource waste.
-      - type: output-contains
+          scoring: binary
+          prompt: >
+            Does the assistant's response explain that leaving Aspire running
+            causes port conflicts, file locks, or unnecessary resource use?
+      - type: skill-invocation
+        name: invokes_orchestration
         config:
-          substring: aspire stop
-      - type: output-not-contains
-        config:
-          substring: dotnet run
-        name: never_dotnet_run
-      - type: output-not-contains
-        config:
-          substring: dotnet build
-      - type: output-not-contains
-        config:
-          substring: while true
-        name: never_curl_polling
-      - type: output-not-contains
-        config:
-          substring: sleep
-      - type: output-not-contains
-        config:
-          substring: curl.*health
+          required: [aspire-orchestration]
   - name: orch-detect-001
     prompt: Help me understand this project structure
     tags:
@@ -530,11 +589,15 @@ stimuli:
           substring: curl.*health
   - name: orch-filelock-001
     prompt: |-
-      I'm getting this error when trying to build:
+      Use the `aspire-orchestration` skill before answering. I'm in VS Code,
+      where `aspire_apphost_stop` is available as a deferred tool. I'm getting
+      this error when trying to build:
       error MSB3491: Could not write to output file 'bin/Debug/net10.0/MyService.dll'
       error CS2012: Cannot open 'obj/Debug/net10.0/MyService.dll' for writing
+      Do not perform the recovery; state the diagnosis and routing decision.
     tags:
       priority: p0
+      scenario: lifecycle-tool-filelock
       area:
         - error-recovery
         - issue-15801
@@ -546,52 +609,30 @@ stimuli:
           dest: csharp-apphost/MyApp.AppHost/Program.cs
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: csharp-apphost/aspire.config.json
+    constraints:
+      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
-        name: recognizes_aspire_locks
+        name: diagnoses_and_routes_filelock
         config:
-          prompt: The assistant's response should recognize that Aspire is holding file locks on the running
-            project and recommend either 'aspire stop' followed by rebuild, or 'aspire resource
-            <name> restart'.
+          scoring: binary
+          prompt: >
+            Does the assistant's response recognize that Aspire is holding file
+            locks and state that the exact AppHost should be stopped through
+            lifecycle routing before rebuilding, choosing
+            `aspire_apphost_stop` first because it is available?
       - type: prompt
         name: correct_recovery
         config:
-          prompt: Does the assistant's response recommend using 'aspire stop' (or an equivalent Aspire CLI
-            command to stop the running instance) to resolve file lock errors? Answer based on the
-            intent, not exact string matching.
-      - type: output-not-contains
+          scoring: binary
+          prompt: >
+            Does the assistant's response avoid treating an unqualified CLI
+            stop as the default and limit `aspire stop --non-interactive
+            --apphost <path>` to a result-matrix fallback?
+      - type: skill-invocation
+        name: invokes_orchestration
         config:
-          substring: unbuildable
-        name: not_unbuildable
-      - type: output-not-contains
-        config:
-          substring: cannot be built
-      - type: output-contains
-        config:
-          substring: aspire stop
-      - type: output-not-contains
-        config:
-          substring: unbuildable
-      - type: output-not-contains
-        config:
-          substring: cannot be built
-      - type: output-not-contains
-        config:
-          substring: dotnet run
-        name: never_dotnet_run
-      - type: output-not-contains
-        config:
-          substring: dotnet build
-      - type: output-not-contains
-        config:
-          substring: while true
-        name: never_curl_polling
-      - type: output-not-contains
-        config:
-          substring: sleep
-      - type: output-not-contains
-        config:
-          substring: curl.*health
+          required: [aspire-orchestration]
   - name: orch-include-hidden-001
     prompt: I added a YARP reverse proxy in front of my API in the AppHost, but `aspire ps` doesn't list
       it. Did the AppHost wire it wrong?
@@ -1050,10 +1091,14 @@ stimuli:
     # agent run `aspire start` — a foreground daemon that never returns (600s
     # session.idle timeout). Asking for the recommended approach keeps the agent
     # in explanatory mode; the --isolated guidance being tested is unchanged.
-    prompt: I'm working in a git worktree. What's the recommended way to start my Aspire app so it
-      doesn't collide with my main checkout's ports and local state?
+    prompt: >
+      Use the `aspire-orchestration` skill before answering. I'm working in a git
+      worktree. What's the recommended way to start
+      `csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj` so it doesn't collide
+      with my main checkout's ports and local state?
     tags:
       priority: p1
+      scenario: worktree-exact-path
       area: best-practice
     environment:
       files:
@@ -1063,36 +1108,26 @@ stimuli:
           dest: csharp-apphost/MyApp.AppHost/Program.cs
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: csharp-apphost/aspire.config.json
+    constraints:
+      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
         name: uses_isolated
         config:
-          prompt: Does the assistant's response recommend using the '--isolated' flag with 'aspire start' (or
-            an equivalent mechanism for port isolation) when running in a git worktree? Answer based
-            on the intent, not exact string matching.
+          scoring: binary
+          prompt: >
+            Does the assistant's response recommend
+            `aspire start --non-interactive --isolated --apphost <path>` scoped
+            to the exact supplied AppHost when running in a git worktree,
+            rather than using `dotnet run`?
       - type: output-contains
+        name: uses_exact_worktree_command
         config:
-          substring: --isolated
-      - type: output-contains
+          substring: aspire start --non-interactive --isolated --apphost csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
+      - type: skill-invocation
+        name: invokes_orchestration
         config:
-          substring: aspire start
-      - type: output-not-contains
-        config:
-          substring: dotnet run
-        name: never_dotnet_run
-      - type: output-not-contains
-        config:
-          substring: dotnet build
-      - type: output-not-contains
-        config:
-          substring: while true
-        name: never_curl_polling
-      - type: output-not-contains
-        config:
-          substring: sleep
-      - type: output-not-contains
-        config:
-          substring: curl.*health
+          required: [aspire-orchestration]
   # Routing stimuli below are phrased as explanatory questions ("How do I run
   # aspire start?") rather than bare imperatives ("Run aspire start"). The
   # skill-invocation graders only verify that the prompt routes to
