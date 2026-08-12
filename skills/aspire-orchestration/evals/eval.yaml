@@ -105,6 +105,49 @@ stimuli:
         name: invokes_orchestration
         config:
           required: [aspire-orchestration]
+  - name: orch-vscode-stop-external-multiroot-001
+    prompt: >
+      Use the `aspire-orchestration` skill before answering. I'm in a
+      multi-root VS Code workspace. I invoked `aspire_apphost_stop` for
+      `repo-a~1/MyApp.AppHost/MyApp.AppHost.csproj`, and it returned
+      `notEditorOwned` with controller `external`. The matching filesystem path
+      for the CLI is
+      `/workspaces/repo-a/MyApp.AppHost/MyApp.AppHost.csproj`. I still need
+      that exact AppHost stopped. What should happen next? Do not perform the
+      stop; state the routing decision.
+    tags:
+      priority: p1
+      area:
+        - agent-mode
+        - lifecycle-tools
+        - multi-root
+        - review-regression
+    environment:
+      files:
+        - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
+          dest: repo-a/MyApp.AppHost/MyApp.AppHost.csproj
+        - src: ../../../evals/csharp-apphost/aspire.config.json
+          dest: repo-a/aspire.config.json
+    constraints:
+      expect_skills: [aspire-orchestration]
+    graders:
+      - type: prompt
+        name: uses_exact_cli_fallback_for_multiroot_external_apphost
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response use `aspire stop --non-interactive
+            --apphost /workspaces/repo-a/MyApp.AppHost/MyApp.AppHost.csproj`
+            after the `notEditorOwned`/`external` result? Answer based on
+            intent.
+      - type: output-contains
+        name: scopes_multiroot_external_stop
+        config:
+          substring: aspire stop --non-interactive --apphost /workspaces/repo-a/MyApp.AppHost/MyApp.AppHost.csproj
+      - type: skill-invocation
+        name: invokes_orchestration
+        config:
+          required: [aspire-orchestration]
   - name: orch-vscode-stop-multiple-001
     prompt: >
       Use the `aspire-orchestration` skill before answering. I'm in VS Code and
@@ -138,30 +181,44 @@ stimuli:
   - name: orch-vscode-start-tool-001
     prompt: >
       Use the `aspire-orchestration` skill before answering. I'm in a normal
-      VS Code workspace (not a git worktree), `aspire_apphost_start` is available,
-      and I need to start `MyApp.AppHost/MyApp.AppHost.csproj` without attaching
-      a debugger. Which mechanism and mode should be used first? Do not perform
-      the start; state the routing decision.
+      multi-root VS Code workspace (not a git worktree). Aspire discovered the
+      AppHost selector `repo-a~1/MyApp.AppHost/MyApp.AppHost.csproj`,
+      `aspire_apphost_start` is available, and I need to start it without
+      attaching a debugger. Which mechanism, mode, and exact `appHostPath`
+      should be used first? Do not perform the start; state the routing
+      decision.
     tags:
       priority: p0
       area:
         - agent-mode
         - lifecycle-tools
+        - review-regression
+    environment:
+      files:
+        - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
+          dest: repo-a/MyApp.AppHost/MyApp.AppHost.csproj
+        - src: ../../../evals/csharp-apphost/aspire.config.json
+          dest: repo-a/aspire.config.json
     constraints:
       expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
-        name: uses_vscode_start_tool_in_run_mode
+        name: uses_vscode_start_tool_in_run_mode_with_exact_selector
         config:
           scoring: binary
           prompt: >
             Does the assistant's response choose `aspire_apphost_start` first
-            with mode `run`, rather than choosing a terminal `aspire start`
-            command? Answer based on routing intent.
+            with mode `run` and the exact AppHost selector
+            `repo-a~1/MyApp.AppHost/MyApp.AppHost.csproj`? Answer based on
+            intent.
       - type: output-contains
         name: names_vscode_start_tool
         config:
           substring: aspire_apphost_start
+      - type: output-contains
+        name: names_exact_vscode_start_selector
+        config:
+          substring: repo-a~1/MyApp.AppHost/MyApp.AppHost.csproj
       - type: skill-invocation
         name: invokes_orchestration
         config:
@@ -229,6 +286,46 @@ stimuli:
         name: invokes_orchestration
         config:
           required: [aspire-orchestration]
+  - name: orch-vscode-stop-tool-unavailable-001
+    prompt: >
+      Use the `aspire-orchestration` skill before answering. I'm in a normal
+      VS Code workspace (not a git worktree). The exact AppHost is
+      `MyApp.AppHost/MyApp.AppHost.csproj`, but the matching editor stop tool
+      is not exposed here. What should happen next? Do not perform the stop;
+      state the routing decision.
+    tags:
+      priority: p1
+      area:
+        - agent-mode
+        - lifecycle-tools
+        - tool-unavailable
+        - review-regression
+    environment:
+      files:
+        - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
+          dest: MyApp.AppHost/MyApp.AppHost.csproj
+        - src: ../../../evals/csharp-apphost/aspire.config.json
+          dest: aspire.config.json
+    constraints:
+      expect_skills: [aspire-orchestration]
+    graders:
+      - type: prompt
+        name: uses_exact_cli_stop_when_editor_tool_is_unavailable
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response use `aspire stop --non-interactive
+            --apphost MyApp.AppHost/MyApp.AppHost.csproj` because the matching
+            editor stop tool is unavailable in this normal workspace? Answer
+            based on intent.
+      - type: output-contains
+        name: scopes_unavailable_stop
+        config:
+          substring: aspire stop --non-interactive --apphost MyApp.AppHost/MyApp.AppHost.csproj
+      - type: skill-invocation
+        name: invokes_orchestration
+        config:
+          required: [aspire-orchestration]
   - name: orch-vscode-stop-ambiguous-session-001
     prompt: >
       Use the `aspire-orchestration` skill before answering. I invoked
@@ -248,9 +345,9 @@ stimuli:
         config:
           scoring: binary
           prompt: >
-            Does the assistant's response stop nothing, avoid a CLI fallback,
-            and require the user to disambiguate the editor sessions? Answer
-            based on intent.
+            Does the assistant's response require the user to disambiguate the
+            editor sessions before any further stop action? Answer based on
+            intent.
       - type: output-not-contains
         name: no_cli_stop_fallback
         config:
@@ -312,8 +409,7 @@ stimuli:
           prompt: >
             Does the assistant's response state that `aspire_apphost_stop`
             should be retried once and, if `alreadyStarting` repeats, report
-            that startup is still in progress without using, offering, or
-            speculating about a CLI stop fallback?
+            that startup is still in progress? Answer based on intent.
       - type: output-not-contains
         name: no_cli_stop_for_starting
         config:
@@ -343,8 +439,8 @@ stimuli:
           scoring: binary
           prompt: >
             Does the assistant's response report that the editor stop is
-            already in progress and take no further stop action, without using,
-            offering, or speculating about a CLI fallback?
+            already in progress and take no further stop action? Answer based
+            on intent.
       - type: output-not-contains
         name: no_cli_stop_for_stopping
         config:
