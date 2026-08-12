@@ -5,7 +5,6 @@ on:
     tags:
       - "v*"
       - "[0-9]*"
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -20,6 +19,20 @@ jobs:
       - name: Checkout
         # actions/checkout@v6.0.2
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          # Fetch full history so the pushed tag object is available locally for
+          # signature parsing by the tag-validate step below.
+          fetch-depth: 0
+
+      - name: Validate pushed tag
+        # lfreleng-actions/tag-validate-action@v1.1.2
+        uses: lfreleng-actions/tag-validate-action@b2865c287f732486e12dfdfb75aef0692b024608
+        with:
+          require_type: semver
+          require_signed: ssh
+          require_owner: IEvangelist,davidfowl,ellahathaway,DamianEdwards,JamesNK,spboyer,mitchdenny,joperezr
+          reject_development: true
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node
         # actions/setup-node@v6.4.0
