@@ -1,17 +1,18 @@
 ---
 name: aspire-orchestration
 description: >-
-  **WORKFLOW SKILL** — Manage Aspire AppHost lifecycle and recover from file locks,
-  port conflicts, and orphaned processes. WHEN: "start my Aspire app", "aspire start",
-  "aspire stop", "aspire wait", "restart the API service", "file lock error",
-  "MSB3491", "CS2012", "port already in use", "upgrade Aspire CLI", "aspire update --self",
-  "proxies missing in aspire ps", "--include-hidden", "aspire integration list",
-  "aspire integration search", "default watch", "hot reload". INVOKES: aspire CLI
-  (start, stop, wait, ps, resource, integration, add, init, doctor, update, restore).
-  DO NOT USE FOR: deploy / publish / destroy / pipeline steps (use aspire-deployment),
-  logs / traces / metrics / dashboard run (use aspire-monitoring), AppHost code edits or
-  resource wiring (use aspireify).
-  FOR SINGLE OPERATIONS: Run the aspire CLI command directly.
+  **WORKFLOW SKILL** — Manage Aspire lifecycle in VS Code or the CLI.
+  WHEN: "start or stop my Aspire app", "aspire_apphost_start",
+  "aspire_apphost_stop", "notEditorOwned", "ambiguousSession", "aspire start",
+  "aspire stop", "aspire wait", resource restart, file-lock errors (MSB3491 or
+  CS2012), port conflicts, git worktrees, "--isolated", "aspire update --self", "--include-hidden",
+  integration discovery, default watch, or hot reload.
+  INVOKES: VS Code lifecycle tools first when exposed; Aspire CLI for readiness,
+  inspection, resource operations, isolated worktree starts, and allowed fallbacks.
+  DO NOT USE FOR: deploy/publish/destroy (aspire-deployment), logs/traces/metrics
+  (aspire-monitoring), or AppHost code and resource wiring (aspireify).
+  FOR SINGLE OPERATIONS: Load the matching editor tool first, then obey the
+  exact-target, worktree-isolation, and stop-result rules below.
 license: MIT
 metadata:
   author: Microsoft
@@ -50,17 +51,80 @@ Activate when ANY signal is present:
 
 See [detection.md](references/detection.md) for detailed fingerprinting.
 
+## VS Code AppHost Lifecycle
+
+When the agent host exposes `aspire_apphost_start` or `aspire_apphost_stop`, use the
+matching tool before running `aspire start` or `aspire stop` in a terminal, except when
+starting from a git worktree requires `--isolated` and the tool cannot request it. If the
+tool is listed as deferred, load its contract with the host's tool-discovery mechanism
+first; do not treat an unloaded deferred tool as unavailable.
+
+Pass the exact selected `appHostPath` discovered by Aspire to editor lifecycle tools. In a
+multi-root workspace, that tool contract may require a selector such as
+`repo-a~1/MyApp.AppHost/MyApp.AppHost.csproj`.
+
+The CLI `--apphost` flag does not understand that selector namespace. Before any CLI
+start/stop fallback, resolve the selected AppHost to its actual filesystem project path
+and pass that path to `--apphost`; never copy a multi-root selector verbatim. That CLI
+project path may be workspace-relative (`MyApp.AppHost/MyApp.AppHost.csproj`) or
+absolute (`/workspaces/repo-a/MyApp.AppHost/MyApp.AppHost.csproj` or
+`C:\workspaces\repo-a\MyApp.AppHost\MyApp.AppHost.csproj`); use the current platform's
+native path syntax. If several AppHosts are discovered and the user's target is unclear,
+ask which one to use instead of guessing, invoking the tool for every AppHost, or
+issuing an unscoped CLI command.
+
+If the selected `appHostPath` is already a normal workspace-relative project path such
+as `MyApp.AppHost/MyApp.AppHost.csproj`, reuse it unchanged for CLI fallbacks; do not
+convert it to an absolute path just for the CLI.
+
+**An unclear target is a hard stop.** Ask one clarifying question and wait for the user to
+name an AppHost. Do not call a lifecycle tool or terminal command until the target is
+resolved, and do not offer commands that bypass this gate. Stop multiple AppHosts only
+when the user explicitly requests all of them.
+
+For starts, call `aspire_apphost_start` with mode `run` and the exact selected
+`appHostPath` unless the user explicitly asks to attach a debugger. In a git worktree, the
+editor tool does not currently request Aspire's isolated state. Resolve the selected
+AppHost to its filesystem path and use
+`aspire start --non-interactive --isolated --apphost <filesystem-path>` instead.
+
+`run` mode has no debugger attached, but it still has an editor-owned Aspire session that
+`aspire_apphost_stop` can stop. After a stop call, follow this result matrix exactly:
+
+| Tool result | Next action | CLI stop allowed? |
+|-------------|-------------|-------------------|
+| `stopped` or `notRunning` | Report the result; take no further stop action | No |
+| `alreadyStopping`, controller `editor` | Report that the editor stop is already in progress; take no further stop action | No |
+| `alreadyStarting`, controller `editor` | Retry `aspire_apphost_stop` once; if it repeats, report that startup is still in progress and take no further stop action | No |
+| `notEditorOwned`, controller `external` | If the user requested that exact AppHost be stopped, resolve it to its filesystem path and run `aspire stop --non-interactive --apphost <filesystem-path>` | Yes |
+| `failed`, controller `unknown` | Retry `aspire_apphost_stop` once; if the same result repeats, use the same exact-target CLI command above | Only after the retry |
+| `ambiguousSession` | Stop nothing and have the user disambiguate in the editor | **Never** |
+| Any other refusal or failure | Resolve or report that result; do not change mechanisms | No |
+
+The rows are mutually exclusive. Act only on the current result; do not offer a command
+from another row as a speculative future workaround. Re-evaluate only after a new tool
+result is returned.
+
+**`ambiguousSession` is a terminal safety refusal.** Do not run or offer a CLI fallback,
+and do not ask whether the user wants one. User confirmation cannot make an ambiguous
+editor session safe to terminate from the CLI.
+
+Use direct Aspire CLI lifecycle commands only when the matching editor tool is unavailable,
+for isolated worktree starts, or for a stop result explicitly marked as allowed above.
+When a CLI fallback is allowed, keep the target exact by resolving the selected AppHost to
+its filesystem path first.
+
 ## Safety Guardrails
 
 | Situation | ✅ ALWAYS Do | ❌ NEVER Do |
 |-----------|-------------|------------|
-| Start an Aspire app | `aspire start` | `dotnet run` on AppHost |
+| Start an Aspire app | `aspire_apphost_start` with mode `run` and the exact selected `appHostPath` when available; in a git worktree, use `aspire start --non-interactive --isolated --apphost <filesystem-path>` even when `aspire_apphost_start` is available | `dotnet run` on AppHost |
 | Wait for resource ready | `aspire wait <resource>` | `curl` / HTTP polling loops |
 | Code changed in a resource | Prefer resource commands, runtime watch/HMR, dashboard actions, or IDE-managed debugging | `dotnet build` against locked files |
-| Task complete | `aspire stop` | Leave processes running |
+| Task complete | `aspire_apphost_stop` with the exact selected `appHostPath` when available; follow its result matrix | Use an unapproved CLI fallback |
 | Check resource status | `aspire describe` / `aspire ps` | Manual process inspection |
-| Working in git worktree | `aspire start --isolated` | `aspire start` without isolation |
-| Running from AI agent | Add `--non-interactive` to all commands | Assuming interactive terminal |
+| Working in git worktree | `aspire start --non-interactive --isolated --apphost <filesystem-path>` | `aspire_apphost_start` when it cannot request isolation |
+| Running from AI agent | Load available lifecycle tools first; resolve CLI `--apphost` fallbacks to `<filesystem-path>`; add `--non-interactive` | Assuming interactive terminal |
 | Editing unfamiliar API | `aspire docs search <topic>` then `aspire docs api search <query>` for API reference | Guessing API shape |
 | C# AppHost API inspection | Use `dotnet-inspect` skill (if available) for local symbols | Guessing overloads or builder chains |
 | Adding custom dashboard/resource commands | `aspire docs search "custom resource commands"` first | Inventing `WithCommand` patterns without docs |
@@ -71,19 +135,19 @@ See [safety-guardrails.md](references/safety-guardrails.md) for detailed rules a
 ## Default Workflow
 
 1. Confirm workspace is Aspire — identify the AppHost
-2. `aspire start` (or `aspire start --isolated` in worktrees)
+2. If the workspace is a git worktree, resolve the selected AppHost to a filesystem project path and use `aspire start --non-interactive --isolated --apphost <filesystem-path>` even when `aspire_apphost_start` is available, because the editor tool cannot request isolation. Otherwise, start with `aspire_apphost_start` in mode `run` using the exact selected `appHostPath` when available; if that tool is unavailable, resolve the selected AppHost to a filesystem project path and use `aspire start --non-interactive --apphost <filesystem-path>`
 3. `aspire wait <resource>` before interacting with any resource
 4. `aspire describe` to inspect state, then work
-5. If AppHost code changed, rerun `aspire start`; if only one resource changed, prefer the resource's commands/watch/HMR/debug workflow
-6. `aspire stop` when cleanup is explicitly requested or needed to release locks/ports
+5. If AppHost code changed, restart through the same lifecycle routing; if only one resource changed, prefer the resource's commands/watch/HMR/debug workflow
+6. Stop with `aspire_apphost_stop` using the exact selected `appHostPath` when available; use `aspire stop --non-interactive --apphost <filesystem-path>` only for the documented fallback outcomes
 
 ## Quick Reference
 
 | Task | Command |
 |------|---------|
-| Start app (agents) | `aspire start` (background, preferred) |
+| Start app (agents) | Git worktree: `aspire start --non-interactive --isolated --apphost <filesystem-path>` even if `aspire_apphost_start` is available, because the tool cannot request isolation. Otherwise: `aspire_apphost_start` (mode `run`, exact selected `appHostPath`); CLI fallback when the tool is unavailable: `aspire start --non-interactive --apphost <filesystem-path>` |
 | Start app (human) | `aspire run` (foreground, dashboard) |
-| Stop app | `aspire stop` |
+| Stop app | `aspire_apphost_stop` (exact selected `appHostPath`); result-matrix fallback: `aspire stop --non-interactive --apphost <filesystem-path>` |
 | Wait for resource | `aspire wait <resource>` |
 | Check status | `aspire ps` or `aspire describe` |
 | Show hidden resources (proxies, helpers, migrations) | `aspire ps --include-hidden` / `aspire describe --include-hidden` |
@@ -106,41 +170,48 @@ See [safety-guardrails.md](references/safety-guardrails.md) for detailed rules a
 
 | Symptom | Cause | Action |
 |---------|-------|--------|
-| **File lock errors during build (`MSB3491`, `CS2012`)** | **Aspire is running and holds locks on `bin/`, `obj/`, and assemblies.** | **Run `aspire stop` first**, then rebuild or `aspire start`. Do NOT conclude the project has a permanent build failure. |
-| "Port already in use" | Previous instance running | `aspire stop`, then `aspire start` |
+| **File lock errors during build (`MSB3491`, `CS2012`)** | **Aspire is running and holds locks on `bin/`, `obj/`, and assemblies.** | **Stop the AppHost through the lifecycle routing above**, then rebuild or restart it. Do NOT conclude the project has a permanent build failure. |
+| "Port already in use" | Previous instance running | Stop, then restart through the lifecycle routing above |
 | Resource not found | App not started or name wrong | `aspire ps` to check |
-| Build errors in resource | Code error, not Aspire issue | Fix code, then use resource commands/watch/HMR/debug workflow or rerun `aspire start` if AppHost code changed |
+| Build errors in resource | Code error, not Aspire issue | Fix code, then use resource commands/watch/HMR/debug workflow or restart through the lifecycle routing if AppHost code changed |
 | Environment issues | Missing SDK or tools | `aspire doctor` to diagnose |
 | JSON parse failure from `aspire start` | Mixed human/JSON output ([#15843](https://github.com/microsoft/aspire/issues/15843)) | Strip non-JSON lines before parsing |
 | `aspire wait` rejects name | Use `displayName` not `name` ([#15842](https://github.com/microsoft/aspire/issues/15842)) | Use `displayName` from `aspire ps --format Json` |
 | `aspire ps` hangs | AppHost on breakpoint ([#15576](https://github.com/microsoft/aspire/issues/15576)) | Use timeout, check AppHost process |
 | `aspire agent init` fails | Non-interactive terminal ([#16264](https://github.com/microsoft/aspire/issues/16264)) | Run from standard terminal |
-| Docker daemon unavailable | Container-backed resources fail to start | Start Docker Desktop, then `aspire start` |
-| Multiple AppHosts detected | Wrong AppHost targeted | Use `--apphost <path>` to specify explicitly |
+| Docker daemon unavailable | Container-backed resources fail to start | Start Docker Desktop, then restart through the lifecycle routing above |
+| Multiple AppHosts detected | Wrong AppHost targeted | Use `--apphost <filesystem-path>` to specify explicitly |
 
-### 🔒 File-Lock Recovery (MSB3491 / CS2012) — Always `aspire stop` First
+### 🔒 File-Lock Recovery (MSB3491 / CS2012) — Always Stop the AppHost First
 
 When a build fails with `error MSB3491: Could not write to output file ...` or
 `error CS2012: Cannot open ... for writing`, the project itself is healthy —
 **Aspire is running and holding file locks** on the resource's output assemblies.
 The recovery is always the same:
 
+Resolve the exact AppHost and call `aspire_apphost_stop` first when available. If a CLI
+fallback is permitted, resolve the selected AppHost to its filesystem path before using
+the commands below; `ambiguousSession` and all other no-fallback results end the recovery
+attempt.
+
 ```bash
-# ✅ Correct recovery sequence
-aspire stop              # release the locks
+# ✅ CLI stop only after the result matrix permits fallback
+aspire stop --non-interactive --apphost <filesystem-path>  # release the locks
 # ... then either rebuild / restart one resource if the resource exposes commands ...
 aspire resource <name> rebuild   # example: C# project resource with rebuild command
-# ... or restart the whole AppHost ...
-aspire start             # if AppHost code changed or Aspire was already stopped
+# ... or restart the whole AppHost through aspire_apphost_start. If unavailable:
+aspire start --non-interactive --apphost <filesystem-path>
+# In a git worktree:
+aspire start --non-interactive --isolated --apphost <filesystem-path>
 ```
 
 | ❌ NEVER do | ✅ ALWAYS do |
 |------------|-------------|
-| Tell the user the project has a permanent build failure | Recognize the lock as Aspire holding outputs and run `aspire stop` |
-| `dotnet build` again with locks held | `aspire stop` first, then `dotnet build` (or prefer resource commands/watch/HMR/debug workflow) |
-| Delete `bin/` / `obj/` to "fix" the lock | `aspire stop` — deletion may succeed but the next build relocks |
-| `pkill dotnet` or `kill <PID>` to free locks | `aspire stop` — clean shutdown via the CLI, no orphans |
-| Tell the user to "reboot" or "restart your machine" | `aspire stop` — single command, instant fix |
+| Tell the user the project has a permanent build failure | Recognize the lock as Aspire holding outputs and stop the AppHost through lifecycle routing |
+| `dotnet build` again with locks held | Stop the AppHost first, then `dotnet build` (or prefer resource commands/watch/HMR/debug workflow) |
+| Delete `bin/` / `obj/` to "fix" the lock | Stop the AppHost; deletion may succeed but the next build relocks |
+| `pkill dotnet` or `kill <PID>` to free locks | Use the editor stop tool or exact-target CLI fallback for clean shutdown |
+| Tell the user to "reboot" or "restart your machine" | Stop the AppHost through lifecycle routing |
 
 The same rule applies to any "file in use", "cannot access the file", or
 "another process is using" error during a build of an Aspire-managed resource.
