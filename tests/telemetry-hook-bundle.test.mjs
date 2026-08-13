@@ -17,6 +17,22 @@ const artifactsParentRoot = join(repoRoot, ".test-artifacts");
 const artifactsRoot = join(artifactsParentRoot, "telemetry-hook-bundle");
 const sourceCommit = resolveSourceCommit(undefined, repoRoot);
 const hookFileNames = ["track-telemetry.sh", "track-telemetry.ps1"];
+const scratchGitEnv = { ...process.env };
+
+for (const variableName of [
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_INDEX_FILE",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_COMMON_DIR",
+  "GIT_CEILING_DIRECTORIES"
+]) {
+  delete scratchGitEnv[variableName];
+}
+
+scratchGitEnv.GIT_CONFIG_NOSYSTEM = "1";
+scratchGitEnv.GIT_CONFIG_GLOBAL = process.platform === "win32" ? "NUL" : "/dev/null";
 
 after(() => {
   rmSync(artifactsRoot, { recursive: true, force: true });
@@ -27,7 +43,7 @@ after(() => {
     }
   }
   catch (error) {
-    if (error?.code !== "ENOENT" && error?.code !== "ENOTEMPTY") {
+    if (error?.code !== "ENOENT" && error?.code !== "ENOTEMPTY" && error?.code !== "EBUSY") {
       throw error;
     }
   }
@@ -128,9 +144,14 @@ test("builder rejects provenance whose committed hook contents differ from the p
     cwd: repoRoot,
     encoding: "utf8"
   });
+  const rootCommitSha = rootCommit.stdout
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .find(line => line.length > 0);
 
   try {
     assert.equal(rootCommit.status, 0, rootCommit.stderr);
+    assert.ok(rootCommitSha, "Expected git rev-list to return at least one root commit");
 
     const result = spawnSync(
       process.execPath,
@@ -139,7 +160,7 @@ test("builder rejects provenance whose committed hook contents differ from the p
         "--bundle", "skills",
         "--version", "9.9.9",
         "--out", outputRoot,
-        "--source-commit", rootCommit.stdout.trim()
+        "--source-commit", rootCommitSha
       ],
       { cwd: repoRoot, encoding: "utf8" }
     );
@@ -156,9 +177,11 @@ test("publishTelemetryHooks rejects provenance when the commit has no hook paths
   const scratchRoot = createArtifactDir("telemetry-hook-missing-commit-paths-");
   const sourceRoot = join(scratchRoot, "hooks", "scripts");
   const targetRoot = join(scratchRoot, "published", "hooks", "scripts");
+  const emptyHooksRoot = join(scratchRoot, "empty-hooks");
 
   try {
     mkdirSync(sourceRoot, { recursive: true });
+    mkdirSync(emptyHooksRoot);
 
     for (const fileName of hookFileNames) {
       writeFileSync(
@@ -167,31 +190,38 @@ test("publishTelemetryHooks rejects provenance when the commit has no hook paths
       );
     }
 
-    let git = spawnSync("git", ["init"], {
+    let git = spawnSync("git", ["-c", "init.defaultBranch=main", "init"], {
       cwd: scratchRoot,
-      encoding: "utf8"
+      encoding: "utf8",
+      env: scratchGitEnv
     });
     assert.equal(git.status, 0, git.stderr);
+    assert.equal(statSync(join(scratchRoot, ".git")).isDirectory(), true);
 
     git = spawnSync(
       "git",
       [
         "-c", "user.name=telemetry hook test",
         "-c", "user.email=telemetry-hook-test@example.com",
+        "-c", "commit.gpgsign=false",
+        "-c", `core.hooksPath=${emptyHooksRoot}`,
         "commit",
         "--allow-empty",
+        "--no-verify",
         "-m", "empty"
       ],
       {
         cwd: scratchRoot,
-        encoding: "utf8"
+        encoding: "utf8",
+        env: scratchGitEnv
       }
     );
     assert.equal(git.status, 0, git.stderr);
 
     const commit = spawnSync("git", ["rev-parse", "HEAD^{commit}"], {
       cwd: scratchRoot,
-      encoding: "utf8"
+      encoding: "utf8",
+      env: scratchGitEnv
     });
     assert.equal(commit.status, 0, commit.stderr);
 
@@ -202,11 +232,16 @@ test("publishTelemetryHooks rejects provenance when the commit has no hook paths
         commitSha: commit.stdout.trim(),
         repoRoot: scratchRoot
       }),
-      /^Error: Could not read hook 'hooks\/scripts\/track-telemetry\.sh' from commit '[0-9a-f]{40}': .+/
+      /^Error: Could not read hook 'hooks\/scripts\/track-telemetry\.(?:sh|ps1)' from commit '[0-9a-f]{40}': .+/
     );
   }
   finally {
-    rmSync(scratchRoot, { recursive: true, force: true });
+    rmSync(scratchRoot, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 50
+    });
   }
 });
 
