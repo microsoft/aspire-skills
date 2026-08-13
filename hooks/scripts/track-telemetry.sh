@@ -9,7 +9,7 @@
 #
 # Hook contract: a PostToolUse hook MUST always print a single JSON object to stdout and exit
 # 0, otherwise it can break the agent session. A single EXIT trap guarantees that response is
-# emitted exactly once, however the script exits.
+# emitted exactly once, however the script leaves.
 #
 # === Client format reference ===
 #
