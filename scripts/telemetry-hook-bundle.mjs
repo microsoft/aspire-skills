@@ -22,6 +22,43 @@ export function normalizeHookBytes(bytes) {
   return Buffer.from(text.replace(/\r\n?/g, "\n"), "utf8");
 }
 
+function createReadOnlyGitEnvironment() {
+  const environment = { ...process.env };
+
+  for (const variableName of [
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_CEILING_DIRECTORIES",
+    "GIT_NAMESPACE",
+    "GIT_GRAFT_FILE",
+    "GIT_SHALLOW_FILE",
+    "GIT_REPLACE_REF_BASE",
+    "GIT_DISCOVERY_ACROSS_FILESYSTEM",
+    "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_COUNT",
+    "GIT_CONFIG_SYSTEM",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_TEMPLATE_DIR"
+  ]) {
+    delete environment[variableName];
+  }
+
+  for (const variableName of Object.keys(environment)) {
+    if (/^GIT_CONFIG_(?:KEY|VALUE)_\d+$/.test(variableName)) {
+      delete environment[variableName];
+    }
+  }
+
+  environment.GIT_CONFIG_NOSYSTEM = "1";
+  environment.GIT_CONFIG_GLOBAL = process.platform === "win32" ? "NUL" : "/dev/null";
+  environment.GIT_ATTR_NOSYSTEM = "1";
+  return environment;
+}
+
 export function resolveSourceCommit(explicitCommit, repoRoot) {
   const commit = explicitCommit ?? readGitCommit(repoRoot);
   if (!/^[0-9a-f]{40}$/i.test(commit)) {
@@ -58,7 +95,8 @@ export function publishTelemetryHooks({ sourceRoot, targetRoot, commitSha, repoR
 
 function readCommittedHookBytes(repoRoot, commitSha, gitPath) {
   const result = spawnSync("git", ["show", `${commitSha}:${gitPath}`], {
-    cwd: repoRoot
+    cwd: repoRoot,
+    env: createReadOnlyGitEnvironment()
   });
 
   if (result.error) {
@@ -78,7 +116,8 @@ function readCommittedHookBytes(repoRoot, commitSha, gitPath) {
 function readGitCommit(repoRoot) {
   const result = spawnSync("git", ["rev-parse", "HEAD^{commit}"], {
     cwd: repoRoot,
-    encoding: "utf8"
+    encoding: "utf8",
+    env: createReadOnlyGitEnvironment()
   });
 
   if (result.error) {
