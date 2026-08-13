@@ -1,14 +1,15 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { publishTelemetryHooks, resolveSourceCommit } from "./telemetry-hook-bundle.mjs";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const args = parseArgs(process.argv.slice(2));
 const packageJson = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
 const version = normalizeVersion(args.version ?? packageJson.version);
-const outputRoot = join(repoRoot, args.out ?? "dist");
+const outputRoot = resolve(repoRoot, args.out ?? "dist");
 const skillsBundleName = `aspire-skills-v${version}`;
 const skillsBundleRoot = join(outputRoot, skillsBundleName);
 const skillsArchivePath = join(outputRoot, `${skillsBundleName}.tgz`);
@@ -17,6 +18,7 @@ const extensionsBundleRoot = join(outputRoot, extensionsBundleName);
 const extensionsArchivePath = join(outputRoot, `${extensionsBundleName}.tgz`);
 const skillsRoot = join(repoRoot, "skills");
 const extensionsRoot = join(repoRoot, "extensions");
+const hooksRoot = join(repoRoot, "hooks", "scripts");
 const bundleSelection = parseBundleSelection(args.bundle);
 const shouldBuildSkills = bundleSelection === undefined || bundleSelection === "skills";
 const shouldBuildExtensions = bundleSelection === undefined || bundleSelection === "extensions";
@@ -32,9 +34,15 @@ if (shouldBuildSkills) {
   mkdirSync(skillsBundleRoot, { recursive: true });
 
   const skills = listSkillDirectories(skillsRoot).map(skillDirectory => buildSkill(skillDirectory));
+  const hooks = publishTelemetryHooks({
+    sourceRoot: hooksRoot,
+    targetRoot: join(skillsBundleRoot, "hooks", "scripts"),
+    commitSha: resolveSourceCommit(args["source-commit"], repoRoot)
+  });
   const manifest = {
     version,
     supports,
+    hooks,
     skills
   };
 
