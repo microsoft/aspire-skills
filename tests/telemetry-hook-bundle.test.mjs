@@ -3,14 +3,29 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { test } from "node:test";
+import { after, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { normalizeHookBytes, resolveSourceCommit } from "../scripts/telemetry-hook-bundle.mjs";
+import {
+  normalizeHookBytes,
+  resolveSourceCommit,
+  telemetryHookFileModes
+} from "../scripts/telemetry-hook-bundle.mjs";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const artifactsRoot = join(repoRoot, ".test-artifacts");
-const sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+const sourceCommit = resolveSourceCommit(undefined, repoRoot);
 const hookFileNames = ["track-telemetry.sh", "track-telemetry.ps1"];
+
+after(() => {
+  rmSync(artifactsRoot, { recursive: true, force: true });
+});
+
+test("publishes telemetry hooks with deterministic file modes", () => {
+  assert.deepEqual(telemetryHookFileModes, {
+    "track-telemetry.sh": 0o755,
+    "track-telemetry.ps1": 0o644
+  });
+});
 
 test("normalizes BOM, CRLF, and CR before hashing", () => {
   const canonical = Buffer.from("#!/bin/bash\necho aspire\n", "utf8");
@@ -71,11 +86,11 @@ test("skills bundle publishes hook bytes and compatible provenance", () => {
       assert.deepEqual(publishedBytes, sourceBytes);
       assert.equal(manifest.hooks.files[fileName], expectedHash);
       assert.match(manifest.hooks.files[fileName], /^[0-9a-f]{128}$/);
+      assert.equal(
+        statSync(join(bundleRoot, "hooks", "scripts", fileName)).mode & 0o777,
+        telemetryHookFileModes[fileName]
+      );
     }
-
-    const sourceMode = statSync(join(repoRoot, "hooks", "scripts", "track-telemetry.sh")).mode & 0o777;
-    const publishedMode = statSync(join(bundleRoot, "hooks", "scripts", "track-telemetry.sh")).mode & 0o777;
-    assert.equal(publishedMode, sourceMode);
 
     const archive = join(outputRoot, "aspire-skills-v9.9.9.tgz");
     const listed = spawnSync("tar", ["-tvzf", archive], { encoding: "utf8" });
@@ -83,6 +98,66 @@ test("skills bundle publishes hook bytes and compatible provenance", () => {
     assert.match(listed.stdout, /aspire-skills-v9\.9\.9\/hooks\/scripts\/track-telemetry\.sh/);
     assert.match(listed.stdout, /aspire-skills-v9\.9\.9\/hooks\/scripts\/track-telemetry\.ps1/);
     assert.match(listed.stdout, /-rwxr-xr-x\s+.*aspire-skills-v9\.9\.9\/hooks\/scripts\/track-telemetry\.sh/);
+    assert.match(listed.stdout, /-rw-r--r--\s+.*aspire-skills-v9\.9\.9\/hooks\/scripts\/track-telemetry\.ps1/);
+  }
+  finally {
+    rmSync(outputRoot, { recursive: true, force: true });
+  }
+});
+
+test("builder rejects provenance whose commit does not contain the published hooks", () => {
+  mkdirSync(artifactsRoot, { recursive: true });
+  const outputRoot = mkdtempSync(join(artifactsRoot, "aspire-skills-bundle-root-commit-"));
+  const rootCommit = spawnSync("git", ["rev-list", "--max-parents=0", "HEAD"], {
+    cwd: repoRoot,
+    encoding: "utf8"
+  });
+
+  try {
+    assert.equal(rootCommit.status, 0, rootCommit.stderr);
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        join(repoRoot, "scripts", "build-aspire-bundles.mjs"),
+        "--bundle", "skills",
+        "--version", "9.9.9",
+        "--out", outputRoot,
+        "--source-commit", rootCommit.stdout.trim()
+      ],
+      { cwd: repoRoot, encoding: "utf8" }
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /Could not read hook '.+' from commit '[0-9a-f]{40}'|does not match commit/
+    );
+  }
+  finally {
+    rmSync(outputRoot, { recursive: true, force: true });
+  }
+});
+
+test("extensions-only bundle ignores invalid hook provenance", () => {
+  mkdirSync(artifactsRoot, { recursive: true });
+  const outputRoot = mkdtempSync(join(artifactsRoot, "aspire-extensions-bundle-invalid-"));
+
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [
+        join(repoRoot, "scripts", "build-aspire-bundles.mjs"),
+        "--bundle", "extensions",
+        "--version", "9.9.9",
+        "--out", outputRoot,
+        "--source-commit", "not-a-commit"
+      ],
+      { cwd: repoRoot, encoding: "utf8" }
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(statSync(join(outputRoot, "aspire-extensions-v9.9.9.tgz")).isFile(), true);
   }
   finally {
     rmSync(outputRoot, { recursive: true, force: true });

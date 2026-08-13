@@ -37,7 +37,8 @@ if (shouldBuildSkills) {
   const hooks = publishTelemetryHooks({
     sourceRoot: hooksRoot,
     targetRoot: join(skillsBundleRoot, "hooks", "scripts"),
-    commitSha: resolveSourceCommit(args["source-commit"], repoRoot)
+    commitSha: resolveSourceCommit(args["source-commit"], repoRoot),
+    repoRoot
   });
   const manifest = {
     version,
