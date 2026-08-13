@@ -43,12 +43,21 @@ jobs:
             exit 1
           fi
 
+          source_commit="$(git rev-parse 'HEAD^{commit}')"
+          echo "source_commit=$source_commit" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "skills_asset=dist/aspire-skills-v$version.tgz" >> "$GITHUB_OUTPUT"
           echo "extensions_asset=dist/aspire-extensions-v$version.tgz" >> "$GITHUB_OUTPUT"
 
+      - name: Test bundles
+        run: npm test
+
       - name: Build bundles
-        run: npm run bundle -- --version "${{ steps.version.outputs.version }}" --out dist
+        run: >-
+          npm run bundle --
+          --version "${{ steps.version.outputs.version }}"
+          --out dist
+          --source-commit "${{ steps.version.outputs.source_commit }}"
 
       - name: Attest bundles
         # actions/attest-build-provenance@v3

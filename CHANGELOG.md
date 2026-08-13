@@ -46,6 +46,12 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Added a release bundle generator and `publish.yml` workflow for the verified
   `aspire-skills-v<version>.tgz` and `aspire-extensions-v<version>.tgz` GitHub
   release assets consumed by `aspire agent init`.
+- Added canonical Bash and PowerShell Aspire agent telemetry hooks that always
+  return exactly one `{"continue":true}` PostToolUse response, including malformed
+  input and unexpected failure paths.
+- Added generated hook commit provenance and LF-normalized SHA-512 checksums to
+  the skills bundle manifest, with release tests that keep the metadata and
+  published hook bytes in sync.
 - Restored upstream migration reference content for AppHost wiring, Docker Compose,
   full-solution AppHosts, JavaScript workspaces, OpenTelemetry, Playwright handoff,
   agent workflows, and detailed monitoring/search/display guidance.
