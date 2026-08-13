@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { chmodSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { dirname, join, relative, resolve, sep } from "node:path";
 
 export const telemetryHookFileNames = [
   "track-telemetry.sh",
@@ -22,7 +22,7 @@ export function normalizeHookBytes(bytes) {
   return Buffer.from(text.replace(/\r\n?/g, "\n"), "utf8");
 }
 
-function createReadOnlyGitEnvironment() {
+function createReadOnlyGitEnvironment(repoRoot) {
   const environment = { ...process.env };
 
   for (const variableName of [
@@ -42,7 +42,10 @@ function createReadOnlyGitEnvironment() {
     "GIT_CONFIG_COUNT",
     "GIT_CONFIG_SYSTEM",
     "GIT_CONFIG_GLOBAL",
-    "GIT_TEMPLATE_DIR"
+    "GIT_TEMPLATE_DIR",
+    "GIT_CONFIG_NOSYSTEM",
+    "GIT_ATTR_NOSYSTEM",
+    "GIT_NO_REPLACE_OBJECTS"
   ]) {
     delete environment[variableName];
   }
@@ -53,14 +56,18 @@ function createReadOnlyGitEnvironment() {
     }
   }
 
-  environment.GIT_CONFIG_NOSYSTEM = "1";
-  environment.GIT_CONFIG_GLOBAL = process.platform === "win32" ? "NUL" : "/dev/null";
-  environment.GIT_ATTR_NOSYSTEM = "1";
+  environment.GIT_CEILING_DIRECTORIES = dirname(resolve(repoRoot));
+  environment.GIT_NO_REPLACE_OBJECTS = "1";
   return environment;
 }
 
 export function resolveSourceCommit(explicitCommit, repoRoot) {
-  const commit = explicitCommit ?? readGitCommit(repoRoot);
+  let commit = explicitCommit;
+  if (commit === undefined || commit === null) {
+    assertGitRepositoryRoot(repoRoot);
+    commit = readGitCommit(repoRoot);
+  }
+
   if (!/^[0-9a-f]{40}$/i.test(commit)) {
     throw new Error(`Hook provenance must be a 40-character Git commit SHA; got '${commit}'.`);
   }
@@ -69,6 +76,7 @@ export function resolveSourceCommit(explicitCommit, repoRoot) {
 }
 
 export function publishTelemetryHooks({ sourceRoot, targetRoot, commitSha, repoRoot }) {
+  assertGitRepositoryRoot(repoRoot);
   mkdirSync(targetRoot, { recursive: true });
   const files = {};
 
@@ -93,10 +101,47 @@ export function publishTelemetryHooks({ sourceRoot, targetRoot, commitSha, repoR
   };
 }
 
+function assertGitRepositoryRoot(repoRoot) {
+  const requestedRoot = resolve(repoRoot);
+  const result = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+    cwd: requestedRoot,
+    encoding: "utf8",
+    env: createReadOnlyGitEnvironment(requestedRoot)
+  });
+
+  if (result.error) {
+    throw new Error(
+      `Could not resolve a Git repository at requested root '${requestedRoot}': ${result.error.message}`
+    );
+  }
+
+  if (result.status !== 0) {
+    const detail = (result.stderr ?? "").trim();
+    throw new Error(
+      `Could not resolve a Git repository at requested root '${requestedRoot}'${detail ? `: ${detail}` : "."}`
+    );
+  }
+
+  const canonicalRequestedRoot = realpathSync(requestedRoot);
+  const canonicalGitRoot = realpathSync(resolve(result.stdout.trim()));
+  const comparableRequestedRoot = process.platform === "win32"
+    ? canonicalRequestedRoot.toLowerCase()
+    : canonicalRequestedRoot;
+  const comparableGitRoot = process.platform === "win32"
+    ? canonicalGitRoot.toLowerCase()
+    : canonicalGitRoot;
+
+  if (comparableRequestedRoot !== comparableGitRoot) {
+    throw new Error(
+      `Requested root '${canonicalRequestedRoot}' is not the Git repository root '${canonicalGitRoot}'.`
+    );
+  }
+}
+
 function readCommittedHookBytes(repoRoot, commitSha, gitPath) {
   const result = spawnSync("git", ["show", `${commitSha}:${gitPath}`], {
     cwd: repoRoot,
-    env: createReadOnlyGitEnvironment()
+    env: createReadOnlyGitEnvironment(repoRoot)
   });
 
   if (result.error) {
@@ -117,7 +162,7 @@ function readGitCommit(repoRoot) {
   const result = spawnSync("git", ["rev-parse", "HEAD^{commit}"], {
     cwd: repoRoot,
     encoding: "utf8",
-    env: createReadOnlyGitEnvironment()
+    env: createReadOnlyGitEnvironment(repoRoot)
   });
 
   if (result.error) {

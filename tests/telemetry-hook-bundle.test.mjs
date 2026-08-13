@@ -64,7 +64,10 @@ function createSanitizedGitEnvironment() {
     "GIT_CONFIG_COUNT",
     "GIT_CONFIG_SYSTEM",
     "GIT_CONFIG_GLOBAL",
-    "GIT_TEMPLATE_DIR"
+    "GIT_TEMPLATE_DIR",
+    "GIT_CONFIG_NOSYSTEM",
+    "GIT_ATTR_NOSYSTEM",
+    "GIT_NO_REPLACE_OBJECTS"
   ]) {
     delete environment[variableName];
   }
@@ -75,9 +78,6 @@ function createSanitizedGitEnvironment() {
     }
   }
 
-  environment.GIT_CONFIG_NOSYSTEM = "1";
-  environment.GIT_CONFIG_GLOBAL = process.platform === "win32" ? "NUL" : "/dev/null";
-  environment.GIT_ATTR_NOSYSTEM = "1";
   return environment;
 }
 
@@ -237,6 +237,286 @@ test("skills bundle ignores ambient Git repository variables", () => {
   finally {
     rmSync(outputRoot, { recursive: true, force: true });
     rmSync(scratchRoot, { recursive: true, force: true });
+  }
+});
+
+const hostileGitEnvironmentCases = [
+  {
+    name: "GIT_NAMESPACE",
+    createEnvironment: () => ({
+      GIT_NAMESPACE: "forged-namespace"
+    })
+  },
+  {
+    name: "GIT_OBJECT_DIRECTORY",
+    createEnvironment: scratchRoot => ({
+      GIT_OBJECT_DIRECTORY: join(scratchRoot, ".git", "objects")
+    })
+  },
+  {
+    name: "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    createEnvironment: scratchRoot => ({
+      GIT_ALTERNATE_OBJECT_DIRECTORIES: join(scratchRoot, ".git", "objects")
+    })
+  },
+  {
+    name: "GIT_COMMON_DIR",
+    createEnvironment: scratchRoot => ({
+      GIT_COMMON_DIR: join(scratchRoot, ".git")
+    })
+  },
+  {
+    name: "GIT_CEILING_DIRECTORIES",
+    createEnvironment: scratchRoot => ({
+      GIT_CEILING_DIRECTORIES: scratchRoot
+    })
+  },
+  {
+    name: "GIT_CONFIG_PARAMETERS",
+    createEnvironment: () => ({
+      GIT_CONFIG_PARAMETERS: "invalid"
+    })
+  },
+  {
+    name: "GIT_CONFIG_COUNT with KEY_0/VALUE_0",
+    createEnvironment: () => ({
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: "core.repositoryformatversion",
+      GIT_CONFIG_VALUE_0: "999"
+    })
+  }
+];
+
+for (const { name, createEnvironment } of hostileGitEnvironmentCases) {
+  test(`skills bundle ignores ambient ${name}`, () => {
+    const outputRoot = createArtifactDir(`aspire-skills-bundle-${name.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-")}-`);
+    const scratchRoot = createArtifactDir(`unrelated-${name.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-")}-`);
+    const emptyGitRoot = join(scratchRoot, "empty-git-environment");
+
+    try {
+      mkdirSync(emptyGitRoot);
+      const scratchGitEnv = createScratchGitEnvironment(emptyGitRoot);
+      initializeScratchRepository(scratchRoot, scratchGitEnv);
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          join(repoRoot, "scripts", "build-aspire-bundles.mjs"),
+          "--bundle", "skills",
+          "--version", "9.9.9",
+          "--out", outputRoot,
+          "--source-commit", sourceCommit
+        ],
+        {
+          cwd: repoRoot,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            ...createEnvironment(scratchRoot)
+          }
+        }
+      );
+
+      assert.equal(result.status, 0, result.stderr);
+
+      const manifest = JSON.parse(
+        readFileSync(join(outputRoot, "aspire-skills-v9.9.9", "skill-manifest.json"), "utf8")
+      );
+      assert.equal(manifest.hooks.commitSha, sourceCommit);
+    }
+    finally {
+      rmSync(outputRoot, { recursive: true, force: true });
+      rmSync(scratchRoot, { recursive: true, force: true });
+    }
+  });
+}
+
+test("publishTelemetryHooks ignores replace refs when validating provenance", () => {
+  const scratchRoot = createArtifactDir("telemetry-hook-replace-ref-");
+  const sourceRoot = join(scratchRoot, "hooks", "scripts");
+  const targetRoot = join(scratchRoot, "published", "hooks", "scripts");
+  const emptyGitRoot = join(scratchRoot, "empty-git-environment");
+
+  try {
+    mkdirSync(sourceRoot, { recursive: true });
+    mkdirSync(emptyGitRoot);
+    const scratchGitEnv = createScratchGitEnvironment(emptyGitRoot);
+
+    for (const fileName of hookFileNames) {
+      writeFileSync(
+        join(sourceRoot, fileName),
+        readFileSync(join(repoRoot, "hooks", "scripts", fileName))
+      );
+    }
+
+    initializeScratchRepository(scratchRoot, scratchGitEnv);
+
+    let git = spawnSync("git", ["add", "hooks/scripts"], {
+      cwd: scratchRoot,
+      encoding: "utf8",
+      env: scratchGitEnv
+    });
+    assert.equal(git.status, 0, git.stderr);
+
+    git = spawnSync(
+      "git",
+      [
+        "-c", "commit.gpgsign=false",
+        "-c", `core.hooksPath=${emptyGitRoot}`,
+        "commit",
+        "--no-verify",
+        "-m", "canonical hooks"
+      ],
+      {
+        cwd: scratchRoot,
+        encoding: "utf8",
+        env: scratchGitEnv
+      }
+    );
+    assert.equal(git.status, 0, git.stderr);
+
+    git = spawnSync("git", ["rev-parse", "HEAD^{commit}"], {
+      cwd: scratchRoot,
+      encoding: "utf8",
+      env: scratchGitEnv
+    });
+    assert.equal(git.status, 0, git.stderr);
+    const realCommit = git.stdout.trim();
+
+    writeFileSync(
+      join(sourceRoot, "track-telemetry.sh"),
+      `${readFileSync(join(sourceRoot, "track-telemetry.sh"), "utf8")}\n# forged replacement\n`
+    );
+
+    git = spawnSync("git", ["add", "hooks/scripts/track-telemetry.sh"], {
+      cwd: scratchRoot,
+      encoding: "utf8",
+      env: scratchGitEnv
+    });
+    assert.equal(git.status, 0, git.stderr);
+
+    git = spawnSync(
+      "git",
+      [
+        "-c", "commit.gpgsign=false",
+        "-c", `core.hooksPath=${emptyGitRoot}`,
+        "commit",
+        "--no-verify",
+        "-m", "forged hooks"
+      ],
+      {
+        cwd: scratchRoot,
+        encoding: "utf8",
+        env: scratchGitEnv
+      }
+    );
+    assert.equal(git.status, 0, git.stderr);
+
+    git = spawnSync("git", ["rev-parse", "HEAD^{commit}"], {
+      cwd: scratchRoot,
+      encoding: "utf8",
+      env: scratchGitEnv
+    });
+    assert.equal(git.status, 0, git.stderr);
+    const forgedCommit = git.stdout.trim();
+
+    git = spawnSync("git", ["replace", realCommit, forgedCommit], {
+      cwd: scratchRoot,
+      encoding: "utf8",
+      env: scratchGitEnv
+    });
+    assert.equal(git.status, 0, git.stderr);
+
+    assert.throws(
+      () => publishTelemetryHooks({
+        sourceRoot,
+        targetRoot,
+        commitSha: realCommit,
+        repoRoot: scratchRoot
+      }),
+      /does not match commit/
+    );
+  }
+  finally {
+    rmSync(scratchRoot, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 50
+    });
+  }
+});
+
+test("publishTelemetryHooks rejects a nested non-repository repo root", () => {
+  const scratchRoot = createArtifactDir("telemetry-hook-ancestor-repository-");
+  const parentSourceRoot = join(scratchRoot, "hooks", "scripts");
+  const nestedRoot = join(scratchRoot, "nested", "non-repository");
+  const sourceRoot = join(nestedRoot, "hooks", "scripts");
+  const targetRoot = join(nestedRoot, "published", "hooks", "scripts");
+  const emptyGitRoot = join(scratchRoot, "empty-git-environment");
+
+  try {
+    mkdirSync(parentSourceRoot, { recursive: true });
+    mkdirSync(sourceRoot, { recursive: true });
+    mkdirSync(emptyGitRoot);
+    const scratchGitEnv = createScratchGitEnvironment(emptyGitRoot);
+
+    for (const fileName of hookFileNames) {
+      const canonicalBytes = readFileSync(join(repoRoot, "hooks", "scripts", fileName));
+      writeFileSync(join(parentSourceRoot, fileName), canonicalBytes);
+      writeFileSync(join(sourceRoot, fileName), canonicalBytes);
+    }
+
+    initializeScratchRepository(scratchRoot, scratchGitEnv);
+
+    let git = spawnSync("git", ["add", "hooks/scripts"], {
+      cwd: scratchRoot,
+      encoding: "utf8",
+      env: scratchGitEnv
+    });
+    assert.equal(git.status, 0, git.stderr);
+
+    git = spawnSync(
+      "git",
+      [
+        "-c", "commit.gpgsign=false",
+        "-c", `core.hooksPath=${emptyGitRoot}`,
+        "commit",
+        "--no-verify",
+        "-m", "canonical hooks"
+      ],
+      {
+        cwd: scratchRoot,
+        encoding: "utf8",
+        env: scratchGitEnv
+      }
+    );
+    assert.equal(git.status, 0, git.stderr);
+
+    git = spawnSync("git", ["rev-parse", "HEAD^{commit}"], {
+      cwd: scratchRoot,
+      encoding: "utf8",
+      env: scratchGitEnv
+    });
+    assert.equal(git.status, 0, git.stderr);
+
+    assert.throws(
+      () => publishTelemetryHooks({
+        sourceRoot,
+        targetRoot,
+        commitSha: git.stdout.trim(),
+        repoRoot: nestedRoot
+      }),
+      /requested root.+Git repository root|Could not resolve.+repository/i
+    );
+  }
+  finally {
+    rmSync(scratchRoot, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 50
+    });
   }
 });
 
