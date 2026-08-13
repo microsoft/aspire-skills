@@ -1,24 +1,42 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, rmdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { after, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   normalizeHookBytes,
+  publishTelemetryHooks,
   resolveSourceCommit,
   telemetryHookFileModes
 } from "../scripts/telemetry-hook-bundle.mjs";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
-const artifactsRoot = join(repoRoot, ".test-artifacts");
+const artifactsParentRoot = join(repoRoot, ".test-artifacts");
+const artifactsRoot = join(artifactsParentRoot, "telemetry-hook-bundle");
 const sourceCommit = resolveSourceCommit(undefined, repoRoot);
 const hookFileNames = ["track-telemetry.sh", "track-telemetry.ps1"];
 
 after(() => {
   rmSync(artifactsRoot, { recursive: true, force: true });
+
+  try {
+    if (readdirSync(artifactsParentRoot).length === 0) {
+      rmdirSync(artifactsParentRoot);
+    }
+  }
+  catch (error) {
+    if (error?.code !== "ENOENT" && error?.code !== "ENOTEMPTY") {
+      throw error;
+    }
+  }
 });
+
+function createArtifactDir(prefix) {
+  mkdirSync(artifactsRoot, { recursive: true });
+  return mkdtempSync(join(artifactsRoot, prefix));
+}
 
 test("publishes telemetry hooks with deterministic file modes", () => {
   assert.deepEqual(telemetryHookFileModes, {
@@ -52,8 +70,7 @@ test("resolves the current commit when provenance is not passed explicitly", () 
 });
 
 test("skills bundle publishes hook bytes and compatible provenance", () => {
-  mkdirSync(artifactsRoot, { recursive: true });
-  const outputRoot = mkdtempSync(join(artifactsRoot, "aspire-skills-bundle-"));
+  const outputRoot = createArtifactDir("aspire-skills-bundle-");
 
   try {
     const result = spawnSync(
@@ -105,9 +122,8 @@ test("skills bundle publishes hook bytes and compatible provenance", () => {
   }
 });
 
-test("builder rejects provenance whose commit does not contain the published hooks", () => {
-  mkdirSync(artifactsRoot, { recursive: true });
-  const outputRoot = mkdtempSync(join(artifactsRoot, "aspire-skills-bundle-root-commit-"));
+test("builder rejects provenance whose committed hook contents differ from the published sources", () => {
+  const outputRoot = createArtifactDir("aspire-skills-bundle-root-commit-");
   const rootCommit = spawnSync("git", ["rev-list", "--max-parents=0", "HEAD"], {
     cwd: repoRoot,
     encoding: "utf8"
@@ -129,19 +145,73 @@ test("builder rejects provenance whose commit does not contain the published hoo
     );
 
     assert.notEqual(result.status, 0);
-    assert.match(
-      result.stderr,
-      /Could not read hook '.+' from commit '[0-9a-f]{40}'|does not match commit/
-    );
+    assert.match(result.stderr, /does not match commit/);
   }
   finally {
     rmSync(outputRoot, { recursive: true, force: true });
   }
 });
 
+test("publishTelemetryHooks rejects provenance when the commit has no hook paths", () => {
+  const scratchRoot = createArtifactDir("telemetry-hook-missing-commit-paths-");
+  const sourceRoot = join(scratchRoot, "hooks", "scripts");
+  const targetRoot = join(scratchRoot, "published", "hooks", "scripts");
+
+  try {
+    mkdirSync(sourceRoot, { recursive: true });
+
+    for (const fileName of hookFileNames) {
+      writeFileSync(
+        join(sourceRoot, fileName),
+        readFileSync(join(repoRoot, "hooks", "scripts", fileName))
+      );
+    }
+
+    let git = spawnSync("git", ["init"], {
+      cwd: scratchRoot,
+      encoding: "utf8"
+    });
+    assert.equal(git.status, 0, git.stderr);
+
+    git = spawnSync(
+      "git",
+      [
+        "-c", "user.name=telemetry hook test",
+        "-c", "user.email=telemetry-hook-test@example.com",
+        "commit",
+        "--allow-empty",
+        "-m", "empty"
+      ],
+      {
+        cwd: scratchRoot,
+        encoding: "utf8"
+      }
+    );
+    assert.equal(git.status, 0, git.stderr);
+
+    const commit = spawnSync("git", ["rev-parse", "HEAD^{commit}"], {
+      cwd: scratchRoot,
+      encoding: "utf8"
+    });
+    assert.equal(commit.status, 0, commit.stderr);
+
+    assert.throws(
+      () => publishTelemetryHooks({
+        sourceRoot,
+        targetRoot,
+        commitSha: commit.stdout.trim(),
+        repoRoot: scratchRoot
+      }),
+      /^Error: Could not read hook 'hooks\/scripts\/track-telemetry\.sh' from commit '[0-9a-f]{40}': .+/
+    );
+  }
+  finally {
+    rmSync(scratchRoot, { recursive: true, force: true });
+  }
+});
+
 test("extensions-only bundle ignores invalid hook provenance", () => {
-  mkdirSync(artifactsRoot, { recursive: true });
-  const outputRoot = mkdtempSync(join(artifactsRoot, "aspire-extensions-bundle-invalid-"));
+  const outputRoot = createArtifactDir("aspire-extensions-bundle-invalid-");
 
   try {
     const result = spawnSync(
@@ -165,8 +235,7 @@ test("extensions-only bundle ignores invalid hook provenance", () => {
 });
 
 test("builder rejects invalid hook provenance", () => {
-  mkdirSync(artifactsRoot, { recursive: true });
-  const outputRoot = mkdtempSync(join(artifactsRoot, "aspire-skills-bundle-invalid-"));
+  const outputRoot = createArtifactDir("aspire-skills-bundle-invalid-");
 
   try {
     const result = spawnSync(
