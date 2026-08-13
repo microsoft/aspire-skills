@@ -78,6 +78,10 @@ function createSanitizedGitEnvironment() {
     }
   }
 
+  environment.GIT_CONFIG_NOSYSTEM = "1";
+  environment.GIT_CONFIG_GLOBAL = process.platform === "win32" ? "NUL" : "/dev/null";
+  environment.GIT_ATTR_NOSYSTEM = "1";
+  environment.GIT_NO_REPLACE_OBJECTS = "1";
   return environment;
 }
 
@@ -91,6 +95,21 @@ function createScratchGitEnvironment(emptyGitRoot) {
     GIT_COMMITTER_EMAIL: "telemetry-hook-test@example.com",
     GIT_AUTHOR_DATE: "2026-01-01T00:00:00Z",
     GIT_COMMITTER_DATE: "2026-01-01T00:00:00Z"
+  };
+}
+
+function createMalformedGitConfigEnvironment(scratchRoot) {
+  const homeRoot = join(scratchRoot, "hostile-home");
+  const xdgRoot = join(scratchRoot, "hostile-xdg");
+
+  mkdirSync(join(xdgRoot, "git"), { recursive: true });
+  mkdirSync(homeRoot, { recursive: true });
+  writeFileSync(join(homeRoot, ".gitconfig"), "[malformed-home-config\n");
+  writeFileSync(join(xdgRoot, "git", "config"), "[malformed-xdg-config\n");
+
+  return {
+    HOME: homeRoot,
+    XDG_CONFIG_HOME: xdgRoot
   };
 }
 
@@ -196,6 +215,43 @@ test("skills bundle publishes hook bytes and compatible provenance", () => {
   }
 });
 
+test("skills bundle ignores malformed HOME and XDG Git configuration", () => {
+  const outputRoot = createArtifactDir("aspire-skills-bundle-home-xdg-");
+  const scratchRoot = createArtifactDir("hostile-home-xdg-");
+
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [
+        join(repoRoot, "scripts", "build-aspire-bundles.mjs"),
+        "--bundle", "skills",
+        "--version", "9.9.9",
+        "--out", outputRoot,
+        "--source-commit", sourceCommit
+      ],
+      {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          ...createMalformedGitConfigEnvironment(scratchRoot)
+        }
+      }
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+
+    const manifest = JSON.parse(
+      readFileSync(join(outputRoot, "aspire-skills-v9.9.9", "skill-manifest.json"), "utf8")
+    );
+    assert.equal(manifest.hooks.commitSha, sourceCommit);
+  }
+  finally {
+    rmSync(outputRoot, { recursive: true, force: true });
+    rmSync(scratchRoot, { recursive: true, force: true });
+  }
+});
+
 test("skills bundle ignores ambient Git repository variables", () => {
   const outputRoot = createArtifactDir("aspire-skills-bundle-ambient-git-");
   const scratchRoot = createArtifactDir("unrelated-git-repository-");
@@ -284,6 +340,10 @@ const hostileGitEnvironmentCases = [
       GIT_CONFIG_KEY_0: "core.repositoryformatversion",
       GIT_CONFIG_VALUE_0: "999"
     })
+  },
+  {
+    name: "HOME and XDG_CONFIG_HOME",
+    createEnvironment: scratchRoot => createMalformedGitConfigEnvironment(scratchRoot)
   }
 ];
 
@@ -499,15 +559,21 @@ test("publishTelemetryHooks rejects a nested non-repository repo root", () => {
       env: scratchGitEnv
     });
     assert.equal(git.status, 0, git.stderr);
+    const commitSha = git.stdout.trim();
 
     assert.throws(
       () => publishTelemetryHooks({
         sourceRoot,
         targetRoot,
-        commitSha: git.stdout.trim(),
+        commitSha,
         repoRoot: nestedRoot
       }),
-      /requested root.+Git repository root|Could not resolve.+repository/i
+      /^Error: Requested root '.+' is not the Git repository root '.+'\.$/
+    );
+
+    assert.throws(
+      () => resolveSourceCommit(undefined, nestedRoot),
+      /^Error: Requested root '.+' is not the Git repository root '.+'\.$/
     );
   }
   finally {

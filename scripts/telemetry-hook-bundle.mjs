@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 
 export const telemetryHookFileNames = [
   "track-telemetry.sh",
@@ -22,7 +22,7 @@ export function normalizeHookBytes(bytes) {
   return Buffer.from(text.replace(/\r\n?/g, "\n"), "utf8");
 }
 
-function createReadOnlyGitEnvironment(repoRoot) {
+function createReadOnlyGitEnvironment() {
   const environment = { ...process.env };
 
   for (const variableName of [
@@ -56,7 +56,9 @@ function createReadOnlyGitEnvironment(repoRoot) {
     }
   }
 
-  environment.GIT_CEILING_DIRECTORIES = dirname(resolve(repoRoot));
+  environment.GIT_CONFIG_NOSYSTEM = "1";
+  environment.GIT_CONFIG_GLOBAL = process.platform === "win32" ? "NUL" : "/dev/null";
+  environment.GIT_ATTR_NOSYSTEM = "1";
   environment.GIT_NO_REPLACE_OBJECTS = "1";
   return environment;
 }
@@ -64,8 +66,8 @@ function createReadOnlyGitEnvironment(repoRoot) {
 export function resolveSourceCommit(explicitCommit, repoRoot) {
   let commit = explicitCommit;
   if (commit === undefined || commit === null) {
-    assertGitRepositoryRoot(repoRoot);
-    commit = readGitCommit(repoRoot);
+    const canonicalRepoRoot = assertGitRepositoryRoot(repoRoot);
+    commit = readGitCommit(canonicalRepoRoot);
   }
 
   if (!/^[0-9a-f]{40}$/i.test(commit)) {
@@ -76,16 +78,26 @@ export function resolveSourceCommit(explicitCommit, repoRoot) {
 }
 
 export function publishTelemetryHooks({ sourceRoot, targetRoot, commitSha, repoRoot }) {
-  assertGitRepositoryRoot(repoRoot);
+  const logicalRepoRoot = resolve(repoRoot);
+  const logicalSourceRoot = resolve(sourceRoot);
+  const gitPaths = Object.fromEntries(
+    telemetryHookFileNames.map(fileName => [
+      fileName,
+      relative(logicalRepoRoot, join(logicalSourceRoot, fileName)).split(sep).join("/")
+    ])
+  );
+  const canonicalRepoRoot = assertGitRepositoryRoot(logicalRepoRoot);
   mkdirSync(targetRoot, { recursive: true });
   const files = {};
 
   for (const fileName of telemetryHookFileNames) {
-    const sourcePath = join(sourceRoot, fileName);
+    const sourcePath = join(logicalSourceRoot, fileName);
     const targetPath = join(targetRoot, fileName);
-    const gitPath = relative(repoRoot, sourcePath).split(sep).join("/");
+    const gitPath = gitPaths[fileName];
     const bytes = normalizeHookBytes(readFileSync(sourcePath));
-    const committedBytes = normalizeHookBytes(readCommittedHookBytes(repoRoot, commitSha, gitPath));
+    const committedBytes = normalizeHookBytes(
+      readCommittedHookBytes(canonicalRepoRoot, commitSha, gitPath)
+    );
     if (!bytes.equals(committedBytes)) {
       throw new Error(`Hook '${gitPath}' does not match commit '${commitSha}' after normalization.`);
     }
@@ -103,11 +115,16 @@ export function publishTelemetryHooks({ sourceRoot, targetRoot, commitSha, repoR
 
 function assertGitRepositoryRoot(repoRoot) {
   const requestedRoot = resolve(repoRoot);
-  const result = spawnSync("git", ["rev-parse", "--show-toplevel"], {
-    cwd: requestedRoot,
-    encoding: "utf8",
-    env: createReadOnlyGitEnvironment(requestedRoot)
-  });
+  const canonicalRequestedRoot = realpathSync(requestedRoot);
+  const result = spawnSync(
+    "git",
+    ["-c", `safe.directory=${canonicalRequestedRoot}`, "rev-parse", "--show-toplevel"],
+    {
+      cwd: canonicalRequestedRoot,
+      encoding: "utf8",
+      env: createReadOnlyGitEnvironment()
+    }
+  );
 
   if (result.error) {
     throw new Error(
@@ -122,8 +139,7 @@ function assertGitRepositoryRoot(repoRoot) {
     );
   }
 
-  const canonicalRequestedRoot = realpathSync(requestedRoot);
-  const canonicalGitRoot = realpathSync(resolve(result.stdout.trim()));
+  const canonicalGitRoot = realpathSync(resolve(canonicalRequestedRoot, result.stdout.trim()));
   const comparableRequestedRoot = process.platform === "win32"
     ? canonicalRequestedRoot.toLowerCase()
     : canonicalRequestedRoot;
@@ -136,13 +152,19 @@ function assertGitRepositoryRoot(repoRoot) {
       `Requested root '${canonicalRequestedRoot}' is not the Git repository root '${canonicalGitRoot}'.`
     );
   }
+
+  return canonicalGitRoot;
 }
 
 function readCommittedHookBytes(repoRoot, commitSha, gitPath) {
-  const result = spawnSync("git", ["show", `${commitSha}:${gitPath}`], {
-    cwd: repoRoot,
-    env: createReadOnlyGitEnvironment(repoRoot)
-  });
+  const result = spawnSync(
+    "git",
+    ["-c", `safe.directory=${repoRoot}`, "show", `${commitSha}:${gitPath}`],
+    {
+      cwd: repoRoot,
+      env: createReadOnlyGitEnvironment()
+    }
+  );
 
   if (result.error) {
     throw new Error(`Could not read hook '${gitPath}' from commit '${commitSha}': ${result.error.message}`);
@@ -159,11 +181,15 @@ function readCommittedHookBytes(repoRoot, commitSha, gitPath) {
 }
 
 function readGitCommit(repoRoot) {
-  const result = spawnSync("git", ["rev-parse", "HEAD^{commit}"], {
-    cwd: repoRoot,
-    encoding: "utf8",
-    env: createReadOnlyGitEnvironment(repoRoot)
-  });
+  const result = spawnSync(
+    "git",
+    ["-c", `safe.directory=${repoRoot}`, "rev-parse", "HEAD^{commit}"],
+    {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: createReadOnlyGitEnvironment()
+    }
+  );
 
   if (result.error) {
     throw new Error(`Could not resolve hook source commit: ${result.error.message}`);
