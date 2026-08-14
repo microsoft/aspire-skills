@@ -5,6 +5,7 @@ on:
     paths:
       - ".gitattributes"
       - ".github/workflows/bundle-test.yml"
+      - ".github/workflows/publish.yml"
       - "hooks/**"
       - "package.json"
       - "scripts/**"
@@ -15,6 +16,7 @@ on:
     paths:
       - ".gitattributes"
       - ".github/workflows/bundle-test.yml"
+      - ".github/workflows/publish.yml"
       - "hooks/**"
       - "package.json"
       - "scripts/**"
@@ -26,7 +28,14 @@ permissions:
 jobs:
   test:
     name: Test and build bundles
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         # actions/checkout@v6.0.2

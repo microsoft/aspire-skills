@@ -196,10 +196,12 @@ test("skills bundle publishes hook bytes and compatible provenance", () => {
       assert.deepEqual(publishedBytes, sourceBytes);
       assert.equal(manifest.hooks.files[fileName], expectedHash);
       assert.match(manifest.hooks.files[fileName], /^[0-9a-f]{128}$/);
-      assert.equal(
-        statSync(join(bundleRoot, "hooks", "scripts", fileName)).mode & 0o777,
-        telemetryHookFileModes[fileName]
-      );
+      if (process.platform !== "win32") {
+        assert.equal(
+          statSync(join(bundleRoot, "hooks", "scripts", fileName)).mode & 0o777,
+          telemetryHookFileModes[fileName]
+        );
+      }
     }
 
     const archive = join(outputRoot, "aspire-skills-v9.9.9.tgz");
@@ -207,8 +209,10 @@ test("skills bundle publishes hook bytes and compatible provenance", () => {
     assert.equal(listed.status, 0, listed.stderr);
     assert.match(listed.stdout, /aspire-skills-v9\.9\.9\/hooks\/scripts\/track-telemetry\.sh/);
     assert.match(listed.stdout, /aspire-skills-v9\.9\.9\/hooks\/scripts\/track-telemetry\.ps1/);
-    assert.match(listed.stdout, /-rwxr-xr-x\s+.*aspire-skills-v9\.9\.9\/hooks\/scripts\/track-telemetry\.sh/);
-    assert.match(listed.stdout, /-rw-r--r--\s+.*aspire-skills-v9\.9\.9\/hooks\/scripts\/track-telemetry\.ps1/);
+    if (process.platform !== "win32") {
+      assert.match(listed.stdout, /-rwxr-xr-x\s+.*aspire-skills-v9\.9\.9\/hooks\/scripts\/track-telemetry\.sh/);
+      assert.match(listed.stdout, /-rw-r--r--\s+.*aspire-skills-v9\.9\.9\/hooks\/scripts\/track-telemetry\.ps1/);
+    }
   }
   finally {
     rmSync(outputRoot, { recursive: true, force: true });
