@@ -104,6 +104,12 @@ if ([string]::IsNullOrWhiteSpace($rawInput)) {
     Write-Success
 }
 
+# Large result payloads are irrelevant to classification and this hook runs synchronously in the
+# agent tool loop. Bound the parsing cost instead of delaying every later tool call.
+if ($rawInput.Length -gt 65536) {
+    Write-Success
+}
+
 # Fast path: most PostToolUse events are not Aspire-related. Everything we track carries
 # "skill"/"aspire" in the payload (the skill tool name, an aspire-/mcp__aspire__ tool name, or a
 # .../skills/<aspire-skill>/ path), so skip JSON parsing entirely when neither appears.
@@ -178,13 +184,14 @@ function Test-AspireSkill([string] $candidate) {
 }
 
 function Test-SessionId([string] $candidate) {
-    return $candidate -match '^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$'
+    return $candidate.Length -eq 36 -and
+        $candidate -match '^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$'
 }
 
 function Get-AspireSkillPath([string] $path) {
     $segments = $path -split '/'
     for ($i = $segments.Length - 3; $i -ge 0; $i--) {
-        if ($segments[$i] -eq 'skills' -and (Test-AspireSkill $segments[$i + 1])) {
+        if ($segments[$i] -eq 'skills') {
             return ($segments[($i + 1)..($segments.Length - 1)] -join '/')
         }
     }
@@ -221,6 +228,11 @@ if ($toolName -eq 'view' -or $toolName -eq 'Read' -or $toolName -eq 'read_file')
         $skillPath = Get-AspireSkillPath $normalized
         if ($skillPath) {
             $skillSegment = $skillPath.Split('/')[0]
+            if (-not (Test-AspireSkill $skillSegment)) {
+                $skillPath = $null
+            }
+        }
+        if ($skillPath) {
             if ($skillPath -imatch '(^|/)skill\.md$') {
                 # A SKILL.md read is a skill invocation, not a reference-file read.
                 if (-not $shouldTrack) {
@@ -264,6 +276,14 @@ if (-not $shouldTrack) {
 $aspireCmd = $env:ASPIRE_CLI_COMMAND
 if (-not $aspireCmd) { $aspireCmd = 'aspire' }
 
+$hookTimeoutSeconds = 10
+$configuredTimeout = 0
+if ([int]::TryParse($env:ASPIRE_HOOK_TIMEOUT_SECONDS, [ref]$configuredTimeout) -and
+    $configuredTimeout -ge 1 -and
+    $configuredTimeout -le 10) {
+    $hookTimeoutSeconds = $configuredTimeout
+}
+
 # Build the argument vector explicitly so untrusted hook values are passed as discrete args.
 $cmdArgs = @('agent', 'telemetry', '--event-type', $eventType, '--client-name', $clientName, '--timestamp', $timestamp)
 if ($sessionId -and (Test-SessionId ([string]$sessionId))) { $cmdArgs += @('--session-id', [string]$sessionId) }
@@ -295,7 +315,7 @@ $psi.RedirectStandardError = $true
 $proc = [System.Diagnostics.Process]::Start($psi)
 $stdoutTask = $proc.StandardOutput.BaseStream.CopyToAsync([System.IO.Stream]::Null)
 $stderrTask = $proc.StandardError.BaseStream.CopyToAsync([System.IO.Stream]::Null)
-if (-not $proc.WaitForExit(10000)) {
+if (-not $proc.WaitForExit($hookTimeoutSeconds * 1000)) {
     try { $proc.Kill($true) } catch { }
     if (-not $proc.WaitForExit(1000)) {
         try { $proc.Kill($true) } catch { }

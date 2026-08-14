@@ -162,12 +162,32 @@ function listShippedReferenceFiles(root, current = root) {
   return files.sort();
 }
 
+function readBashMultilineAllowlist(name) {
+  const script = readFileSync(join(repoRoot, "hooks", "scripts", "track-telemetry.sh"), "utf8");
+  const match = new RegExp(`${name}="\\n([\\s\\S]*?)\\n"`).exec(script);
+  assert.ok(match, `missing ${name} in Bash hook`);
+  return match[1].split("\n").filter(Boolean).toSorted();
+}
+
+function readPowerShellArray(name) {
+  const script = readFileSync(join(repoRoot, "hooks", "scripts", "track-telemetry.ps1"), "utf8");
+  const match = new RegExp(`\\$${name} = @\\(\\n([\\s\\S]*?)\\n\\)`).exec(script);
+  assert.ok(match, `missing ${name} in PowerShell hook`);
+  return [...match[1].matchAll(/'([^']+)'/g)].map(item => item[1]).toSorted();
+}
+
 function assertArg(args, name, expected) {
   assert.ok(args, `expected telemetry invocation containing ${name}`);
   const index = args.indexOf(name);
   assert.notEqual(index, -1, `missing ${name} in ${JSON.stringify(args)}`);
   assert.equal(args[index + 1], expected);
 }
+
+test("reference allowlists match the files shipped by this repository", () => {
+  const references = listShippedReferenceFiles(join(repoRoot, "skills"));
+  assert.deepEqual(readBashMultilineAllowlist("ASPIRE_REFERENCE_FILES"), references);
+  assert.deepEqual(readPowerShellArray("AspireReferenceFiles"), references);
+});
 
 for (const kind of hookKinds) {
   test(`${kind.name}: Copilot string toolArgs forwards an Aspire skill`, () => {
@@ -181,6 +201,17 @@ for (const kind of hookKinds) {
     assertArg(run.args, "--client-name", "copilot-cli");
     assertArg(run.args, "--skill-name", "aspire");
     assertArg(run.args, "--session-id", "03d6f9f8-a6e0-4f4d-b175-6737106eaf73");
+  });
+
+  test(`${kind.name}: Copilot string toolArgs forwards a Windows reference path`, () => {
+    const run = runHook(
+      kind,
+      String.raw`{"toolName":"view","toolArgs":"{\"path\":\"C:\\\\workspace\\\\skills\\\\aspire\\\\references\\\\aspire-13-3-breaking-changes.md\"}"}`,
+      { env: { COPILOT_CLI: "1" } }
+    );
+
+    assertArg(run.args, "--event-type", "reference_file_read");
+    assertArg(run.args, "--file-reference", "aspire/references/aspire-13-3-breaking-changes.md");
   });
 
   test(`${kind.name}: Claude Aspire MCP usage forwards the tool name`, () => {
@@ -204,30 +235,12 @@ for (const kind of hookKinds) {
     assertArg(run.args, "--file-reference", "aspire/references/aspire-13-3-breaking-changes.md");
   });
 
-  test(`${kind.name}: only shipped Aspire reference paths are forwarded`, () => {
-    const references = listShippedReferenceFiles(join(repoRoot, "skills"));
-    assert.ok(references.length > 0);
-
-    for (const fileReference of references) {
-      const run = runHook(
-        kind,
-        JSON.stringify({
-          hook_event_name: "PostToolUse",
-          tool_name: "Read",
-          tool_input: {
-            file_path: `.agents/skills/${fileReference}`
-          }
-        })
-      );
-
-      assertArg(run.args, "--file-reference", fileReference);
-    }
-
-    const customRun = runHook(
+  test(`${kind.name}: custom Aspire reference paths are ignored`, () => {
+    const run = runHook(
       kind,
       '{"hook_event_name":"PostToolUse","tool_name":"Read","tool_input":{"file_path":".agents/skills/aspire/references/customer-acme.md"}}'
     );
-    assert.equal(customRun.args, undefined);
+    assert.equal(run.args, undefined);
   });
 
   test(`${kind.name}: the final recognized skills root determines the reference`, () => {
@@ -237,6 +250,15 @@ for (const kind of hookKinds) {
     );
 
     assertArg(run.args, "--file-reference", "aspire/references/aspire-13-3-breaking-changes.md");
+  });
+
+  test(`${kind.name}: a rightmost third-party skill root is not attributed to Aspire`, () => {
+    const run = runHook(
+      kind,
+      '{"hook_event_name":"PostToolUse","tool_name":"Read","tool_input":{"file_path":"/workspace/skills/aspire/references/aspire-13-3-breaking-changes.md/.agents/skills/private/SKILL.md"}}'
+    );
+
+    assert.equal(run.args, undefined);
   });
 
   test(`${kind.name}: tool response fields cannot forge an Aspire invocation`, () => {
@@ -278,6 +300,52 @@ for (const kind of hookKinds) {
 
     assertArg(run.args, "--skill-name", "aspire");
     assert.equal(run.args.includes("--session-id"), false);
+  });
+
+  test(`${kind.name}: multiline session identifiers are omitted`, () => {
+    const run = runHook(
+      kind,
+      JSON.stringify({
+        toolName: "skill",
+        sessionId: "customer-acme\n03d6f9f8-a6e0-4f4d-b175-6737106eaf73",
+        toolArgs: {
+          skill: "aspire"
+        }
+      }),
+      { env: { COPILOT_CLI: "1" } }
+    );
+
+    assertArg(run.args, "--skill-name", "aspire");
+    assert.equal(run.args.includes("--session-id"), false);
+  });
+
+  test(`${kind.name}: response metadata cannot change client detection`, () => {
+    const run = runHook(
+      kind,
+      '{"toolName":"skill","toolArgs":{"skill":"aspire"},"tool_response":{"hook_event_name":"PostToolUse"}}'
+    );
+
+    assertArg(run.args, "--client-name", "copilot-cli");
+  });
+
+  test(`${kind.name}: oversized payloads are ignored promptly`, () => {
+    const startedAt = Date.now();
+    const run = runHook(
+      kind,
+      JSON.stringify({
+        toolName: "skill",
+        toolArgs: {
+          skill: "aspire"
+        },
+        tool_response: {
+          text: "aspire".repeat(14_000)
+        }
+      }),
+      { outerTimeoutMs: 3_000 }
+    );
+
+    assert.ok(Date.now() - startedAt < 2_000);
+    assert.equal(run.args, undefined);
   });
 
   test(`${kind.name}: non-Aspire input does not invoke the CLI`, () => {
@@ -332,13 +400,14 @@ for (const kind of hookKinds) {
       {
         env: {
           COPILOT_CLI: "1",
-          ASPIRE_HOOK_TEST_HANG: "1"
+          ASPIRE_HOOK_TEST_HANG: "1",
+          ASPIRE_HOOK_TIMEOUT_SECONDS: "1"
         },
-        outerTimeoutMs: 15_000
+        outerTimeoutMs: 5_000
       }
     );
 
-    assert.ok(Date.now() - startedAt < 13_000);
+    assert.ok(Date.now() - startedAt < 4_000);
     assertArg(run.args, "--skill-name", "aspire");
     assert.ok(run.childPid);
     try {

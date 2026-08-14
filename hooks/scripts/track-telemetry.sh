@@ -114,9 +114,10 @@ case "$(printf '%s' "${ASPIRE_CLI_TELEMETRY_OPTOUT}" | tr '[:upper:]' '[:lower:]
     1|true) exit 0 ;;
 esac
 
-# Extract one top-level JSON value without consulting tool result fields. This small parser handles
-# the two value shapes the hooks need: JSON strings and nested objects. It validates the enclosing
-# object before returning a value, so malformed Aspire-shaped input is ignored instead of guessed.
+# Parse the event envelope once, or extract one field from the much smaller tool-input object.
+# Event mode emits a record-separator-delimited set of the top-level fields classification needs.
+# Values keep their JSON escaping until decode_event_value runs, so control characters cannot
+# corrupt that record format.
 extract_json_value() {
     printf '%s' "$1" | awk -v target="$2" '
         function skip_ws() {
@@ -125,18 +126,21 @@ extract_json_value() {
             }
         }
 
-        function parse_string(    value, character, escape) {
+        function parse_string(    value, raw, character, escape, unicode) {
             if (substr(json, position, 1) != "\"") {
                 return 0
             }
 
             position++
             value = ""
+            raw = ""
             while (position <= json_length) {
                 character = substr(json, position, 1)
                 if (character == "\"") {
                     position++
                     parsed_value = value
+                    raw_value = raw
+                    parsed_type = "s"
                     return 1
                 }
 
@@ -147,6 +151,7 @@ extract_json_value() {
                     }
 
                     escape = substr(json, position, 1)
+                    raw = raw "\\" escape
                     if (escape == "\"" || escape == "\\" || escape == "/") {
                         value = value escape
                     }
@@ -173,7 +178,9 @@ extract_json_value() {
 
                         # Aspire identifiers and allowlisted paths are ASCII. Preserve a valid
                         # Unicode escape so it cannot be confused with an allowlisted value.
-                        value = value "\\u" substr(json, position + 1, 4)
+                        unicode = substr(json, position + 1, 4)
+                        raw = raw unicode
+                        value = value "\\u" unicode
                         position += 4
                     }
                     else {
@@ -182,6 +189,7 @@ extract_json_value() {
                 }
                 else {
                     value = value character
+                    raw = raw character
                 }
 
                 position++
@@ -222,6 +230,9 @@ extract_json_value() {
                     if (depth == 0) {
                         position++
                         parsed_value = substr(json, start, position - start)
+                        raw_value = parsed_value
+                        gsub(/[\r\n\t]/, "", raw_value)
+                        parsed_type = "c"
                         return 1
                     }
                 }
@@ -251,7 +262,23 @@ extract_json_value() {
 
             parsed_value = substr(json, start, position - start)
             gsub(/^[ \t\r\n]+|[ \t\r\n]+$/, "", parsed_value)
+            raw_value = parsed_value
+            parsed_type = "p"
             return parsed_value ~ /^(true|false|null|-?[0-9]+([.][0-9]+)?([eE][+-]?[0-9]+)?)$/
+        }
+
+        function emit_event_fields(    separator) {
+            separator = sprintf("%c", 28)
+            printf "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s", \
+                event_values["toolName"], separator, \
+                event_values["tool_name"], separator, \
+                event_values["sessionId"], separator, \
+                event_values["session_id"], separator, \
+                event_values["toolArgs"], separator, \
+                event_values["tool_input"], separator, \
+                event_values["hook_event_name"], separator, \
+                event_values["tool_use_id"], separator, \
+                event_values["transcript_path"]
         }
 
         {
@@ -263,7 +290,7 @@ extract_json_value() {
             position = 1
             skip_ws()
             if (substr(json, position, 1) != "{") {
-                exit
+                exit 2
             }
 
             position++
@@ -274,29 +301,36 @@ extract_json_value() {
                     position++
                     skip_ws()
                     if (position <= json_length) {
-                        exit
+                        exit 2
                     }
 
-                    if (found) {
+                    if (target == "") {
+                        emit_event_fields()
+                    }
+                    else if (found) {
                         printf "%s", found_value
                     }
-                    exit
+                    exit 0
                 }
 
                 if (!parse_string()) {
-                    exit
+                    exit 2
                 }
                 key = parsed_value
                 skip_ws()
                 if (substr(json, position, 1) != ":") {
-                    exit
+                    exit 2
                 }
 
                 position++
                 if (!parse_value()) {
-                    exit
+                    exit 2
                 }
-                if (!found && key == target) {
+                if (target == "" &&
+                    key ~ /^(toolName|tool_name|sessionId|session_id|toolArgs|tool_input|hook_event_name|tool_use_id|transcript_path)$/) {
+                    event_values[key] = parsed_type ":" raw_value
+                }
+                else if (!found && key == target) {
                     found = 1
                     found_value = parsed_value
                 }
@@ -307,30 +341,40 @@ extract_json_value() {
                     position++
                 }
                 else if (character != "}") {
-                    exit
+                    exit 2
                 }
             }
+
+            exit 2
         }
     '
+}
+
+decode_event_value() {
+    local encoded="$1"
+    case "$encoded" in
+        s:*)
+            # Reuse the validated string parser on this small value. Shell escape processing is
+            # not JSON-compatible for cases such as Windows paths and Unicode escapes.
+            extract_json_value "{\"value\":\"${encoded#s:}\"}" "value"
+            ;;
+        c:*) printf '%s' "${encoded#c:}" ;;
+        p:*) printf '%s' "${encoded#p:}" ;;
+    esac
 }
 
 extract_input_field() {
     extract_json_value "$toolInput" "$1"
 }
 
-# Return the path beginning at the final recognized skills/<aspire-skill>/ segment. Choosing from
-# right to left handles workspaces whose parent directories also contain a skills directory.
+# Return the path beginning at the final skills/<skill>/ segment. The caller validates that final
+# skill name; falling back to an earlier Aspire segment would misattribute a nested third-party
+# skill read.
 extract_aspire_skill_path() {
-    printf '%s' "$1" | awk -F/ -v skills="$ASPIRE_SKILLS" '
-        BEGIN {
-            count = split(skills, names, " ")
-            for (i = 1; i <= count; i++) {
-                allowed[names[i]] = 1
-            }
-        }
+    printf '%s' "$1" | awk -F/ '
         {
             for (i = NF - 2; i >= 1; i--) {
-                if ($i == "skills" && allowed[$(i + 1)]) {
+                if ($i == "skills") {
                     value = $(i + 1)
                     for (j = i + 2; j <= NF; j++) {
                         value = value "/" $j
@@ -375,6 +419,7 @@ is_aspire_reference() {
 }
 
 is_session_id() {
+    [ "${#1}" -eq 36 ] || return 1
     printf '%s' "$1" | grep -Eq '^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$'
 }
 
@@ -388,6 +433,12 @@ if [ -z "$rawInput" ]; then
     exit 0
 fi
 
+# A hook runs synchronously in the agent tool loop. Large result payloads are not needed for
+# classification and must not turn the best-effort telemetry path into noticeable latency.
+if [ "${#rawInput}" -gt 65536 ]; then
+    exit 0
+fi
+
 # Fast path: the vast majority of PostToolUse events are not Aspire-related. Everything we track
 # carries "skill"/"Skill" or "aspire" somewhere in the payload (the skill tool name, an aspire-/
 # mcp__aspire__ tool name, or a .../skills/<aspire-skill>/ path), so when none of those appear we
@@ -397,30 +448,34 @@ case "$rawInput" in
     *) exit 0 ;;
 esac
 
-toolName=$(extract_json_value "$rawInput" "toolName")
-[ -z "$toolName" ] && toolName=$(extract_json_value "$rawInput" "tool_name")
+eventFields=$(extract_json_value "$rawInput" "") || exit 0
+fieldSeparator=$(printf '\034')
+IFS="$fieldSeparator" read -r toolNameCamel toolNameSnake sessionIdCamel sessionIdSnake toolArgsValue toolInputValue hookEventNameValue toolUseIdValue transcriptPathValue <<EOF
+$eventFields
+EOF
 
-sessionId=$(extract_json_value "$rawInput" "sessionId")
-[ -z "$sessionId" ] && sessionId=$(extract_json_value "$rawInput" "session_id")
+toolName=$(decode_event_value "${toolNameCamel:-$toolNameSnake}")
+sessionId=$(decode_event_value "${sessionIdCamel:-$sessionIdSnake}")
 [ -n "$sessionId" ] && ! is_session_id "$sessionId" && sessionId=""
 
-toolInput=$(extract_json_value "$rawInput" "toolArgs")
-[ -z "$toolInput" ] && toolInput=$(extract_json_value "$rawInput" "tool_input")
+encodedToolInput="${toolArgsValue:-$toolInputValue}"
+[ "${#encodedToolInput}" -gt 8192 ] && exit 0
+toolInput=$(decode_event_value "$encodedToolInput")
 
 timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Detect the client (used only for a low-cardinality client-name tag).
 if [ "$COPILOT_CLI" = "1" ]; then
     clientName="copilot-cli"
-elif printf '%s' "$rawInput" | grep -q '"hook_event_name"'; then
-    toolUseId=$(extract_json_value "$rawInput" "tool_use_id")
-    transcriptPath=$(extract_json_value "$rawInput" "transcript_path")
+elif [ -n "$hookEventNameValue" ]; then
+    toolUseId=$(decode_event_value "$toolUseIdValue")
+    transcriptPath=$(decode_event_value "$transcriptPathValue")
     transcriptPathNorm=$(printf '%s' "$transcriptPath" | tr '\\' '/')
     case "$toolUseId$transcriptPathNorm" in
         *__vscode*|*/Code/*|*/Code\ -\ Insiders/*) clientName="vscode" ;;
         *) clientName="claude-code" ;;
     esac
-elif printf '%s' "$rawInput" | grep -q '"toolArgs"'; then
+elif [ -n "$toolArgsValue" ]; then
     clientName="copilot-cli"
 else
     clientName="unknown"
@@ -468,6 +523,11 @@ if [ "$toolName" = "view" ] || [ "$toolName" = "Read" ] || [ "$toolName" = "read
         skillPath=$(extract_aspire_skill_path "$normalized")
         if [ -n "$skillPath" ]; then
             skillSegment="${skillPath%%/*}"
+            if ! is_aspire_skill "$skillSegment"; then
+                skillPath=""
+            fi
+        fi
+        if [ -n "$skillPath" ]; then
             case "$skillPath" in
                 */SKILL.md|SKILL.md|*/skill.md|skill.md)
                     # A SKILL.md read is a skill invocation, not a reference-file read.
@@ -519,6 +579,14 @@ fi
 # Resolve the Aspire CLI. ASPIRE_CLI_COMMAND lets tests substitute a recording stub.
 aspireCmd="${ASPIRE_CLI_COMMAND:-aspire}"
 
+hookTimeoutSeconds="${ASPIRE_HOOK_TIMEOUT_SECONDS:-10}"
+case "$hookTimeoutSeconds" in
+    ''|*[!0-9]*|0) hookTimeoutSeconds=10 ;;
+esac
+if [ "$hookTimeoutSeconds" -gt 10 ]; then
+    hookTimeoutSeconds=10
+fi
+
 # Build the argument vector explicitly so untrusted hook values are passed as discrete args
 # (never concatenated into a shell string).
 args=(agent telemetry --event-type "$eventType" --client-name "$clientName" --timestamp "$timestamp")
@@ -537,7 +605,7 @@ set +m
 
 set -m
 (
-    sleep 10
+    sleep "$hookTimeoutSeconds"
     kill -TERM -- "-$cliPid" >/dev/null 2>&1
     sleep 1
     kill -KILL -- "-$cliPid" >/dev/null 2>&1
