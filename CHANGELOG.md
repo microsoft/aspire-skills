@@ -64,6 +64,12 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   #34) so they never fire inside VS Code or any agent that does not opt in. The CLI installs
   and wires them per-client itself, and both the scripts and the CLI command skip entirely
   when `ASPIRE_CLI_TELEMETRY_OPTOUT` is set.
+- Added canonical Bash and PowerShell Aspire agent telemetry hooks that always
+  return exactly one `{"continue":true}` PostToolUse response, including malformed
+  input and unexpected failure paths.
+- Added generated hook commit provenance and LF-normalized SHA-512 checksums to
+  the skills bundle manifest, with release tests that keep the metadata and
+  published hook bytes in sync.
 
 ### Changed
 - Migrated all six per-skill eval specs from the legacy `waza` schema to the

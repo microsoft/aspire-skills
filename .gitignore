@@ -1,6 +1,7 @@
 eval-results/
 vally-results/
 .smoketest-results/
+.test-artifacts/
 node_modules/
 dist/
 obj/
