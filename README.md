@@ -99,6 +99,7 @@ In that command, `-a github-copilot` selects the target agent, `-g` installs glo
 |------|---------|
 | `skills/` | Source skill files, references, and evals |
 | `extensions/` | Source Copilot CLI canvas extensions |
+| `hooks/scripts/` | Canonical Aspire CLI agent telemetry hooks |
 | `.plugin/`, `.claude-plugin/`, `.cursor-plugin/` | Plugin metadata for marketplaces |
 | `.github/plugins/aspire-skills/` | Published plugin mirror |
 | `evals/` | Shared evaluation fixtures and helpers |
@@ -113,8 +114,12 @@ npm run bundle
 
 | Artifact | Contents |
 |----------|----------|
-| `aspire-skills-v<version>.tgz` | Agent skill files and `skill-manifest.json` |
+| `aspire-skills-v<version>.tgz` | Agent skill files, canonical telemetry hooks, and `skill-manifest.json` with hook commit/SHA-512 provenance |
 | `aspire-extensions-v<version>.tgz` | Copilot CLI extension files and `extension-manifest.json` |
+
+The skills manifest records the release commit and LF-normalized SHA-512 hash for
+each file under `hooks/scripts/`. Downstream consumers can copy the `hooks` object
+directly instead of maintaining hook provenance separately.
 
 Use `npm run bundle:skills` or `npm run bundle:extensions` to build one bundle type.
 
