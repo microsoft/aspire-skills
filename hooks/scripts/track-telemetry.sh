@@ -428,7 +428,9 @@ if [ -t 0 ]; then
     exit 0
 fi
 
-rawInput=$(cat)
+rawInput=""
+LC_ALL=C IFS= read -r -n 65537 -d '' rawInput || true
+cat >/dev/null
 if [ -z "$rawInput" ]; then
     exit 0
 fi
@@ -579,13 +581,10 @@ fi
 # Resolve the Aspire CLI. ASPIRE_CLI_COMMAND lets tests substitute a recording stub.
 aspireCmd="${ASPIRE_CLI_COMMAND:-aspire}"
 
-hookTimeoutSeconds="${ASPIRE_HOOK_TIMEOUT_SECONDS:-10}"
-case "$hookTimeoutSeconds" in
-    ''|*[!0-9]*|0) hookTimeoutSeconds=10 ;;
+case "${ASPIRE_HOOK_TIMEOUT_SECONDS:-}" in
+    1|2|3|4|5|6|7|8|9|10) hookTimeoutSeconds="$ASPIRE_HOOK_TIMEOUT_SECONDS" ;;
+    *) hookTimeoutSeconds=10 ;;
 esac
-if [ "$hookTimeoutSeconds" -gt 10 ]; then
-    hookTimeoutSeconds=10
-fi
 
 # Build the argument vector explicitly so untrusted hook values are passed as discrete args
 # (never concatenated into a shell string).

@@ -189,6 +189,22 @@ test("reference allowlists match the files shipped by this repository", () => {
   assert.deepEqual(readPowerShellArray("AspireReferenceFiles"), references);
 });
 
+test("hooks bound stdin before materializing the payload", () => {
+  const bashScript = readFileSync(join(repoRoot, "hooks", "scripts", "track-telemetry.sh"), "utf8");
+  const powerShellScript = readFileSync(join(repoRoot, "hooks", "scripts", "track-telemetry.ps1"), "utf8");
+
+  assert.doesNotMatch(bashScript, /rawInput=\$\(cat\)/);
+  assert.match(bashScript, /read -r -n 65537 -d '' rawInput/);
+  assert.doesNotMatch(powerShellScript, /\[Console\]::In\.ReadToEnd\(\)/);
+  assert.match(powerShellScript, /\[Console\]::In\.ReadBlock\(/);
+});
+
+test("the Bash timeout override accepts only exact values from 1 through 10", () => {
+  const script = readFileSync(join(repoRoot, "hooks", "scripts", "track-telemetry.sh"), "utf8");
+  assert.match(script, /1\|2\|3\|4\|5\|6\|7\|8\|9\|10\)/);
+  assert.doesNotMatch(script, /\[ "\$hookTimeoutSeconds" -gt 10 \]/);
+});
+
 for (const kind of hookKinds) {
   test(`${kind.name}: Copilot string toolArgs forwards an Aspire skill`, () => {
     const run = runHook(
@@ -338,7 +354,7 @@ for (const kind of hookKinds) {
           skill: "aspire"
         },
         tool_response: {
-          text: "aspire".repeat(14_000)
+          text: "aspire".repeat(350_000)
         }
       }),
       { outerTimeoutMs: 3_000 }

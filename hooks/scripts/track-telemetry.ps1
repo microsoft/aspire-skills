@@ -96,17 +96,33 @@ if (Test-OptOut $env:ASPIRE_CLI_TELEMETRY_OPTOUT) {
     Write-Success
 }
 
-# Read the entire payload from stdin (one complete JSON object per hook invocation). A read
-# failure is exotic and falls through to the top-level trap, which still returns success.
-$rawInput = [Console]::In.ReadToEnd()
+# Materialize at most 64 KiB plus one sentinel character. If the payload is larger, drain the
+# remainder into a fixed buffer so the host can finish writing without retaining the event.
+$payloadLimit = 65536
+$payloadBuffer = [char[]]::new($payloadLimit + 1)
+$payloadLength = 0
+while ($payloadLength -lt $payloadBuffer.Length) {
+    $read = [Console]::In.ReadBlock(
+        $payloadBuffer,
+        $payloadLength,
+        $payloadBuffer.Length - $payloadLength)
+    if ($read -eq 0) {
+        break
+    }
 
-if ([string]::IsNullOrWhiteSpace($rawInput)) {
+    $payloadLength += $read
+}
+
+$rawInput = [string]::new($payloadBuffer, 0, $payloadLength)
+if ($payloadLength -gt $payloadLimit) {
+    $discardBuffer = [char[]]::new(4096)
+    while ([Console]::In.Read($discardBuffer, 0, $discardBuffer.Length) -gt 0) {
+    }
+
     Write-Success
 }
 
-# Large result payloads are irrelevant to classification and this hook runs synchronously in the
-# agent tool loop. Bound the parsing cost instead of delaying every later tool call.
-if ($rawInput.Length -gt 65536) {
+if ([string]::IsNullOrWhiteSpace($rawInput)) {
     Write-Success
 }
 
@@ -277,11 +293,8 @@ $aspireCmd = $env:ASPIRE_CLI_COMMAND
 if (-not $aspireCmd) { $aspireCmd = 'aspire' }
 
 $hookTimeoutSeconds = 10
-$configuredTimeout = 0
-if ([int]::TryParse($env:ASPIRE_HOOK_TIMEOUT_SECONDS, [ref]$configuredTimeout) -and
-    $configuredTimeout -ge 1 -and
-    $configuredTimeout -le 10) {
-    $hookTimeoutSeconds = $configuredTimeout
+if ($env:ASPIRE_HOOK_TIMEOUT_SECONDS -match '^(?:[1-9]|10)$') {
+    $hookTimeoutSeconds = [int]$env:ASPIRE_HOOK_TIMEOUT_SECONDS
 }
 
 # Build the argument vector explicitly so untrusted hook values are passed as discrete args.
