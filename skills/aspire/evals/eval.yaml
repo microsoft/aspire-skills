@@ -205,10 +205,20 @@ stimuli:
         config:
           substring: aspire
   - name: router-orch-001
-    prompt: I need to start my Aspire app and wait for the database to be ready
+    prompt: >
+      Use the `aspire` router skill before answering. In VS Code,
+      `aspire_apphost_start` is available as a deferred tool. I need to start my
+      Aspire app without a debugger and then wait for the database to be ready.
+      Do not perform either action; state the routing decision, exact lifecycle
+      tool and mode, and readiness command.
     tags:
       priority: p0
       area: routing
+      scenario: lifecycle-tools
+    constraints:
+      expect_skills:
+        - aspire
+        - aspire-orchestration
     environment:
       files:
         - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
@@ -222,19 +232,19 @@ stimuli:
         name: routes_correctly
         config:
           scoring: binary
-          prompt: "The assistant's response should route this to aspire-orchestration concerns: using 'aspire
-            start' to launch and 'aspire wait' for resource readiness as the primary action. Answer
-            based on intent."
+          prompt: "The assistant's response should route this to aspire-orchestration concerns: loading
+            and using `aspire_apphost_start` in run mode before using `aspire wait` for resource
+            readiness. This is a routing-only prompt, so it should not be graded on actually invoking
+            an unavailable lifecycle tool. Answer based on action ordering and intent."
       - type: prompt
         name: correct_commands
         config:
           scoring: binary
-          prompt: Does the assistant's response recommend using 'aspire start' to launch the application and
-            'aspire wait' (or an equivalent readiness-check command) for resource readiness? Answer
-            based on the intent, not exact string matching.
+          prompt: Does the assistant's response recommend using `aspire_apphost_start` in run mode to launch
+            the application and `aspire wait` for resource readiness? Answer based on intent.
       - type: output-contains
         config:
-          substring: aspire start
+          substring: aspire_apphost_start
       - type: output-contains
         config:
           substring: aspire wait

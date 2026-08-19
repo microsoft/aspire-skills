@@ -67,15 +67,17 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
    but is **unwired** (no resources declared), route to [`aspireify`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md).
    Only continue with the steps below once a wired AppHost is present.
 1. Confirm workspace is Aspire — identify the AppHost
-2. `aspire start` (or `aspire start --isolated` in worktrees or whenever shared local state is risky)
+2. Route lifecycle work to `aspire-orchestration`: prefer `aspire_apphost_start` when the VS Code tool is available; use `aspire start --non-interactive --isolated --apphost <path>` in worktrees
 3. `aspire wait <resource>` before interacting with any resource
 4. Inspect state with `aspire describe`, `aspire otel logs`, `aspire logs`, `aspire otel traces`, and `aspire export` before making code changes
 5. Before adding integrations, use `aspire integration search <query>` when the package is unknown, then `aspire add <package>` when ready to mutate the AppHost
-6. When code changes, decide whether the AppHost model changed or only one resource changed. Re-run `aspire start` after AppHost changes; otherwise prefer resource commands, runtime watch/HMR, dashboard actions, or IDE-managed debugging as appropriate.
+6. When code changes, decide whether the AppHost model changed or only one resource changed. Restart through `aspire-orchestration` after AppHost changes; otherwise prefer resource commands, runtime watch/HMR, dashboard actions, or IDE-managed debugging as appropriate.
 
 ## Key Rules
 
-- **Always** `aspire start`, **never** `dotnet run` on AppHosts
+- For AppHost lifecycle requests, identify one exact AppHost and route to `aspire-orchestration`; never use `dotnet run` on AppHosts
+- When VS Code exposes `aspire_apphost_start` or `aspire_apphost_stop`, load deferred contracts and prefer the matching tool, subject to the orchestration skill's worktree and stop-result rules; use start mode `run` unless the user explicitly asks to attach a debugger
+- If several AppHosts are discovered and the target is unclear, ask which one before taking any lifecycle action
 - **Always** `aspire wait <resource>`, **never** manual HTTP polling
 - Use `aspire resource <resource-name> <command>` for resource operations such as `stop`, `start`, or `rebuild` when available
 - Do not stop or restart the whole AppHost just because one resource changed
