@@ -128,6 +128,8 @@ jobs:
 
       - name: Run full ci-gate suite (global change)
         if: steps.preflight.outputs.has_token == 'true' && steps.changed.outputs.run_full == 'true'
+        # Ceiling so a hung eval subprocess (e.g. aspire#11595) can't hold the job indefinitely.
+        timeout-minutes: 120
         # A `.vally.yaml` / gate-workflow change landed us here. `--suite ci-gate`
         # applies the p0 + p1 priority filter across every skill. (`--suite`
         # can't be combined with `-e`, which is why the scoped path below
@@ -142,6 +144,8 @@ jobs:
 
       - name: Run CI gate evals
         if: steps.preflight.outputs.has_token == 'true' && steps.changed.outputs.run_full == 'false' && steps.changed.outputs.has_specs == 'true'
+        # Ceiling so a hung eval subprocess (e.g. aspire#11595) can't hold the job indefinitely.
+        timeout-minutes: 120
         # COPILOT_GITHUB_TOKEN is read by @github/copilot-sdk (the vally
         # `copilot-sdk` executor) to invoke Copilot models. It is scoped to
         # this step only so install / upload never see it.

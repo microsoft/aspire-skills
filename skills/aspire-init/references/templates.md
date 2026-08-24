@@ -32,6 +32,12 @@ https://aspire.dev/reference/cli/commands/aspire-new/
 | `--suppress-agent-init` | Skip the post-create prompt to configure AI agent environments |
 | `-l, --log-level` | `Critical`, `Debug`, `Error`, `Information`, `None`, `Trace`, `Warning` |
 
+For automation, always pass `--non-interactive` explicitly and provide `--name`, `--output`,
+and any required template-specific choices. Do not rely on the CLI inferring non-interactive
+mode from other options. The flag suppresses UI interaction but does not skip template
+discovery or package installation, so callers still need a process deadline. Do not add
+undocumented substitutes such as `--yes`, `--skip-install`, or `--features`.
+
 ## Template-Specific Options
 
 ### `aspire-py-starter`
@@ -41,7 +47,7 @@ https://aspire.dev/reference/cli/commands/aspire-new/
 | `--use-redis-cache` | `true` / `false` | Prompts interactively |
 
 ```bash
-aspire new aspire-py-starter --use-redis-cache true --non-interactive
+aspire new aspire-py-starter --use-redis-cache true --name py-shop --output ./py-shop --non-interactive
 ```
 
 ## Interactive Prompts (avoid by passing flags)
@@ -69,15 +75,14 @@ aspire certs trust
 
 ## Examples
 
-```bash
-# Interactive — CLI prompts for name, output, version
-aspire new aspire-starter
+Interactive mode is available for humans, but agent and CI examples must be fully specified:
 
+```bash
 # Non-interactive C# empty scaffold pinned to a specific version
 aspire new aspire-empty --version <version> --name aspireapp --output ./dev --non-interactive
 
 # Pre-release templates from the daily channel
-aspire new aspire-starter --channel daily
+aspire new aspire-starter --channel daily --name MyApp --output ./MyApp --non-interactive
 
 # TypeScript-AppHost-driven Python starter with Redis cache
 aspire new aspire-py-starter --use-redis-cache true --name py-shop --output ./py-shop --non-interactive

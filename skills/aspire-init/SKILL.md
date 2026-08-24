@@ -72,10 +72,18 @@ For brand-new projects in an empty or non-existent directory:
 
 1. Confirm prerequisites with `aspire doctor` if the CLI install is uncertain.
 2. Pick a template from [references/templates.md](references/templates.md).
-3. Run the template, append `--non-interactive` for agent flows:
+3. Run the template with `--non-interactive` explicitly for every agent or CI flow; do not
+   rely on other options implicitly suppressing prompts:
    ```bash
    aspire new aspire-starter --name MyApp --output ./MyApp --non-interactive
    ```
+   Supply values for required template-specific choices as well (for example,
+   `--use-redis-cache true` for the Python starter when Redis is requested).
+   `--non-interactive` disables prompts and spinners; it does not bypass template discovery,
+   package restore, or installation. It is the prompt-suppression switch; do not add
+   unsupported substitutes such as `--yes`.
+   In unattended runs, also enforce a hard process deadline (5 minutes is a reasonable
+   default). An execution tool's initial-output wait is not a deadline.
 4. The new directory is fully wired by the template — **no aspireify handoff needed**.
 5. Route to [`aspire-orchestration`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-orchestration/SKILL.md) for first run
    (`aspire start`).
@@ -134,6 +142,7 @@ copy and warn.
 | `aspire init` reports AppHost already exists | Repo already has an AppHost | Stop. Route to `aspireify` (re-wire) or `aspire-orchestration` (lifecycle) |
 | `aspire init` fails in non-interactive mode without `--language` | Multiple language paths available | Re-run with `--language csharp` or `--language typescript` |
 | `aspire new` rejects `--output` path | Path exists and is non-empty | Use a different `--output` or empty the directory |
+| `aspire new` stalls while searching for, getting, or installing templates | Known CLI hang ([microsoft/aspire#11595](https://github.com/microsoft/aspire/issues/11595)) is still open; a related Unix stdin block ([#16791](https://github.com/microsoft/aspire/issues/16791)) is fixed in current CLIs | Stop the process at the deadline rather than polling indefinitely. On older CLIs, retrying once with stdin closed (`< /dev/null`) can help; otherwise report the CLI issue and captured output. |
 | `aspire` command not found | CLI not installed | `dotnet tool install -g Aspire.Cli` (.NET 10) or `curl -sSL https://aspire.dev/install.sh \| bash` |
 | `aspire doctor` reports missing .NET 10 | SDK missing | Install .NET 10 SDK before retrying |
 | `aspire init` succeeded but no `aspireify` skill installed | Agent skill directory not detected | Run `aspire agent init` to install `aspireify`, then continue wiring |
