@@ -168,26 +168,36 @@ stimuli:
       files:
         - src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs
           dest: csharp-apphost/MyApp.AppHost/Program.cs
+        - src: ../../../evals/csharp-apphost/MyApp.ApiService/Program.cs
+          dest: csharp-apphost/MyApp.ApiService/Program.cs
+        - src: ../../../evals/csharp-apphost/MyApp.Web/Program.cs
+          dest: csharp-apphost/MyApp.Web/Program.cs
+        - src: ../../../evals/csharp-apphost/MyApp.ServiceDefaults/MyApp.ServiceDefaults.csproj
+          dest: csharp-apphost/MyApp.ServiceDefaults/MyApp.ServiceDefaults.csproj
     graders:
       - type: prompt
         name: adds_service_defaults
         config:
+          scoring: binary
           prompt: Does the assistant's response add builder.AddServiceDefaults() to each service's Program.cs
-            (Api and Worker)?
+            (the ApiService and Web projects)?
       - type: prompt
         name: maps_default_endpoints
         config:
+          scoring: binary
           prompt: Does the assistant's response add app.MapDefaultEndpoints() so /health and /alive are
             exposed for use by AppHost's WaitFor / HealthChecks?
       - type: prompt
         name: mentions_otel_health_discovery
         config:
+          scoring: binary
           prompt: Does the assistant's response explain that AddServiceDefaults wires OpenTelemetry (tracing,
             metrics, logs), health checks, service discovery, and HTTP resilience — i.e., the agent
             understands what they are configuring?
       - type: prompt
         name: project_reference
         config:
+          scoring: binary
           prompt: Does the assistant's response add a ProjectReference from each service project to the
             Aspire.ServiceDefaults project (or equivalent NuGet package)?
       - type: output-contains
@@ -536,6 +546,157 @@ stimuli:
       - type: output-not-contains
         config:
           substring: modify .aspire/modules/
+  - name: aspireify-fluent-ts-001
+    description: "Codifies the fluent (no-over-await) TypeScript AppHost style: only
+      createBuilder() and build().run() are awaited; intermediate add*/with* calls are
+      assigned to a const and chained without await via the *ResourcePromise surface (issue #31)."
+    prompt: >-
+      In my apphost.ts, add a Postgres database and a Vite frontend in ./web, wire the
+      frontend to the API via service discovery, and have the frontend wait for the
+      database. Show me the full apphost.ts.
+    tags:
+      priority: p1
+      issue: "31"
+      area:
+        - authoring
+        - typescript
+    environment:
+      files:
+        - src: ../../../evals/ts-apphost/apphost.ts
+          dest: ts-apphost/apphost.ts
+        - src: ../../../evals/ts-apphost/aspire.config.json
+          dest: ts-apphost/aspire.config.json
+    graders:
+      - type: output-not-contains
+        name: no_over_await_on_add
+        config:
+          substring: "await builder.add"
+      - type: output-not-contains
+        name: no_paren_wrapped_await
+        config:
+          substring: "(await builder"
+      - type: prompt
+        name: fluent_resource_promise_style
+        config:
+          prompt: >-
+            In the TypeScript apphost.ts the assistant produced, is `await` used in ONLY
+            two places — `const builder = await createBuilder();` and
+            `await builder.build().run();` — while every intermediate add*/with* call
+            (addPostgres, addViteApp, addProject, etc.) is assigned to a const and chained
+            WITHOUT await (relying on the fluent *ResourcePromise surface)? Answer yes only
+            if no intermediate add* or with* call is awaited.
+      - type: output-contains
+        name: awaits_create_builder
+        config:
+          substring: "await createBuilder"
+      - type: output-contains
+        name: calls_build_run
+        config:
+          substring: "build().run()"
+  - name: aspireify-monorepo-shared-001
+    description: "Monorepo with a source-linked shared TS package compiled to dist/:
+      model a one-shot shared-build resource that consumers waitForCompletion on, and
+      warn about the tsc --incremental skip-emit pitfall (issue #23)."
+    prompt: >-
+      I have a yarn-workspaces monorepo: packages/shared is a TypeScript library
+      compiled to dist/ and imported by both services/api (Express) and apps/web
+      (Vite). Wire this into my Aspire apphost.ts so the API and web app don't start
+      before the shared library has been built.
+    tags:
+      priority: p1
+      issue: "23"
+      area:
+        - authoring
+        - javascript
+        - typescript
+    environment:
+      files:
+        - src: ../../../evals/ts-apphost/apphost.ts
+          dest: ts-apphost/apphost.ts
+        - src: ../../../evals/ts-apphost/aspire.config.json
+          dest: ts-apphost/aspire.config.json
+    graders:
+      - type: prompt
+        name: models_shared_build_resource
+        config:
+          prompt: >-
+            Does the response model the shared TypeScript library as its own build
+            resource (e.g. addJavaScriptApp("shared-build", ...) running the library's
+            build script) that the api and web consumers depend on, rather than ignoring
+            the build ordering?
+      - type: prompt
+        name: uses_wait_for_completion
+        config:
+          prompt: >-
+            Do the consuming resources use waitForCompletion(shared) (because the build
+            is a one-shot process that exits) rather than waitFor(shared) (which waits
+            for a healthy long-running resource and would never resolve)?
+      - type: output-contains
+        name: mentions_wait_for_completion
+        config:
+          substring: waitForCompletion
+      - type: prompt
+        name: warns_tsc_incremental_pitfall
+        config:
+          prompt: >-
+            Does the response warn that tsc --incremental (or a checked-in
+            tsconfig.tsbuildinfo) can make the build exit 0 without emitting dist/, and
+            recommend a fix such as a prebuild step that wipes dist/ and
+            tsconfig.tsbuildinfo (or `tsc --build --clean`)?
+  - name: aspireify-bicep-convert-001
+    description: "Convert exported Azure Bicep IaC into an AppHost: map native resources to
+      AddAzure* APIs, fall back to AddBicepTemplate for unsupported resources, and surface the
+      provision-new vs reference-existing decision for a production app (issue #29)."
+    prompt: >-
+      I exported the infrastructure for my production app to Bicep — it's checked in at
+      `infra/main.bicep`. Read it and convert it into my Aspire AppHost.
+    tags:
+      priority: p1
+      issue: "29"
+      area:
+        - authoring
+        - azure
+        - bicep
+    environment:
+      files:
+        - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
+          dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
+        - src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs
+          dest: csharp-apphost/MyApp.AppHost/Program.cs
+        - src: ../../../evals/csharp-apphost/aspire.config.json
+          dest: csharp-apphost/aspire.config.json
+        - src: ../../../evals/azure-bicep/infra/main.bicep
+          dest: infra/main.bicep
+    graders:
+      - type: output-contains
+        name: mentions_add_azure_service_bus
+        config:
+          substring: AddAzureServiceBus
+      - type: prompt
+        name: custom_bicep_fallback_for_unsupported
+        config:
+          prompt: >-
+            Does the response recognize that Azure Maps (`Microsoft.Maps/accounts`) has no
+            first-class Aspire integration and fall back to `AddBicepTemplate` (or
+            `AddAzureInfrastructure`) for it, rather than inventing a non-existent
+            `AddAzureMaps` API?
+      - type: prompt
+        name: surfaces_provision_vs_existing
+        config:
+          prompt: >-
+            Because this is a production app's exported infrastructure, does the response surface
+            the provision-new vs reference-existing trade-off — i.e. that Aspire will provision
+            and own NEW resources by default, and offer to point at the existing resources
+            instead (e.g. `AddConnectionString`, `AsExisting` / `PublishAsExisting`) — rather
+            than silently creating parallel resources?
+      - type: output-contains
+        name: mentions_add_bicep_template
+        config:
+          substring: AddBicepTemplate
+      - type: output-contains
+        name: mentions_add_azure_storage
+        config:
+          substring: AddAzureStorage
   - name: should_trigger_01
     description: "Reason: Direct wiring request — aspireify owns AppHost wiring"
     prompt: Wire up my Aspire AppHost

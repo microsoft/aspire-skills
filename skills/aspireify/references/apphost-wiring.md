@@ -125,8 +125,8 @@ var frontend = builder.AddCSharpApp("web", "../src/Web")
 
 ```typescript
 // TypeScript equivalent
-const db = await builder.addPostgres("pg").addDatabase("mydb");
-const api = await builder.addCSharpApp("api", "./src/Api")
+const db = builder.addPostgres("pg").addDatabase("mydb");
+const api = builder.addCSharpApp("api", "./src/Api")
     .withReference(db);
 ```
 
@@ -234,9 +234,9 @@ When a service expects a **specific env var name** for a dependency's URL (not t
 
 ```typescript
 // ✅ CORRECT — endpoint reference resolves to the actual URL at runtime
-const roomEndpoint = await room.getEndpoint("http");
+const roomEndpoint = room.getEndpoint("http");
 
-const frontend = await builder
+const frontend = builder
     .addViteApp("frontend", "./frontend")
     .withEnvironment("VITE_APP_WS_SERVER_URL", roomEndpoint)  // EndpointReference, not a string
     .withReference(room)   // also sets up standard service discovery
@@ -329,7 +329,7 @@ This prevents data loss when restarting the AppHost — the container stays runn
 **TypeScript equivalent:**
 
 ```typescript
-const db = await builder.addPostgres("pg")
+const db = builder.addPostgres("pg")
     .withLifetime("persistent");
 ```
 
@@ -388,6 +388,6 @@ var db = builder.AddPostgres("pg")
 ```
 
 ```typescript
-const db = await builder.addPostgres("pg")
+const db = builder.addPostgres("pg")
     .withDataVolume("pg-data");
 ```

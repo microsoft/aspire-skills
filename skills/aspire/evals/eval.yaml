@@ -248,6 +248,55 @@ stimuli:
       - type: output-contains
         config:
           substring: aspire wait
+  - name: router-upgrade-13-4-001
+    description: "Codifies that upgrading to Aspire 13.4 surfaces the real 13.4 breaking
+      changes (not generic advice), including the PostgreSQL 18 data-volume incompatibility
+      when a data volume is in play, plus the correct aspire update --self → aspire update
+      flow (issue #24)."
+    prompt: >-
+      I'm upgrading my Aspire app from 13.3 to 13.4. It deploys to Kubernetes and uses a
+      Postgres database with a persistent data volume. What breaking changes should I watch
+      out for, and how do I upgrade safely?
+    tags:
+      priority: p1
+      issue: "24"
+      area:
+        - breaking-changes
+        - upgrade
+    environment:
+      files:
+        - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
+          dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
+        - src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs
+          dest: csharp-apphost/MyApp.AppHost/Program.cs
+        - src: ../../../evals/csharp-apphost/aspire.config.json
+          dest: csharp-apphost/aspire.config.json
+    graders:
+      - type: prompt
+        name: surfaces_specific_13_4_breaking_changes
+        config:
+          prompt: >-
+            Does the response surface specific Aspire 13.4 breaking changes — for example the
+            `aspire exec` removal, Kubernetes Ingress `WithRoute` → `WithPath` / `WithHelm`
+            consolidation / external-endpoint requirement, Foundry `PublishAsHostedAgent` →
+            `WithComputeEnvironment`, `PublishAsNpmPackageScript` → `PublishAsPackageScript`,
+            named resource-command options, or TypeScript `.aspire/modules/` — rather than only
+            generic "update your packages" advice?
+      - type: prompt
+        name: warns_postgres_18_data_volume
+        config:
+          prompt: >-
+            Does the response warn that the default PostgreSQL image moves to 18 in 13.4 and that
+            an existing PostgreSQL 17 `WithDataVolume()` data volume is incompatible (the
+            container fails to start), and recommend pinning `WithImageTag("17.6")` before
+            `WithDataVolume()` or performing a dump/restore migration?
+      - type: prompt
+        name: recommends_upgrade_flow
+        config:
+          prompt: >-
+            Does the response recommend the correct upgrade flow — `aspire update --self` to
+            update the CLI, then `aspire update` from the repo root to update project packages —
+            and/or scrubbing the AppHost and CI for removed/renamed APIs?
   # Positive-routing stimuli assert both activation and outcome. Because this
   # spec tests the top-level router, model knowledge that merely produces an
   # Aspire-flavored answer is insufficient: `constraints.expect_skills` requires
