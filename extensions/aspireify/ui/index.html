@@ -10,83 +10,164 @@
         <header class="toolbar">
             <div class="tb-row">
                 <div class="tb-title">
-                    <div class="tb-heading">Aspireify</div>
-                    <div class="tb-sub muted" id="status-line">Loading plan…</div>
+                    <div>
+                        <div class="tb-heading">Aspireify</div>
+                        <div class="tb-sub muted" id="status-line">
+                            Receiving AppHost proposal snapshot…
+                        </div>
+                    </div>
                 </div>
                 <div class="tb-actions">
                     <div class="apphost-select" id="apphost-control" hidden>
                         <span class="apphost-label">AppHost type</span>
                         <span class="apphost-value" id="apphost-value">C# SDK</span>
                     </div>
-                    <button class="btn btn-outline btn-sm" id="rescan" type="button" hidden>
-                        <span class="btn-ico" aria-hidden="true">
-                            <svg width="14" height="14" viewBox="0 0 16 16">
-                                <path
-                                    fill="currentColor"
-                                    d="M8 2.5a5.5 5.5 0 1 0 5.478 6.03.75.75 0 0 1 1.492.148A7 7 0 1 1 8 1c1.79 0 3.42.67 4.66 1.77V1.75a.75.75 0 0 1 1.5 0v3.5a.75.75 0 0 1-.75.75h-3.5a.75.75 0 0 1 0-1.5h1.72A5.48 5.48 0 0 0 8 2.5Z"
-                                />
-                            </svg>
-                        </span>
-                        <span id="scan-action-label">Re-scan</span>
-                    </button>
                 </div>
             </div>
-            <div class="progress" aria-hidden="true"><span></span></div>
+            <div class="progress" id="progress" aria-hidden="true"><span></span></div>
         </header>
 
         <main class="content">
-            <section id="skeleton" class="centered-state" aria-label="Loading AppHost plan">
-                <div class="centered-state-icon is-spinning" aria-hidden="true">↻</div>
-                <h1 id="loading-title">Preparing findings</h1>
-                <p class="muted" id="loading-detail">
-                    Waiting for Aspireify to present the resource plan.
-                </p>
+            <section id="skeleton" class="review-groups" aria-label="Loading AppHost proposal">
+                <div class="review-section">
+                    <div class="review-section-heading">
+                        <span class="skeleton sk-line" style="width: 156px; height: 13px"></span>
+                    </div>
+                    <div class="review-list">
+                        <div class="review-item skeleton-card">
+                            <div class="review-row">
+                                <span
+                                    class="skeleton"
+                                    style="width: 16px; height: 16px; border-radius: 999px"
+                                ></span>
+                                <div class="skeleton-copy">
+                                    <span
+                                        class="skeleton sk-line"
+                                        style="width: min(72%, 280px)"
+                                    ></span>
+                                    <span
+                                        class="skeleton sk-line"
+                                        style="width: min(48%, 190px)"
+                                    ></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="review-item skeleton-card">
+                            <div class="review-row">
+                                <span
+                                    class="skeleton"
+                                    style="width: 16px; height: 16px; border-radius: 999px"
+                                ></span>
+                                <div class="skeleton-copy">
+                                    <span
+                                        class="skeleton sk-line"
+                                        style="width: min(64%, 240px)"
+                                    ></span>
+                                    <span
+                                        class="skeleton sk-line"
+                                        style="width: min(42%, 170px)"
+                                    ></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </section>
 
             <section id="snapshot" class="plan" hidden>
-                <div id="plan-pending" class="centered-state" aria-live="polite" aria-busy="true" hidden>
-                    <div class="centered-state-icon is-spinning" aria-hidden="true">↻</div>
-                    <h1>Preparing the resource plan</h1>
-                    <p class="muted">
-                        Aspireify is organizing the detected resources and connections.
-                    </p>
-                </div>
-
                 <div id="plan-content" hidden>
                     <div id="plan-workspace" class="plan-workspace">
+                        <section class="proposal-state" id="proposal-state">
+                            <div>
+                                <strong id="proposal-state-copy">AppHost proposal awaiting confirmation</strong>
+                                <div class="muted" id="proposal-generated-at"></div>
+                            </div>
+                            <div class="proposal-identity">
+                                <span>Generation <code id="proposal-generation"></code></span>
+                                <span>Hash <code id="proposal-hash"></code></span>
+                            </div>
+                        </section>
                         <section class="resource-plan" id="resource-plan-panel" hidden>
                             <div class="resource-plan-heading">
                                 <div>
                                     <h1>Proposed AppHost</h1>
-                                    <p class="muted">Resources Aspireify will wire after confirmation.</p>
+                                    <p class="muted">
+                                        Source services mapped to the exact Aspire resources in this
+                                        snapshot.
+                                    </p>
+                                </div>
+                                <button
+                                    class="btn btn-outline btn-sm"
+                                    id="compact-add-resource"
+                                    type="button"
+                                    hidden
+                                >
+                                    Add resource
+                                </button>
+                            </div>
+                            <div class="compact-resources" id="compact-resources" hidden></div>
+                            <div class="resource-groups" id="resource-groups"></div>
+                        </section>
+                        <section class="review-section" id="external-services-section" hidden>
+                            <div class="review-section-heading">
+                                <div>
+                                    <h2>External infrastructure</h2>
+                                    <p class="muted">
+                                        Observed services not declared as Aspire resources.
+                                    </p>
                                 </div>
                             </div>
-                            <div class="resource-groups" id="resource-groups"></div>
+                            <div class="review-list" id="external-services"></div>
+                        </section>
+                        <section class="review-section" id="assumptions-section" hidden>
+                            <div class="review-section-heading">
+                                <div>
+                                    <h2>Assumptions &amp; risks</h2>
+                                    <p class="muted">
+                                        Proposal facts supplied by the Aspireify skill.
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="review-list" id="assumptions-risks"></div>
+                        </section>
+                        <section class="review-section" id="decisions-section" hidden>
+                            <div class="review-section-heading">
+                                <div>
+                                    <h2>Chat decisions</h2>
+                                    <p class="muted">
+                                        Resolve these tradeoffs in chat before confirmation.
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="review-list" id="decisions"></div>
                         </section>
                     </div>
                 </div>
             </section>
 
-            <section id="error" class="centered-state error-card" hidden>
-                <div class="centered-state-icon" aria-hidden="true">!</div>
-                <h1>Couldn’t load the resource plan</h1>
+            <section id="error" class="state-card error-card" hidden>
+                <div class="state-icon" aria-hidden="true">!</div>
+                <strong>Couldn’t load the AppHost proposal</strong>
                 <p class="muted" id="error-message"></p>
                 <button class="btn btn-outline btn-sm" id="retry" type="button">Try again</button>
             </section>
         </main>
 
         <footer class="action-footer" id="action-footer" hidden>
-            <span
-                class="footer-note muted"
-                id="footer-note"
-                role="alert"
-                aria-live="assertive"
-                aria-atomic="true"
-            >
-                No files have changed.
-            </span>
+            <div class="confirmation-scope">
+                <strong>Confirmation scope</strong>
+                <span class="muted" id="scope-summary"></span>
+                <span
+                    class="footer-note"
+                    id="footer-note"
+                    role="alert"
+                    aria-live="assertive"
+                    aria-atomic="true"
+                    hidden
+                ></span>
+            </div>
             <button id="confirm" class="btn btn-primary" type="button" disabled>
-                Confirm &amp; wire
+                Confirm this AppHost proposal
             </button>
         </footer>
 
@@ -294,6 +375,6 @@
             </form>
         </dialog>
 
-        <script src="/app.js"></script>
+        <script type="module" src="/app.js"></script>
     </body>
 </html>

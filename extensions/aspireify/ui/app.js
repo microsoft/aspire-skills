@@ -1,5 +1,7 @@
 "use strict";
 
+import { isDotNetType } from "./resource-types.js";
+
 const apiToken = new URLSearchParams(window.location.search).get("token") || "";
 
 const EDGE_LABELS = {
@@ -48,17 +50,25 @@ const elements = {
     statusLine: document.getElementById("status-line"),
     apphostControl: document.getElementById("apphost-control"),
     apphostValue: document.getElementById("apphost-value"),
-    rescan: document.getElementById("rescan"),
-    scanActionLabel: document.getElementById("scan-action-label"),
     skeleton: document.getElementById("skeleton"),
-    loadingTitle: document.getElementById("loading-title"),
-    loadingDetail: document.getElementById("loading-detail"),
     snapshot: document.getElementById("snapshot"),
-    planPending: document.getElementById("plan-pending"),
     planContent: document.getElementById("plan-content"),
     resourcePlanPanel: document.getElementById("resource-plan-panel"),
+    compactResources: document.getElementById("compact-resources"),
+    compactAddResource: document.getElementById("compact-add-resource"),
     resourceGroups: document.getElementById("resource-groups"),
+    proposalStateCopy: document.getElementById("proposal-state-copy"),
+    proposalGeneratedAt: document.getElementById("proposal-generated-at"),
+    proposalGeneration: document.getElementById("proposal-generation"),
+    proposalHash: document.getElementById("proposal-hash"),
+    externalServicesSection: document.getElementById("external-services-section"),
+    externalServices: document.getElementById("external-services"),
+    assumptionsSection: document.getElementById("assumptions-section"),
+    assumptionsRisks: document.getElementById("assumptions-risks"),
+    decisionsSection: document.getElementById("decisions-section"),
+    decisions: document.getElementById("decisions"),
     actionFooter: document.getElementById("action-footer"),
+    scopeSummary: document.getElementById("scope-summary"),
     footerNote: document.getElementById("footer-note"),
     confirm: document.getElementById("confirm"),
     error: document.getElementById("error"),
@@ -107,8 +117,7 @@ const collapsedGroups = new Set();
 const collapsedCards = new Set();
 const initializedGroups = new Set();
 document.addEventListener("DOMContentLoaded", () => {
-    elements.rescan.addEventListener("click", () => void requestScan());
-    elements.retry.addEventListener("click", () => void loadSnapshot());
+    elements.retry.addEventListener("click", () => void retryProposalOrSnapshot());
     elements.confirm.addEventListener("click", () => void confirmSnapshot());
     elements.resourceForm.addEventListener("submit", saveResource);
     elements.resourceType.addEventListener("change", () =>
@@ -127,6 +136,7 @@ document.addEventListener("DOMContentLoaded", () => {
     );
     elements.addResourceConnection.addEventListener("click", openResourceConnectionDialog);
     elements.deleteResource.addEventListener("click", () => void deleteResource());
+    elements.compactAddResource.addEventListener("click", () => openAddResourceDialog("all"));
     elements.addResourceForm.addEventListener("submit", addResource);
     elements.addResourceType.addEventListener("change", () =>
         syncDefaultsField(
@@ -255,21 +265,11 @@ async function runBusy(control, action) {
                     snapshot?.proposalStale ||
                     confirmationIssues().length > 0 ||
                     snapshot?.confirmed;
-            } else if (control === elements.rescan) {
-                control.disabled =
-                    snapshot?.scanStatus === "scanning" ||
-                    !snapshot?.discoveryLoaded;
             } else {
                 control.disabled = false;
             }
         }
     }
-}
-
-async function requestScan() {
-    await runBusy(elements.rescan, async () => {
-        await post("/api/rescan", {});
-    });
 }
 
 async function requestProposal() {
@@ -304,50 +304,59 @@ async function confirmSnapshot() {
     });
 }
 
+async function retryProposalOrSnapshot() {
+    if (snapshot?.proposalError && snapshot.discoveryLoaded) {
+        elements.retry.disabled = true;
+        try {
+            await post("/api/proposal/request", {});
+        } catch (error) {
+            showProposalError(error?.message ?? error);
+        } finally {
+            elements.retry.disabled = false;
+        }
+        return;
+    }
+    await loadSnapshot();
+}
+
 function render(nextSnapshot) {
     const draw = () => {
         snapshot = nextSnapshot;
-        if (snapshot.scanStatus === "waiting") {
-            showLoading();
+        if (snapshot.proposalError) {
+            showProposalError(snapshot.proposalError);
             firstRender = false;
             return;
         }
-        if (snapshot.scanStatus === "scanning") {
-            showScanPending();
+        if (!snapshot.proposalLoaded || snapshot.proposalStale) {
+            showProposalPending();
+            if (
+                snapshot.proposalRequestNeeded &&
+                snapshot.discoveryLoaded &&
+                !snapshot.proposalError
+            ) {
+                queueMicrotask(() => void requestProposal());
+            }
             firstRender = false;
             return;
         }
 
-        elements.body.classList.remove("is-loading");
-        elements.body.classList.remove("is-scanning");
+        elements.body.classList.remove("is-loading", "is-busy");
+        elements.body.classList.add("has-data");
         elements.skeleton.hidden = true;
         elements.error.hidden = true;
         elements.snapshot.hidden = false;
         elements.actionFooter.hidden = false;
         elements.apphostControl.hidden = !snapshot.apphostStyle;
-        elements.rescan.hidden = snapshot.confirmed;
         elements.body.classList.toggle("is-confirmed", snapshot.confirmed);
         updateAppHostValue();
-        elements.scanActionLabel.textContent = "Re-scan";
-
-        const hasPlan = snapshot.proposalLoaded;
-        elements.rescan.disabled = !snapshot.discoveryLoaded;
-        elements.body.classList.toggle("is-loading", !hasPlan || snapshot.proposalStale);
-        elements.planPending.hidden = hasPlan;
-        elements.planContent.hidden = !hasPlan;
-        if (hasPlan) {
-            renderResourcePlan();
-        }
+        elements.planContent.hidden = false;
+        renderProposalIdentity();
+        renderResourcePlan();
+        renderExternalServices();
+        renderAssumptionsAndRisks();
+        renderDecisions();
         renderStatus();
         renderConfirmation();
-
-        if (
-            snapshot.proposalRequestNeeded &&
-            snapshot.discoveryLoaded &&
-            !snapshot.proposalError
-        ) {
-            queueMicrotask(() => void requestProposal());
-        }
         firstRender = false;
     };
 
@@ -372,7 +381,21 @@ function renderResourcePlan() {
     const edges = proposal.edges.filter((edge) => names.has(edge.from) && names.has(edge.to));
     const resourceIssues = proposalValidation().resourceIssues;
     elements.resourcePlanPanel.hidden = false;
+    elements.compactResources.replaceChildren();
     elements.resourceGroups.replaceChildren();
+    const compact = (snapshot.presentationMode ?? (resources.length <= 2 ? "compact" : "relationship")) ===
+        "compact";
+    elements.compactResources.hidden = !compact;
+    elements.resourceGroups.hidden = compact;
+    elements.compactAddResource.hidden = !compact || snapshot.confirmed;
+    if (compact) {
+        for (const resource of resources) {
+            elements.compactResources.append(
+                renderCompactResource(resource, edges, resourceIssues[resource.id] ?? []),
+            );
+        }
+        return;
+    }
 
     for (const definition of RESOURCE_GROUPS) {
         const groupedResources = resources.filter((resource) =>
@@ -477,6 +500,188 @@ function renderResourcePlan() {
     }
 }
 
+function renderCompactResource(resource, edges, issues = []) {
+    const service = serviceForResource(resource);
+    const item = createElement("article", { className: "compact-resource review-item" });
+    const header = createElement("div", { className: "compact-resource-header" });
+    const identity = createElement("div", { className: "compact-resource-identity" });
+    identity.append(
+        createElement("h3", { text: `${resource.name} (${resource.type})` }),
+        renderSourceMapping(resource, service),
+    );
+    const edit = createElement("button", {
+        className: "btn btn-quiet btn-sm resource-edit",
+        text: "Edit",
+        title: `Edit ${resource.name}`,
+        attrs: { type: "button", "aria-label": `Edit resource ${resource.name}` },
+    });
+    edit.hidden = snapshot.confirmed;
+    edit.addEventListener("click", () => openResourceDialog(resource.id));
+    const remove = createElement("button", {
+        className: "btn btn-quiet btn-danger btn-sm resource-remove",
+        text: "Remove",
+        title: `Remove ${resource.name} from the proposal`,
+        attrs: { type: "button", "aria-label": `Remove resource ${resource.name}` },
+    });
+    remove.hidden = snapshot.confirmed;
+    remove.addEventListener("click", () => {
+        if (window.confirm(`Remove ${resource.name} from this AppHost proposal?`)) {
+            void deleteResourceById(resource.id, remove);
+        }
+    });
+    const actions = createElement("div", { className: "compact-resource-actions" });
+    actions.append(edit, remove);
+    header.append(identity, actions);
+    item.append(header);
+
+    if (issues.length > 0) {
+        item.append(renderResourceValidation(issues));
+    }
+    item.append(renderResourceFacts(resource, service));
+    item.append(renderCompactConnections(resource, edges));
+    return item;
+}
+
+function renderSourceMapping(resource, service) {
+    const mapping = createElement("p", { className: "resource-mapping muted" });
+    mapping.append(
+        createElement("code", {
+            text: service?.name || resource.sourceName || "Proposal addition",
+        }),
+        createElement("span", { className: "mapping-arrow", text: "→" }),
+        createElement("code", { text: resource.name }),
+        createElement("span", { text: `(${resource.type})` }),
+    );
+    return mapping;
+}
+
+function renderResourceValidation(issues) {
+    const validation = createElement("div", { className: "resource-validation" });
+    validation.append(
+        createElement("span", {
+            className: "resource-validation-icon",
+            text: "!",
+            attrs: { "aria-hidden": "true" },
+        }),
+        createElement("span", { text: issues.join(" ") }),
+    );
+    return validation;
+}
+
+function renderResourceFacts(resource, service) {
+    const facts = createElement("dl", { className: "resource-facts" });
+    const sourceIdentity = service
+        ? `${service.name}${service.id ? ` (${service.id})` : ""}`
+        : resource.sourceName || "Added in proposal";
+    appendFact(facts, "Source service", sourceIdentity);
+    appendFact(facts, "Aspire resource", resource.name, true);
+    appendFact(facts, "Aspire type", resource.type);
+
+    const path = servicePathForDisplay(resource.path || service?.path);
+    if (path) {
+        appendFact(facts, "Path", path, true);
+    }
+    const command = resource.command || service?.command;
+    if (command) {
+        appendFact(facts, "Run command", command, true);
+    }
+    const ports = resource.ports?.length ? resource.ports : (service?.ports ?? []);
+    if (ports.length) {
+        appendFact(facts, "Ports", ports.map(formatPort).join(", "));
+    }
+    if (resource.packages?.length) {
+        appendFact(facts, "Packages", resource.packages.map(formatPackage).join(", "), true);
+    }
+
+    const dotnet = isDotNetType(service?.type || resource.type);
+    appendFact(
+        facts,
+        "Service Defaults",
+        dotnet ? (resource.serviceDefaults ? "Enabled" : "Disabled") : "Not applicable",
+    );
+    appendFact(facts, "Service-code impact", formatServiceCodeImpact(resource, service));
+    appendFact(facts, "Ownership", formatOwnership(resource, service));
+    return facts;
+}
+
+function appendFact(list, label, value, code = false) {
+    const row = createElement("div", { className: "resource-fact" });
+    const valueElement = createElement("dd", { title: value || "" });
+    valueElement.append(
+        createElement(code ? "code" : "span", {
+            className: "resource-fact-value",
+            text: value || "Not supplied",
+        }),
+    );
+    row.append(createElement("dt", { text: label }), valueElement);
+    list.append(row);
+}
+
+function formatPort(port) {
+    if (typeof port !== "object" || port === null) {
+        return String(port);
+    }
+    const endpoint = [port.port, port.targetPort ? `→${port.targetPort}` : ""]
+        .filter(Boolean)
+        .join("");
+    return [port.name, endpoint, port.protocol, port.purpose].filter(Boolean).join(" · ");
+}
+
+function formatPackage(package_) {
+    return `${package_.name}${package_.version ? `@${package_.version}` : ""}`;
+}
+
+function formatServiceCodeImpact(resource, service) {
+    const impact = resource.serviceCodeImpact?.summary || resource.serviceCodeImpact?.files?.length
+        ? resource.serviceCodeImpact
+        : service?.serviceCodeImpact;
+    if (!impact || (!impact.summary && !impact.files?.length && impact.state === "unknown")) {
+        return "Not supplied";
+    }
+    return [
+        impact.state && impact.state !== "unknown" ? impact.state : "",
+        impact.summary,
+        impact.files?.length ? impact.files.join(", ") : "",
+    ]
+        .filter(Boolean)
+        .join(" · ");
+}
+
+function formatOwnership(resource, service) {
+    const ownership = resource.ownership?.label || resource.ownership?.owner
+        ? resource.ownership
+        : service?.ownership;
+    if (!ownership || (!ownership.label && !ownership.owner && ownership.kind === "unknown")) {
+        return "Not supplied";
+    }
+    return [ownership.label, ownership.owner, ownership.kind !== "unknown" ? ownership.kind : ""]
+        .filter(Boolean)
+        .join(" · ");
+}
+
+function renderCompactConnections(resource, edges) {
+    const section = createElement("div", { className: "compact-connections" });
+    const relationships = relationshipsFor(resource, edges);
+    section.append(createElement("strong", { text: "Connections" }));
+    if (!relationships.length) {
+        section.append(createElement("span", { className: "muted", text: "No direct connections" }));
+        return section;
+    }
+    const chips = createElement("div", { className: "connection-chips" });
+    for (const relationship of relationships) {
+        const chip = createElement("button", {
+            className: "connection-chip",
+            text: relationshipText(relationship),
+            attrs: { type: "button" },
+        });
+        chip.disabled = snapshot.confirmed;
+        chip.addEventListener("click", () => openConnectionDialog(relationship.edge.id));
+        chips.append(chip);
+    }
+    section.append(chips);
+    return section;
+}
+
 function renderResourceCard(resource, edges, issues = []) {
     const service = serviceForResource(resource);
     const collapsed = collapsedCards.has(resource.id);
@@ -510,7 +715,7 @@ function renderResourceCard(resource, edges, issues = []) {
     title.append(toggle);
     identity.append(
         title,
-        createElement("p", { className: "muted", text: resource.type }),
+        renderSourceMapping(resource, service),
     );
     toggle.addEventListener("click", () => {
         body.hidden = !body.hidden;
@@ -556,30 +761,7 @@ function renderResourceCard(resource, edges, issues = []) {
     }
     card.append(body);
 
-    const metadata = [
-        service?.framework,
-        service?.exposesHttp ? "HTTP" : "",
-        resource.serviceDefaults ? "Service Defaults" : "",
-    ].filter(Boolean);
-    if (metadata.length > 0) {
-        const metadataRow = createElement("div", { className: "resource-metadata" });
-        for (const item of metadata) {
-            metadataRow.append(createElement("span", { className: "metadata-chip", text: item }));
-        }
-        body.append(metadataRow);
-    }
-
-    const servicePath = servicePathForDisplay(service?.path);
-    const detail = servicePath || resource.detail;
-    if (detail) {
-        body.append(
-            createElement(servicePath ? "code" : "p", {
-                className: servicePath ? "resource-path" : "resource-detail muted",
-                text: detail,
-                title: detail,
-            }),
-        );
-    }
+    body.append(renderResourceFacts(resource, service));
 
     const relationships = relationshipsFor(resource, edges);
     const connectionSection = createElement("div", { className: "resource-connections" });
@@ -651,6 +833,132 @@ function relationshipText(relationship) {
     return `${labels[relationship.direction]} ${relationship.peer}`;
 }
 
+function renderProposalIdentity() {
+    const generatedAt = new Date(snapshot.proposal.generatedAt);
+    const generatedLabel = Number.isNaN(generatedAt.getTime())
+        ? "Generation time not supplied"
+        : `Generated ${generatedAt.toLocaleString([], {
+              dateStyle: "medium",
+              timeStyle: "short",
+          })}`;
+    elements.proposalStateCopy.textContent = snapshot.confirmed
+        ? "AppHost proposal confirmed — Implementation continues in chat."
+        : "AppHost proposal awaiting confirmation";
+    elements.proposalGeneratedAt.textContent = snapshot.confirmed
+        ? `${generatedLabel} · Confirmed snapshot is read-only.`
+        : `${generatedLabel} · No files have changed.`;
+    elements.proposalGeneration.textContent = String(
+        snapshot.confirmedGeneration ?? snapshot.proposalGeneration,
+    );
+    elements.proposalHash.textContent = shortHash(snapshot.proposalHash);
+    elements.proposalHash.title = snapshot.proposalHash || "";
+}
+
+function renderExternalServices() {
+    const mappedServiceIds = new Set(
+        snapshot.proposal.resources
+            .filter((resource) => resource.include)
+            .map((resource) => resource.serviceId)
+            .filter(Boolean),
+    );
+    const services = snapshot.services.filter(
+        (service) =>
+            service.ownership?.kind === "external-infrastructure" &&
+            !mappedServiceIds.has(service.id),
+    );
+    elements.externalServicesSection.hidden = services.length === 0;
+    elements.externalServices.replaceChildren();
+    for (const service of services) {
+        const item = createElement("article", { className: "review-item external-service" });
+        item.append(
+            createElement("strong", { text: service.name }),
+            createElement("span", {
+                className: "status-chip external",
+                text: service.ownership.label || "External infrastructure",
+            }),
+        );
+        const details = createElement("dl", { className: "resource-facts" });
+        appendFact(details, "Source identity", `${service.name} (${service.id})`);
+        appendFact(details, "Type", service.type);
+        const path = servicePathForDisplay(service.path);
+        if (path) {
+            appendFact(details, "Path", path, true);
+        }
+        if (service.command) {
+            appendFact(details, "Run command", service.command, true);
+        }
+        if (service.ports?.length) {
+            appendFact(details, "Ports", service.ports.map(formatPort).join(", "));
+        }
+        appendFact(details, "Ownership", formatOwnership({}, service));
+        item.append(details);
+        elements.externalServices.append(item);
+    }
+}
+
+function renderAssumptionsAndRisks() {
+    const facts = snapshot.proposal.assumptionsRisks ?? [];
+    elements.assumptionsSection.hidden = facts.length === 0;
+    elements.assumptionsRisks.replaceChildren();
+    for (const fact of facts) {
+        const item = createElement("article", {
+            className: `review-item proposal-fact severity-${fact.severity}`,
+        });
+        const heading = createElement("div", { className: "review-item-heading" });
+        heading.append(
+            createElement("strong", { text: fact.title || "Proposal fact" }),
+            createElement("span", {
+                className: `status-chip ${fact.severity}`,
+                text: fact.severity,
+            }),
+            createElement("span", {
+                className: `status-chip ${fact.verification}`,
+                text: displayStatus(fact.verification),
+            }),
+        );
+        item.append(heading);
+        if (fact.detail) {
+            item.append(createElement("p", { className: "muted", text: fact.detail }));
+        }
+        elements.assumptionsRisks.append(item);
+    }
+}
+
+function renderDecisions() {
+    const decisions = snapshot.proposal.decisions ?? [];
+    elements.decisionsSection.hidden = decisions.length === 0;
+    elements.decisions.replaceChildren();
+    for (const decision of decisions) {
+        const item = createElement("article", {
+            className: `review-item proposal-decision ${decision.status}`,
+        });
+        const heading = createElement("div", { className: "review-item-heading" });
+        heading.append(
+            createElement("strong", { text: decision.title || "Implementation decision" }),
+            createElement("span", {
+                className: `status-chip ${decision.status}`,
+                text: displayStatus(decision.status),
+            }),
+        );
+        item.append(heading);
+        if (decision.summary) {
+            item.append(createElement("p", { className: "muted", text: decision.summary }));
+        }
+        elements.decisions.append(item);
+    }
+}
+
+function displayStatus(value) {
+    return String(value ?? "")
+        .split("-")
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+}
+
+function shortHash(hash) {
+    return hash ? hash.slice(0, 12) : "not available";
+}
+
 function renderStatus() {
     const resources = snapshot.proposal.resources ?? [];
     const includedResources = resources.filter((resource) => resource.include);
@@ -658,18 +966,22 @@ function renderStatus() {
     const activeEdges = snapshot.proposal.edges.filter(
         (edge) => includedNames.has(edge.from) && includedNames.has(edge.to),
     ).length;
-    if (snapshot.scanError) {
-        elements.statusLine.textContent = snapshot.scanError;
-    } else if (snapshot.proposalError) {
+    if (snapshot.proposalError) {
         elements.statusLine.textContent = snapshot.proposalError;
-    } else if (!snapshot.proposalLoaded || snapshot.proposalStale) {
-        elements.statusLine.textContent = "Updating the resource plan…";
     } else if (snapshot.confirmed) {
-        elements.statusLine.textContent = "Resource plan confirmed";
+        elements.statusLine.textContent = `Proposal generation ${
+            snapshot.confirmedGeneration ?? snapshot.proposalGeneration
+        } confirmed · ${shortHash(snapshot.proposalHash)} · Implementation continues in chat`;
     } else {
-        elements.statusLine.textContent = `${includedResources.length} resource${
-            includedResources.length === 1 ? "" : "s"
-        } · ${activeEdges} connection${activeEdges === 1 ? "" : "s"} · No files changed`;
+        const generatedAt = new Date(snapshot.proposal.generatedAt);
+        const time = Number.isNaN(generatedAt.getTime())
+            ? "time not supplied"
+            : generatedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        elements.statusLine.textContent = `AppHost proposal generated at ${time} — awaiting confirmation · ${
+            includedResources.length
+        } resource${includedResources.length === 1 ? "" : "s"} · ${activeEdges} connection${
+            activeEdges === 1 ? "" : "s"
+        }`;
     }
 }
 
@@ -679,13 +991,44 @@ function renderConfirmation() {
     const nonResourceIssues = issues.filter((issue) => !issue.startsWith('Resource "'));
     elements.confirm.disabled =
         !snapshot.proposalLoaded || snapshot.proposalStale || issues.length > 0 || snapshot.confirmed;
-    elements.confirm.textContent = snapshot.confirmed ? "Confirmed" : "Confirm & wire";
-    elements.footerNote.hidden = issues.length === 0;
-    elements.footerNote.textContent = resourceIssueCount
-        ? `${resourceIssueCount} resource${resourceIssueCount === 1 ? "" : "s"} need attention before confirmation.${
-              nonResourceIssues.length ? ` ${nonResourceIssues.join(" ")}` : ""
-          }`
-        : (issues[0] ?? "");
+    elements.confirm.textContent = snapshot.confirmed
+        ? "Proposal confirmed"
+        : "Confirm this AppHost proposal";
+    elements.scopeSummary.textContent = confirmationScopeSummary();
+    elements.footerNote.hidden = issues.length === 0 && !snapshot.confirmed;
+    elements.footerNote.textContent = snapshot.confirmed
+        ? "Implementation continues in chat."
+        : resourceIssueCount
+          ? `${resourceIssueCount} resource${resourceIssueCount === 1 ? "" : "s"} need attention before confirmation.${
+                nonResourceIssues.length ? ` ${nonResourceIssues.join(" ")}` : ""
+            }`
+          : (issues[0] ?? "");
+}
+
+function confirmationScopeSummary() {
+    const scope = snapshot.proposal.scope ?? {};
+    const files = scope.appHostFiles ?? [];
+    const packages = scope.integrationPackages ?? [];
+    const impacts = scope.serviceCodeImpacts ?? [];
+    const fileText = files.length ? files.join(", ") : "no AppHost files supplied";
+    const packageText = packages.length
+        ? packages.map(formatPackage).join(", ")
+        : "no integration packages supplied";
+    const impactText = impacts.length
+        ? impacts
+              .map((impact) =>
+                  [
+                      impact.serviceName || impact.serviceId || "service",
+                      impact.state,
+                      impact.summary,
+                      impact.files?.length ? impact.files.join(", ") : "",
+                  ]
+                      .filter(Boolean)
+                      .join(" · "),
+              )
+              .join("; ")
+        : "no service-code impacts supplied";
+    return `AppHost: ${fileText}. Packages: ${packageText}. Service code: ${impactText}.`;
 }
 
 function confirmationIssues() {
@@ -704,41 +1047,10 @@ function proposalValidation() {
         return snapshot.validation;
     }
 
-    const issues = [];
-    const resourceIssues = {};
-    const included = snapshot.proposal.resources.filter((resource) => resource.include);
-    const duplicateCounts = new Map();
-    for (const resource of included) {
-        const key = resource.name.trim().toLowerCase();
-        if (key) {
-            duplicateCounts.set(key, (duplicateCounts.get(key) ?? 0) + 1);
-        }
-    }
-    if (included.length === 0) {
-        issues.push("Include at least one resource.");
-    }
-    for (const resource of included) {
-        const messages = resourceNameIssues(resource.name);
-        const key = resource.name.trim().toLowerCase();
-        if (key && (duplicateCounts.get(key) ?? 0) > 1) {
-            messages.push(`The name "${resource.name}" is used by more than one resource.`);
-        }
-        if (!resource.type.trim()) {
-            messages.push("Choose a resource type.");
-        }
-        if (messages.length > 0) {
-            resourceIssues[resource.id] = messages;
-            issues.push(
-                `Resource "${resource.name || resource.id || "(unnamed)"}": ${messages.join(" ")}`,
-            );
-        }
-    }
-    for (const edge of snapshot.proposal.edges) {
-        if (edge.from === edge.to) {
-            issues.push(`Connection "${edge.from}" cannot target itself.`);
-        }
-    }
-    return { issues, resourceIssues };
+    return {
+        issues: ["Proposal validation is unavailable. Refresh the snapshot before confirmation."],
+        resourceIssues: {},
+    };
 }
 
 function resourceNameIssues(value) {
@@ -927,9 +1239,15 @@ async function saveResource(event) {
 
 async function deleteResource() {
     const id = elements.resourceId.value;
-    await runBusy(elements.deleteResource, async () => {
-        await post("/api/proposal/resource/delete", { id });
+    await deleteResourceById(id, elements.deleteResource, () => {
         elements.resourceDialog.close();
+    });
+}
+
+async function deleteResourceById(id, control, onDeleted) {
+    await runBusy(control, async () => {
+        await post("/api/proposal/resource/delete", { id });
+        onDeleted?.();
     });
 }
 
@@ -937,7 +1255,14 @@ function openAddResourceDialog(groupId) {
     if (snapshot.confirmed) {
         return;
     }
-    const definition = RESOURCE_GROUPS.find((candidate) => candidate.id === groupId);
+    const definition =
+        groupId === "all"
+            ? {
+                  id: "all",
+                  addTitle: "Add resource",
+                  addDescription: "Add another resource to this AppHost proposal.",
+              }
+            : RESOURCE_GROUPS.find((candidate) => candidate.id === groupId);
     if (!definition) {
         return;
     }
@@ -1182,7 +1507,10 @@ function resourceGroupDefinition(resource) {
 
 function filterResourceTypeOptions(select, groupId) {
     for (const option of select.options) {
-        const matches = option.dataset.group === groupId || option.dataset.detected === "true";
+        const matches =
+            groupId === "all" ||
+            option.dataset.group === groupId ||
+            option.dataset.detected === "true";
         option.hidden = !matches;
         option.disabled = !matches;
     }
@@ -1195,7 +1523,7 @@ function filterResourceTypeOptions(select, groupId) {
 
 function syncDefaultsField(select, field, checkbox, defaultWhenShown = true) {
     const wasHidden = field.hidden;
-    const isDotNet = select.value === ".NET project";
+    const isDotNet = isDotNetType(select.value);
     field.hidden = !isDotNet;
     if (isDotNet && wasHidden && defaultWhenShown) {
         checkbox.checked = true;
@@ -1203,45 +1531,36 @@ function syncDefaultsField(select, field, checkbox, defaultWhenShown = true) {
 }
 
 function showLoading() {
-    elements.body.classList.add("is-loading");
-    elements.body.classList.remove("is-scanning");
-    elements.skeleton.hidden = false;
-    elements.snapshot.hidden = true;
-    elements.actionFooter.hidden = true;
-    elements.error.hidden = true;
-    elements.apphostControl.hidden = true;
-    elements.rescan.hidden = true;
-    elements.loadingTitle.textContent = "Preparing findings";
-    elements.loadingDetail.textContent = "Waiting for Aspireify to present the resource plan.";
-    elements.statusLine.textContent = "Preparing findings…";
+    showProposalPending();
 }
 
-function showScanPending() {
-    elements.body.classList.add("is-loading", "is-scanning");
+function showProposalPending() {
+    elements.body.classList.add("is-loading");
+    elements.body.classList.remove("is-busy", "has-data", "is-confirmed");
     elements.skeleton.hidden = false;
     elements.snapshot.hidden = true;
     elements.actionFooter.hidden = true;
     elements.error.hidden = true;
-    elements.apphostControl.hidden = true;
-    elements.rescan.hidden = false;
-    elements.rescan.disabled = true;
-    elements.scanActionLabel.textContent = "Re-scanning…";
-    elements.loadingTitle.textContent = "Refreshing findings";
-    elements.loadingDetail.textContent =
-        "Aspireify is re-running discovery and rebuilding the proposal.";
-    elements.statusLine.textContent = "Refreshing findings…";
+    elements.apphostControl.hidden = !snapshot?.apphostStyle;
+    elements.statusLine.textContent = "Receiving AppHost proposal snapshot…";
 }
 
 function showError(error) {
-    elements.body.classList.remove("is-loading", "is-busy", "is-scanning");
+    elements.body.classList.remove("is-loading", "is-busy", "has-data");
     elements.skeleton.hidden = true;
     elements.snapshot.hidden = true;
     elements.actionFooter.hidden = true;
     elements.error.hidden = false;
     elements.apphostControl.hidden = true;
-    elements.rescan.hidden = true;
-    elements.statusLine.textContent = "Plan unavailable";
+    elements.statusLine.textContent = "Proposal unavailable";
+    elements.retry.textContent = "Try again";
     elements.errorMessage.textContent = error?.message ?? String(error);
+}
+
+function showProposalError(error) {
+    showError(new Error(String(error ?? "Proposal generation failed.")));
+    elements.statusLine.textContent = "Proposal generation failed";
+    elements.retry.textContent = "Retry proposal";
 }
 
 function showInlineError(error) {

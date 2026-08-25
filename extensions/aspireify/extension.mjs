@@ -8,6 +8,23 @@ import { readFile } from "node:fs/promises";
 import { basename, dirname, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createCanvas, joinSession } from "@github/copilot-sdk/extension";
+import {
+    classifyServiceKind,
+    exactType,
+    freezeSnapshot,
+    includedServicesForProposal,
+    isDotNetType,
+    normalizeOwnership,
+    normalizePackages,
+    normalizePorts,
+    normalizeProposalMetadata,
+    normalizeScope,
+    normalizeServiceCodeImpact,
+    presentationMode,
+    stableProposalHash,
+    unmappedExternalServicesForProposal,
+    unresolvedDecisions,
+} from "./proposal-model.mjs";
 
 const CANVAS_ID = "aspireify-graph";
 const DEFAULT_INSTANCE_ID = "aspireify-main";
@@ -25,32 +42,6 @@ const CONTENT_TYPES = {
 };
 
 const APPHOST_STYLES = new Set(["csharp-sdk", "csharp-file", "typescript"]);
-const SERVICE_TYPES = new Set(["dotnet", "node", "python", "dockerfile", "container", "executable"]);
-const TYPE_ALIASES = new Map([
-    ["c#", "dotnet"],
-    ["csharp", "dotnet"],
-    ["csproj", "dotnet"],
-    ["dotnet", "dotnet"],
-    ["project", "dotnet"],
-    ["javascript", "node"],
-    ["nextjs", "node"],
-    ["node", "node"],
-    ["nodejs", "node"],
-    ["npm", "node"],
-    ["typescript", "node"],
-    ["vite", "node"],
-    ["fastapi", "python"],
-    ["flask", "python"],
-    ["py", "python"],
-    ["python", "python"],
-    ["docker", "dockerfile"],
-    ["dockerfile", "dockerfile"],
-    ["container", "container"],
-    ["image", "container"],
-    ["exe", "executable"],
-    ["executable", "executable"],
-    ["process", "executable"],
-]);
 
 const instances = new Map();
 const snapshots = new Map();
@@ -72,6 +63,10 @@ function emptySnapshot(appHostPath = "") {
         proposal: {
             resources: [],
             edges: [],
+            generatedAt: "",
+            assumptionsRisks: [],
+            decisions: [],
+            scope: normalizeScope(),
         },
         removedGeneratedResources: [],
         removedGeneratedEdges: [],
@@ -103,14 +98,6 @@ function getSnapshot(domainId) {
     return snapshots.get(domainId);
 }
 
-function normalizeType(value) {
-    const key = String(value ?? "")
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, "");
-    return TYPE_ALIASES.get(key) ?? (SERVICE_TYPES.has(key) ? key : "executable");
-}
-
 function resourceNameFrom(value, index) {
     const normalized = String(value ?? "")
         .trim()
@@ -123,7 +110,9 @@ function resourceNameFrom(value, index) {
 }
 
 function normalizeService(service, index) {
-    const type = normalizeType(service?.type);
+    const type = exactType(service?.type, "executable");
+    const kind = classifyServiceKind(type);
+    const ownership = normalizeOwnership(service?.ownership);
     const name = String(service?.name ?? `Service ${index + 1}`).trim() || `Service ${index + 1}`;
     const include = typeof service?.include === "boolean" ? service.include : true;
     const id = String(service?.id ?? "").trim();
@@ -131,14 +120,23 @@ function normalizeService(service, index) {
         id,
         name,
         type,
+        kind,
         framework: String(service?.framework ?? "").trim(),
         exposesHttp: Boolean(service?.exposesHttp),
         path: String(service?.path ?? "").trim(),
+        command: String(service?.command ?? service?.runCommand ?? "").trim(),
+        ports: normalizePorts(service?.ports),
+        ownership,
+        serviceCodeImpact: normalizeServiceCodeImpact(service?.serviceCodeImpact),
+        proposalCandidate:
+            typeof service?.proposalCandidate === "boolean"
+                ? service.proposalCandidate
+                : ownership.kind !== "external-infrastructure",
         include,
         resourceName: String(service?.resourceName ?? resourceNameFrom(name, index)).trim(),
         serviceDefaults:
             include &&
-            type === "dotnet" &&
+            kind === "dotnet" &&
             (typeof service?.serviceDefaults === "boolean" ? service.serviceDefaults : true),
     };
 }
@@ -163,26 +161,7 @@ function countServicePaths(services) {
 }
 
 function normalizeResourceType(value) {
-    const text = String(value ?? "").trim();
-    const normalized = text.toLowerCase();
-    const aliases = [
-        [/next(?:\.js|js)?/, "Next.js"],
-        [/\bvite\b/, "Vite"],
-        [/asp\.net|\.net|dotnet|csharp|csproj/, ".NET project"],
-        [/\bnode(?:\.js|js)?\b/, "Node.js"],
-        [/\bpython\b|fastapi|flask/, "Python"],
-        [/\bpostgres(?:ql)?\b/, "Postgres"],
-        [/\bredis\b/, "Redis"],
-        [/\brabbitmq\b/, "RabbitMQ"],
-        [/\bmongo(?:db)?\b/, "MongoDB"],
-        [/\bsql server\b/, "SQL Server"],
-        [/\bmysql\b/, "MySQL"],
-        [/\bcosmos\b/, "Azure Cosmos DB"],
-        [/\bservice bus\b/, "Azure Service Bus"],
-        [/\bcontainer\b|docker/, "Container"],
-        [/\bexecutable\b|\bprocess\b/, "Executable"],
-    ];
-    return aliases.find(([pattern]) => pattern.test(normalized))?.[1] ?? (text || "Executable");
+    return exactType(value, "Executable");
 }
 
 function normalizeProposalResource(resource, index, userAdded = false) {
@@ -193,9 +172,15 @@ function normalizeProposalResource(resource, index, userAdded = false) {
         type,
         serviceId: String(resource?.serviceId ?? "").trim(),
         detail: String(resource?.detail ?? "").trim(),
+        path: String(resource?.path ?? "").trim(),
+        command: String(resource?.command ?? resource?.runCommand ?? "").trim(),
+        ports: normalizePorts(resource?.ports),
+        packages: normalizePackages(resource?.packages),
+        ownership: normalizeOwnership(resource?.ownership),
+        serviceCodeImpact: normalizeServiceCodeImpact(resource?.serviceCodeImpact),
         include: typeof resource?.include === "boolean" ? resource.include : true,
         serviceDefaults:
-            type === ".NET project" &&
+            isDotNetResourceType(type) &&
             (typeof resource?.serviceDefaults === "boolean" ? resource.serviceDefaults : true),
         userAdded: Boolean(resource?.userAdded ?? userAdded),
         userEdited: Boolean(resource?.userEdited),
@@ -245,14 +230,37 @@ function normalizeProposalEdge(edge, index, userAdded = false) {
 }
 
 function serviceResourceType(type) {
-    return {
-        dotnet: ".NET project",
-        node: "Node.js",
-        python: "Python",
-        dockerfile: "Container",
-        container: "Container",
-        executable: "Executable",
-    }[type] ?? "Executable";
+    return exactType(type, "Executable");
+}
+
+function isDotNetResourceType(type) {
+    return isDotNetType(type);
+}
+
+function enrichResourceFromService(resource, service) {
+    if (!service) {
+        return resource;
+    }
+    resource.sourceName ||= service.name;
+    resource.path ||= service.path;
+    resource.command ||= service.command;
+    if (!resource.ports.length) {
+        resource.ports = service.ports.map((port) => ({ ...port }));
+    }
+    if (!resource.ownership.label && resource.ownership.kind === "unknown") {
+        resource.ownership = { ...service.ownership };
+    }
+    if (
+        resource.serviceCodeImpact.state === "unknown" &&
+        !resource.serviceCodeImpact.summary &&
+        !resource.serviceCodeImpact.files.length
+    ) {
+        resource.serviceCodeImpact = {
+            ...service.serviceCodeImpact,
+            files: [...service.serviceCodeImpact.files],
+        };
+    }
+    return resource;
 }
 
 function replaceNameInEdgeKey(key, previousName, nextName) {
@@ -303,7 +311,9 @@ function syncServiceResource(state, service, { rename = false, updateType = fals
         resource.type = serviceResourceType(service.type);
     }
     resource.include = service.include;
-    resource.serviceDefaults = service.include && service.type === "dotnet" && service.serviceDefaults;
+    resource.serviceDefaults =
+        service.include && isDotNetType(service.type) && service.serviceDefaults;
+    enrichResourceFromService(resource, service);
     state.proposalEdited = true;
     return true;
 }
@@ -353,7 +363,9 @@ function duplicateNameGroups(items, nameSelector) {
 
 function validateResourceNames(services) {
     const issues = {};
-    const included = services.filter((candidate) => candidate.include);
+    const included = services.filter(
+        (candidate) => candidate.include && candidate.proposalCandidate,
+    );
     const duplicateGroups = duplicateNameGroups(included, (service) => service.resourceName);
     for (const service of included) {
         const name = service.resourceName.trim();
@@ -430,6 +442,14 @@ function validateProposalDetails(proposal) {
             issues.push(`Connection "${edge.from}" cannot target itself.`);
         }
     }
+    for (const decision of unresolvedDecisions(proposal)) {
+        issues.push(`Needs chat decision: ${decision.title || decision.id}.`);
+    }
+    for (const fact of proposal.assumptionsRisks ?? []) {
+        if (fact.severity === "blocking") {
+            issues.push(`Blocking proposal risk: ${fact.title || fact.id}.`);
+        }
+    }
     return { issues, resourceIssues };
 }
 
@@ -441,10 +461,23 @@ function confirmedProposal(proposal) {
     const resources = proposal.resources.filter((resource) => resource.include);
     const names = new Set(resources.map((resource) => resource.name));
     return {
-        resources: resources.map(({ userAdded, userEdited, sourceName, ...resource }) => resource),
+        resources: resources.map(({ userAdded, userEdited, ...resource }) => resource),
         edges: proposal.edges
             .filter((edge) => names.has(edge.from) && names.has(edge.to))
             .map(({ userAdded, userEdited, sourceId, sourceKey, ...edge }) => edge),
+        generatedAt: proposal.generatedAt,
+        assumptionsRisks: proposal.assumptionsRisks.map((fact) => ({ ...fact })),
+        decisions: proposal.decisions.map((decision) => ({ ...decision })),
+        scope: {
+            appHostFiles: [...proposal.scope.appHostFiles],
+            integrationPackages: proposal.scope.integrationPackages.map((package_) => ({
+                ...package_,
+            })),
+            serviceCodeImpacts: proposal.scope.serviceCodeImpacts.map((impact) => ({
+                ...impact,
+                files: [...impact.files],
+            })),
+        },
     };
 }
 
@@ -454,25 +487,42 @@ function confirmationResult(snapshot, confirmed = snapshot.confirmed) {
             .filter(
                 (resource) =>
                     resource.include &&
-                    resource.type === ".NET project" &&
+                    isDotNetResourceType(resource.type) &&
                     resource.serviceDefaults,
             )
             .map((resource) => resource.name),
     );
     return {
         confirmed: Boolean(confirmed),
+        proposalGeneration: snapshot.proposalGeneration,
+        proposalHash: proposalHash(snapshot),
+        generatedAt: snapshot.proposal.generatedAt,
+        confirmedAt: confirmed ? new Date().toISOString() : "",
         discoveryLoaded: snapshot.discoveryLoaded,
         proposalLoaded: snapshot.proposalLoaded,
         apphostStyle: snapshot.apphostStyle,
-        included: snapshot.services
-            .filter((service) => service.include)
-            .map((service) => ({ ...service })),
+        included: includedServices(snapshot).map((service) => ({ ...service })),
         excluded: snapshot.services
             .filter((service) => !service.include)
             .map(({ id, name, type }) => ({ id, name, type })),
+        externalServices: unmappedExternalServices(snapshot).map((service) => ({ ...service })),
         serviceDefaults: [...serviceDefaults],
         proposal: confirmedProposal(snapshot.proposal),
     };
+}
+
+function includedServices(snapshot) {
+    return includedServicesForProposal(
+        snapshot.services,
+        snapshot.proposal.resources,
+    );
+}
+
+function unmappedExternalServices(snapshot) {
+    return unmappedExternalServicesForProposal(
+        snapshot.services,
+        snapshot.proposal.resources,
+    );
 }
 
 function isConfirmed(snapshot) {
@@ -484,8 +534,19 @@ function snapshotForClient(snapshot) {
     return {
         ...clientSnapshot,
         confirmed: isConfirmed(snapshot),
+        proposalHash: confirmation?.proposalHash ?? proposalHash(snapshot),
+        confirmedGeneration: confirmation?.proposalGeneration ?? null,
+        confirmedAt: confirmation?.confirmedAt ?? "",
+        presentationMode: presentationMode(snapshot.proposal),
         validation: validateProposalDetails(snapshot.proposal),
     };
+}
+
+function proposalHash(snapshot) {
+    return stableProposalHash({
+        proposalGeneration: snapshot.proposalGeneration,
+        proposal: confirmedProposal(snapshot.proposal),
+    });
 }
 
 function broadcast(domainId) {
@@ -567,13 +628,20 @@ function serializeUntrustedData(value) {
 
 function confirmationMessage(snapshot) {
     const payload = {
+        proposalGeneration: snapshot.proposalGeneration,
+        proposalHash: proposalHash(snapshot),
         apphostStyle: snapshot.apphostStyle,
-        included: snapshot.services
-            .filter((service) => service.include)
+        included: includedServices(snapshot)
             .map((service) => ({ name: service.name, resourceName: service.resourceName })),
         excluded: snapshot.services
             .filter((service) => !service.include)
             .map((service) => service.name),
+        externalInfrastructure: unmappedExternalServices(snapshot).map((service) => ({
+            id: service.id,
+            name: service.name,
+            type: service.type,
+            ownership: service.ownership,
+        })),
         proposal: confirmedProposal(snapshot.proposal),
     };
     return [
@@ -591,13 +659,20 @@ function proposalRequestMessage(snapshot) {
     const payload = {
         apphostStyle: snapshot.apphostStyle,
         services: snapshot.services.map((service) => ({
+            id: service.id,
             name: service.name,
             resourceName: service.resourceName,
             type: service.type,
+            kind: service.kind,
             framework: service.framework,
             exposesHttp: service.exposesHttp,
             serviceDefaults: service.serviceDefaults,
             path: service.path,
+            command: service.command,
+            ports: service.ports,
+            ownership: service.ownership,
+            serviceCodeImpact: service.serviceCodeImpact,
+            proposalCandidate: service.proposalCandidate,
             include: service.include,
         })),
     };
@@ -766,15 +841,21 @@ async function handlePost(entry, path, body, response) {
 
     if (path === "/api/service/type" && service) {
         updateSnapshot(domainId, (state) => {
-            service.type = normalizeType(body.value);
-            service.serviceDefaults = service.include && service.type === "dotnet";
+            service.type = exactType(body.value, service.type);
+            service.kind = classifyServiceKind(service.type);
+            service.serviceDefaults = service.include && isDotNetType(service.type);
             state.confirmed = false;
             syncServiceResource(state, service, { updateType: true });
         });
         return sendJson(response, 200, { ok: true });
     }
 
-    if (path === "/api/service/defaults" && service && service.include && service.type === "dotnet") {
+    if (
+        path === "/api/service/defaults" &&
+        service &&
+        service.include &&
+        isDotNetType(service.type)
+    ) {
         updateSnapshot(domainId, (state) => {
             service.serviceDefaults = Boolean(body.value);
             syncServiceResource(state, service);
@@ -799,7 +880,11 @@ async function handlePost(entry, path, body, response) {
                 error: formatServiceNameIssues(snapshot.services, issues),
             });
         }
-        if (!snapshot.services.some((candidate) => candidate.include)) {
+        if (
+            !snapshot.services.some(
+                (candidate) => candidate.include && candidate.proposalCandidate,
+            )
+        ) {
             return sendJson(response, 400, {
                 ok: false,
                 error: "Include at least one service before building the proposal.",
@@ -875,7 +960,7 @@ async function handlePost(entry, path, body, response) {
                 : proposalResource.type;
         const previousType = proposalResource.type;
         const nextServiceDefaults =
-            nextType === ".NET project" &&
+            isDotNetResourceType(nextType) &&
             (typeof body.serviceDefaults === "boolean"
                 ? body.serviceDefaults
                 : proposalResource.serviceDefaults);
@@ -891,11 +976,11 @@ async function handlePost(entry, path, body, response) {
             if (typeof body.type === "string") {
                 proposalResource.type = nextType;
             }
-            if (nextType !== ".NET project") {
+            if (!isDotNetResourceType(nextType)) {
                 proposalResource.serviceDefaults = false;
             } else if (typeof body.serviceDefaults === "boolean") {
                 proposalResource.serviceDefaults = body.serviceDefaults;
-            } else if (previousType !== ".NET project") {
+            } else if (!isDotNetResourceType(previousType)) {
                 proposalResource.serviceDefaults = true;
             }
             if (typeof body.include === "boolean") {
@@ -1000,7 +1085,7 @@ async function handlePost(entry, path, body, response) {
                     detail: String(body.detail ?? "").trim(),
                     include: true,
                     serviceDefaults:
-                        type === ".NET project" &&
+                        isDotNetResourceType(type) &&
                         (typeof body.serviceDefaults === "boolean"
                             ? body.serviceDefaults
                             : true),
@@ -1214,7 +1299,7 @@ async function handlePost(entry, path, body, response) {
                 }
                 updateSnapshot(domainId, (state) => {
                     state.confirmed = true;
-                    state.confirmation = confirmationResult(state, true);
+                    state.confirmation = freezeSnapshot(confirmationResult(state, true));
                 });
                 return true;
             })().finally(() => confirmationRequests.delete(domainId));
@@ -1242,7 +1327,10 @@ async function handleRequest(entry, request, response) {
     if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
         return serveAsset(response, "index.html");
     }
-    if (request.method === "GET" && ["/app.js", "/styles.css"].includes(url.pathname)) {
+    if (
+        request.method === "GET" &&
+        ["/app.js", "/styles.css", "/resource-types.js"].includes(url.pathname)
+    ) {
         return serveAsset(response, url.pathname.slice(1));
     }
     if (request.method === "GET" && url.pathname === "/api/snapshot") {
@@ -1314,6 +1402,82 @@ const APPHOST_PATH_SCHEMA = {
     },
 };
 
+const OWNERSHIP_SCHEMA = {
+    oneOf: [
+        { type: "string" },
+        {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+                kind: {
+                    type: "string",
+                    enum: [
+                        "aspire-managed",
+                        "service-owned",
+                        "external-infrastructure",
+                        "shared",
+                        "unknown",
+                    ],
+                },
+                label: { type: "string" },
+                owner: { type: "string" },
+            },
+        },
+    ],
+};
+
+const PORT_SCHEMA = {
+    oneOf: [
+        { type: "integer", minimum: 1, maximum: 65535 },
+        { type: "string" },
+        {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+                id: { type: "string" },
+                name: { type: "string" },
+                port: { oneOf: [{ type: "integer" }, { type: "string" }] },
+                targetPort: { oneOf: [{ type: "integer" }, { type: "string" }] },
+                protocol: { type: "string" },
+                purpose: { type: "string" },
+            },
+        },
+    ],
+};
+
+const PACKAGE_SCHEMA = {
+    oneOf: [
+        { type: "string" },
+        {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+                name: { type: "string" },
+                version: { type: "string" },
+            },
+            required: ["name"],
+        },
+    ],
+};
+
+const SERVICE_CODE_IMPACT_SCHEMA = {
+    oneOf: [
+        { type: "string" },
+        {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+                state: {
+                    type: "string",
+                    enum: ["none", "required", "optional", "unknown"],
+                },
+                summary: { type: "string" },
+                files: { type: "array", items: { type: "string" } },
+            },
+        },
+    ],
+};
+
 const SERVICE_SCHEMA = {
     type: "object",
     additionalProperties: false,
@@ -1327,11 +1491,22 @@ const SERVICE_SCHEMA = {
         name: { type: "string" },
         type: {
             type: "string",
-            description: "Runnable service type: dotnet, node, python, dockerfile, container, or executable.",
+            description:
+                "Precise discovered service type label, such as .NET project, Vite SPA, Next.js, Python, or Docker Compose service.",
         },
         framework: { type: "string" },
         exposesHttp: { type: "boolean" },
         path: { type: "string" },
+        command: { type: "string" },
+        runCommand: { type: "string" },
+        ports: { type: "array", items: PORT_SCHEMA },
+        ownership: OWNERSHIP_SCHEMA,
+        serviceCodeImpact: SERVICE_CODE_IMPACT_SCHEMA,
+        proposalCandidate: {
+            type: "boolean",
+            description:
+                "Whether Aspireify may propose this service as an Aspire resource. Defaults false for external infrastructure ownership.",
+        },
         resourceName: { type: "string" },
         include: { type: "boolean" },
         serviceDefaults: { type: "boolean" },
@@ -1499,8 +1674,8 @@ const aspireifyCanvas = createCanvas({
                             resourceName: previous?.resourceName ?? service.resourceName,
                             serviceDefaults:
                                 include &&
-                                service.type === "dotnet" &&
-                                (previous?.include && previous.type === "dotnet"
+                                isDotNetType(service.type) &&
+                                (previous?.include && isDotNetType(previous.type)
                                     ? previous.serviceDefaults
                                     : service.serviceDefaults),
                         };
@@ -1542,10 +1717,17 @@ const aspireifyCanvas = createCanvas({
                                 type: {
                                     type: "string",
                                     description:
-                                        "Aspire resource kind, such as .NET project, Next.js, Postgres, Redis, or Container.",
+                                        "Precise Aspire resource type label, such as .NET project, Vite SPA, Next.js, Postgres, Redis, or Container.",
                                 },
                                 serviceId: { type: "string" },
                                 detail: { type: "string" },
+                                path: { type: "string" },
+                                command: { type: "string" },
+                                runCommand: { type: "string" },
+                                ports: { type: "array", items: PORT_SCHEMA },
+                                packages: { type: "array", items: PACKAGE_SCHEMA },
+                                ownership: OWNERSHIP_SCHEMA,
+                                serviceCodeImpact: SERVICE_CODE_IMPACT_SCHEMA,
                                 include: { type: "boolean" },
                                 serviceDefaults: {
                                     type: "boolean",
@@ -1583,6 +1765,87 @@ const aspireifyCanvas = createCanvas({
                             required: ["from", "to", "kind"],
                         },
                     },
+                    generatedAt: {
+                        type: "string",
+                        description:
+                            "ISO 8601 timestamp for when this proposal snapshot was generated.",
+                    },
+                    assumptionsRisks: {
+                        type: "array",
+                        items: {
+                            type: "object",
+                            additionalProperties: false,
+                            properties: {
+                                id: { type: "string" },
+                                kind: { type: "string", enum: ["assumption", "risk"] },
+                                severity: {
+                                    type: "string",
+                                    enum: ["info", "warning", "blocking"],
+                                },
+                                verification: {
+                                    type: "string",
+                                    enum: [
+                                        "assumption",
+                                        "verified",
+                                        "unverified",
+                                        "needs-chat-decision",
+                                    ],
+                                },
+                                title: { type: "string" },
+                                detail: { type: "string" },
+                            },
+                            required: ["title"],
+                        },
+                    },
+                    decisions: {
+                        type: "array",
+                        items: {
+                            type: "object",
+                            additionalProperties: false,
+                            properties: {
+                                id: { type: "string" },
+                                title: { type: "string" },
+                                summary: { type: "string" },
+                                status: {
+                                    type: "string",
+                                    enum: ["resolved", "needs-chat-decision"],
+                                },
+                            },
+                            required: ["title", "status"],
+                        },
+                    },
+                    scope: {
+                        type: "object",
+                        additionalProperties: false,
+                        properties: {
+                            appHostFiles: { type: "array", items: { type: "string" } },
+                            integrationPackages: {
+                                type: "array",
+                                items: PACKAGE_SCHEMA,
+                            },
+                            serviceCodeImpacts: {
+                                type: "array",
+                                items: {
+                                    type: "object",
+                                    additionalProperties: false,
+                                    properties: {
+                                        id: { type: "string" },
+                                        serviceId: { type: "string" },
+                                        serviceName: { type: "string" },
+                                        state: {
+                                            type: "string",
+                                            enum: ["none", "required", "optional", "unknown"],
+                                        },
+                                        summary: { type: "string" },
+                                        files: {
+                                            type: "array",
+                                            items: { type: "string" },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
                 },
                 required: ["proposalGeneration"],
             },
@@ -1605,6 +1868,11 @@ const aspireifyCanvas = createCanvas({
                           normalizeProposalResource(resource, index),
                       )
                     : null;
+                const incomingMetadata = normalizeProposalMetadata(context.input, () =>
+                    current.proposalLoaded && current.proposal.generatedAt
+                        ? new Date(current.proposal.generatedAt)
+                        : new Date(),
+                );
                 const userAddedResources = current.proposal.resources.filter(
                     (resource) => resource.userAdded,
                 );
@@ -1652,10 +1920,10 @@ const aspireifyCanvas = createCanvas({
                                   if (linkedService) {
                                       generated.serviceDefaults =
                                           linkedService.include &&
-                                          linkedService.type === "dotnet" &&
+                                          isDotNetType(linkedService.type) &&
                                           linkedService.serviceDefaults;
                                   }
-                                  return generated;
+                                  return enrichResourceFromService(generated, linkedService);
                               })
                               .map((generated) => {
                                   const preserved = preservedResourcesByName.get(
@@ -1758,6 +2026,7 @@ const aspireifyCanvas = createCanvas({
                                     !edgeKeys.has(proposalEdgeKey(edge)),
                             ),
                         ],
+                        ...incomingMetadata,
                     };
                     state.proposalLoaded = true;
                     state.proposalEdited =
@@ -1804,11 +2073,9 @@ const aspireifyCanvas = createCanvas({
             title: snapshot.repoName ? `Aspireify - ${snapshot.repoName}` : "Aspireify",
             status: isConfirmed(snapshot)
                 ? "Confirmed"
-                : snapshot.scanStatus === "scanning"
-                  ? "Refreshing findings"
-                  : snapshot.discoveryLoaded
-                  ? `${snapshot.services.length} service${snapshot.services.length === 1 ? "" : "s"}`
-                  : "Waiting for findings",
+                : snapshot.proposalLoaded && !snapshot.proposalStale
+                  ? `Proposal generation ${snapshot.proposalGeneration} awaiting confirmation`
+                  : "Receiving proposal snapshot",
             url: entry.url,
         };
     },
@@ -1938,14 +2205,14 @@ const openAspireifyTool = {
 
 const SESSION_GUIDANCE =
     "An Aspireify Step 3 confirmation canvas is available. Use it only while running the aspireify workflow, after repository scanning and chat-based clarification have produced a proposal. " +
-    "The aspireify skill owns scanning, proposal generation, AppHost edits, and validation; the canvas only presents and confirms the resource plan. " +
+    "The aspireify skill owns scanning, clarification, proposal generation, AppHost edits, startup, and validation; the canvas only presents and confirms one generated proposal snapshot. " +
     "Do not open it for ordinary Aspire lifecycle, monitoring, deployment, or AppHost editing requests.";
 
 const ASPIREFY_WORKFLOW_GUIDANCE =
     "This request is part of the aspireify workflow. Keep discovery questions and implementation tradeoffs in chat. " +
-    "When the proposal is ready, call open_aspireify, then load_discovery with the AppHost style and every runnable service's stable unique id, name, type, framework, exposesHttp, and path. " +
-    "Pass the proposalGeneration returned by load_discovery to set_proposal with the complete resource graph. Wait for the user to confirm in the canvas, then call get_confirmation before editing any files. " +
-    "Never make the canvas scan the repository, generate the proposal, edit the AppHost, or validate the application. " +
+    "When the proposal is ready, call open_aspireify, then load_discovery with the AppHost style and every runnable service's stable unique id, name, precise type, framework, exposesHttp, path, command, ports, ownership, and service-code impact when known. " +
+    "Pass the proposalGeneration returned by load_discovery to set_proposal with the complete resource graph, generatedAt, packages with versions, assumptions and risks, chat-decision states, and exact scope of AppHost files, integration packages, and service-code impacts. Preserve exact type labels such as Vite SPA. Mark managed infrastructure that is not an Aspire resource with external-infrastructure ownership rather than adding it to the graph. " +
+    "Wait for the user to confirm in the canvas, then call get_confirmation before editing any files. Never make the canvas scan the repository, resolve tradeoffs, generate the proposal, edit the AppHost, start resources, or validate the application. " +
     "If the canvas host is unavailable, present and confirm the same proposal in chat.";
 
 const CANVAS_CALLBACK_GUIDANCE =
@@ -1953,7 +2220,7 @@ const CANVAS_CALLBACK_GUIDANCE =
     "Perform the requested scan or proposal regeneration in the aspireify workflow, preserve user-added resources and connections, pass the latest scanGeneration to load_discovery and the latest proposalGeneration to set_proposal as appropriate, and do not edit files before confirmation.";
 
 const AFTER_OPEN_GUIDANCE =
-    "The Aspireify confirmation canvas is open. Populate it now: call load_discovery with the completed scan, then pass its proposalGeneration to set_proposal with the generated resource plan. " +
+    "The Aspireify confirmation canvas is open. Populate it now: call load_discovery with the completed discovery facts, then pass its proposalGeneration to set_proposal with the complete generated snapshot, including precise types, ownership, scope, assumptions, risks, and decision states. " +
     "Do not expect the canvas to discover or generate anything.";
 
 const AFTER_PROPOSAL_GUIDANCE =
