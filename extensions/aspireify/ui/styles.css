@@ -13,12 +13,6 @@
     --surface-muted: color-mix(in srgb, var(--text-color-default, #1f2328) 9%, transparent);
     --surface-raised: var(--background-color-default, #ffffff);
     --border-soft: color-mix(in srgb, var(--text-color-default, #1f2328) 14%, transparent);
-    --project: var(--accent);
-    --frontend: var(--accent);
-    --database: var(--accent);
-    --cache: var(--accent);
-    --broker: var(--accent);
-    --container: var(--accent);
 }
 
 .compact-resource-actions {
@@ -252,6 +246,59 @@ input[aria-invalid="true"] {
     gap: 8px;
 }
 
+.tb-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 0 var(--gutter) 10px;
+}
+
+.pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 11px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: var(--font-weight-semibold, 600);
+}
+
+.pill-num {
+    font-variant-numeric: tabular-nums;
+}
+
+.pill-dot {
+    width: 8px;
+    height: 8px;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: currentColor;
+}
+
+.pill.ok {
+    color: var(--ok);
+    border-color: color-mix(in srgb, var(--ok) 22%, transparent);
+    background: color-mix(in srgb, var(--ok) 13%, transparent);
+}
+
+.pill.warn {
+    color: var(--warn);
+    border-color: color-mix(in srgb, var(--warn) 24%, transparent);
+    background: color-mix(in srgb, var(--warn) 14%, transparent);
+}
+
+.pill.req {
+    color: var(--danger);
+    border-color: color-mix(in srgb, var(--danger) 24%, transparent);
+    background: color-mix(in srgb, var(--danger) 13%, transparent);
+}
+
+.pill[data-zero="true"] {
+    opacity: 0.5;
+}
+
 .btn-ico {
     display: inline-flex;
     flex: 0 0 auto;
@@ -411,10 +458,9 @@ body.is-loading .progress > span {
 
 .resource-plan {
     display: flex;
-    min-height: 0;
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     flex-direction: column;
-    overflow: hidden;
+    overflow: visible;
 }
 
 .resource-plan-heading {
@@ -448,11 +494,10 @@ body.is-loading .progress > span {
 
 .resource-groups {
     display: flex;
-    min-height: 0;
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     flex-direction: column;
     gap: 14px;
-    overflow: auto;
+    overflow: visible;
     padding: 0 2px 4px 0;
 }
 
@@ -580,9 +625,9 @@ body.is-loading .progress > span {
     justify-content: space-between;
     gap: 12px;
     padding: 10px 12px;
-    border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border-soft));
+    border: 1px solid var(--border-soft);
     border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--accent) 6%, var(--surface-raised));
+    background: var(--surface-raised);
 }
 
 .proposal-state strong {
@@ -614,7 +659,7 @@ body.is-loading .progress > span {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    overflow: auto;
+    overflow: visible;
 }
 
 .compact-resource {
@@ -659,13 +704,10 @@ body.is-loading .progress > span {
 }
 
 .resource-facts {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
     margin: 0;
-    border: 1px solid var(--border-soft);
-    border-radius: var(--radius);
-    overflow: hidden;
 }
 
 .resource-fact {
@@ -674,12 +716,10 @@ body.is-loading .progress > span {
     gap: 8px;
     min-width: 0;
     padding: 6px 8px;
-    background: var(--surface-raised);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    background: var(--surface-inset);
     font-size: 11.5px;
-}
-
-.resource-fact + .resource-fact {
-    border-top: 1px solid var(--border-soft);
 }
 
 .resource-fact dt {
@@ -786,15 +826,13 @@ body.is-loading .progress > span {
 }
 
 .resource-card {
-    --resource-accent: var(--project);
     display: flex;
     min-width: 0;
     min-height: 0;
     flex-direction: column;
     gap: 10px;
     padding: 12px;
-    border: 1px solid var(--border-color-default, #d1d9e0);
-    border-left: 3px solid var(--resource-accent);
+    border: 1px solid var(--border-soft);
     border-radius: var(--radius-lg);
     background: var(--surface-raised);
     box-shadow: none;
@@ -802,30 +840,6 @@ body.is-loading .progress > span {
 
 .resource-card.is-collapsed {
     min-height: 0;
-}
-
-.resource-card.resource-frontend {
-    --resource-accent: var(--frontend);
-}
-
-.resource-card.resource-database {
-    --resource-accent: var(--database);
-}
-
-.resource-card.resource-cache {
-    --resource-accent: var(--cache);
-}
-
-.resource-card.resource-broker {
-    --resource-accent: var(--broker);
-}
-
-.resource-card.resource-container {
-    --resource-accent: var(--container);
-}
-
-.resource-card.resource-external {
-    --resource-accent: var(--text-color-muted, #59636e);
 }
 
 .resource-card-header {

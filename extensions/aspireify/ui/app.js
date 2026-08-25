@@ -50,6 +50,16 @@ const elements = {
     statusLine: document.getElementById("status-line"),
     apphostControl: document.getElementById("apphost-control"),
     apphostValue: document.getElementById("apphost-value"),
+    proposalSummary: document.getElementById("proposal-summary"),
+    pillResources: document.getElementById("pill-resources"),
+    countResources: document.getElementById("count-resources"),
+    labelResources: document.getElementById("label-resources"),
+    pillWarnings: document.getElementById("pill-warnings"),
+    countWarnings: document.getElementById("count-warnings"),
+    labelWarnings: document.getElementById("label-warnings"),
+    pillDecisions: document.getElementById("pill-decisions"),
+    countDecisions: document.getElementById("count-decisions"),
+    labelDecisions: document.getElementById("label-decisions"),
     skeleton: document.getElementById("skeleton"),
     snapshot: document.getElementById("snapshot"),
     planContent: document.getElementById("plan-content"),
@@ -172,6 +182,43 @@ function updateAppHostValue() {
             "csharp-file": "File-based C#",
             typescript: "TypeScript",
         }[snapshot?.apphostStyle] ?? "Unknown";
+}
+
+function renderSummaryPills() {
+    const resourceCount = snapshot.proposal.resources.filter((resource) => resource.include).length;
+    const warningCount = (snapshot.proposal.assumptionsRisks ?? []).filter(
+        (fact) => fact.severity === "warning" || fact.severity === "blocking",
+    ).length;
+    const decisionCount = (snapshot.proposal.decisions ?? []).filter(
+        (decision) => decision.status === "needs-chat-decision",
+    ).length;
+    setSummaryPill(
+        elements.pillResources,
+        elements.countResources,
+        elements.labelResources,
+        resourceCount,
+        "resource",
+    );
+    setSummaryPill(
+        elements.pillWarnings,
+        elements.countWarnings,
+        elements.labelWarnings,
+        warningCount,
+        "warning",
+    );
+    setSummaryPill(
+        elements.pillDecisions,
+        elements.countDecisions,
+        elements.labelDecisions,
+        decisionCount,
+        "chat decision",
+    );
+}
+
+function setSummaryPill(pill, countElement, labelElement, count, label) {
+    countElement.textContent = String(count);
+    labelElement.textContent = `${label}${count === 1 ? "" : "s"}`;
+    pill.dataset.zero = String(count === 0);
 }
 
 async function loadSnapshot() {
@@ -347,10 +394,12 @@ function render(nextSnapshot) {
         elements.snapshot.hidden = false;
         elements.actionFooter.hidden = false;
         elements.apphostControl.hidden = !snapshot.apphostStyle;
+        elements.proposalSummary.hidden = false;
         elements.body.classList.toggle("is-confirmed", snapshot.confirmed);
         updateAppHostValue();
         elements.planContent.hidden = false;
         renderProposalIdentity();
+        renderSummaryPills();
         renderResourcePlan();
         renderExternalServices();
         renderAssumptionsAndRisks();
@@ -639,7 +688,7 @@ function formatServiceCodeImpact(resource, service) {
         return "Not supplied";
     }
     return [
-        impact.state && impact.state !== "unknown" ? impact.state : "",
+        impact.state && impact.state !== "unknown" ? displayStatus(impact.state) : "",
         impact.summary,
         impact.files?.length ? impact.files.join(", ") : "",
     ]
@@ -654,7 +703,11 @@ function formatOwnership(resource, service) {
     if (!ownership || (!ownership.label && !ownership.owner && ownership.kind === "unknown")) {
         return "Not supplied";
     }
-    return [ownership.label, ownership.owner, ownership.kind !== "unknown" ? ownership.kind : ""]
+    return [
+        ownership.label,
+        ownership.owner,
+        ownership.kind !== "unknown" ? displayStatus(ownership.kind) : "",
+    ]
         .filter(Boolean)
         .join(" · ");
 }
@@ -909,7 +962,7 @@ function renderAssumptionsAndRisks() {
             createElement("strong", { text: fact.title || "Proposal fact" }),
             createElement("span", {
                 className: `status-chip ${fact.severity}`,
-                text: fact.severity,
+                text: displayStatus(fact.severity),
             }),
             createElement("span", {
                 className: `status-chip ${fact.verification}`,
@@ -1542,6 +1595,7 @@ function showProposalPending() {
     elements.actionFooter.hidden = true;
     elements.error.hidden = true;
     elements.apphostControl.hidden = !snapshot?.apphostStyle;
+    elements.proposalSummary.hidden = true;
     elements.statusLine.textContent = "Receiving AppHost proposal snapshot…";
 }
 
@@ -1552,6 +1606,7 @@ function showError(error) {
     elements.actionFooter.hidden = true;
     elements.error.hidden = false;
     elements.apphostControl.hidden = true;
+    elements.proposalSummary.hidden = true;
     elements.statusLine.textContent = "Proposal unavailable";
     elements.retry.textContent = "Try again";
     elements.errorMessage.textContent = error?.message ?? String(error);
