@@ -569,11 +569,12 @@ function renderResourceCard(resource, edges, issues = []) {
         body.append(metadataRow);
     }
 
-    const detail = service?.path || resource.detail;
+    const servicePath = servicePathForDisplay(service?.path);
+    const detail = servicePath || resource.detail;
     if (detail) {
         body.append(
-            createElement(service?.path ? "code" : "p", {
-                className: service?.path ? "resource-path" : "resource-detail muted",
+            createElement(servicePath ? "code" : "p", {
+                className: servicePath ? "resource-path" : "resource-detail muted",
                 text: detail,
                 title: detail,
             }),
@@ -612,6 +613,22 @@ function renderResourceCard(resource, edges, issues = []) {
     }
     body.append(connectionSection);
     return card;
+}
+
+function servicePathForDisplay(path) {
+    const displayPath = String(path ?? "").trim();
+    const normalizedSegments = displayPath
+        .replace(/\\/g, "/")
+        .split("/")
+        .filter(Boolean);
+    if (
+        !/^[\\/]/.test(displayPath) &&
+        normalizedSegments.length > 0 &&
+        normalizedSegments.every((segment) => segment === ".")
+    ) {
+        return "";
+    }
+    return displayPath;
 }
 
 function relationshipsFor(resource, edges = snapshot.proposal.edges) {
