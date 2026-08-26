@@ -445,7 +445,7 @@ function renderResourcePlan() {
         const add = createElement("button", {
             className: "btn btn-outline btn-icon resource-group-add",
             text: "+",
-            title: definition.addTitle,
+            title: `${definition.addTitle} to ${definition.title}`,
             attrs: {
                 type: "button",
                 "aria-label": `${definition.addTitle} in ${definition.title}`,
@@ -731,7 +731,7 @@ function createConnectionHeading(resource) {
     const add = createElement("button", {
         className: "btn btn-outline btn-icon connection-add",
         text: "+",
-        title: "Add connection",
+        title: `Add connection for ${resource.name}`,
         attrs: {
             type: "button",
             "aria-label": `Add connection for ${resource.name}`,

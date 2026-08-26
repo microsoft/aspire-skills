@@ -717,6 +717,10 @@ body.is-loading .progress > span {
     background: var(--surface-raised);
 }
 
+select.inline-resource-input {
+    padding-right: 30px;
+}
+
 .inline-defaults-control {
     display: inline-flex;
     align-items: center;
