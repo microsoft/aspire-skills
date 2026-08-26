@@ -736,7 +736,29 @@ body.is-loading .progress > span {
 }
 
 select.inline-resource-input {
-    padding-right: 30px;
+    appearance: none;
+    padding-right: 36px;
+}
+
+.inline-select-wrap {
+    position: relative;
+    display: block;
+}
+
+.inline-select-chevron {
+    position: absolute;
+    top: 50%;
+    right: 13px;
+    width: 7px;
+    height: 7px;
+    border-right: 1.5px solid var(--text-color-muted, #59636e);
+    border-bottom: 1.5px solid var(--text-color-muted, #59636e);
+    pointer-events: none;
+    transform: translateY(-70%) rotate(45deg);
+}
+
+.inline-select-wrap:has(select:disabled) .inline-select-chevron {
+    opacity: 0.55;
 }
 
 .inline-defaults-control {

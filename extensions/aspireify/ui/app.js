@@ -617,7 +617,15 @@ function appendEditableTypeFact(list, resource) {
     select.addEventListener("change", () => {
         void saveInlineResourceField(resource, "type", select.value, select);
     });
-    appendControlFact(list, "Aspire type", select);
+    const wrapper = createElement("span", { className: "inline-select-wrap" });
+    wrapper.append(
+        select,
+        createElement("span", {
+            className: "inline-select-chevron",
+            attrs: { "aria-hidden": "true" },
+        }),
+    );
+    appendControlFact(list, "Aspire type", wrapper);
 }
 
 function appendEditableDefaultsFact(list, resource) {
