@@ -60,7 +60,6 @@ function emptySnapshot(appHostPath = "") {
         removedGeneratedEdges: [],
         proposalEdited: false,
         proposalStale: false,
-        proposalRequestNeeded: false,
         proposalError: "",
         scanGeneration: 0,
         proposalGeneration: 0,
@@ -253,8 +252,6 @@ function replaceResourceName(state, previousName, nextName) {
 function syncServiceResource(state, service, { rename = false, updateType = false } = {}) {
     const resource = state.proposal.resources.find((candidate) => candidate.serviceId === service.id);
     if (!resource) {
-        state.proposalStale = state.proposalStale || state.proposalLoaded;
-        state.proposalRequestNeeded = state.proposalLoaded;
         return false;
     }
 
@@ -506,7 +503,6 @@ function snapshotForClient(snapshot) {
         proposal: proposalForClient(snapshot.proposal),
         proposalEdited: snapshot.proposalEdited,
         proposalStale: snapshot.proposalStale,
-        proposalRequestNeeded: snapshot.proposalRequestNeeded,
         proposalError: snapshot.proposalError,
         scanGeneration: snapshot.scanGeneration,
         proposalGeneration: snapshot.proposalGeneration,
@@ -826,8 +822,6 @@ async function handlePost(entry, path, body, response) {
             service.serviceDefaults = Boolean(body.value);
             syncServiceResource(state, service);
             state.confirmed = false;
-            state.proposalStale = true;
-            state.proposalRequestNeeded = true;
         });
         return sendJson(response, 200, { ok: true });
     }
@@ -856,13 +850,11 @@ async function handlePost(entry, path, body, response) {
         const previousProposalState = {
             proposalLoaded: snapshot.proposalLoaded,
             proposalStale: snapshot.proposalStale,
-            proposalRequestNeeded: snapshot.proposalRequestNeeded,
             confirmed: snapshot.confirmed,
         };
         const proposalSnapshot = updateSnapshot(domainId, (state) => {
             state.proposalLoaded = false;
             state.proposalStale = true;
-            state.proposalRequestNeeded = false;
             state.proposalError = "";
             state.proposalGeneration += 1;
             state.confirmed = false;
@@ -911,15 +903,6 @@ async function handlePost(entry, path, body, response) {
                 ? normalizeResourceType(body.type)
                 : proposalResource.type;
         const previousType = proposalResource.type;
-        const nextServiceDefaults =
-            isDotNetResourceType(nextType) &&
-            (typeof body.serviceDefaults === "boolean"
-                ? body.serviceDefaults
-                : proposalResource.serviceDefaults);
-        const serviceDefaultsChanged =
-            Boolean(linkedService) &&
-            typeof body.serviceDefaults === "boolean" &&
-            linkedService.serviceDefaults !== nextServiceDefaults;
         updateSnapshot(domainId, (state) => {
             const previousName = proposalResource.name;
             if (typeof body.name === "string") {
@@ -957,10 +940,6 @@ async function handlePost(entry, path, body, response) {
             }
             state.confirmed = false;
             state.proposalEdited = true;
-            if (serviceDefaultsChanged) {
-                state.proposalStale = true;
-                state.proposalRequestNeeded = true;
-            }
         });
         return sendJson(response, 200, { ok: true });
     }
@@ -1201,7 +1180,6 @@ async function handlePost(entry, path, body, response) {
                 state.proposal.resources.length > 0;
             state.scanGeneration += 1;
             state.proposalGeneration += 1;
-            state.proposalRequestNeeded = false;
             state.proposalError = "";
             state.confirmed = false;
         });
@@ -1518,7 +1496,6 @@ const aspireifyCanvas = createCanvas({
                     state.scanError = "";
                     state.discoveryLoaded = true;
                     state.proposalLoaded = false;
-                    state.proposalRequestNeeded = false;
                     state.proposalError = "";
                     state.services = incomingServices.map((service, index) => {
                         const path = servicePathKey(service);
@@ -1820,7 +1797,6 @@ const aspireifyCanvas = createCanvas({
                         ) ||
                         state.proposal.edges.some((edge) => edge.userAdded || edge.userEdited);
                     state.proposalStale = false;
-                    state.proposalRequestNeeded = false;
                     state.proposalError = "";
                     state.confirmed = false;
                 });

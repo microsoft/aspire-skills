@@ -64,6 +64,10 @@ Follow the Aspire Doctor canvas:
   Reuse Aspire Doctor's skeleton cards and indeterminate progress treatment.
 - Never imply that the canvas is scanning, editing, starting, or validating.
 - Proposal-generation errors replace the skeleton with a retryable error state.
+- All in-canvas edits update the current snapshot in place. They must never mark
+  the proposal stale, hide the review, or trigger agent regeneration.
+- Loading is reserved for initial population, an explicit new discovery/re-scan,
+  or provider rehydration.
 - Disable confirmation while any inline save is pending.
 - Confirmation and all mutation routes must enforce the same server-side
   generation, validation, and read-only guards as the UI.

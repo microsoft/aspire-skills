@@ -93,7 +93,6 @@ const elements = {
 
 let snapshot;
 let firstRender = true;
-let proposalRequestPending = false;
 let pendingMutations = 0;
 let mutationError = "";
 const collapsedGroups = new Set();
@@ -179,7 +178,6 @@ function connectEvents() {
         try {
             const message = JSON.parse(event.data);
             if (message.type === "snapshot") {
-                proposalRequestPending = false;
                 render(message.snapshot);
             }
         } catch {
@@ -256,20 +254,6 @@ async function runBusy(control, action) {
     return succeeded;
 }
 
-async function requestProposal() {
-    if (proposalRequestPending || !snapshot?.discoveryLoaded) {
-        return;
-    }
-    proposalRequestPending = true;
-    try {
-        await post("/api/proposal/request", {});
-    } catch (error) {
-        showInlineError(error);
-    } finally {
-        proposalRequestPending = false;
-    }
-}
-
 async function confirmSnapshot() {
     if (pendingMutations > 0) {
         return;
@@ -316,13 +300,6 @@ function render(nextSnapshot) {
         }
         if (!snapshot.proposalLoaded || snapshot.proposalStale) {
             showProposalPending();
-            if (
-                snapshot.proposalRequestNeeded &&
-                snapshot.discoveryLoaded &&
-                !snapshot.proposalError
-            ) {
-                queueMicrotask(() => void requestProposal());
-            }
             firstRender = false;
             return;
         }
