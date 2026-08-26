@@ -1,6 +1,9 @@
 "use strict";
 
-import { isDotNetType } from "./resource-types.js";
+import {
+    isCompatibleAspireResourceType,
+    isDotNetType,
+} from "./resource-types.js";
 
 const apiToken = new URLSearchParams(window.location.search).get("token") || "";
 
@@ -420,8 +423,7 @@ function renderResourcePlan() {
         });
         const headingActions = createElement("div", { className: "resource-group-heading-actions" });
         const add = createElement("button", {
-            className: "btn btn-outline btn-icon resource-group-add",
-            text: "+",
+            className: "btn btn-outline btn-icon add-icon-button resource-group-add",
             title: `${definition.addTitle} to ${definition.title}`,
             attrs: {
                 type: "button",
@@ -531,11 +533,7 @@ function renderResourceValidation(issues) {
 function renderResourceFacts(resource, service) {
     const facts = createElement("dl", { className: "resource-facts" });
     if (service) {
-        appendFact(
-            facts,
-            "Source service",
-            `${service.name}${service.id ? ` (${service.id})` : ""}`,
-        );
+        appendFact(facts, "Source service", service.name);
     }
     appendEditableTextFact(facts, "Resource name", resource, "name", resource.name, {
         validate: (value) => resourceNameFieldIssues(value, resource.id),
@@ -599,10 +597,18 @@ function appendEditableTypeFact(list, resource) {
         className: "inline-resource-input",
         attrs: { "aria-label": `Aspire type for ${resource.name}` },
     });
+    const service = serviceForResource(resource);
     const values = [
         resource.type,
         ...[...elements.addResourceType.options].map((option) => option.value),
-    ].filter((value, index, all) => value && all.indexOf(value) === index);
+    ].filter(
+        (value, index, all) =>
+            value &&
+            all.indexOf(value) === index &&
+            (!service ||
+                value === resource.type ||
+                isCompatibleAspireResourceType(service.type, value)),
+    );
     for (const value of values) {
         select.append(createElement("option", { text: value, attrs: { value } }));
     }
@@ -706,8 +712,7 @@ function renderCompactConnections(resource, edges) {
 function createConnectionHeading(resource) {
     const heading = createElement("div", { className: "connection-heading" });
     const add = createElement("button", {
-        className: "btn btn-outline btn-icon connection-add",
-        text: "+",
+        className: "btn btn-outline btn-icon add-icon-button connection-add",
         title: `Add connection for ${resource.name}`,
         attrs: {
             type: "button",

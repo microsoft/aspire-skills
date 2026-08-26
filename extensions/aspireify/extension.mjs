@@ -12,6 +12,7 @@ import {
     classifyServiceKind,
     exactType,
     freezeSnapshot,
+    isCompatibleAspireResourceType,
     isDotNetType,
     presentationMode,
     stableProposalHash,
@@ -902,6 +903,17 @@ async function handlePost(entry, path, body, response) {
             typeof body.type === "string"
                 ? normalizeResourceType(body.type)
                 : proposalResource.type;
+        if (
+            linkedService &&
+            typeof body.type === "string" &&
+            nextType !== proposalResource.type &&
+            !isCompatibleAspireResourceType(linkedService.type, nextType)
+        ) {
+            return sendJson(response, 400, {
+                ok: false,
+                error: `The detected ${linkedService.type} service cannot be hosted as ${nextType}. Add a separate resource instead.`,
+            });
+        }
         const previousType = proposalResource.type;
         updateSnapshot(domainId, (state) => {
             const previousName = proposalResource.name;

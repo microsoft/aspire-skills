@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
-export { classifyServiceKind, isDotNetType } from "./ui/resource-types.js";
+export {
+    classifyServiceKind,
+    isCompatibleAspireResourceType,
+    isDotNetType,
+} from "./ui/resource-types.js";
 
 export function exactType(value, fallback = "") {
     return String(value ?? "").trim() || fallback;

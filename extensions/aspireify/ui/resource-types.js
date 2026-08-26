@@ -21,3 +21,23 @@ export function classifyServiceKind(value) {
 export function isDotNetType(value) {
     return classifyServiceKind(value) === "dotnet";
 }
+
+export function isCompatibleAspireResourceType(serviceType, resourceType) {
+    const type = String(resourceType ?? "").trim().toLowerCase();
+    if (!type) {
+        return false;
+    }
+    switch (classifyServiceKind(serviceType)) {
+        case "dotnet":
+            return [".net project", "executable"].includes(type);
+        case "node":
+            return ["next.js", "vite", "vite spa", "node.js", "executable"].includes(type);
+        case "python":
+            return ["python", "executable"].includes(type);
+        case "dockerfile":
+        case "container":
+            return ["container", "external service"].includes(type);
+        default:
+            return type === "executable";
+    }
+}

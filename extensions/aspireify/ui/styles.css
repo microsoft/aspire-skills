@@ -174,6 +174,24 @@ summary:focus-visible {
     font-size: 17px;
 }
 
+.add-icon-button {
+    display: inline-grid;
+    place-items: center;
+}
+
+.add-icon-button::before,
+.add-icon-button::after {
+    grid-area: 1 / 1;
+    width: 10px;
+    height: 1px;
+    background: currentColor;
+    content: "";
+}
+
+.add-icon-button::after {
+    transform: rotate(90deg);
+}
+
 .btn:disabled {
     opacity: 0.55;
     cursor: default;
