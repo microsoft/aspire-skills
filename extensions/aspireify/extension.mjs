@@ -12,18 +12,9 @@ import {
     classifyServiceKind,
     exactType,
     freezeSnapshot,
-    includedServicesForProposal,
     isDotNetType,
-    normalizeOwnership,
-    normalizePackages,
-    normalizePorts,
-    normalizeProposalMetadata,
-    normalizeScope,
-    normalizeServiceCodeImpact,
     presentationMode,
     stableProposalHash,
-    unmappedExternalServicesForProposal,
-    unresolvedDecisions,
 } from "./proposal-model.mjs";
 
 const CANVAS_ID = "aspireify-graph";
@@ -64,9 +55,6 @@ function emptySnapshot(appHostPath = "") {
             resources: [],
             edges: [],
             generatedAt: "",
-            assumptionsRisks: [],
-            decisions: [],
-            scope: normalizeScope(),
         },
         removedGeneratedResources: [],
         removedGeneratedEdges: [],
@@ -112,7 +100,6 @@ function resourceNameFrom(value, index) {
 function normalizeService(service, index) {
     const type = exactType(service?.type, "executable");
     const kind = classifyServiceKind(type);
-    const ownership = normalizeOwnership(service?.ownership);
     const name = String(service?.name ?? `Service ${index + 1}`).trim() || `Service ${index + 1}`;
     const include = typeof service?.include === "boolean" ? service.include : true;
     const id = String(service?.id ?? "").trim();
@@ -124,14 +111,6 @@ function normalizeService(service, index) {
         framework: String(service?.framework ?? "").trim(),
         exposesHttp: Boolean(service?.exposesHttp),
         path: String(service?.path ?? "").trim(),
-        command: String(service?.command ?? service?.runCommand ?? "").trim(),
-        ports: normalizePorts(service?.ports),
-        ownership,
-        serviceCodeImpact: normalizeServiceCodeImpact(service?.serviceCodeImpact),
-        proposalCandidate:
-            typeof service?.proposalCandidate === "boolean"
-                ? service.proposalCandidate
-                : ownership.kind !== "external-infrastructure",
         include,
         resourceName: String(service?.resourceName ?? resourceNameFrom(name, index)).trim(),
         serviceDefaults:
@@ -172,12 +151,6 @@ function normalizeProposalResource(resource, index, userAdded = false) {
         type,
         serviceId: String(resource?.serviceId ?? "").trim(),
         detail: String(resource?.detail ?? "").trim(),
-        path: String(resource?.path ?? "").trim(),
-        command: String(resource?.command ?? resource?.runCommand ?? "").trim(),
-        ports: normalizePorts(resource?.ports),
-        packages: normalizePackages(resource?.packages),
-        ownership: normalizeOwnership(resource?.ownership),
-        serviceCodeImpact: normalizeServiceCodeImpact(resource?.serviceCodeImpact),
         include: typeof resource?.include === "boolean" ? resource.include : true,
         serviceDefaults:
             isDotNetResourceType(type) &&
@@ -242,24 +215,6 @@ function enrichResourceFromService(resource, service) {
         return resource;
     }
     resource.sourceName ||= service.name;
-    resource.path ||= service.path;
-    resource.command ||= service.command;
-    if (!resource.ports.length) {
-        resource.ports = service.ports.map((port) => ({ ...port }));
-    }
-    if (!resource.ownership.label && resource.ownership.kind === "unknown") {
-        resource.ownership = { ...service.ownership };
-    }
-    if (
-        resource.serviceCodeImpact.state === "unknown" &&
-        !resource.serviceCodeImpact.summary &&
-        !resource.serviceCodeImpact.files.length
-    ) {
-        resource.serviceCodeImpact = {
-            ...service.serviceCodeImpact,
-            files: [...service.serviceCodeImpact.files],
-        };
-    }
     return resource;
 }
 
@@ -363,9 +318,7 @@ function duplicateNameGroups(items, nameSelector) {
 
 function validateResourceNames(services) {
     const issues = {};
-    const included = services.filter(
-        (candidate) => candidate.include && candidate.proposalCandidate,
-    );
+    const included = services.filter((candidate) => candidate.include);
     const duplicateGroups = duplicateNameGroups(included, (service) => service.resourceName);
     for (const service of included) {
         const name = service.resourceName.trim();
@@ -442,14 +395,6 @@ function validateProposalDetails(proposal) {
             issues.push(`Connection "${edge.from}" cannot target itself.`);
         }
     }
-    for (const decision of unresolvedDecisions(proposal)) {
-        issues.push(`Needs chat decision: ${decision.title || decision.id}.`);
-    }
-    for (const fact of proposal.assumptionsRisks ?? []) {
-        if (fact.severity === "blocking") {
-            issues.push(`Blocking proposal risk: ${fact.title || fact.id}.`);
-        }
-    }
     return { issues, resourceIssues };
 }
 
@@ -461,23 +406,59 @@ function confirmedProposal(proposal) {
     const resources = proposal.resources.filter((resource) => resource.include);
     const names = new Set(resources.map((resource) => resource.name));
     return {
-        resources: resources.map(({ userAdded, userEdited, ...resource }) => resource),
+        resources: resources.map(
+            ({ userAdded, userEdited, sourceName, ...resource }) => resource,
+        ),
         edges: proposal.edges
             .filter((edge) => names.has(edge.from) && names.has(edge.to))
             .map(({ userAdded, userEdited, sourceId, sourceKey, ...edge }) => edge),
         generatedAt: proposal.generatedAt,
-        assumptionsRisks: proposal.assumptionsRisks.map((fact) => ({ ...fact })),
-        decisions: proposal.decisions.map((decision) => ({ ...decision })),
-        scope: {
-            appHostFiles: [...proposal.scope.appHostFiles],
-            integrationPackages: proposal.scope.integrationPackages.map((package_) => ({
-                ...package_,
-            })),
-            serviceCodeImpacts: proposal.scope.serviceCodeImpacts.map((impact) => ({
-                ...impact,
-                files: [...impact.files],
-            })),
-        },
+    };
+}
+
+function includedMappedServices(snapshot) {
+    return mappedServices(snapshot).filter((service) => service.include);
+}
+
+function excludedMappedServices(snapshot) {
+    return mappedServices(snapshot).filter((service) => !service.include);
+}
+
+function mappedServices(snapshot) {
+    const serviceIds = new Set([
+        ...snapshot.proposal.resources
+            .filter((resource) => resource.serviceId)
+            .map((resource) => resource.serviceId),
+        ...snapshot.removedGeneratedResources
+            .filter((resource) => resource.serviceId)
+            .map((resource) => resource.serviceId),
+    ]);
+    return snapshot.services.filter((service) => serviceIds.has(service.id));
+}
+
+function projectService(service) {
+    return {
+        id: service.id,
+        name: service.name,
+        type: service.type,
+        framework: service.framework,
+        exposesHttp: service.exposesHttp,
+        path: service.path,
+        include: service.include,
+        resourceName: service.resourceName,
+        serviceDefaults: service.serviceDefaults,
+    };
+}
+
+function proposalForClient(proposal) {
+    return {
+        resources: proposal.resources.map(
+            ({ userAdded, userEdited, sourceName, ...resource }) => ({ ...resource }),
+        ),
+        edges: proposal.edges.map(
+            ({ userAdded, userEdited, sourceId, sourceKey, ...edge }) => ({ ...edge }),
+        ),
+        generatedAt: proposal.generatedAt,
     };
 }
 
@@ -501,28 +482,11 @@ function confirmationResult(snapshot, confirmed = snapshot.confirmed) {
         discoveryLoaded: snapshot.discoveryLoaded,
         proposalLoaded: snapshot.proposalLoaded,
         apphostStyle: snapshot.apphostStyle,
-        included: includedServices(snapshot).map((service) => ({ ...service })),
-        excluded: snapshot.services
-            .filter((service) => !service.include)
-            .map(({ id, name, type }) => ({ id, name, type })),
-        externalServices: unmappedExternalServices(snapshot).map((service) => ({ ...service })),
+        included: includedMappedServices(snapshot).map(projectService),
+        excluded: excludedMappedServices(snapshot).map(projectService),
         serviceDefaults: [...serviceDefaults],
         proposal: confirmedProposal(snapshot.proposal),
     };
-}
-
-function includedServices(snapshot) {
-    return includedServicesForProposal(
-        snapshot.services,
-        snapshot.proposal.resources,
-    );
-}
-
-function unmappedExternalServices(snapshot) {
-    return unmappedExternalServicesForProposal(
-        snapshot.services,
-        snapshot.proposal.resources,
-    );
 }
 
 function isConfirmed(snapshot) {
@@ -530,13 +494,28 @@ function isConfirmed(snapshot) {
 }
 
 function snapshotForClient(snapshot) {
-    const { confirmation, ...clientSnapshot } = snapshot;
     return {
-        ...clientSnapshot,
+        appHostPath: snapshot.appHostPath,
+        repoName: snapshot.repoName,
+        scanStatus: snapshot.scanStatus,
+        scanError: snapshot.scanError,
+        discoveryLoaded: snapshot.discoveryLoaded,
+        proposalLoaded: snapshot.proposalLoaded,
+        apphostStyle: snapshot.apphostStyle,
+        services: snapshot.services.map(projectService),
+        proposal: proposalForClient(snapshot.proposal),
+        proposalEdited: snapshot.proposalEdited,
+        proposalStale: snapshot.proposalStale,
+        proposalRequestNeeded: snapshot.proposalRequestNeeded,
+        proposalError: snapshot.proposalError,
+        scanGeneration: snapshot.scanGeneration,
+        proposalGeneration: snapshot.proposalGeneration,
         confirmed: isConfirmed(snapshot),
-        proposalHash: confirmation?.proposalHash ?? proposalHash(snapshot),
-        confirmedGeneration: confirmation?.proposalGeneration ?? null,
-        confirmedAt: confirmation?.confirmedAt ?? "",
+        proposalHash: snapshot.confirmation?.proposalHash ?? proposalHash(snapshot),
+        confirmedGeneration: snapshot.confirmation?.proposalGeneration ?? null,
+        confirmedAt: snapshot.confirmation?.confirmedAt ?? "",
+        revision: snapshot.revision,
+        updatedAt: snapshot.updatedAt,
         presentationMode: presentationMode(snapshot.proposal),
         validation: validateProposalDetails(snapshot.proposal),
     };
@@ -631,17 +610,10 @@ function confirmationMessage(snapshot) {
         proposalGeneration: snapshot.proposalGeneration,
         proposalHash: proposalHash(snapshot),
         apphostStyle: snapshot.apphostStyle,
-        included: includedServices(snapshot)
+        included: includedMappedServices(snapshot)
             .map((service) => ({ name: service.name, resourceName: service.resourceName })),
-        excluded: snapshot.services
-            .filter((service) => !service.include)
+        excluded: excludedMappedServices(snapshot)
             .map((service) => service.name),
-        externalInfrastructure: unmappedExternalServices(snapshot).map((service) => ({
-            id: service.id,
-            name: service.name,
-            type: service.type,
-            ownership: service.ownership,
-        })),
         proposal: confirmedProposal(snapshot.proposal),
     };
     return [
@@ -663,16 +635,10 @@ function proposalRequestMessage(snapshot) {
             name: service.name,
             resourceName: service.resourceName,
             type: service.type,
-            kind: service.kind,
             framework: service.framework,
             exposesHttp: service.exposesHttp,
             serviceDefaults: service.serviceDefaults,
             path: service.path,
-            command: service.command,
-            ports: service.ports,
-            ownership: service.ownership,
-            serviceCodeImpact: service.serviceCodeImpact,
-            proposalCandidate: service.proposalCandidate,
             include: service.include,
         })),
     };
@@ -880,11 +846,7 @@ async function handlePost(entry, path, body, response) {
                 error: formatServiceNameIssues(snapshot.services, issues),
             });
         }
-        if (
-            !snapshot.services.some(
-                (candidate) => candidate.include && candidate.proposalCandidate,
-            )
-        ) {
+        if (!snapshot.services.some((candidate) => candidate.include)) {
             return sendJson(response, 400, {
                 ok: false,
                 error: "Include at least one service before building the proposal.",
@@ -944,16 +906,6 @@ async function handlePost(entry, path, body, response) {
                 error: `Resource "${nextName || proposalResource.id}": ${nameIssues.join(" ")}`,
             });
         }
-        if (
-            linkedService &&
-            typeof body.type === "string" &&
-            normalizeResourceType(body.type) !== proposalResource.type
-        ) {
-            return sendJson(response, 400, {
-                ok: false,
-                error: "Detected service types come from Aspireify discovery and cannot be changed in the proposal.",
-            });
-        }
         const nextType =
             typeof body.type === "string"
                 ? normalizeResourceType(body.type)
@@ -966,6 +918,7 @@ async function handlePost(entry, path, body, response) {
                 : proposalResource.serviceDefaults);
         const serviceDefaultsChanged =
             Boolean(linkedService) &&
+            typeof body.serviceDefaults === "boolean" &&
             linkedService.serviceDefaults !== nextServiceDefaults;
         updateSnapshot(domainId, (state) => {
             const previousName = proposalResource.name;
@@ -975,6 +928,9 @@ async function handlePost(entry, path, body, response) {
             }
             if (typeof body.type === "string") {
                 proposalResource.type = nextType;
+            }
+            if (typeof body.detail === "string") {
+                proposalResource.detail = body.detail.trim();
             }
             if (!isDotNetResourceType(nextType)) {
                 proposalResource.serviceDefaults = false;
@@ -993,8 +949,10 @@ async function handlePost(entry, path, body, response) {
                 if (!linkedService.include) {
                     linkedService.serviceDefaults = false;
                     proposalResource.serviceDefaults = false;
-                } else if (typeof body.serviceDefaults === "boolean") {
-                    linkedService.serviceDefaults = nextServiceDefaults;
+                } else {
+                    linkedService.serviceDefaults =
+                        isDotNetResourceType(proposalResource.type) &&
+                        proposalResource.serviceDefaults;
                 }
             }
             state.confirmed = false;
@@ -1272,7 +1230,7 @@ async function handlePost(entry, path, body, response) {
                 error: "Discovery and proposal must finish before confirmation.",
             });
         }
-        const issues = validateResourceNames(snapshot.services);
+        const issues = validateResourceNames(includedMappedServices(snapshot));
         if (Object.keys(issues).length) {
             return sendJson(response, 400, {
                 ok: false,
@@ -1402,82 +1360,6 @@ const APPHOST_PATH_SCHEMA = {
     },
 };
 
-const OWNERSHIP_SCHEMA = {
-    oneOf: [
-        { type: "string" },
-        {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-                kind: {
-                    type: "string",
-                    enum: [
-                        "aspire-managed",
-                        "service-owned",
-                        "external-infrastructure",
-                        "shared",
-                        "unknown",
-                    ],
-                },
-                label: { type: "string" },
-                owner: { type: "string" },
-            },
-        },
-    ],
-};
-
-const PORT_SCHEMA = {
-    oneOf: [
-        { type: "integer", minimum: 1, maximum: 65535 },
-        { type: "string" },
-        {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-                id: { type: "string" },
-                name: { type: "string" },
-                port: { oneOf: [{ type: "integer" }, { type: "string" }] },
-                targetPort: { oneOf: [{ type: "integer" }, { type: "string" }] },
-                protocol: { type: "string" },
-                purpose: { type: "string" },
-            },
-        },
-    ],
-};
-
-const PACKAGE_SCHEMA = {
-    oneOf: [
-        { type: "string" },
-        {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-                name: { type: "string" },
-                version: { type: "string" },
-            },
-            required: ["name"],
-        },
-    ],
-};
-
-const SERVICE_CODE_IMPACT_SCHEMA = {
-    oneOf: [
-        { type: "string" },
-        {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-                state: {
-                    type: "string",
-                    enum: ["none", "required", "optional", "unknown"],
-                },
-                summary: { type: "string" },
-                files: { type: "array", items: { type: "string" } },
-            },
-        },
-    ],
-};
-
 const SERVICE_SCHEMA = {
     type: "object",
     additionalProperties: false,
@@ -1497,16 +1379,6 @@ const SERVICE_SCHEMA = {
         framework: { type: "string" },
         exposesHttp: { type: "boolean" },
         path: { type: "string" },
-        command: { type: "string" },
-        runCommand: { type: "string" },
-        ports: { type: "array", items: PORT_SCHEMA },
-        ownership: OWNERSHIP_SCHEMA,
-        serviceCodeImpact: SERVICE_CODE_IMPACT_SCHEMA,
-        proposalCandidate: {
-            type: "boolean",
-            description:
-                "Whether Aspireify may propose this service as an Aspire resource. Defaults false for external infrastructure ownership.",
-        },
         resourceName: { type: "string" },
         include: { type: "boolean" },
         serviceDefaults: { type: "boolean" },
@@ -1721,13 +1593,6 @@ const aspireifyCanvas = createCanvas({
                                 },
                                 serviceId: { type: "string" },
                                 detail: { type: "string" },
-                                path: { type: "string" },
-                                command: { type: "string" },
-                                runCommand: { type: "string" },
-                                ports: { type: "array", items: PORT_SCHEMA },
-                                packages: { type: "array", items: PACKAGE_SCHEMA },
-                                ownership: OWNERSHIP_SCHEMA,
-                                serviceCodeImpact: SERVICE_CODE_IMPACT_SCHEMA,
                                 include: { type: "boolean" },
                                 serviceDefaults: {
                                     type: "boolean",
@@ -1765,87 +1630,6 @@ const aspireifyCanvas = createCanvas({
                             required: ["from", "to", "kind"],
                         },
                     },
-                    generatedAt: {
-                        type: "string",
-                        description:
-                            "ISO 8601 timestamp for when this proposal snapshot was generated.",
-                    },
-                    assumptionsRisks: {
-                        type: "array",
-                        items: {
-                            type: "object",
-                            additionalProperties: false,
-                            properties: {
-                                id: { type: "string" },
-                                kind: { type: "string", enum: ["assumption", "risk"] },
-                                severity: {
-                                    type: "string",
-                                    enum: ["info", "warning", "blocking"],
-                                },
-                                verification: {
-                                    type: "string",
-                                    enum: [
-                                        "assumption",
-                                        "verified",
-                                        "unverified",
-                                        "needs-chat-decision",
-                                    ],
-                                },
-                                title: { type: "string" },
-                                detail: { type: "string" },
-                            },
-                            required: ["title"],
-                        },
-                    },
-                    decisions: {
-                        type: "array",
-                        items: {
-                            type: "object",
-                            additionalProperties: false,
-                            properties: {
-                                id: { type: "string" },
-                                title: { type: "string" },
-                                summary: { type: "string" },
-                                status: {
-                                    type: "string",
-                                    enum: ["resolved", "needs-chat-decision"],
-                                },
-                            },
-                            required: ["title", "status"],
-                        },
-                    },
-                    scope: {
-                        type: "object",
-                        additionalProperties: false,
-                        properties: {
-                            appHostFiles: { type: "array", items: { type: "string" } },
-                            integrationPackages: {
-                                type: "array",
-                                items: PACKAGE_SCHEMA,
-                            },
-                            serviceCodeImpacts: {
-                                type: "array",
-                                items: {
-                                    type: "object",
-                                    additionalProperties: false,
-                                    properties: {
-                                        id: { type: "string" },
-                                        serviceId: { type: "string" },
-                                        serviceName: { type: "string" },
-                                        state: {
-                                            type: "string",
-                                            enum: ["none", "required", "optional", "unknown"],
-                                        },
-                                        summary: { type: "string" },
-                                        files: {
-                                            type: "array",
-                                            items: { type: "string" },
-                                        },
-                                    },
-                                },
-                            },
-                        },
-                    },
                 },
                 required: ["proposalGeneration"],
             },
@@ -1868,11 +1652,6 @@ const aspireifyCanvas = createCanvas({
                           normalizeProposalResource(resource, index),
                       )
                     : null;
-                const incomingMetadata = normalizeProposalMetadata(context.input, () =>
-                    current.proposalLoaded && current.proposal.generatedAt
-                        ? new Date(current.proposal.generatedAt)
-                        : new Date(),
-                );
                 const userAddedResources = current.proposal.resources.filter(
                     (resource) => resource.userAdded,
                 );
@@ -1905,15 +1684,6 @@ const aspireifyCanvas = createCanvas({
                     const generatedResources = incomingResources
                         ? incomingResources
                               .map((generated) => {
-                                  if (!generated.serviceId) {
-                                      const linkedService = state.services.find(
-                                          (service) =>
-                                              service.id === generated.id ||
-                                              service.resourceName.toLowerCase() ===
-                                                  generated.name.toLowerCase(),
-                                      );
-                                      generated.serviceId = linkedService?.id ?? "";
-                                  }
                                   const linkedService = state.services.find(
                                       (service) => service.id === generated.serviceId,
                                   );
@@ -1948,12 +1718,10 @@ const aspireifyCanvas = createCanvas({
                                       return {
                                           ...generated,
                                           name: existing.name,
-                                          type: generated.serviceId ? generated.type : existing.type,
+                                          type: existing.type,
                                           detail: existing.detail,
                                           include: existing.include,
-                                          serviceDefaults: generated.serviceId
-                                              ? generated.serviceDefaults
-                                              : existing.serviceDefaults,
+                                          serviceDefaults: existing.serviceDefaults,
                                           userEdited: true,
                                       };
                                   }
@@ -2015,6 +1783,20 @@ const aspireifyCanvas = createCanvas({
                         generatedEdges.map((edge) => proposalEdgeKey(edge)),
                     );
                     const generatedEdgeIds = new Set(generatedEdges.map((edge) => edge.id));
+                    for (const service of state.services) {
+                        const resource = resources.find(
+                            (candidate) => candidate.serviceId === service.id,
+                        );
+                        if (!resource) {
+                            continue;
+                        }
+                        service.include = resource.include;
+                        service.resourceName = resource.name;
+                        service.serviceDefaults =
+                            resource.include &&
+                            isDotNetType(resource.type) &&
+                            resource.serviceDefaults;
+                    }
                     state.proposal = {
                         resources,
                         edges: [
@@ -2026,7 +1808,10 @@ const aspireifyCanvas = createCanvas({
                                     !edgeKeys.has(proposalEdgeKey(edge)),
                             ),
                         ],
-                        ...incomingMetadata,
+                        generatedAt:
+                            state.proposalLoaded && state.proposal.generatedAt
+                                ? state.proposal.generatedAt
+                                : new Date().toISOString(),
                     };
                     state.proposalLoaded = true;
                     state.proposalEdited =
@@ -2210,8 +1995,8 @@ const SESSION_GUIDANCE =
 
 const ASPIREFY_WORKFLOW_GUIDANCE =
     "This request is part of the aspireify workflow. Keep discovery questions and implementation tradeoffs in chat. " +
-    "When the proposal is ready, call open_aspireify, then load_discovery with the AppHost style and every runnable service's stable unique id, name, precise type, framework, exposesHttp, path, command, ports, ownership, and service-code impact when known. " +
-    "Pass the proposalGeneration returned by load_discovery to set_proposal with the complete resource graph, generatedAt, packages with versions, assumptions and risks, chat-decision states, and exact scope of AppHost files, integration packages, and service-code impacts. Preserve exact type labels such as Vite SPA. Mark managed infrastructure that is not an Aspire resource with external-infrastructure ownership rather than adding it to the graph. " +
+    "When the proposal is ready, call open_aspireify, then load_discovery with the AppHost style and every runnable service's stable unique id, name, type, framework, exposesHttp, and path. " +
+    "Pass the proposalGeneration returned by load_discovery to set_proposal with the complete resource graph. Do not invent or add fields that the Aspireify skill did not discover or propose. Preserve exact proposal type labels when supplied. " +
     "Wait for the user to confirm in the canvas, then call get_confirmation before editing any files. Never make the canvas scan the repository, resolve tradeoffs, generate the proposal, edit the AppHost, start resources, or validate the application. " +
     "If the canvas host is unavailable, present and confirm the same proposal in chat.";
 
@@ -2220,7 +2005,7 @@ const CANVAS_CALLBACK_GUIDANCE =
     "Perform the requested scan or proposal regeneration in the aspireify workflow, preserve user-added resources and connections, pass the latest scanGeneration to load_discovery and the latest proposalGeneration to set_proposal as appropriate, and do not edit files before confirmation.";
 
 const AFTER_OPEN_GUIDANCE =
-    "The Aspireify confirmation canvas is open. Populate it now: call load_discovery with the completed discovery facts, then pass its proposalGeneration to set_proposal with the complete generated snapshot, including precise types, ownership, scope, assumptions, risks, and decision states. " +
+    "The Aspireify confirmation canvas is open. Populate it now: call load_discovery with the completed discovery facts, then pass its proposalGeneration to set_proposal with the generated resource plan. " +
     "Do not expect the canvas to discover or generate anything.";
 
 const AFTER_PROPOSAL_GUIDANCE =

@@ -10,14 +10,12 @@ The canvas only:
 
 1. opens through `open_aspireify`;
 2. receives the detected AppHost style and discovered runnable services through
-   `load_discovery`, using a stable unique ID, exact type label, path, command,
-   ports, ownership, and service-code impact when known;
+   `load_discovery`, using the skill's existing stable ID, name, type, framework,
+   HTTP exposure, path, inclusion, resource name, and Service Defaults fields;
 3. receives resources and connections through `set_proposal`, using the current
-   `proposalGeneration`, plus the generated timestamp, exact Aspire types,
-   packages and versions, ownership, scope, assumptions, risks, and chat-decision
-   state;
-4. explicitly maps source services to proposed Aspire resources and keeps
-   external infrastructure that is not in the proposal out of the Aspire graph;
+   `proposalGeneration` and the skill's existing resource and edge fields;
+4. explicitly maps source services to proposed Aspire resources without showing
+   discovered services that the skill did not include in the proposal;
 5. uses a compact mapping-first review for one or two resources and grouped,
    relationship-oriented cards for larger plans;
 6. lets the user add or remove plan resources, add their initial connections
@@ -26,11 +24,9 @@ The canvas only:
    editor using constrained Aspire-aware resource-type selectors;
 7. identifies every invalid or duplicate resource name on its card, explains the
    violated naming rule, and prevents invalid edits from being saved;
-8. displays agent-supplied assumptions and risks without performing platform or
-   feasibility checks;
-9. blocks confirmation while a tradeoff is marked `needs-chat-decision` or a
-   supplied risk is blocking, leaving resolution in chat; and
-10. returns the confirmed service choices, exact structured plan, generation,
+8. keeps unresolved implementation tradeoffs in chat rather than inventing new
+   canvas data; and
+9. returns the confirmed service choices, exact structured plan, generation,
     and stable proposal hash through `get_confirmation`.
 
 After confirmation, the canvas becomes read-only and `get_confirmation` returns
@@ -54,3 +50,6 @@ as explicit user requests.
 
 It intentionally has no repository detector, scanner, proposal generator,
 AppHost editor, deployment controls, initialization flow, or validation workflow.
+
+See [UI-GUIDELINES.md](UI-GUIDELINES.md) for the canvas information hierarchy,
+interaction model, visual conventions, and accessibility rules.
