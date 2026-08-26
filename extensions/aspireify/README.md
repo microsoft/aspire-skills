@@ -50,6 +50,3 @@ as explicit user requests.
 
 It intentionally has no repository detector, scanner, proposal generator,
 AppHost editor, deployment controls, initialization flow, or validation workflow.
-
-See [UI-GUIDELINES.md](UI-GUIDELINES.md) for the canvas information hierarchy,
-interaction model, visual conventions, and accessibility rules.
