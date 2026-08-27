@@ -1,0 +1,1 @@
+../../../../../extensions/aspire-doctor/extension.mjs

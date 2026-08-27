@@ -1,0 +1,139 @@
+name: Skill Experiment (baseline)
+
+# Informational comparative baseline: runs every skill's eval suite twice via
+# `vally experiment run` — once with the skill(s) loaded (treatment) and once
+# with no skills (baseline) — and reports the per-variant lift.
+#
+# This job is NEVER a gate. The no-skills baseline is *expected* to score low
+# (that's the whole point), so `vally experiment run` returns a non-zero exit
+# code. We deliberately tolerate that and surface the comparison instead of
+# red-X-ing the run. The actual pass/fail gate is `skill-eval.yml` (ci-gate).
+
+on:
+  schedule:
+    # Saturday 06:00 UTC — offset from the Sunday nightly eval so trend data is
+    # captured regularly without competing for the same window.
+    - cron: "0 6 * * 6"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: skill-experiment
+  cancel-in-progress: false
+
+jobs:
+  experiment:
+    name: Run skill-lift experiment
+    runs-on: ubuntu-latest
+    steps:
+      # Fail-fast preflight: if the Copilot token isn't provisioned, soft-skip
+      # (so scheduled runs don't paint the Actions UI red) before spending CI
+      # minutes on checkout / setup-node / install. The secret must be added
+      # once on the repo as `COPILOT_GITHUB_TOKEN` — see evals/README.md →
+      # "CI authentication".
+      - name: Preflight COPILOT_GITHUB_TOKEN
+        id: preflight
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+        run: |
+          if [ -z "${COPILOT_GITHUB_TOKEN:-}" ]; then
+            echo "::warning title=Skill experiment skipped::COPILOT_GITHUB_TOKEN secret is not configured on this repo, so the skill-lift baseline experiment was skipped. A maintainer must add the secret (see evals/README.md → CI authentication) for it to run."
+            {
+              echo "### ⚠️ Skill-lift experiment skipped"
+              echo ""
+              echo "The \`COPILOT_GITHUB_TOKEN\` repository secret is not configured, so"
+              echo "the comparative baseline experiment did not run."
+              echo ""
+              echo "**To enable it**, a maintainer needs to add the secret once —"
+              echo "see [\`evals/README.md\` → CI authentication](${{ github.server_url }}/${{ github.repository }}/blob/main/evals/README.md#ci-authentication)."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "has_token=true" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        if: steps.preflight.outputs.has_token == 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node
+        if: steps.preflight.outputs.has_token == 'true'
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "22"
+
+      - name: Install vally CLI
+        if: steps.preflight.outputs.has_token == 'true'
+        run: npm install -g @microsoft/vally-cli
+
+      - name: Run skill-lift experiment
+        if: steps.preflight.outputs.has_token == 'true'
+        # COPILOT_GITHUB_TOKEN is read by @github/copilot-sdk (the vally
+        # `copilot-sdk` executor) to invoke Copilot models. Scoped to this step.
+        #
+        # `|| true`: the no-skills baseline is expected to fail grading, so the
+        # experiment exits non-zero by design. This job is informational, not a
+        # gate — we capture the comparison and never fail on a low baseline.
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+        run: |
+          set -o pipefail
+          vally experiment run skill-lift.experiment.yaml \
+            --output-dir ./results 2>&1 | tee experiment-output.txt || true
+
+          # Defense-in-depth: Actions masks registered secrets in logs and job
+          # summaries, but NOT in uploaded artifacts. This job both summarizes
+          # and uploads the captured output, so redact the token from anything
+          # we persist in case the CLI ever echoes it on an error path. The
+          # token contains no '|', so it is safe as the sed delimiter.
+          if [ -n "${COPILOT_GITHUB_TOKEN:-}" ]; then
+            [ -f experiment-output.txt ] && \
+              sed -i "s|${COPILOT_GITHUB_TOKEN}|***|g" experiment-output.txt
+            if [ -d ./results ]; then
+              grep -rIlZ -- "$COPILOT_GITHUB_TOKEN" ./results 2>/dev/null \
+                | xargs -0 -r sed -i "s|${COPILOT_GITHUB_TOKEN}|***|g"
+            fi
+          fi
+
+      - name: Summarize lift
+        if: always() && steps.preflight.outputs.has_token == 'true'
+        run: |
+          {
+            echo "## 📊 Skill-lift baseline"
+            echo ""
+            echo "Per-variant pass summary (\`with-skills\` treatment vs \`no-skills\` baseline):"
+            echo ""
+            echo '```'
+            # The per-variant "✔/✘ <variant>: N/M evals passed" lines. The run
+            # step swallows failures, so the file may be missing/empty if vally
+            # never started — degrade gracefully instead of failing this step.
+            if [ -s experiment-output.txt ]; then
+              grep -E 'evals passed|Run ID' experiment-output.txt || cat experiment-output.txt || true
+            else
+              echo "(no experiment output captured — the run may have failed before writing experiment-output.txt; see the step logs)"
+            fi
+            echo '```'
+            echo ""
+            REPORT="$(find ./results -name report.md 2>/dev/null | head -1)"
+            if [ -n "$REPORT" ]; then
+              echo "<details><summary>Full experiment report</summary>"
+              echo ""
+              cat "$REPORT"
+              echo ""
+              echo "</details>"
+            fi
+            echo ""
+            echo "_Full per-variant trajectories are attached as the \`skill-lift-results\` artifact._"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload experiment results
+        if: always() && steps.preflight.outputs.has_token == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: skill-lift-results
+          path: |
+            ./results/
+            ./experiment-output.txt
+          if-no-files-found: warn

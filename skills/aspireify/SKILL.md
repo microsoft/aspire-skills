@@ -1,19 +1,19 @@
 ---
 name: aspireify
 description: >-
-  **WORKFLOW SKILL** - Wire an Aspire AppHost after `aspire init` drops a skeleton.
-  Scans the repo, proposes a resource graph, edits the AppHost (C#, file-based C#, or
-  TypeScript), wires `Aspire.ServiceDefaults` + OTel, validates with `aspire start`,
-  then self-deactivates.
-  USE FOR: wire AppHost, scaffold resource graph, add Postgres/Redis/Rabbit/Mongo to
-  Aspire, connect frontend to API, after `aspire init` what next, AddNextJsApp, AddViteApp,
-  WithBrowserLogs, file-based apphost.cs, apphost.ts, unified withEnvironment,
-  refuse .aspire/modules edit, migrate .env files, migrate user secrets.
-  DO NOT USE FOR: skeleton drop (use aspire-init), start/stop/wait/restart (use
-  aspire-orchestration), publish/deploy/destroy (use aspire-deployment), logs/traces
-  (use aspire-monitoring).
-  INVOKES: aspire CLI (add, start, wait, describe, docs api search, stop), AppHost
-  source edits, ServiceDefaults wiring.
+  **WORKFLOW SKILL** - Wire Aspire AppHosts after `aspire init` or repair TypeScript
+  AppHost package-manager toolchains. Scans the repo, proposes a resource graph, edits
+  C#, file-based C#, or TypeScript AppHosts, wires ServiceDefaults + OTel, validates
+  with `aspire start`, then self-deactivates.
+  USE FOR: wire AppHost, scaffold resource graph, add Postgres/Redis/Rabbit/Mongo,
+  connect frontend to API, after `aspire init`, AddNextJsApp, AddViteApp, WithBrowserLogs,
+  file-based apphost.cs, apphost.ts, unified withEnvironment, refuse .aspire/modules edits,
+  migrate config/secrets, TS AppHost dependency restore, package-manager detection/repair,
+  pnpm/yarn/bun AppHosts, Yarn Classic.
+  DO NOT USE FOR: skeleton drop (aspire-init), lifecycle-only start/stop/wait/restart
+  (aspire-orchestration), publish/deploy/destroy (aspire-deployment), logs/traces
+  (aspire-monitoring).
+  INVOKES: aspire CLI, AppHost source edits, ServiceDefaults wiring.
   FOR SINGLE OPERATIONS: Run `aspire add PACKAGE` directly for a one-off integration.
 license: MIT
 metadata:
@@ -149,6 +149,36 @@ the app → `aspire-orchestration`. If the user wants to **deploy** → `aspire-
 
 See [references/csharp-authoring.md](references/csharp-authoring.md) and
 [references/typescript-authoring.md](references/typescript-authoring.md).
+
+### TypeScript AppHost package managers
+
+Dependency and toolchain failures belong to this skill. Before recommending a command,
+inspect the AppHost directory and then its immediate eligible parent. Within each directory,
+the first recognized marker wins in this order:
+
+1. `packageManager` in `package.json` (`npm`, `pnpm`, `yarn`, or `bun`, optionally versioned)
+2. `bun.lock`
+3. `bun.lockb`
+4. `pnpm-lock.yaml`
+5. `yarn.lock`
+6. `.yarnrc.yml`
+7. `package-lock.json`
+
+An AppHost-local marker takes precedence over every parent marker. If neither directory has
+a recognized marker, Aspire defaults to npm. Report the selected manager and marker.
+
+Use the selected manager only to repair dependencies or diagnose the toolchain. The resolver
+commands are `npm install`, `bun install`, and `yarn install`; a generated brownfield pnpm
+AppHost uses `pnpm install --ignore-workspace`, while other pnpm dependency installs use
+`pnpm install`. Yarn Classic (`yarn@1...` or a v1 lockfile) is unsupported: stop and ask the
+user to upgrade to Yarn 4+ or explicitly migrate to npm, pnpm, or Bun.
+
+Do not change `packageManager` or create, replace, or regenerate a lockfile merely to
+influence detection or switch managers. Preserve existing files until the user explicitly
+chooses an upgrade or migration. Start the AppHost with `aspire start --non-interactive`,
+not a raw package-manager launcher. See
+[references/typescript-authoring.md](references/typescript-authoring.md) for the full
+command matrix and resolver details.
 
 ## Workflow Phases
 

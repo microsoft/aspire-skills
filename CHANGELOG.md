@@ -5,6 +5,12 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Corrected Aspire monitoring guidance for `WithBrowserLogs()` child-resource diagnostics.
+- Prefer VS Code's `aspire_apphost_start` and `aspire_apphost_stop` tools over
+  terminal lifecycle commands when available, with multi-root tool selectors
+  resolved to exact CLI filesystem paths for CLI fallbacks, bounded recovery
+  for unknown controllers, explicit multi-AppHost disambiguation, and isolated
+  CLI starts in worktrees.
 - Synced skill guidance with the current Aspire 13.4 development branch:
   `.aspire/modules` TypeScript AppHost generated files, `aspire integration list/search`
   discovery, resource-command/watch/HMR lifecycle guidance, and `PublishAsPackageScript`
@@ -36,8 +42,11 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   (AWS deploy, deployment-plan validation, `--list-steps` pipeline preview).
 
 ### Added
+- Added the `aspire-doctor` GitHub App canvas extension for viewing `aspire doctor`
+  results as a live checklist in a side panel.
 - Added a release bundle generator and `publish.yml` workflow for the verified
-  `aspire-skills-v<version>.tgz` GitHub release asset consumed by `aspire agent init`.
+  `aspire-skills-v<version>.tgz` and `aspire-extensions-v<version>.tgz` GitHub
+  release assets consumed by `aspire agent init`.
 - Restored upstream migration reference content for AppHost wiring, Docker Compose,
   full-solution AppHosts, JavaScript workspaces, OpenTelemetry, Playwright handoff,
   agent workflows, and detailed monitoring/search/display guidance.
@@ -49,6 +58,19 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   (Sunday 06:00 UTC `nightly` suite with trajectory artifact upload). Eval
   workflows soft-skip when `COPILOT_GITHUB_TOKEN` is unset (e.g. fork PRs);
   see `evals/README.md` for the CI authentication contract.
+- Added the agent skill-usage telemetry hook scripts at
+  `hooks/scripts/track-telemetry.{sh,ps1}`. These are the canonical, attested source
+  that the Aspire CLI's `aspire agent init` bundle sync fetches and hash-verifies; they
+  are intentionally **not** registered as plugin hooks (the plugin remains hooks-free, per
+  #34) so they never fire inside VS Code or any agent that does not opt in. The CLI installs
+  and wires them per-client itself, and both the scripts and the CLI command skip entirely
+  when `ASPIRE_CLI_TELEMETRY_OPTOUT` is set.
+- Added canonical Bash and PowerShell Aspire agent telemetry hooks that always
+  return exactly one `{"continue":true}` PostToolUse response, including malformed
+  input and unexpected failure paths.
+- Added generated hook commit provenance and LF-normalized SHA-512 checksums to
+  the skills bundle manifest, with release tests that keep the metadata and
+  published hook bytes in sync.
 
 ### Changed
 - Migrated all six per-skill eval specs from the legacy `waza` schema to the

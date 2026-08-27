@@ -1,10 +1,12 @@
 # Aspire Skills
 
-Aspire Skills is a plugin and skill pack for AI coding agents working on Aspire distributed applications.
+Aspire Skills is a plugin, skill pack, and extension pack for AI coding agents working on Aspire distributed applications.
 
-It helps agents recognize Aspire workspaces, use the Aspire CLI correctly, and route common work to focused skills instead of falling back to ad hoc `dotnet`, `curl`, Docker, or shell workflows.
+It helps agents recognize Aspire workspaces, use the Aspire CLI correctly, route common work to focused skills instead of ad hoc `dotnet`, `curl`, Docker, or shell workflows, and surface focused visual tools for Aspire-specific tasks.
 
 ## What's included
+
+### Skills
 
 | Skill | Purpose |
 |-------|---------|
@@ -15,13 +17,19 @@ It helps agents recognize Aspire workspaces, use the Aspire CLI correctly, and r
 | `aspire-deployment` | Publishes, deploys, and tears down Aspire apps |
 | `aspire-monitoring` | Routes logs, traces, dashboard, telemetry, and diagnostics work |
 
+### Extensions
+
+| Extension | Purpose |
+|-----------|---------|
+| `aspire-doctor` | Opens a Copilot canvas for `aspire doctor` results, showing environment checks, fixes, and detected CLI installations |
+
 ## Install
 
 Choose the path that matches your agent host.
 
 ### Aspire CLI
 
-Aspire's first-party agent setup installs Aspire skill files and MCP configuration into detected agent environments.
+Aspire's first-party agent setup installs Aspire skill files, extension files, and MCP configuration into detected agent environments.
 
 ```bash
 # Create a new Aspire app and opt into agent guidance when prompted
@@ -35,6 +43,34 @@ aspire agent init
 ```
 
 ### Agent plugins and extensions
+
+#### GitHub Copilot app
+
+The GitHub Copilot app plugin installs Aspire skills and canvas extensions for
+the current user.
+
+##### Prerequisites
+
+Before you install, make sure you have:
+
+- [GitHub Copilot app](https://gh.io/app) installed.
+- A GitHub Copilot subscription (paid or free).
+
+##### Install
+
+Install the `microsoft/aspire-skills` marketplace through the GitHub Copilot
+app:
+
+1. Click [this link](https://github.com/copilot/app/launch?entry_point=aspire_skills_docs&open=ghapp%3A%2F%2Fplugins%2Fmarketplace%2Fadd%3Fsource%3Dmicrosoft%2Faspire-skills)
+   to automatically open the **Settings** > **Plugins** window in the GitHub
+   Copilot app.
+2. In the **Add plugin marketplace?** dialog, select **Allow**.
+3. The **Plugins** window opens with the `microsoft/aspire-skills` marketplace.
+   Select **Add marketplace**.
+4. Expand the `aspire-skills` entry and select **Install** on the `aspire`
+   plugin.
+
+#### Command-line hosts
 
 ```bash
 # GitHub Copilot CLI
@@ -90,6 +126,8 @@ In that command, `-a github-copilot` selects the target agent, `-g` installs glo
 | Path | Purpose |
 |------|---------|
 | `skills/` | Source skill files, references, and evals |
+| `extensions/` | Source GitHub Copilot app canvas extensions |
+| `hooks/scripts/` | Canonical Aspire CLI agent telemetry hooks |
 | `.plugin/`, `.claude-plugin/`, `.cursor-plugin/` | Plugin metadata for marketplaces |
 | `.github/plugins/aspire-skills/` | Published plugin mirror |
 | `evals/` | Shared evaluation fixtures and helpers |
@@ -100,7 +138,18 @@ In that command, `-a github-copilot` selects the target agent, `-g` installs glo
 npm run bundle
 ```
 
-`npm run bundle` builds the published Aspire Skills plugin bundle.
+`npm run bundle` builds both published release artifacts:
+
+| Artifact | Contents |
+|----------|----------|
+| `aspire-skills-v<version>.tgz` | Agent skill files, canonical telemetry hooks, and `skill-manifest.json` with hook commit/SHA-512 provenance |
+| `aspire-extensions-v<version>.tgz` | GitHub Copilot app canvas extension files and `extension-manifest.json` |
+
+The skills manifest records the release commit and LF-normalized SHA-512 hash for
+each file under `hooks/scripts/`. Downstream consumers can copy the `hooks` object
+directly instead of maintaining hook provenance separately.
+
+Use `npm run bundle:skills` or `npm run bundle:extensions` to build one bundle type.
 
 ## Contributing
 

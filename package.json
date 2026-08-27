@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "bundle": "node scripts/build-aspire-skills-bundle.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "bundle": "node scripts/build-aspire-bundles.mjs",
+    "bundle:skills": "node scripts/build-aspire-bundles.mjs --bundle skills",
+    "bundle:extensions": "node scripts/build-aspire-bundles.mjs --bundle extensions"
   }
 }

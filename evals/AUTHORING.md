@@ -1,88 +1,79 @@
 # Authoring evals
 
-How to add or modify eval tasks for this plugin. Read [README.md](./README.md) first for how to *run* evals.
+How to add or modify eval stimuli for this plugin. Read [README.md](./README.md) first for how to *run* evals.
 
 > **Why these conventions matter:** the patterns below were learned by running the suite and watching graders mis-fire. Following them keeps judges focused on the agent's response (not the input fixtures) and prevents false negatives that hide real regressions.
 
-## Anatomy of a task file
+## Anatomy of a stimulus
 
-`skills/<skill>/evals/tasks/<id>.yaml`:
+Stimuli are declared **inline** in `skills/<skill>/evals/eval.yaml` under the top-level `stimuli:` array. There is no `tasks/<id>.yaml` file and no `--context-dir` flag — both were removed when the suite moved to vally's canonical `EvalSchema`.
 
 ```yaml
-id: deploy-destroy-001                # unique within the skill, used by --task glob
-name: Tear Down with aspire destroy   # human-readable title
-description: >
-  Agent should know `aspire destroy` (new in 13.3) tears down Azure / Kubernetes /
-  Docker Compose deployments using the same WithComputeEnvironment bindings as
-  `aspire deploy`.
-tags:
-  - core-flow
-  - p1
-  - aspire-13-3
-
-inputs:
-  prompt: "I'm done with this preview deployment — how do I tear down everything Aspire provisioned?"
-  files:                              # paths resolve against --context-dir (this repo: evals/)
-    - path: "csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj"
-    - path: "csharp-apphost/MyApp.AppHost/Program.cs"
-    - path: "csharp-apphost/aspire.config.json"
-
-expected:                             # cheap pre-grader checks (string-level)
-  output_contains:
-    - "aspire destroy"
-  output_not_contains:
-    - "az group delete"
-    - "kubectl delete"
-
-graders:
-  - name: uses_aspire_destroy
-    type: prompt
-    config:
-      prompt: >
-        Does the assistant's response recommend `aspire destroy` (new in Aspire 13.3)
-        as the way to tear down a deployed Aspire app? Answer based on intent.
-
-  - name: no_manual_teardown
-    type: text
-    config:
-      not_contains:
-        - "az group delete"
-        - "kubectl delete"
-        - "helm uninstall"
-        - "docker compose down"
-
-  - name: knows_destroy_is_cross_target
-    type: prompt
-    config:
-      prompt: >
-        The assistant's response should mention that `aspire destroy` is the inverse of
-        `aspire deploy` and works across deployment targets — Azure, Kubernetes/AKS, and
-        Docker Compose.
+stimuli:
+  - name: deploy-destroy-001              # unique within the spec
+    prompt: >                             # phrase like a real user, not a spec
+      I'm done with this preview deployment — how do I tear down everything
+      Aspire provisioned?
+    tags:                                 # record; merged over eval-level tags
+      priority: p1
+      area:
+        - core-flow
+        - 13-3
+    environment:
+      files:                              # { src, dest } pairs (see field reference)
+        - src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs
+          dest: csharp-apphost/MyApp.AppHost/Program.cs
+        - src: ../../../evals/csharp-apphost/aspire.config.json
+          dest: csharp-apphost/aspire.config.json
+    graders:
+      - type: prompt
+        name: uses_aspire_destroy
+        config:
+          prompt: >
+            Does the assistant's response recommend `aspire destroy` (new in
+            Aspire 13.3) as the way to tear down a deployed Aspire app? Answer
+            based on intent.
+      - type: output-not-contains
+        name: no_manual_teardown
+        config:
+          substring: "az group delete"
+      - type: skill-invocation
+        name: routes_to_deployment
+        config:
+          required: [aspire-deployment]
 ```
 
-## Field reference
+> **Skills must be declared.** As of vally 0.8.0 a run loads **no skills** unless the spec sets a top-level `environment.skills` list. See [README → Skills & baselines](./README.md#skills--baselines-vally-080) for the hybrid-loading convention this repo follows.
+
+## Stimulus field reference
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `id` | string | Stable; used by `--task` glob. Convention: `<skill-prefix>-<area>-<NNN>` (e.g. `deploy-destroy-001`, `mon-bridge-001`). |
-| `name` | string | Shown in result output. |
-| `description` | string | Why this task exists; what behavior it validates. |
-| `tags` | string[] | Used by `--tags`. Always include a priority tag (`p0`/`p1`) and at least one topical tag. Use `aspire-13-3` for new-in-13.3 behavior. |
-| `inputs.prompt` | string | The user prompt the executor sends. Phrase like a real user, not like a spec. |
-| `inputs.files[].path` | string | Relative to `--context-dir` (this repo: `evals/`). Reference the **shared fixtures** rather than copy-pasting per skill. |
-| `expected.output_contains` | string[] | Hard pre-grader: pulled into a built-in `text` grader. Cheap correctness signal — skip if your response wording can vary. |
-| `expected.output_not_contains` | string[] | Same, inverse. Be **specific** — see [Issue: over-broad `not_contains`](#issue-over-broad-not_contains). |
-| `graders` | object[] | Custom graders. See below. |
+| `name` | string | Unique within the spec; shown in result output and usable for filtering. Convention: `<skill-prefix>-<area>-<NNN>` (e.g. `deploy-destroy-001`, `mon-bridge-001`). |
+| `prompt` | string | The user prompt the executor sends. Phrase like a real user, not like a spec. |
+| `tags` | record | Merged over the eval-level `tags`. Always include a `priority` (`p0`/`p1`/`p2`) and at least one `area` (a single value or a list). |
+| `environment.files[]` | `{ src, dest }[]` | `src` resolves **relative to the eval spec file** (shared fixtures: `../../../evals/<fixture>`); `dest` is the workspace-relative path the executor sees. Reference the **shared fixtures** rather than copy-pasting per skill. |
+| `environment.skills[]` | string[] | (Optional) skill dirs to **add** for this stimulus on top of the eval-level set — used by routing stimuli to pull in siblings. Union-merged during normal eval runs; experiment variants replace the resolved list wholesale. |
+| `constraints.expect_skills` / `reject_skills` | string[] | (Optional) assert the agent *did* / *did not* activate these skills. |
+| `graders[]` | object[] | One or more graders. See below. |
+| `scoring` | object | (Optional) per-grader weights + pass threshold. Omitted → equal weights, threshold `1.0` (every grader must pass). |
 
 ## Grader types
 
-| Type | What it does | When to use |
-|------|--------------|-------------|
-| `text` | Checks `contains` / `not_contains` substrings against the response. Deterministic, cheap. | Specific command strings, forbidden anti-patterns. |
-| `prompt` | LLM-as-judge — runs `--judge-model` against the agent's response with your prompt. | Intent / paraphrase tolerance. Anything that requires understanding. |
-| `code` | Python expression evaluated against the response (`output` variable). | Programmatic checks (regex, parse JSON, count lines). |
+Each grader has a `type`, an optional `name`, and a `config`. The types this suite uses:
 
-`eval.yaml` can also declare **top-level graders** that run on every task in the suite (used in this repo for the global `never_azd` rule on `aspire-deployment`).
+| Type | What it does | `config` keys | When to use |
+|------|--------------|---------------|-------------|
+| `prompt` | LLM-as-judge — runs `--judge-model` against the agent's response with your rubric. | `prompt` | Intent / paraphrase tolerance. Anything that needs understanding. |
+| `output-contains` | Substring must appear in the response. Deterministic, cheap. | `substring` | A specific command string that must be present. |
+| `output-not-contains` | Substring must **not** appear. | `substring` | A forbidden anti-pattern (be specific — see below). |
+| `output-matches` | Regex match against the response. | `pattern` | Patterned correctness (e.g. a flag with any value). |
+| `skill-invocation` | Asserts which skill(s) the agent activated. | `required` and/or `disallowed` | **Routing** — the primary mechanism here (replaces the old `trigger_tests.yaml`). |
+| `pairwise` / `panel` | Compare two runs / judge with a panel of models. | varies | Regression comparisons; higher-confidence judging. |
+
+Other static graders exist (`file-exists`, `file-contains`, `file-matches`, `tool-call`, `run-command`, `program`, `metric-threshold`); run `vally lint --eval-spec <spec>` and see the [vally docs](https://www.npmjs.com/package/@microsoft/vally-cli) for the full set.
+
+`eval.yaml` can also declare **top-level graders** that run on every stimulus in the spec (used in this repo for the global `never_azd` rule on `aspire-deployment`).
 
 ## Grader patterns (do's and don'ts)
 
@@ -121,14 +112,10 @@ A combined "Does X recommend Y? It should NOT do Z." prompt confuses judges — 
     prompt: >
       Does the assistant's response recommend `aspire destroy`?
 
-- name: no_manual_teardown
-  type: text
+- name: no_az_group_delete
+  type: output-not-contains
   config:
-    not_contains:
-      - "az group delete"
-      - "kubectl delete"
-      - "helm uninstall"
-      - "docker compose down"
+    substring: "az group delete"
 
 # ❌ Bad — combined positive + negative confuses the judge
 - name: uses_aspire_destroy
@@ -144,19 +131,16 @@ A combined "Does X recommend Y? It should NOT do Z." prompt confuses judges — 
 
 #### Issue: over-broad `not_contains`
 
-Forbidding the bare substring `"azd"` will fire on legitimate "do not use azd" guidance from the agent. Forbid full command tokens.
+Forbidding the bare substring `"azd"` will fire on legitimate "do not use azd" guidance from the agent. Forbid full command tokens — one `output-not-contains` grader per token.
 
 ```yaml
-# ✅ Good
-not_contains:
-  - "azd up"
-  - "azd deploy"
-  - "azd init"
-  - "azd provision"
+# ✅ Good — specific command tokens
+- { type: output-not-contains, name: no_azd_up,      config: { substring: "azd up" } }
+- { type: output-not-contains, name: no_azd_deploy,  config: { substring: "azd deploy" } }
+- { type: output-not-contains, name: no_azd_provision, config: { substring: "azd provision" } }
 
 # ❌ Bad — fires on the literal letters "azd" anywhere in the response
-not_contains:
-  - "azd"
+- { type: output-not-contains, name: no_azd, config: { substring: "azd" } }
 ```
 
 The same applies to bare `"docker"`, `"kubectl"`, `"helm"` — agents will mention them in valid context (e.g., "Aspire generates a Helm chart; you do not need to run `helm install` yourself"). Forbid the **action** (`docker compose down`, `kubectl apply`, `helm install`), not the noun.
@@ -189,66 +173,68 @@ The judge model (typically `gpt-4.1`) may have stale Aspire knowledge. If your g
 
 Use the shared `evals/` directory at the repo root. Cross-skill fixture drift defeats the point of a shared baseline.
 
-## Trigger tests
+## Routing assertions (`skill-invocation`)
 
-`skills/<skill>/evals/trigger_tests.yaml` measures how well the SKILL.md description routes prompts. Each entry:
+Routing is graded **inline** with the `skill-invocation` grader (there is no separate `trigger_tests.yaml`). It inspects which skill(s) the agent activated and passes when the `required` set was invoked and none of the `disallowed` set were:
 
 ```yaml
-should_trigger_prompts:
-  - prompt: "Tear down my Aspire deployment"
-    reason: "aspire destroy is deployment"
-    confidence: high
-
-should_not_trigger_prompts:
-  - prompt: "Show me logs from my deployed app"
-    reason: "Deployed monitoring routes to azure-diagnostics"
-    confidence: high
+# In the router spec, a prompt that must land on aspire-deployment and must NOT
+# be poached by aspire-monitoring:
+- name: route-teardown-001
+  prompt: "I want to tear down everything I deployed for this preview."
+  tags: { priority: p0, area: routing }
+  graders:
+    - type: skill-invocation
+      name: routes_to_deployment
+      config:
+        required: [aspire-deployment]
+        disallowed: [aspire-monitoring]
 ```
 
 Rules:
 
-- **A prompt must not appear in both lists** for the same skill (and a prompt in one skill's `should_trigger` should appear in `should_not_trigger` of every sibling that might claim it).
-- **`reason` must agree with the bucket.** A prompt under `should_not_trigger_prompts` whose reason says "should trigger this skill" is a misclassification — fix it.
+- **Routing stimuli must load the full skill set** so the decision is made against real siblings — add the siblings via stimulus-level `environment.skills` (union-merged on top of the eval-level list). See [README → Skills & baselines](./README.md#skills--baselines-vally-080).
+- **A skill cannot be in both `required` and `disallowed`** (vally errors). For an "any of these N is fine" intent, list them all in `required` only if all are acceptable, or fall back to a `prompt` grader on the response content.
+- **Pair routing with a content check.** `skill-invocation` proves *which* skill ran; add a `prompt` or `output-contains` grader if the *answer* also matters.
+- **`constraints.expect_skills` / `reject_skills`** are a lighter-weight alternative when you only need an activation assertion and no scoring weight.
 - **Phrase like a real user.** "I want to ship this" is more realistic than "Invoke aspire deploy."
-- **Confidence is informational** — `high`/`medium`/`low`. Use `high` for unambiguous routing, `medium` when the prompt could plausibly route elsewhere.
 
-## Adding a new task — checklist
+## Adding a new stimulus — checklist
 
 1. **Pick the right skill.** Tear-down? `aspire-deployment`. Wiring? `aspireify`. Routing? `aspire` (router).
 2. **Pick or create a fixture.** Reuse `evals/csharp-apphost/`, `evals/ts-apphost/`, or `evals/non-aspire/`. Add a new fixture only if existing ones don't capture the scenario.
 3. **Write a realistic prompt.** Match how a developer or AI agent would actually phrase the request — not how the spec describes it.
 4. **Pick at most 3 graders:**
    - One positive `prompt` grader for intent.
-   - One `text` `not_contains` for forbidden anti-patterns.
-   - Optionally a second `prompt` grader for a distinct bonus expectation.
+   - One `output-not-contains` for a forbidden anti-pattern (one substring each).
+   - Optionally a `skill-invocation` grader for the routing decision, or a second `prompt` grader for a distinct bonus expectation.
 5. **Apply the grader-pattern rules** above.
-6. **Tag with priority + topic** — at least one of `p0`/`p1` plus a topical tag.
-7. **Run `vally lint skills/<skill>`** to confirm schema validity.
-8. **Run the task once** — `vally eval --eval-spec skills/<skill>/evals/eval.yaml --task "<id>" --context-dir evals --no-cache` — to confirm it executes and the graders behave as you expect.
-9. **Update the trigger tests if needed** — if the new task validates a routing decision, add matching entries in `trigger_tests.yaml`.
+6. **Tag with priority + area** — at least one of `p0`/`p1`/`p2` plus a topical `area`.
+7. **Confirm skills are loaded** — the spec's `environment.skills` must include the skill under test (capability) or the full set (routing). See [README → Skills & baselines](./README.md#skills--baselines-vally-080).
+8. **Run `vally lint --eval-spec skills/<skill>/evals/eval.yaml`** to confirm schema validity (or `vally lint skills` for all).
+9. **Run the stimulus once** — `vally eval --eval-spec skills/<skill>/evals/eval.yaml --tag <key>=<value> --runs 1` (with `COPILOT_GITHUB_TOKEN` set) — to confirm it executes and the graders behave as you expect. `--tag` filters by the stimulus's `tags` record.
 10. **Commit with a focused message.**
 
 ## Common pitfalls
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
+| Every stimulus runs with **no skill loaded** (`Skills used 0`) | Spec is missing top-level `environment.skills` (vally 0.8.0 default) | Declare `environment.skills` — see [README → Skills & baselines](./README.md#skills--baselines-vally-080) |
 | Grader says *"no response found in workspace"* | `prompt` grader doesn't tell the judge to look at the response | Add "the assistant's response" to the grader prompt |
-| Grader fails when response is correct | Combined positive + negative in one prompt | Split into separate `prompt` + `text` graders |
-| `not_contains` fires on legitimate guidance | Substring is too broad (e.g., `"azd"`) | Forbid full commands (`"azd up"`, `"azd deploy"`) |
-| Judge rejects response as outdated | Stale model knowledge of Aspire 13.3 | State the 13.3 fact in the grader prompt |
-| Trigger accuracy below threshold | Description too dense, keywords don't match how users phrase it, or trigger prompts are too generic | Refine SKILL.md `description` triggers and / or trigger_tests.yaml prompts; iterate |
-| `vally eval --task "name"` matches 0 tests | `--task` filters by `id`, not `name` | Use the `id:` field with a glob (e.g., `--task "deploy-destroy*"`) |
-| Task hangs forever | `config.timeout_seconds` too low for slow models, or judge model unreachable | Raise `timeout_seconds` in `eval.yaml`; check `--judge-model` is available |
+| Grader fails when response is correct | Combined positive + negative in one prompt | Split into a focused `prompt` grader + `output-not-contains` grader(s) |
+| `output-not-contains` fires on legitimate guidance | Substring is too broad (e.g., `"azd"`) | Forbid full commands (`"azd up"`, `"azd deploy"`) |
+| Judge rejects response as outdated | Stale model knowledge of Aspire 13.x | State the fact in the grader prompt |
+| `skill-invocation` grader misses | Required skill wasn't loaded for that stimulus, or a sibling was picked | Ensure the routing stimulus loads the full set via `environment.skills`; tune `required`/`disallowed` |
+| Stimulus hangs / times out | `defaults.timeout` too low for slow models, or judge model unreachable | Raise `defaults.timeout` (e.g. `"180s"`) or the per-stimulus `timeout`; check `--judge-model` is available |
 
-## When to update `eval.yaml`
+## When to update `eval.yaml` defaults
 
-The per-skill `eval.yaml` controls thresholds, model, and top-level graders. Update it when:
+The per-skill `eval.yaml` `defaults` block controls model, executor, runs, and timeout; the top level also holds `environment.skills`, `scoring`, and any spec-wide graders. Update it when:
 
-- A new metric is needed (e.g., `correctness_after_13_3`). Declare under `metrics:` with a weight and threshold.
-- The skill ships a new globally forbidden pattern. Add a top-level `text` `not_contains` grader.
+- The skill's dependency closure changes — adjust `environment.skills`.
+- The skill ships a new globally forbidden pattern — add a top-level `output-not-contains` (or `prompt`) grader so it runs on every stimulus.
+- You need different scoring weights or a pass threshold — add a `scoring` block (omitted → equal weights, threshold `1.0`).
 - You need a different default model — but prefer overriding via `--model` on the CLI for ad-hoc runs.
-
-Don't touch `tasks: ["tasks/*.yaml"]` — leave it as the wildcard.
 
 ## See also
 

@@ -1,0 +1,41 @@
+# Skill-lift experiment — comparative baseline for the Aspire skills.
+#
+# Runs every skill's eval suite twice along a single axis (`/environment/skills`):
+#
+#   * with-skills (treatment) — inherits each eval's declared environment.skills
+#     (the skill under test plus its in-repo dependency closure).
+#   * no-skills (baseline)     — strips all skills, so the same stimuli run against
+#     a bare agent with no Aspire guidance.
+#
+# The per-variant delta (treatment − baseline pass rate) is the skill's measured
+# "lift": how much the skill improves the agent's answers over no skill at all.
+#
+# Run:    vally experiment run skill-lift.experiment.yaml --output-dir ./results
+# Plan:   vally experiment run skill-lift.experiment.yaml --dry-run
+# Diff:   vally compare --run-a <results>/no-skills --run-b <results>/with-skills
+#
+# Paths/globs resolve relative to this file's directory (the repo root).
+name: skill-lift
+
+evals:
+  - skills/*/evals/eval.yaml
+
+# The only field allowed to differ between variants. Subtree-prefix semantics
+# authorize any change at or below /environment/skills. At the experiment layer,
+# this field replaces the effective list after eval- and stimulus-level skills
+# are unioned, so [] also strips stimulus-level additions. Any other difference
+# in the effective resolved config is a hard error.
+vary:
+  - /environment/skills
+
+# Control variant used as the baseline for metric deltas in comparison reports.
+baseline: no-skills
+
+variants:
+  # Baseline: no skills loaded at all. Replaces each resolved skills list with [].
+  no-skills:
+    environment:
+      skills: []
+
+  # Treatment: inherit each eval's declared environment.skills unchanged.
+  with-skills: {}

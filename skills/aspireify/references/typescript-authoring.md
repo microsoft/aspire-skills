@@ -187,9 +187,10 @@ Yarn Classic is unsupported for TypeScript AppHosts. If `packageManager` is `yar
 or the first lines of `yarn.lock` identify lockfile v1, stop and tell the user to upgrade
 to Yarn 4+ or use npm, pnpm, or Bun. Do not silently fall back to npm.
 
-Preserve repository conventions: never create, delete, replace, or regenerate
-`package.json`, lockfiles, `.yarnrc.yml`, or workspace files unless the user explicitly
-asks for that change.
+Preserve repository conventions: do not change `packageManager` or create, replace, or
+regenerate lockfiles, `.yarnrc.yml`, or workspace files merely to influence detection or
+switch managers. Preserve existing files until the user explicitly chooses an upgrade or
+migration.
 
 Publish hooks (mirror C# `PublishAs*`):
 

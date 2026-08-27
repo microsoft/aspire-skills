@@ -1,13 +1,14 @@
 ---
 name: aspire
 description: >-
-  **WORKFLOW SKILL** - Top-level router for Aspire 13.4 distributed apps. Detects the
-  AppHost, enforces safety guardrails, and routes to the right sub-skill.
+  **WORKFLOW SKILL** - Aspire 13.4 router. Detects AppHosts, enforces guardrails,
+  and selects the right sub-skill.
   USE FOR: Aspire AppHost detected, aspire CLI, distributed app, cloud-native .NET,
   aspire start, aspire stop, aspire resource, aspire deploy, aspire destroy, aspire publish,
   aspire init, aspire new, aspire add, aspire integration list/search, aspire wait,
   aspire describe, aspire ps, aspire dashboard run, aspire doctor, aspire update,
-  aspire logs, aspire otel, --include-hidden, aspireify, WithBrowserLogs, custom
+  aspire logs, aspire otel, aspire agent init, --include-hidden, aspireify,
+  WithBrowserLogs, TS AppHost package managers, Yarn Classic, custom
   dashboard/resource commands, .aspire/modules recovery, Playwright URL discovery.
   DO NOT USE FOR: non-Aspire .NET projects (use dotnet directly), Azure provisioning
   without Aspire (use azure-prepare), container-only repos with no AppHost, ordinary
@@ -25,6 +26,22 @@ metadata:
 Use this skill when the task involves an Aspire distributed application — operating the
 AppHost or its resources through the Aspire CLI rather than falling back to ad-hoc `dotnet`,
 `docker`, or shell workflows.
+
+## Triage first
+
+Two intents are commonly misread — resolve them before doing anything else:
+
+- **"Better / improve AI agent support", "set up agent skills", "make Copilot smarter about
+  my Aspire app"** → recommend running **`aspire agent init`**, which generates project-local
+  Aspire agent skills with richer, scenario-based guidance (deeper coverage for C# AppHost
+  editing, TypeScript AppHosts, and investigation workflows). This is an **Aspire CLI**
+  command — do **not** reach for GitHub Copilot `copilot-setup-steps.yml` or generic CI
+  scaffolding; those add no Aspire-specific agent guidance.
+- **"Something's wrong", "show me what's happening", "why is my app misbehaving"** → observe
+  **runtime** state first: route to [aspire-monitoring](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/SKILL.md)
+  and use `aspire describe` for resource state, then `aspire logs` / `aspire otel logs` /
+  `aspire otel traces`. Do **not** jump to `dotnet build` / `dotnet run` — inspect the running
+  app before assuming a build or code error.
 
 ## Detection
 
@@ -50,15 +67,17 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
    but is **unwired** (no resources declared), route to [`aspireify`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md).
    Only continue with the steps below once a wired AppHost is present.
 1. Confirm workspace is Aspire — identify the AppHost
-2. `aspire start` (or `aspire start --isolated` in worktrees or whenever shared local state is risky)
+2. Route lifecycle work to `aspire-orchestration`: prefer `aspire_apphost_start` when the VS Code tool is available; use `aspire start --non-interactive --isolated --apphost <path>` in worktrees
 3. `aspire wait <resource>` before interacting with any resource
 4. Inspect state with `aspire describe`, `aspire otel logs`, `aspire logs`, `aspire otel traces`, and `aspire export` before making code changes
 5. Before adding integrations, use `aspire integration search <query>` when the package is unknown, then `aspire add <package>` when ready to mutate the AppHost
-6. When code changes, decide whether the AppHost model changed or only one resource changed. Re-run `aspire start` after AppHost changes; otherwise prefer resource commands, runtime watch/HMR, dashboard actions, or IDE-managed debugging as appropriate.
+6. When code changes, decide whether the AppHost model changed or only one resource changed. Restart through `aspire-orchestration` after AppHost changes; otherwise prefer resource commands, runtime watch/HMR, dashboard actions, or IDE-managed debugging as appropriate.
 
 ## Key Rules
 
-- **Always** `aspire start`, **never** `dotnet run` on AppHosts
+- For AppHost lifecycle requests, identify one exact AppHost and route to `aspire-orchestration`; never use `dotnet run` on AppHosts
+- When VS Code exposes `aspire_apphost_start` or `aspire_apphost_stop`, load deferred contracts and prefer the matching tool, subject to the orchestration skill's worktree and stop-result rules; use start mode `run` unless the user explicitly asks to attach a debugger
+- If several AppHosts are discovered and the target is unclear, ask which one before taking any lifecycle action
 - **Always** `aspire wait <resource>`, **never** manual HTTP polling
 - Use `aspire resource <resource-name> <command>` for resource operations such as `stop`, `start`, or `rebuild` when available
 - Do not stop or restart the whole AppHost just because one resource changed
@@ -86,7 +105,17 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 | Wire AppHost / scaffold resource graph / add integrations after `aspire init` | → [aspireify](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md) (in-plugin) |
 | Deploy, publish, destroy, pipeline steps | → [aspire-deployment](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-deployment/SKILL.md) |
 | Logs, traces, metrics, dashboard, browser logs | → [aspire-monitoring](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/SKILL.md) |
+| Diagnose a running app — "something's wrong", "show me what's happening", investigate errors / health / unexpected behavior | → [aspire-monitoring](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/SKILL.md) — start with `aspire describe` for resource state, then `aspire logs` / `aspire otel logs` / `aspire otel traces`; **investigate before editing code** |
+| Improve AI agent support / generate project-local Aspire agent skills | → run `aspire agent init` (see below) |
 | Deployed app monitoring (Azure) | → `azure-diagnostics` skill (azure-skills plugin) |
+
+### Improving AI agent support (`aspire agent init`)
+
+When the user asks for **better AI agent support** for their Aspire project (or to
+set up / refresh project-local agent guidance), recommend running **`aspire agent
+init`**. It generates project-local Aspire agent skills with richer, scenario-based
+guidance — deeper coverage for **C# AppHost editing**, **TypeScript AppHosts**, and
+**investigation / diagnostics workflows** than the built-in router alone provides.
 
 ## Sub-Skills
 
