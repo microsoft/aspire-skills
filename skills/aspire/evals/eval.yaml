@@ -248,6 +248,28 @@ stimuli:
       - type: output-contains
         config:
           substring: aspire wait
+  - name: router-package-manager-001
+    prompt: >
+      Use the `aspire` router skill before answering. A generated TypeScript AppHost
+      cannot restore dependencies, and its repository uses pnpm. Do not run commands;
+      state which sub-skill owns the package-manager diagnosis and which lifecycle
+      command should start the AppHost afterward.
+    tags:
+      priority: p1
+      area:
+        - routing
+        - package-manager-routing
+    constraints:
+      expect_skills:
+        - aspire
+        - aspireify
+    rubric:
+      - The assistant routes TypeScript AppHost package-manager diagnosis to aspireify and keeps normal AppHost execution on aspire start.
+    graders:
+      - type: prompt
+        name: routes_package_manager_repair
+        config:
+          scoring: binary
   # Positive-routing stimuli assert both activation and outcome. Because this
   # spec tests the top-level router, model knowledge that merely produces an
   # Aspire-flavored answer is insufficient: `constraints.expect_skills` requires
