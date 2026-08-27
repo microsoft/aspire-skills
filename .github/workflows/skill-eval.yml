@@ -66,9 +66,12 @@ jobs:
 
       - name: Install vally and Copilot runtime
         if: steps.preflight.outputs.has_token == 'true'
-        # Install the Ubuntu x64 package at the global module root where
-        # Vally's copilot-sdk executor resolves platform packages.
-        run: npm install -g @microsoft/vally-cli @github/copilot-linux-x64
+        # Keep Vally and its native runtime under one node_modules ancestor so
+        # @github/copilot-sdk can resolve the platform package.
+        run: |
+          tools_dir="$RUNNER_TEMP/aspire-eval-tools"
+          npm install --prefix "$tools_dir" @microsoft/vally-cli @github/copilot-linux-x64
+          echo "$tools_dir/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Determine changed skill eval specs
         id: changed
