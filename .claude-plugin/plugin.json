@@ -1,6 +1,6 @@
 {
   "name": "aspire",
-  "description": "Aspire skills plugin for AI coding agents. Six skills: aspire (router), aspire-init (skeleton drop), aspireify (AppHost wiring), aspire-orchestration (lifecycle, guardrails), aspire-deployment (publish, deploy, destroy, pipeline steps), aspire-monitoring (logs, traces, dashboard, diagnostics bridge). Aligned with Aspire 13.4.",
+  "description": "Aspire skills plugin for AI coding agents. Six skills: aspire (router), aspire-init (skeleton drop), aspireify (AppHost wiring), aspire-orchestration (lifecycle, guardrails), aspire-deployment (publish, deploy, destroy, pipeline steps), aspire-monitoring (logs, traces, dashboard, diagnostics bridge). Aligned with Aspire 13.5.3.",
   "version": "0.0.2",
   "author": {
     "name": "Microsoft",

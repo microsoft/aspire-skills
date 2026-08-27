@@ -1,7 +1,11 @@
 {
   "name": "myapp-apphost",
+  "private": true,
   "type": "module",
-  "dependencies": {
-    "@aspire/apphost": "^10.0.0"
+  "scripts": {
+    "aspire:start": "aspire run"
+  },
+  "engines": {
+    "node": "^20.19.0 || ^22.13.0 || >=24"
   }
 }

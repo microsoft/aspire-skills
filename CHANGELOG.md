@@ -5,16 +5,17 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [0.0.2] - Unreleased
 
 ### Changed
+- Aligned the shipped skill family and bundle compatibility metadata with Aspire 13.5.3.
+  Updated current TypeScript AppHosts to `apphost.mts`, separated AppHost discovery
+  (`aspire ps`) from resource inspection (`aspire describe`), removed resolved 13.4
+  workarounds, documented 13.5 AppHost interactions and CLI behavior, and added the
+  latest Kubernetes, Azure, Docker Compose, and Radius deployment guidance.
 - Corrected Aspire monitoring guidance for `WithBrowserLogs()` child-resource diagnostics.
 - Prefer VS Code's `aspire_apphost_start` and `aspire_apphost_stop` tools over
   terminal lifecycle commands when available, with multi-root tool selectors
   resolved to exact CLI filesystem paths for CLI fallbacks, bounded recovery
   for unknown controllers, explicit multi-AppHost disambiguation, and isolated
   CLI starts in worktrees.
-- Synced skill guidance with the current Aspire 13.4 development branch:
-  `.aspire/modules` TypeScript AppHost generated files, `aspire integration list/search`
-  discovery, resource-command/watch/HMR lifecycle guidance, and `PublishAsPackageScript`
-  JavaScript deployment naming.
 - Reset all skill `metadata.version` values to `0.0.1` ahead of the initial release.
 - Synced `aspire-deployment` skill routing description with
   [microsoft/aspire#17209](https://github.com/microsoft/aspire/pull/17209).

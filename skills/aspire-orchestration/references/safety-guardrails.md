@@ -8,18 +8,19 @@ Issue [#15801](https://github.com/microsoft/aspire/issues/15801) documented 5 sp
 
 ---
 
-## Rule 1: Use Aspire Lifecycle Routing — NEVER `dotnet run`
+## Rule 1: Use Aspire Lifecycle Routing, Not `dotnet run`, For Agent Starts
 
-### Why `dotnet run` Is Dangerous for AppHosts
+### Why explicit Aspire lifecycle is required for agents
 
-The AppHost project is an **orchestrator**, not a regular .NET app. Running it with `dotnet run`:
+New 13.5 C# templates enable `AspireUseCliBundle=true`, so `dotnet run` can resolve and
+delegate to the Aspire CLI. Existing AppHosts remain opt-in, and even a bundled
+`dotnet run` is the wrong agent lifecycle entry point because it:
 
-- **Bypasses the Aspire CLI orchestration layer** — resources don't get managed lifecycle
-- **No dashboard** — the Aspire developer dashboard won't launch
-- **No backchannel** — `aspire wait`, `aspire logs`, `aspire describe` won't work
-- **No resource management** — can't operate on individual resources
-- **Port conflicts** — resources start without coordinated port allocation
-- **No cleanup** — orphaned processes when the host exits
+- runs in the foreground instead of returning control to the agent;
+- cannot express the skill's exact-target, `--non-interactive`, and worktree
+  `--isolated` contract;
+- may bypass Aspire entirely in an older or opted-out AppHost; and
+- does not participate in editor-owned lifecycle tracking.
 
 ### Correct Pattern
 
@@ -76,7 +77,7 @@ exact selected `appHostPath`. Use the CLI only when the editor tool is unavailab
 when a git worktree requires `--isolated`.
 
 ```bash
-# Kill the dotnet process manually (find PID first)
+# Stop the foreground run cleanly, then use the editor lifecycle tool.
 # If the editor tool is unavailable:
 aspire start --non-interactive --apphost <filesystem-path>
 # In a git worktree:
@@ -227,7 +228,7 @@ the CLI filesystem path.
 aspire stop --non-interactive --apphost <filesystem-path>
 
 # ✅ Verify everything stopped
-aspire ps  # should show no running resources
+aspire ps  # should show no running AppHost for that path
 ```
 
 ### Recovery from Orphaned Processes
@@ -240,6 +241,13 @@ aspire ps
 # The previous instance may have crashed. Start fresh:
 aspire start --non-interactive --apphost <filesystem-path>  # editor-tool-unavailable fallback
 ```
+
+### Destructive persistent-resource cleanup
+
+`aspire stop --force` is not a stronger ordinary stop. It stops one selected AppHost and
+then permanently removes its persistent resource instances without another confirmation.
+Require explicit data-loss approval and an exact `--apphost` target. Never combine
+`--force` with `--all`.
 
 ---
 
@@ -256,7 +264,7 @@ Text output is formatted for humans and may change between versions. JSON output
 ### Examples
 
 ```bash
-# ✅ Machine-readable resource list
+# ✅ Machine-readable AppHost list
 aspire ps --format Json
 
 # ✅ Get specific resource details
@@ -272,12 +280,11 @@ aspire describe --format Json | jq '.resources[] | select(.state == "Running")'
 |-------|-----------|
 | `aspire start --format json` may emit human-readable text before JSON ([#15843](https://github.com/microsoft/aspire/issues/15843)) | Strip non-JSON lines before parsing |
 | `aspire stop` does NOT support `--format json` yet | Use exit code for success/failure |
-| `aspire ps --format Json` returns `name` and `displayName` fields | Use `displayName` for `aspire wait` — the `name` field may be rejected ([#15842](https://github.com/microsoft/aspire/issues/15842)) |
 
 ### Hidden Resources and `--include-hidden`
 
-`aspire ps`, `aspire describe`, and other CLI commands **filter out resources marked as
-hidden in the AppHost** (proxies, helper containers, migration jobs, etc.).
+`aspire ps` is AppHost-level in 13.5 and does not list resources. `aspire describe`
+filters resources marked hidden in the AppHost (proxies, helper containers, migration jobs).
 This filtering is correct for normal workflows — agents and humans see only the resources they
 care about, not the implementation scaffolding.
 
@@ -288,20 +295,20 @@ Use `--include-hidden` when:
 | Debugging a proxy or sidecar | Proxies are hidden by default; you need their state to diagnose connectivity |
 | Investigating helper containers | Helper containers (e.g. wait-for-it shims, init containers) are hidden |
 | Tracking down migration jobs | Migration / seed jobs are typically hidden once they finish |
-| Expected resources are missing from `aspire ps` | The resource may exist but be marked hidden — confirm with `--include-hidden` before assuming the AppHost is wrong |
+| Expected resources are missing from `aspire describe` | The resource may exist but be marked hidden — confirm with `--include-hidden` before assuming the AppHost is wrong |
 | Parsing for completeness in agent automation | A full-graph view requires explicit opt-in |
 
 ```bash
-# ✅ Normal flow — filtered (correct for most tasks)
+# ✅ AppHost discovery
 aspire ps --format Json
 
-# ✅ Debugging / completeness — include hidden resources
-aspire ps --include-hidden --format Json
+# ✅ Resource debugging / completeness — include hidden resources
 aspire describe --include-hidden --format Json
 ```
 
 If a user reports "I can't see my proxy / migration / helper container," reach for
-`--include-hidden` before assuming the AppHost is misconfigured.
+`aspire describe --include-hidden` before assuming the AppHost is misconfigured. On
+`aspire resource`, `--include-hidden` exposes hidden commands rather than hidden resources.
 
 ---
 
@@ -326,7 +333,7 @@ aspire agent init --non-interactive
 
 | Mistake Made | Recovery Steps |
 |-------------|---------------|
-| Used `dotnet run` on AppHost | Kill the process, then start through lifecycle routing |
+| Used `dotnet run` on AppHost | Stop the foreground run cleanly, then start through lifecycle routing |
 | Used `dotnet build` and got file locks | Stop through lifecycle routing, wait 2s, then `dotnet build` or restart |
 | Used `curl` polling and got false results | `aspire wait <resource>`, then use endpoints from `aspire describe` |
 | Left Aspire running, now ports conflict | Stop and restart through lifecycle routing |

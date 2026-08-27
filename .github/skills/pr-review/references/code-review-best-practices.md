@@ -45,7 +45,7 @@ behavior in the agent, not a rhetorical victory.
   "This needs to be moved out."
 - "Could we add `trigger_tests.yaml` coverage for this new keyword?" rather than "You
   forgot the trigger test."
-- "Is `aspire-13-3` still the right tag here, or has this rolled into a 13.4 surface?"
+- "Is `aspire-13-3` still the right tag here, or has this rolled into a 13.5 surface?"
   rather than "Wrong tag."
 
 ### Be specific and actionable
@@ -120,7 +120,7 @@ These are quick mental tests that catch most of the bugs we see:
   Probably a guardrail regression.
 - **"Did the SKILL.md description shrink?"** Shrinking trigger keywords usually drops
   routing accuracy — check `trigger_tests.yaml`.
-- **"Does this eval rely on the judge knowing Aspire 13.4?"** State the current Aspire fact in the
+- **"Does this eval rely on the judge knowing Aspire 13.5.3?"** State the current Aspire fact in the
   grader prompt instead.
 - **"Does this snippet use `--non-interactive`?"** If it's agent-facing, it must.
 

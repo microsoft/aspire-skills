@@ -124,7 +124,7 @@ Run `aspire restore` to generate the `.aspire/modules/` directory with TypeScrip
 
 Augment if it exists:
 
-- Ensure `".aspire/modules/**/*.ts"` and `"apphost.ts"` are in `include`
+- Ensure `".aspire/modules/**/*.mts"` and `"apphost.mts"` are in `include`
 - Ensure `"module"` is `"nodenext"` or `"node16"` (ESM required)
 - Ensure `"moduleResolution"` matches
 
@@ -141,7 +141,7 @@ If no `tsconfig.json` exists and `aspire restore` didn't create one, create a mi
     "outDir": "./dist",
     "rootDir": "."
   },
-  "include": ["apphost.ts", ".aspire/modules/**/*.ts"]
+  "include": ["apphost.mts", ".aspire/modules/**/*.mts"]
 }
 ```
 

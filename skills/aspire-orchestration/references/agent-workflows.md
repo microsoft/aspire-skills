@@ -98,12 +98,15 @@ Keep these points in mind:
 
 ## Scenario: The AppHost Is TypeScript And Generated APIs Matter
 
-If the AppHost is `apphost.ts`, the `.aspire/modules/` directory contains generated TypeScript modules that expose Aspire APIs.
+If the AppHost is current `apphost.mts` (or legacy `apphost.ts`), the
+`.aspire/modules/` directory contains generated TypeScript modules that expose Aspire APIs.
 
 - Do not edit `.aspire/modules/` directly.
 - Use `aspire add <package>` to regenerate the available APIs when adding integrations.
 - Use `aspire restore` if `.aspire/modules/` disappeared after a pull, clean, or branch switch.
-- Inspect `.aspire/modules/aspire.ts` after regeneration or restore to see the newly available APIs.
+- Inspect `.aspire/modules/aspire.mts` after regeneration or restore to see the newly available APIs.
+- For legacy `apphost.ts`, offer `aspire update --migrate` after approval instead of
+  hand-renaming the entry point or generated imports.
 
 ## Scenario: I Need Secrets, Deployment, Or A Playwright Handoff
 
