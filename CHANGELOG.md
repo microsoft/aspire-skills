@@ -2,7 +2,7 @@
 
 All notable changes to the aspire-skills plugin will be documented in this file.
 
-## [Unreleased]
+## [0.0.2] - Unreleased
 
 ### Changed
 - Corrected Aspire monitoring guidance for `WithBrowserLogs()` child-resource diagnostics.
@@ -89,7 +89,7 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   `--skip-grade`, `--workers`, `--runs`, etc.) and documented `vally serve`
   (local dashboard) and `vally ingest` (SQLite store) workflows.
 
-## [0.0.1] - Unreleased
+## [0.0.1] - 2026-05-27
 
 ### Added
 - Initial `aspire` skill with detection, safety guardrails, diagnostics bridge

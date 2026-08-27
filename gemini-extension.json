@@ -1,6 +1,6 @@
 {
   "name": "aspire",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Aspire skills plugin for AI coding agents. Six skills covering routing, init, AppHost wiring (aspireify), orchestration, deployment, and monitoring. Aligned with Aspire 13.4.",
   "mcpServers": {
     "context7": {
