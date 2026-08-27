@@ -1380,7 +1380,7 @@ const aspireifyCanvas = createCanvas({
     id: CANVAS_ID,
     displayName: "Aspireify",
     description:
-        "Review and confirm Aspireify findings before the skill edits the AppHost.",
+        "Presents Aspireify's generated AppHost proposal for Step 3 review and confirmation before any files change.",
     inputSchema: {
         type: "object",
         additionalProperties: false,
