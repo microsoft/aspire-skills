@@ -71,7 +71,11 @@ jobs:
         run: |
           tools_dir="$RUNNER_TEMP/aspire-eval-tools"
           npm install --prefix "$tools_dir" @microsoft/vally-cli @github/copilot-linux-x64
+          cli_path="$tools_dir/node_modules/@github/copilot-linux-x64/index.js"
+          test -f "$cli_path"
+          node "$cli_path" --version
           echo "$tools_dir/node_modules/.bin" >> "$GITHUB_PATH"
+          echo "COPILOT_CLI_PATH=$cli_path" >> "$GITHUB_ENV"
 
       - name: Run skill-lift experiment
         if: steps.preflight.outputs.has_token == 'true'
