@@ -44,6 +44,34 @@ aspire agent init
 
 ### Agent plugins and extensions
 
+#### GitHub Copilot app
+
+The GitHub Copilot app plugin installs Aspire skills and canvas extensions for
+the current user.
+
+##### Prerequisites
+
+Before you install, make sure you have:
+
+- [GitHub Copilot app](https://gh.io/app) installed.
+- A GitHub Copilot subscription (paid or free).
+
+##### Install
+
+Install the `microsoft/aspire-skills` marketplace through the GitHub Copilot
+app:
+
+1. Click [this link](https://github.com/copilot/app/launch?entry_point=aspire_skills_docs&open=ghapp%3A%2F%2Fplugins%2Fmarketplace%2Fadd%3Fsource%3Dmicrosoft%2Faspire-skills)
+   to automatically open the **Settings** > **Plugins** window in the GitHub
+   Copilot app.
+2. In the **Add plugin marketplace?** dialog, select **Allow**.
+3. The **Plugins** window opens with the `microsoft/aspire-skills` marketplace.
+   Select **Add marketplace**.
+4. Expand the `aspire-skills` entry and select **Install** on the `aspire`
+   plugin.
+
+#### Command-line hosts
+
 ```bash
 # GitHub Copilot CLI
 copilot plugin marketplace add microsoft/aspire-skills
@@ -98,7 +126,8 @@ In that command, `-a github-copilot` selects the target agent, `-g` installs glo
 | Path | Purpose |
 |------|---------|
 | `skills/` | Source skill files, references, and evals |
-| `extensions/` | Source Copilot CLI canvas extensions |
+| `extensions/` | Source GitHub Copilot app canvas extensions |
+| `hooks/scripts/` | Canonical Aspire CLI agent telemetry hooks |
 | `.plugin/`, `.claude-plugin/`, `.cursor-plugin/` | Plugin metadata for marketplaces |
 | `.github/plugins/aspire-skills/` | Published plugin mirror |
 | `evals/` | Shared evaluation fixtures and helpers |
@@ -113,8 +142,12 @@ npm run bundle
 
 | Artifact | Contents |
 |----------|----------|
-| `aspire-skills-v<version>.tgz` | Agent skill files and `skill-manifest.json` |
-| `aspire-extensions-v<version>.tgz` | Copilot CLI extension files and `extension-manifest.json` |
+| `aspire-skills-v<version>.tgz` | Agent skill files, canonical telemetry hooks, and `skill-manifest.json` with hook commit/SHA-512 provenance |
+| `aspire-extensions-v<version>.tgz` | GitHub Copilot app canvas extension files and `extension-manifest.json` |
+
+The skills manifest records the release commit and LF-normalized SHA-512 hash for
+each file under `hooks/scripts/`. Downstream consumers can copy the `hooks` object
+directly instead of maintaining hook provenance separately.
 
 Use `npm run bundle:skills` or `npm run bundle:extensions` to build one bundle type.
 
