@@ -7,7 +7,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { basename, dirname, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createCanvas, joinSession } from "@github/copilot-sdk/extension";
+import { CanvasError, createCanvas, joinSession } from "@github/copilot-sdk/extension";
 import {
     classifyServiceKind,
     exactType,
@@ -200,6 +200,121 @@ function normalizeProposalEdge(edge, index, userAdded = false) {
         sourceId: userAdded ? "" : String(edge?.sourceId ?? (edge?.id == null ? "" : edge.id)),
         sourceKey: userAdded ? "" : String(edge?.sourceKey ?? proposalEdgeKey(normalized)),
     };
+}
+
+function resolveSubmittedProposalEdges(edges, resources) {
+    const resourcesById = groupResourcesBy(resources, (resource) => resource.id);
+    const resourcesByName = groupResourcesBy(resources, (resource) => resource.name);
+    const issues = [];
+    const resolvedEdges = edges.map((edge, index) => {
+        const resolved = {};
+        for (const field of ["from", "to"]) {
+            const endpoint = String(edge?.[field] ?? "");
+            const resolution = resolveProposalEndpoint(
+                endpoint,
+                resourcesById,
+                resourcesByName,
+            );
+            if (resolution.resource) {
+                resolved[field] = resolution.resource.name;
+                continue;
+            }
+            const edgeLabel = String(edge?.id ?? "").trim() || `#${index + 1}`;
+            issues.push(
+                resolution.reason === "ambiguous-id"
+                    ? `Edge "${edgeLabel}" has ambiguous ${field} endpoint "${endpoint}": it matches multiple resources[].id values; resource IDs must be unique.`
+                    : resolution.reason === "ambiguous-name"
+                      ? `Edge "${edgeLabel}" has ambiguous ${field} endpoint "${endpoint}": it matches multiple resources[].name values; use an exact resources[].id instead.`
+                      : `Edge "${edgeLabel}" has unknown ${field} endpoint "${endpoint}": use an exact resources[].id (preferred) or a unique resources[].name.`,
+            );
+        }
+        return {
+            ...edge,
+            ...resolved,
+        };
+    });
+    if (issues.length) {
+        throw new CanvasError(
+            "aspireify_edge_endpoint_invalid",
+            `Cannot apply the AppHost proposal. ${issues.join(" ")}`,
+        );
+    }
+    return resolvedEdges;
+}
+
+function validateProposalResourceIds(resources) {
+    const resourcesById = groupResourcesBy(resources, (resource) => resource.id);
+    const issues = [];
+    for (const resource of resources) {
+        if (!resource.id) {
+            issues.push(
+                `Resource "${resource.name || "(unnamed)"}" is missing resources[].id; assign a stable unique ID.`,
+            );
+        } else if (resource.id !== resource.id.trim()) {
+            issues.push(
+                `Resource ID "${resource.id}" has leading or trailing whitespace; resources[].id values must match edge endpoints exactly.`,
+            );
+        }
+    }
+    for (const [id, matches] of resourcesById) {
+        if (matches.length > 1) {
+            issues.push(
+                `Resource ID "${id}" is duplicated by ${matches
+                    .map((resource) => `"${resource.name || "(unnamed)"}"`)
+                    .join(", ")}; resources[].id values must be unique.`,
+            );
+        }
+    }
+    if (issues.length) {
+        throw new CanvasError(
+            "aspireify_resource_id_invalid",
+            `Cannot apply the AppHost proposal. ${issues.join(" ")}`,
+        );
+    }
+}
+
+function groupResourcesBy(resources, selector) {
+    const groups = new Map();
+    for (const resource of resources) {
+        const value = String(selector(resource) ?? "");
+        if (!value) {
+            continue;
+        }
+        const group = groups.get(value) ?? [];
+        group.push(resource);
+        groups.set(value, group);
+    }
+    return groups;
+}
+
+function resolveProposalEndpoint(endpoint, resourcesById, resourcesByName) {
+    const idMatches = resourcesById.get(endpoint) ?? [];
+    if (idMatches.length === 1) {
+        return { resource: idMatches[0] };
+    }
+    if (idMatches.length > 1) {
+        return { reason: "ambiguous-id" };
+    }
+    const nameMatches = resourcesByName.get(endpoint) ?? [];
+    if (nameMatches.length === 1) {
+        return { resource: nameMatches[0] };
+    }
+    if (nameMatches.length > 1) {
+        return { reason: "ambiguous-name" };
+    }
+    return { reason: "unknown" };
+}
+
+function countEdgesByKind(edges) {
+    const counts = {
+        reference: 0,
+        waitFor: 0,
+        parent: 0,
+    };
+    for (const edge of edges) {
+        counts[edge.kind] += 1;
+    }
+    return counts;
 }
 
 function serviceResourceType(type) {
@@ -1573,14 +1688,28 @@ const aspireifyCanvas = createCanvas({
                             type: "object",
                             additionalProperties: false,
                             properties: {
-                                id: { type: "string" },
-                                name: { type: "string" },
+                                id: {
+                                    type: "string",
+                                    minLength: 1,
+                                    pattern: "^\\S(?:[\\s\\S]*\\S)?$",
+                                    description:
+                                        "Stable proposal resource ID. Edge endpoints should prefer this exact value.",
+                                },
+                                name: {
+                                    type: "string",
+                                    description:
+                                        "Current Aspire resource name. Edge endpoints may use this exact value only when it is unique.",
+                                },
                                 type: {
                                     type: "string",
                                     description:
                                         "Precise Aspire resource type label, such as .NET project, Vite SPA, Next.js, Postgres, Redis, or Container.",
                                 },
-                                serviceId: { type: "string" },
+                                serviceId: {
+                                    type: "string",
+                                    description:
+                                        "ID of the discovered service represented by this resource. This is not the proposal resource ID used by edge endpoints.",
+                                },
                                 detail: { type: "string" },
                                 include: { type: "boolean" },
                                 serviceDefaults: {
@@ -1601,12 +1730,12 @@ const aspireifyCanvas = createCanvas({
                                 from: {
                                     type: "string",
                                     description:
-                                        "Relationship subject and arrow origin. This resource references, waits for, or is a child of the target.",
+                                        "Relationship subject and arrow origin. Use the exact resources[].id (preferred) or an exact unique resources[].name.",
                                 },
                                 to: {
                                     type: "string",
                                     description:
-                                        "Relationship target and arrow destination. The arrowhead points to this resource.",
+                                        "Relationship target and arrow destination. Use the exact resources[].id (preferred) or an exact unique resources[].name.",
                                 },
                                 kind: {
                                     type: "string",
@@ -1644,18 +1773,13 @@ const aspireifyCanvas = createCanvas({
                 const userAddedResources = current.proposal.resources.filter(
                     (resource) => resource.userAdded,
                 );
-                const idConflict = incomingResources?.find((generated) =>
-                    userAddedResources.some(
-                        (userAdded) =>
-                            userAdded.id === generated.id &&
-                            userAdded.name.toLowerCase() !== generated.name.toLowerCase(),
-                    ),
-                );
-                if (idConflict) {
-                    throw new Error(
-                        `Generated resource ID "${idConflict.id}" conflicts with a user-added resource. Use a unique generated resource ID.`,
-                    );
-                }
+                const endpointResources = incomingResources
+                    ? [...incomingResources, ...userAddedResources]
+                    : current.proposal.resources;
+                validateProposalResourceIds(endpointResources);
+                const resolvedIncomingEdges = Array.isArray(context.input.edges)
+                    ? resolveSubmittedProposalEdges(context.input.edges, endpointResources)
+                    : null;
                 const snapshot = updateSnapshot(domainId, (state) => {
                     const preservedResources = state.proposal.resources.filter(
                         (resource) => resource.userAdded,
@@ -1726,8 +1850,8 @@ const aspireifyCanvas = createCanvas({
                             resourceNames.has(edge.from) &&
                             resourceNames.has(edge.to),
                     );
-                    const generatedEdges = Array.isArray(context.input.edges)
-                        ? context.input.edges
+                    const generatedEdges = resolvedIncomingEdges
+                        ? resolvedIncomingEdges
                               .map((edge, index) =>
                                   normalizeProposalEdge(
                                       {
@@ -1737,10 +1861,6 @@ const aspireifyCanvas = createCanvas({
                                       },
                                       index,
                                   ),
-                              )
-                              .filter(
-                                  (edge) =>
-                                      resourceNames.has(edge.from) && resourceNames.has(edge.to),
                               )
                               .filter(
                                   (edge) =>
@@ -1768,6 +1888,21 @@ const aspireifyCanvas = createCanvas({
                               (edge) =>
                                   resourceNames.has(edge.from) && resourceNames.has(edge.to),
                           );
+                    const unavailableEdges = generatedEdges.filter(
+                        (edge) =>
+                            !resourceNames.has(edge.from) || !resourceNames.has(edge.to),
+                    );
+                    if (unavailableEdges.length) {
+                        throw new CanvasError(
+                            "aspireify_edge_endpoint_unavailable",
+                            `Cannot apply the AppHost proposal. ${unavailableEdges
+                                .map(
+                                    (edge) =>
+                                        `Edge "${edge.id}" references a resource that is not available in the current proposal after preserving user edits.`,
+                                )
+                                .join(" ")}`,
+                        );
+                    }
                     const edgeKeys = new Set(
                         generatedEdges.map((edge) => proposalEdgeKey(edge)),
                     );
@@ -1812,7 +1947,12 @@ const aspireifyCanvas = createCanvas({
                     state.proposalError = "";
                     state.confirmed = false;
                 });
-                return { ok: true, resourceCount: snapshot.proposal.resources.length };
+                return {
+                    ok: true,
+                    resourceCount: snapshot.proposal.resources.length,
+                    edgeCount: snapshot.proposal.edges.length,
+                    edgeCounts: countEdgesByKind(snapshot.proposal.edges),
+                };
             },
         },
         {

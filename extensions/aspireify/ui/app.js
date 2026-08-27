@@ -98,6 +98,19 @@ let snapshot;
 let firstRender = true;
 let pendingMutations = 0;
 let mutationError = "";
+const detailTextareaWidths = new WeakMap();
+const detailResizeObserver =
+    typeof ResizeObserver === "function"
+        ? new ResizeObserver((entries) => {
+              for (const entry of entries) {
+                  if (detailTextareaWidths.get(entry.target) === entry.contentRect.width) {
+                      continue;
+                  }
+                  detailTextareaWidths.set(entry.target, entry.contentRect.width);
+                  syncDetailTextareaHeight(entry.target);
+              }
+          })
+        : null;
 const collapsedGroups = new Set();
 const collapsedCards = new Set();
 const initializedGroups = new Set();
@@ -129,6 +142,7 @@ document.addEventListener("DOMContentLoaded", () => {
     for (const button of document.querySelectorAll("[data-close-dialog]")) {
         button.addEventListener("click", () => button.closest("dialog")?.close());
     }
+    window.addEventListener("resize", () => resizeVisibleDetailTextareas());
     void loadSnapshot();
     connectEvents();
 });
@@ -295,6 +309,7 @@ async function retryProposalOrSnapshot() {
 
 function render(nextSnapshot) {
     const draw = () => {
+        unobserveDetailTextareas();
         snapshot = nextSnapshot;
         if (snapshot.proposalError) {
             showProposalError(snapshot.proposalError);
@@ -419,6 +434,7 @@ function renderResourcePlan() {
                 collapsedGroups.add(definition.id);
             } else {
                 collapsedGroups.delete(definition.id);
+                resizeVisibleDetailTextareas(body);
             }
         });
         const headingActions = createElement("div", { className: "resource-group-heading-actions" });
@@ -549,9 +565,7 @@ function renderResourceFacts(resource, service) {
     if (path) {
         appendFact(facts, "Path", path, true);
     }
-    appendEditableTextFact(facts, "Proposal detail", resource, "detail", resource.detail, {
-        allowEmpty: true,
-    });
+    appendEditableDetailFact(facts, resource);
 
     const dotnet = isDotNetType(resource.type);
     if (dotnet) {
@@ -590,6 +604,60 @@ function appendEditableTextFact(list, label, resource, field, value, options = {
         void saveInlineResourceField(resource, field, nextValue, input);
     });
     appendControlFact(list, label, input);
+}
+
+function appendEditableDetailFact(list, resource) {
+    const detailId = `proposal-detail-${String(resource.id).replace(/[^A-Za-z0-9_-]/g, "-")}`;
+    const textarea = createElement("textarea", {
+        className: "inline-resource-input proposal-detail-input",
+        attrs: {
+            id: detailId,
+            rows: "2",
+            "aria-label": `Proposal detail for ${resource.name}`,
+            spellcheck: "true",
+        },
+    });
+    textarea.value = resource.detail ?? "";
+    textarea.disabled = snapshot.confirmed;
+    textarea.addEventListener("input", () => {
+        syncDetailTextareaHeight(textarea);
+    });
+    textarea.addEventListener("change", () => {
+        void saveInlineResourceField(resource, "detail", textarea.value.trim(), textarea);
+    });
+
+    appendControlFact(list, "Proposal detail", textarea, "is-detail");
+    requestAnimationFrame(() => {
+        if (textarea.isConnected) {
+            syncDetailTextareaHeight(textarea);
+            detailResizeObserver?.observe(textarea);
+        }
+    });
+}
+
+function syncDetailTextareaHeight(textarea) {
+    textarea.style.height = "auto";
+    const borderHeight = textarea.offsetHeight - textarea.clientHeight;
+    textarea.style.height = `${Math.max(44, textarea.scrollHeight + borderHeight)}px`;
+}
+
+function resizeVisibleDetailTextareas(root = document) {
+    requestAnimationFrame(() => {
+        for (const textarea of root.querySelectorAll(".proposal-detail-input")) {
+            if (textarea.offsetParent) {
+                syncDetailTextareaHeight(textarea);
+            }
+        }
+    });
+}
+
+function unobserveDetailTextareas() {
+    if (!detailResizeObserver) {
+        return;
+    }
+    for (const textarea of document.querySelectorAll(".proposal-detail-input")) {
+        detailResizeObserver.unobserve(textarea);
+    }
 }
 
 function appendEditableTypeFact(list, resource) {
@@ -654,8 +722,10 @@ function appendEditableDefaultsFact(list, resource) {
     appendControlFact(list, "Service Defaults", control);
 }
 
-function appendControlFact(list, label, control) {
-    const row = createElement("div", { className: "resource-fact is-editable" });
+function appendControlFact(list, label, control, className = "") {
+    const row = createElement("div", {
+        className: `resource-fact is-editable${className ? ` ${className}` : ""}`,
+    });
     const valueElement = createElement("dd");
     valueElement.append(control);
     row.append(createElement("dt", { text: label }), valueElement);
@@ -784,6 +854,7 @@ function renderResourceCard(resource, edges, issues = []) {
             collapsedCards.add(resource.id);
         } else {
             collapsedCards.delete(resource.id);
+            resizeVisibleDetailTextareas(body);
         }
     });
     header.append(identity, createRemoveResourceButton(resource));
