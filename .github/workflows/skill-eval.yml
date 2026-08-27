@@ -121,26 +121,26 @@ jobs:
               | sort -u
           )"
 
-          spec_args=""
           matched=""
           for skill in $changed_skills; do
+            if ! printf '%s' "$skill" | grep -Eq '^[a-z0-9][a-z0-9-]*$'; then
+              echo "::error::Invalid skill directory name: $skill" >&2
+              exit 1
+            fi
             spec="skills/${skill}/evals/eval.yaml"
             if [ -f "$spec" ]; then
-              spec_args="${spec_args} -e ${spec}"
               matched="${matched} ${skill}"
             fi
           done
 
-          if [ -z "$spec_args" ] && [ "$workflow_changed" = true ]; then
-            spec_args="-e skills/aspire/evals/eval.yaml"
-            matched="aspire (gate workflow smoke)"
+          if [ -z "$matched" ] && [ "$workflow_changed" = true ]; then
+            matched=" aspire"
           fi
 
-          if [ -z "$spec_args" ]; then
+          if [ -z "$matched" ]; then
             echo "has_specs=false" >> "$GITHUB_OUTPUT"
           else
             echo "has_specs=true" >> "$GITHUB_OUTPUT"
-            echo "spec_args=${spec_args# }" >> "$GITHUB_OUTPUT"
             echo "matched=${matched# }" >> "$GITHUB_OUTPUT"
           fi
 
@@ -164,18 +164,34 @@ jobs:
         # `copilot-sdk` executor) to invoke Copilot models. It is scoped to
         # this step only so install / upload never see it.
         #
-        # Run the changed specs directly via `-e`, applying the same priority
-        # filter as the `ci-gate` suite (p0 + p1) so forward-looking p2 stimuli
-        # stay out of the PR gate. `--suite` can't be combined with `-e`, so the
-        # filter is expressed with `--tag` instead.
+        # Run each changed spec in an isolated Vally process. Vally's session
+        # filesystem provider is process-global, so multiple workers can race
+        # while configuring it; one worker per process avoids that race while
+        # the processes still run concurrently. Apply the ci-gate-equivalent
+        # p0 + p1 filter so forward-looking p2 stimuli stay out of the PR gate.
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
         run: |
-          echo "Evaluating changed skills: ${{ steps.changed.outputs.matched }}"
-          vally eval \
-            ${{ steps.changed.outputs.spec_args }} \
-            --tag priority=p0,p1 \
-            --output-dir ./results
+          set -uo pipefail
+          pids=()
+
+          for skill in ${{ steps.changed.outputs.matched }}; do
+            echo "Evaluating changed skill: $skill"
+            vally eval \
+              --eval-spec "skills/${skill}/evals/eval.yaml" \
+              --tag priority=p0,p1 \
+              --workers 1 \
+              --output-dir "./results/${skill}" &
+            pids+=("$!")
+          done
+
+          status=0
+          for pid in "${pids[@]}"; do
+            if ! wait "$pid"; then
+              status=1
+            fi
+          done
+          exit "$status"
 
       - name: Note no skills changed
         if: steps.preflight.outputs.has_token == 'true' && steps.changed.outputs.run_full == 'false' && steps.changed.outputs.has_specs == 'false'
