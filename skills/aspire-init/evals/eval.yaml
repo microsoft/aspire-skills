@@ -126,10 +126,16 @@ stimuli:
         config:
           substring: dotnet workload install aspire
   - name: init-existing-001
-    prompt: Add Aspire to this repository so I can orchestrate my Express frontend and .NET API.
+    prompt: >-
+      Before answering, invoke the installed skill that owns adding Aspire to an existing
+      repo. After it loads, give the safe non-interactive agent/CI command for this Express +
+      .NET API repository and explain the next wiring handoff. Do not invoke any other tool,
+      run commands, or modify files.
     tags:
       priority: p0
       area: core-flow
+      automation: non-interactive
+      command-check: supported-options
     graders:
       - type: prompt
         name: runs_aspire_init
@@ -152,6 +158,18 @@ stimuli:
         config:
           substring: aspire init
       - type: output-contains
+        name: uses_non_interactive
+        config:
+          substring: --non-interactive
+      - type: output-contains
+        name: selects_language
+        config:
+          substring: --language
+      - type: output-not-contains
+        name: no_unsupported_yes
+        config:
+          substring: --yes
+      - type: output-contains
         config:
           substring: aspireify
       - type: output-not-contains
@@ -171,11 +189,15 @@ stimuli:
         config:
           substring: dotnet workload install aspire
   - name: init-new-001
-    prompt: I'm starting a brand-new distributed app from scratch. Scaffold an Aspire starter project
-      for me.
+    prompt: >-
+      Before answering, invoke the installed skill that owns `aspire new`. After it loads,
+      give the safe non-interactive agent/CI command for a brand-new Aspire starter. Do not
+      invoke any other tool, run commands, or modify files.
     tags:
       priority: p0
       area: core-flow
+      automation: non-interactive
+      command-check: supported-options
     graders:
       - type: prompt
         name: uses_aspire_new
@@ -205,6 +227,22 @@ stimuli:
       - type: output-contains
         config:
           substring: aspire-starter
+      - type: output-contains
+        name: uses_non_interactive
+        config:
+          substring: --non-interactive
+      - type: output-contains
+        name: sets_name
+        config:
+          substring: --name
+      - type: output-contains
+        name: sets_output
+        config:
+          substring: --output
+      - type: output-not-contains
+        name: no_unsupported_yes
+        config:
+          substring: --yes
       - type: output-not-contains
         config:
           substring: dotnet new aspire
@@ -222,12 +260,18 @@ stimuli:
         config:
           substring: dotnet workload install aspire
   - name: init-py-001
-    prompt: Scaffold an Aspire FastAPI + React Python starter, and please include Redis.
+    prompt: >-
+      Before answering, invoke the installed skill that owns `aspire new`. After it loads,
+      give the exact safe non-interactive agent/CI command for an Aspire FastAPI + React
+      Python starter with Redis, and identify the AppHost language. Do not invoke any other
+      tool, run commands, or modify files.
     tags:
       priority: p0
       area:
         - core-flow
         - 13.3-breaking
+      automation: non-interactive
+      command-check: supported-options
     graders:
       - type: prompt
         name: uses_aspire_new_py_starter
@@ -254,6 +298,30 @@ stimuli:
       - type: output-contains
         config:
           substring: --use-redis-cache
+      - type: output-contains
+        name: uses_non_interactive
+        config:
+          substring: --non-interactive
+      - type: output-contains
+        name: sets_name
+        config:
+          substring: --name
+      - type: output-contains
+        name: sets_output
+        config:
+          substring: --output
+      - type: output-not-contains
+        name: no_unsupported_yes
+        config:
+          substring: --yes
+      - type: output-not-contains
+        name: no_unsupported_features
+        config:
+          substring: --features
+      - type: output-not-contains
+        name: no_unsupported_skip_install
+        config:
+          substring: --skip-install
       - type: output-not-contains
         config:
           substring: dotnet new aspire-py-starter

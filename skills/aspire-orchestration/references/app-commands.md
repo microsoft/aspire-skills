@@ -27,13 +27,16 @@ aspire stop
 ## Create A New Aspire App Or Add Aspire To An Existing App
 
 ```bash
-aspire new
-aspire init
-aspire init --language typescript
+aspire new aspire-starter --name MyApp --output ./MyApp --non-interactive
+aspire init --language csharp --non-interactive
+aspire init --language typescript --non-interactive
 ```
 
 - Use `aspire new` when creating a brand-new Aspire app from scratch.
 - Use `aspire init` when adding Aspire to an existing application.
+- In agent and CI flows, always pass `--non-interactive` explicitly. For `aspire new`, also
+  provide the template, name, output, and required template-specific choices. For
+  `aspire init`, always provide `--language`.
 
 ## After `aspire init` — Hand Off to `aspireify`
 

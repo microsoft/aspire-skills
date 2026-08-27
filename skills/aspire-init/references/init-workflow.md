@@ -19,7 +19,7 @@ It does **not**:
 ## Command and Options
 
 ```bash
-aspire init [options]
+aspire init --language <csharp|typescript> --non-interactive
 ```
 
 | Option | Purpose |

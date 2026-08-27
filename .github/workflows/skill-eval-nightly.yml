@@ -60,6 +60,9 @@ jobs:
 
       - name: Run nightly evals
         if: steps.preflight.outputs.has_token == 'true'
+        # Nightly includes p2 stimuli; allow headroom while still bounding a hung
+        # subprocess (e.g. aspire#11595).
+        timeout-minutes: 180
         # COPILOT_GITHUB_TOKEN is read by @github/copilot-sdk (the vally
         # `copilot-sdk` executor) to invoke Copilot models. It is scoped to
         # this step only so install / upload never see it.
