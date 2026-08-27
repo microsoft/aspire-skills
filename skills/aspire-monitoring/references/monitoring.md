@@ -46,6 +46,35 @@ Keep these points in mind:
 - `[resource]` is optional. Include it to filter results to a single resource; omit it to see all resources.
 - `--search` can be combined with other options like `--format Json`, `--trace-id`, `--limit`, and resource filtering.
 
+## Scenario: I Need Browser Console, Error, Or Network Diagnostics
+
+When a frontend already uses `WithBrowserLogs()`, Aspire creates a normal child resource named
+`<frontend>-browser-logs`. Browser console messages, errors, exceptions, and network diagnostics
+go to that child resource's console log stream.
+
+```bash
+# Discover the BrowserLogs child resource.
+aspire describe
+aspire resources
+
+# Start a tracked browser session for the frontend.
+aspire resource <frontend>-browser-logs open-tracked-browser
+
+# Inspect browser console, error, exception, and network diagnostics.
+aspire logs <frontend>-browser-logs
+```
+
+Keep these points in mind:
+
+- Correlate the child resource to its frontend through the parent relationship and its `Source`
+  property.
+- `<frontend>-browser-logs` is not hidden by default. Start with normal `aspire describe` or
+  `aspire resources` output, not `aspire ps --include-hidden`; use `--include-hidden` only when
+  the expected resource is unavailable.
+- `aspire otel logs <frontend>` does **not** return browser diagnostics. Use
+  `aspire logs <frontend>-browser-logs` instead.
+- Adding or configuring `WithBrowserLogs()` is AppHost authoring; route that work to `aspireify`.
+
 ## Filtering
 
 The `--search` option filters output by matching text against log content and trace/span content.
@@ -183,15 +212,19 @@ For dashboards configured with API-key authentication, pass `--api-key` alongsid
 aspire otel logs --dashboard-url https://my-dashboard.example.com --api-key "$DASHBOARD_API_KEY" --follow
 ```
 
-## Browser Telemetry
+## Browser Logs
 
-Frontend resources opted into `Aspire.Hosting.Browsers` via `WithBrowserLogs()` surface browser console logs, network requests, and screenshots in the dashboard alongside server-side telemetry.
+`WithBrowserLogs()` creates a `<frontend>-browser-logs` child resource for the frontend. Its
+console stream contains browser console logs, errors, exceptions, and network diagnostics. Use
+`aspire resource <frontend>-browser-logs open-tracked-browser` to start a tracked browser session,
+then inspect `aspire logs <frontend>-browser-logs`.
 
-| Need | Action |
-|------|--------|
-| Inspect browser telemetry that is already wired | Open the dashboard; browser logs / network / screenshots appear next to server telemetry for the resource |
-| Confirm a frontend has it enabled | Check the AppHost for `.WithBrowserLogs()` on the resource |
-| Add `WithBrowserLogs()` to a resource | Route to `aspireify`; this is AppHost authoring, not monitoring |
+Use the child resource's parent relationship and `Source` property to verify which frontend it
+belongs to. Do not claim that `aspire otel logs <frontend>` returns this browser output. If an
+expected browser child resource is unavailable from normal `aspire describe` or `aspire resources`
+output, then retry discovery with `--include-hidden`.
+
+Adding or configuring `WithBrowserLogs()` remains AppHost authoring and routes to `aspireify`.
 
 ## Why Aspire CLI Can't Do Remote Diagnostics
 

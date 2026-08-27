@@ -29,8 +29,12 @@ environment:
     - ../../aspire-monitoring
 stimuli:
   - name: mon-browser-logs-001
-    prompt: I want to see browser console logs and network requests from my Vite frontend in the Aspire
-      Dashboard alongside the API server logs. How does that work?
+    prompt: My Aspire app already uses WithBrowserLogs() for a Vite frontend named storefront. A browser
+      request is failing and I need to inspect its console messages, errors, exceptions, and network
+      diagnostics. I see a storefront-browser-logs resource and need to confirm through its parent and
+      Source which frontend it belongs to. What commands should I run to find the browser resource,
+      launch a tracked browser session, and read the output? I am debugging the running app, not
+      changing AppHost code.
     tags:
       priority: p1
       area:
@@ -38,38 +42,39 @@ stimuli:
         - dashboard
         - 13-3
         - routing
-    environment:
-      files:
-        - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
-          dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
-        - src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs
-          dest: csharp-apphost/MyApp.AppHost/Program.cs
-        - src: ../../../evals/csharp-apphost/aspire.config.json
-          dest: csharp-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: knows_browsers_integration
+        name: discovers_browser_logs_child_resource
         config:
-          prompt: Does the assistant's response identify the `Aspire.Hosting.Browsers` integration (or
-            equivalent description) as the mechanism that captures browser console logs, network
-            requests, and screenshots into the dashboard, and `WithBrowserLogs()` as the opt-in call
-            on a frontend resource? Answer based on intent.
+          prompt: Does the assistant's response direct the user to discover the `<frontend>-browser-logs`
+            child resource with normal `aspire describe` or `aspire resources` output, using
+            `--include-hidden` only if the expected resource is unavailable? Answer based on intent.
       - type: prompt
-        name: routes_code_change_to_aspireify
+        name: correlates_browser_logs_to_frontend
         config:
-          prompt: Does the assistant's response route the actual code edit (adding `WithBrowserLogs()` to the
-            AppHost) to the `aspireify` skill (or otherwise indicate that AppHost authoring is out
-            of scope for this monitoring skill)? Answer based on intent — direct AppHost edits from
-            the monitoring skill should be discouraged.
-      - type: prompt
-        name: explains_dashboard_surface
-        config:
-          prompt: Does the assistant's response explain that once `WithBrowserLogs()` is wired, the browser
-            telemetry surfaces in the dashboard alongside server-side telemetry (and is also visible
-            via `aspire otel logs <frontend>`)?
+          prompt: Does the assistant's response explain that the BrowserLogs child resource can be
+            correlated to its frontend through its parent relationship and `Source` property? Answer
+            based on intent.
       - type: output-contains
+        name: starts_tracked_browser_session
         config:
-          substring: WithBrowserLogs
+          substring: aspire resource storefront-browser-logs open-tracked-browser
+      - type: output-contains
+        name: reads_browser_console_log_stream
+        config:
+          substring: aspire logs storefront-browser-logs
+      - type: prompt
+        name: keeps_browser_output_out_of_frontend_otel_logs
+        config:
+          prompt: Does the assistant's response explicitly avoid the incorrect claim that
+            `aspire otel logs storefront` returns browser diagnostics, and instead direct the user
+            to the BrowserLogs child resource's console stream? Answer based on intent.
+      - type: prompt
+        name: routes_browser_log_authoring_to_aspireify
+        config:
+          prompt: If the assistant discusses adding or configuring `WithBrowserLogs()`, does its response
+            route that AppHost authoring work to the `aspireify` skill rather than performing it as
+            monitoring? Answer based on intent.
   - name: mon-dashboard-run-001
     prompt: I want to view OTLP telemetry from a non-Aspire service in the Aspire Dashboard without
       booting an AppHost. How do I do that and how do I query it from the CLI?

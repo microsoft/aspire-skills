@@ -5,6 +5,7 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Corrected Aspire monitoring guidance for `WithBrowserLogs()` child-resource diagnostics.
 - Prefer VS Code's `aspire_apphost_start` and `aspire_apphost_stop` tools over
   terminal lifecycle commands when available, with multi-root tool selectors
   resolved to exact CLI filesystem paths for CLI fallbacks, bounded recovery

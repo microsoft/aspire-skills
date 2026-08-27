@@ -33,7 +33,7 @@ metadata:
 | Resource state | Local dev | Aspire CLI | `aspire describe` (add `--include-hidden` if a resource is missing) |
 | Telemetry export | Local dev | Aspire CLI | `aspire export [resource]` |
 | Standalone dashboard | Any (no AppHost) | Aspire CLI | `aspire dashboard run` (foreground/blocking — see below) |
-| Browser console / network / screenshots | Local dev (frontend) | Aspire dashboard | Surfaced via `Aspire.Hosting.Browsers` + `WithBrowserLogs()` |
+| Browser console / network / diagnostics | Local dev (frontend) | Aspire CLI + dashboard | Discover `<frontend>-browser-logs`, start its tracked browser, then inspect its console logs |
 | AppHost / deployment definition | Authoring | aspire-deployment skill | → `aspire-deployment` skill |
 | AKS workload (pod logs, pod state) | Deployed AKS | kubectl + Container Insights | `kubectl logs <pod>`, `kubectl describe pod <pod>`, Container Insights in Azure Monitor |
 | Azure resource health (App Insights, Front Door, NSP, private endpoint) | Deployed Azure | azure-diagnostics | → `azure-diagnostics` skill |
@@ -74,27 +74,26 @@ When something is wrong, investigate before editing code:
 | `aspire otel traces --dashboard-url` | Query a standalone dashboard | `aspire otel traces --dashboard-url "http://localhost:18888/login?t=TOKEN"` |
 | `aspire describe` | Resource state, endpoints, health | `aspire describe --format Json` |
 | `aspire describe --include-hidden` | Include proxies, helper containers, migrations | `aspire describe --include-hidden --format Json` |
-| `aspire ps --format Json` | Resource list with state (filtered) | `aspire ps --format Json` |
-| `aspire ps --include-hidden --format Json` | Resource list with hidden resources | `aspire ps --include-hidden --format Json` |
+| `aspire resources` | Resource list with state | `aspire resources` |
 | `aspire export` | Portable telemetry bundle | `aspire export` |
 | `aspire dashboard run` | Standalone dashboard (foreground/blocking) | `aspire dashboard run` |
 
 ### Hidden resources are filtered by default
 
-`aspire ps`, `aspire describe`, and other CLI commands filter out resources marked hidden in the AppHost (proxies, helper containers, migrations). The default output is correct for normal app inspection. Add `--include-hidden` when:
+`aspire describe` and other CLI commands filter out resources marked hidden in the AppHost (proxies, helper containers, migrations). The default output is correct for normal app inspection. Add `--include-hidden` when:
 
 - Debugging proxies, sidecar/helper containers, or migration jobs.
-- An expected resource is "missing" from `aspire ps` / `aspire describe`.
+- An expected resource is "missing" from `aspire resources` / `aspire describe`.
 - Triaging connectivity or wiring issues that may involve infrastructure resources.
 
 ### Tips for Agents
 
 ```bash
-# ✅ Use --format Json for machine parsing (supported: ps, describe, start)
+# ✅ Use --format Json for machine parsing (supported: describe, start)
 aspire describe --format Json
 
 # ✅ When a resource you expect is missing, retry with --include-hidden
-aspire ps --include-hidden --format Json | jq '.[] | {name, displayName, state, hidden}'
+aspire describe --include-hidden --format Json
 
 # ✅ Get endpoints from describe, not guessing ports
 ENDPOINT=$(aspire describe apiservice --format Json | jq -r '.endpoints[0].url')
@@ -109,7 +108,7 @@ aspire describe --apphost ./src/MyApp.AppHost/
 |-------|---------|-----------|
 | TS AppHost DNS failure ([#15782](https://github.com/microsoft/aspire/issues/15782)) | `aspire otel` "No such host" for `*.dev.localhost` | Use `--dashboard-url localhost:PORT` |
 | `--isolated` mode telemetry ([#16107](https://github.com/microsoft/aspire/issues/16107)) | OTEL port not randomized in isolated mode | Avoid `--isolated` if telemetry is needed |
-| Resource missing from `aspire ps` / `aspire describe` | Hidden-by-default resources such as proxies, helpers, or migrations | Re-run with `--include-hidden` |
+| Resource missing from `aspire resources` / `aspire describe` | Hidden-by-default resources such as proxies, helpers, or migrations | Re-run with `--include-hidden` |
 
 > **Resolved in 13.3**: The standalone-dashboard workaround for [#16236](https://github.com/microsoft/aspire/issues/16236) is obsolete — use `aspire dashboard run` (see below).
 
@@ -146,17 +145,37 @@ aspire otel logs --dashboard-url https://my-dashboard.example.com --api-key "$DA
 
 The container-image standalone dashboard still works for environments where the CLI isn't available.
 
-## Browser Telemetry (`Aspire.Hosting.Browsers`)
+## Browser Logs (`Aspire.Hosting.Browsers`)
 
-The `Aspire.Hosting.Browsers` integration captures **browser console logs, network requests, and screenshots** from frontend resources during local development and surfaces them in the dashboard alongside server-side telemetry. Frontend resources opt in via `WithBrowserLogs()`.
+When a frontend has already opted into `WithBrowserLogs()`, Aspire creates a child resource named
+`<frontend>-browser-logs`. Browser console messages, errors, exceptions, and network diagnostics
+are sent to that child resource's console log stream, not to the frontend's OpenTelemetry logs.
+
+1. Begin with normal `aspire describe` or `aspire resources` output to find
+   `<frontend>-browser-logs`; do not begin with `aspire ps --include-hidden`. It is a normal child
+   resource, so retry with `--include-hidden` only if the expected resource is unavailable.
+2. Correlate it to the frontend through its parent relationship and `Source` property.
+3. Start a tracked browser session with:
+
+   ```bash
+   aspire resource <frontend>-browser-logs open-tracked-browser
+   ```
+
+4. Inspect the browser diagnostics with:
+
+   ```bash
+   aspire logs <frontend>-browser-logs
+   ```
+
+Do **not** use `aspire otel logs <frontend>` for browser output; it does not return that child
+resource's browser diagnostics.
 
 | Need | Action |
 |------|--------|
-| Inspect browser telemetry that is already wired | Open the dashboard; browser logs / network / screenshots appear next to server telemetry for the resource |
-| Confirm a frontend has it enabled | Check the AppHost for `.WithBrowserLogs()` on the resource (e.g., `AddViteApp("frontend").WithBrowserLogs()`) |
+| Inspect existing browser diagnostics | Discover `<frontend>-browser-logs`, start `open-tracked-browser`, then run `aspire logs <frontend>-browser-logs` |
+| Confirm the browser resource belongs to a frontend | Check the child resource's parent relationship and `Source` property |
+| Confirm a frontend has browser logging enabled | Check the AppHost for `.WithBrowserLogs()` on the resource |
 | Add `WithBrowserLogs()` to a resource | → **`aspireify` skill** (AppHost authoring) — do not edit the AppHost from this skill |
-
-When parsing telemetry programmatically, browser logs surface as additional OTLP log records associated with the frontend resource — `aspire otel logs <frontend-resource>` returns them alongside server logs.
 
 ## Dashboard UX Features
 
