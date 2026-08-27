@@ -64,11 +64,11 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Install vally and Copilot CLIs
+      - name: Install vally and Copilot runtime
         if: steps.preflight.outputs.has_token == 'true'
-        # Vally's copilot-sdk executor resolves the native platform package
-        # through the @github/copilot CLI package.
-        run: npm install -g @microsoft/vally-cli @github/copilot
+        # Install the Ubuntu x64 package at the global module root where
+        # Vally's copilot-sdk executor resolves platform packages.
+        run: npm install -g @microsoft/vally-cli @github/copilot-linux-x64
 
       - name: Determine changed skill eval specs
         id: changed
