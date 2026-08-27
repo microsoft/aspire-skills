@@ -64,9 +64,11 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Install vally CLI
+      - name: Install vally and Copilot CLIs
         if: steps.preflight.outputs.has_token == 'true'
-        run: npm install -g @microsoft/vally-cli
+        # Vally's copilot-sdk executor resolves the native platform package
+        # through the @github/copilot CLI package.
+        run: npm install -g @microsoft/vally-cli @github/copilot
 
       - name: Run skill-lift experiment
         if: steps.preflight.outputs.has_token == 'true'
