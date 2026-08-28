@@ -310,6 +310,7 @@ async function retryProposalOrSnapshot() {
 function render(nextSnapshot) {
     const draw = () => {
         unobserveDetailTextareas();
+        mutationError = "";
         snapshot = nextSnapshot;
         if (snapshot.proposalError) {
             showProposalError(snapshot.proposalError);
@@ -1013,8 +1014,7 @@ function renderConfirmation() {
         snapshot.proposalStale ||
         issues.length > 0 ||
         snapshot.confirmed ||
-        pendingMutations > 0 ||
-        Boolean(mutationError);
+        pendingMutations > 0;
     elements.confirm.textContent = snapshot.confirmed ? "Confirmed" : "Confirm";
     elements.footerNote.hidden =
         !mutationError && issues.length === 0 && !snapshot.confirmed;

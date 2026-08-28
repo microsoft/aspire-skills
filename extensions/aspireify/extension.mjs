@@ -176,7 +176,11 @@ function resourceIdentitiesMatch(left, right) {
 }
 
 function proposalEdgeKey(edge) {
-    return `${edge.from}|${edge.kind}|${edge.to}`;
+    return JSON.stringify([
+        edge.fromId || edge.from,
+        edge.kind,
+        edge.toId || edge.to,
+    ]);
 }
 
 function edgeIdentitiesMatch(left, right) {
@@ -191,6 +195,8 @@ function normalizeProposalEdge(edge, index, userAdded = false) {
         id: String(edge?.id ?? `edge-${index + 1}`),
         from: String(edge?.from ?? "").trim(),
         to: String(edge?.to ?? "").trim(),
+        fromId: String(edge?.fromId ?? "").trim(),
+        toId: String(edge?.toId ?? "").trim(),
         kind: ["reference", "waitFor", "parent"].includes(edge?.kind) ? edge.kind : "reference",
         userAdded: Boolean(edge?.userAdded ?? userAdded),
         userEdited: Boolean(edge?.userEdited),
@@ -217,6 +223,7 @@ function resolveSubmittedProposalEdges(edges, resources) {
             );
             if (resolution.resource) {
                 resolved[field] = resolution.resource.name;
+                resolved[`${field}Id`] = resolution.resource.id;
                 continue;
             }
             const edgeLabel = String(edge?.id ?? "").trim() || `#${index + 1}`;
@@ -317,6 +324,33 @@ function countEdgesByKind(edges) {
     return counts;
 }
 
+function uniqueResourceByName(resources, name) {
+    const matches = resources.filter((resource) => resource.name === name);
+    return matches.length === 1 ? matches[0] : null;
+}
+
+function proposalEdgeKeyForResources(edge, resources) {
+    const fromId = edge.fromId || uniqueResourceByName(resources, edge.from)?.id || edge.from;
+    const toId = edge.toId || uniqueResourceByName(resources, edge.to)?.id || edge.to;
+    return JSON.stringify([fromId, edge.kind, toId]);
+}
+
+function edgeEndpointsAvailable(edge, resourceIds, resourceNames) {
+    const fromAvailable = edge.fromId
+        ? resourceIds.has(edge.fromId)
+        : resourceNames.has(edge.from);
+    const toAvailable = edge.toId ? resourceIds.has(edge.toId) : resourceNames.has(edge.to);
+    return fromAvailable && toAvailable;
+}
+
+function synchronizeEdgeNames(edge, resourcesById) {
+    return {
+        ...edge,
+        from: edge.fromId ? (resourcesById.get(edge.fromId)?.name ?? edge.from) : edge.from,
+        to: edge.toId ? (resourcesById.get(edge.toId)?.name ?? edge.to) : edge.to,
+    };
+}
+
 function serviceResourceType(type) {
     return exactType(type, "Executable");
 }
@@ -337,31 +371,37 @@ function replaceNameInEdgeKey(key, previousName, nextName) {
     if (!key) {
         return key;
     }
-    const [from, kind, to] = key.split("|");
-    return `${from === previousName ? nextName : from}|${kind}|${
-        to === previousName ? nextName : to
-    }`;
+    try {
+        const [from, kind, to] = JSON.parse(key);
+        return JSON.stringify([
+            from === previousName ? nextName : from,
+            kind,
+            to === previousName ? nextName : to,
+        ]);
+    } catch {
+        const [from, kind, to] = key.split("|");
+        return JSON.stringify([
+            from === previousName ? nextName : from,
+            kind,
+            to === previousName ? nextName : to,
+        ]);
+    }
 }
 
-function replaceResourceName(state, previousName, nextName) {
+function replaceResourceName(state, resourceId, previousName, nextName) {
     if (!previousName || previousName === nextName) {
         return;
     }
     for (const edge of state.proposal.edges) {
-        if (edge.from === previousName) {
+        if (edge.fromId ? edge.fromId === resourceId : edge.from === previousName) {
             edge.from = nextName;
         }
-        if (edge.to === previousName) {
+        if (edge.toId ? edge.toId === resourceId : edge.to === previousName) {
             edge.to = nextName;
         }
-        edge.sourceKey = replaceNameInEdgeKey(edge.sourceKey, previousName, nextName);
-    }
-    for (const removedEdge of state.removedGeneratedEdges) {
-        removedEdge.sourceKey = replaceNameInEdgeKey(
-            removedEdge.sourceKey,
-            previousName,
-            nextName,
-        );
+        if (!edge.fromId && !edge.toId) {
+            edge.sourceKey = replaceNameInEdgeKey(edge.sourceKey, previousName, nextName);
+        }
     }
 }
 
@@ -372,7 +412,7 @@ function syncServiceResource(state, service, { rename = false, updateType = fals
     }
 
     if (rename) {
-        replaceResourceName(state, resource.name, service.resourceName);
+        replaceResourceName(state, resource.id, resource.name, service.resourceName);
         resource.name = service.resourceName;
     }
     if (updateType) {
@@ -524,7 +564,17 @@ function confirmedProposal(proposal) {
         ),
         edges: proposal.edges
             .filter((edge) => names.has(edge.from) && names.has(edge.to))
-            .map(({ userAdded, userEdited, sourceId, sourceKey, ...edge }) => edge),
+            .map(
+                ({
+                    userAdded,
+                    userEdited,
+                    sourceId,
+                    sourceKey,
+                    fromId,
+                    toId,
+                    ...edge
+                }) => edge,
+            ),
         generatedAt: proposal.generatedAt,
     };
 }
@@ -569,7 +619,15 @@ function proposalForClient(proposal) {
             ({ userAdded, userEdited, sourceName, ...resource }) => ({ ...resource }),
         ),
         edges: proposal.edges.map(
-            ({ userAdded, userEdited, sourceId, sourceKey, ...edge }) => ({ ...edge }),
+            ({
+                userAdded,
+                userEdited,
+                sourceId,
+                sourceKey,
+                fromId,
+                toId,
+                ...edge
+            }) => ({ ...edge }),
         ),
         generatedAt: proposal.generatedAt,
     };
@@ -1034,7 +1092,12 @@ async function handlePost(entry, path, body, response) {
             const previousName = proposalResource.name;
             if (typeof body.name === "string") {
                 proposalResource.name = nextName;
-                replaceResourceName(state, previousName, proposalResource.name);
+                replaceResourceName(
+                    state,
+                    proposalResource.id,
+                    previousName,
+                    proposalResource.name,
+                );
             }
             if (typeof body.type === "string") {
                 proposalResource.type = nextType;
@@ -1074,6 +1137,7 @@ async function handlePost(entry, path, body, response) {
     if (path === "/api/proposal/resource/add") {
         const name = String(body.name ?? "").trim();
         const type = normalizeResourceType(body.type);
+        const newResourceId = `resource-${Date.now().toString(36)}-${snapshot.proposal.resources.length + 1}`;
         const nameIssues = resourceNameIssues(name);
         if (nameIssues.length || !type) {
             if (!type) {
@@ -1104,16 +1168,22 @@ async function handlePost(entry, path, body, response) {
             (resource) => resource.include,
         );
         const existingNames = new Set(existingResources.map((resource) => resource.name));
-        const edgeKeys = new Set(snapshot.proposal.edges.map((edge) => proposalEdgeKey(edge)));
+        const edgeKeys = new Set(
+            snapshot.proposal.edges.map((edge) =>
+                proposalEdgeKeyForResources(edge, existingResources),
+            ),
+        );
         const connections = [];
         for (const [index, connection] of (body.connections ?? []).entries()) {
             const direction = connection?.direction;
             const target = String(connection?.target ?? "").trim();
             const kind = connection?.kind;
+            const targetResource = uniqueResourceByName(existingResources, target);
             if (
                 !["outgoing", "incoming"].includes(direction) ||
                 !["reference", "waitFor", "parent"].includes(kind) ||
-                !existingNames.has(target)
+                !existingNames.has(target) ||
+                !targetResource
             ) {
                 return sendJson(response, 400, {
                     ok: false,
@@ -1125,6 +1195,8 @@ async function handlePost(entry, path, body, response) {
                     id: `edge-${Date.now().toString(36)}-${snapshot.proposal.edges.length + index + 1}`,
                     from: direction === "outgoing" ? name : target,
                     to: direction === "outgoing" ? target : name,
+                    fromId: direction === "outgoing" ? newResourceId : targetResource.id,
+                    toId: direction === "outgoing" ? targetResource.id : newResourceId,
                     kind,
                 },
                 snapshot.proposal.edges.length + index,
@@ -1143,7 +1215,7 @@ async function handlePost(entry, path, body, response) {
         updateSnapshot(domainId, (state) => {
             const resource = normalizeProposalResource(
                 {
-                    id: `resource-${Date.now().toString(36)}-${state.proposal.resources.length + 1}`,
+                    id: newResourceId,
                     name,
                     type,
                     detail: String(body.detail ?? "").trim(),
@@ -1195,7 +1267,13 @@ async function handlePost(entry, path, body, response) {
                 (candidate) => candidate.id !== proposalResource.id,
             );
             state.proposal.edges = state.proposal.edges.filter(
-                (edge) => edge.from !== proposalResource.name && edge.to !== proposalResource.name,
+                (edge) =>
+                    (edge.fromId
+                        ? edge.fromId !== proposalResource.id
+                        : edge.from !== proposalResource.name) &&
+                    (edge.toId
+                        ? edge.toId !== proposalResource.id
+                        : edge.to !== proposalResource.name),
             );
             state.confirmed = false;
             state.proposalEdited = true;
@@ -1204,31 +1282,51 @@ async function handlePost(entry, path, body, response) {
     }
 
     if (path === "/api/proposal/edge" && proposalEdge) {
-        const resourceNames = new Set(
-            snapshot.proposal.resources
-                .filter((resource) => resource.include)
-                .map((resource) => resource.name),
-        );
+        const resources = snapshot.proposal.resources.filter((resource) => resource.include);
+        const resourceNames = new Set(resources.map((resource) => resource.name));
         const nextFrom = typeof body.from === "string" ? body.from : proposalEdge.from;
         const nextTo = typeof body.to === "string" ? body.to : proposalEdge.to;
+        const nextKind =
+            typeof body.kind === "string" ? body.kind : proposalEdge.kind;
+        const fromResource = uniqueResourceByName(resources, nextFrom);
+        const toResource = uniqueResourceByName(resources, nextTo);
         if (
             !resourceNames.has(nextFrom) ||
             !resourceNames.has(nextTo) ||
-            (typeof body.kind === "string" && !["reference", "waitFor", "parent"].includes(body.kind)) ||
+            !fromResource ||
+            !toResource ||
+            !["reference", "waitFor", "parent"].includes(nextKind) ||
             nextFrom === nextTo
         ) {
             return sendJson(response, 400, { ok: false, error: "Invalid connection update." });
         }
+        const nextEdge = {
+            ...proposalEdge,
+            from: nextFrom,
+            to: nextTo,
+            fromId: fromResource.id,
+            toId: toResource.id,
+            kind: nextKind,
+        };
+        if (
+            snapshot.proposal.edges.some(
+                (edge) =>
+                    edge.id !== proposalEdge.id &&
+                    proposalEdgeKeyForResources(edge, resources) ===
+                        proposalEdgeKey(nextEdge),
+            )
+        ) {
+            return sendJson(response, 409, {
+                ok: false,
+                error: `A ${nextKind} connection from "${nextFrom}" to "${nextTo}" already exists.`,
+            });
+        }
         updateSnapshot(domainId, (state) => {
-            if (typeof body.from === "string") {
-                proposalEdge.from = body.from;
-            }
-            if (typeof body.to === "string") {
-                proposalEdge.to = body.to;
-            }
-            if (typeof body.kind === "string") {
-                proposalEdge.kind = body.kind;
-            }
+            proposalEdge.from = nextEdge.from;
+            proposalEdge.to = nextEdge.to;
+            proposalEdge.fromId = nextEdge.fromId;
+            proposalEdge.toId = nextEdge.toId;
+            proposalEdge.kind = nextEdge.kind;
             proposalEdge.userEdited = true;
             state.confirmed = false;
             state.proposalEdited = true;
@@ -1272,22 +1370,43 @@ async function handlePost(entry, path, body, response) {
         const kind = ["reference", "waitFor", "parent"].includes(body.kind)
             ? body.kind
             : "reference";
-        if (!resourceNames.has(from) || !resourceNames.has(to) || from === to) {
+        const fromResource = uniqueResourceByName(resources, from);
+        const toResource = uniqueResourceByName(resources, to);
+        if (
+            !resourceNames.has(from) ||
+            !resourceNames.has(to) ||
+            !fromResource ||
+            !toResource ||
+            from === to
+        ) {
             return sendJson(response, 400, { ok: false, error: "Invalid connection." });
         }
+        const edge = normalizeProposalEdge(
+            {
+                id: `edge-${Date.now().toString(36)}-${snapshot.proposal.edges.length + 1}`,
+                from,
+                to,
+                fromId: fromResource.id,
+                toId: toResource.id,
+                kind,
+            },
+            snapshot.proposal.edges.length,
+            true,
+        );
+        if (
+            snapshot.proposal.edges.some(
+                (candidate) =>
+                    proposalEdgeKeyForResources(candidate, resources) ===
+                    proposalEdgeKey(edge),
+            )
+        ) {
+            return sendJson(response, 409, {
+                ok: false,
+                error: `A ${kind} connection from "${from}" to "${to}" already exists.`,
+            });
+        }
         updateSnapshot(domainId, (state) => {
-            state.proposal.edges.push(
-                normalizeProposalEdge(
-                    {
-                        id: `edge-${Date.now().toString(36)}-${state.proposal.edges.length + 1}`,
-                        from,
-                        to,
-                        kind,
-                    },
-                    state.proposal.edges.length,
-                    true,
-                ),
-            );
+            state.proposal.edges.push(edge);
             state.confirmed = false;
             state.proposalEdited = true;
         });
@@ -1793,7 +1912,7 @@ const aspireifyCanvas = createCanvas({
                     const previousGenerated = state.proposal.resources.filter(
                         (resource) => !resource.userAdded,
                     );
-                    const generatedNameOverrides = new Map();
+                    const generatedResourceOverrides = new Map();
                     const generatedResources = incomingResources
                         ? incomingResources
                               .map((generated) => {
@@ -1813,7 +1932,10 @@ const aspireifyCanvas = createCanvas({
                                       generated.name.toLowerCase(),
                                   );
                                   if (preserved) {
-                                      generatedNameOverrides.set(generated.name, preserved.name);
+                                      generatedResourceOverrides.set(
+                                          generated.id,
+                                          preserved.id,
+                                      );
                                       return null;
                                   }
                                   if (
@@ -1827,7 +1949,6 @@ const aspireifyCanvas = createCanvas({
                                       resourceIdentitiesMatch(candidate, generated),
                                   );
                                   if (existing?.userEdited) {
-                                      generatedNameOverrides.set(generated.name, existing.name);
                                       return {
                                           ...generated,
                                           name: existing.name,
@@ -1843,25 +1964,39 @@ const aspireifyCanvas = createCanvas({
                               .filter(Boolean)
                         : previousGenerated;
                     const resources = [...generatedResources, ...preservedResources];
-                    const resourceNames = new Set(resources.map((resource) => resource.name));
-                    const preservedEdges = state.proposal.edges.filter(
-                        (edge) =>
-                            (edge.userAdded || edge.userEdited) &&
-                            resourceNames.has(edge.from) &&
-                            resourceNames.has(edge.to),
+                    const resourcesById = new Map(
+                        resources.map((resource) => [resource.id, resource]),
                     );
+                    const resourceIds = new Set(resourcesById.keys());
+                    const resourceNames = new Set(resources.map((resource) => resource.name));
+                    const preservedEdges = state.proposal.edges
+                        .filter(
+                            (edge) =>
+                                (edge.userAdded || edge.userEdited) &&
+                                edgeEndpointsAvailable(edge, resourceIds, resourceNames),
+                        )
+                        .map((edge) => synchronizeEdgeNames(edge, resourcesById));
                     const generatedEdges = resolvedIncomingEdges
                         ? resolvedIncomingEdges
-                              .map((edge, index) =>
-                                  normalizeProposalEdge(
+                              .map((edge, index) => {
+                                  const fromId =
+                                      generatedResourceOverrides.get(edge.fromId) ??
+                                      edge.fromId;
+                                  const toId =
+                                      generatedResourceOverrides.get(edge.toId) ??
+                                      edge.toId;
+                                  return normalizeProposalEdge(
                                       {
                                           ...edge,
-                                          from: generatedNameOverrides.get(edge.from) ?? edge.from,
-                                          to: generatedNameOverrides.get(edge.to) ?? edge.to,
+                                          fromId,
+                                          toId,
+                                          from:
+                                              resourcesById.get(fromId)?.name ?? edge.from,
+                                          to: resourcesById.get(toId)?.name ?? edge.to,
                                       },
                                       index,
-                                  ),
-                              )
+                                  );
+                              })
                               .filter(
                                   (edge) =>
                                       !state.removedGeneratedEdges.some((removedEdge) =>
@@ -1874,23 +2009,26 @@ const aspireifyCanvas = createCanvas({
                                           !candidate.userAdded &&
                                           edgeIdentitiesMatch(candidate, edge),
                                   );
-                                  return edited
-                                      ? {
-                                            ...edge,
-                                            from: edited.from,
-                                            to: edited.to,
-                                            kind: edited.kind,
-                                            userEdited: true,
-                                        }
-                                      : edge;
+                                  return synchronizeEdgeNames(
+                                      edited
+                                          ? {
+                                                ...edge,
+                                                fromId: edited.fromId || edge.fromId,
+                                                toId: edited.toId || edge.toId,
+                                                kind: edited.kind,
+                                                userEdited: true,
+                                            }
+                                          : edge,
+                                      resourcesById,
+                                  );
                               })
-                        : state.proposal.edges.filter(
-                              (edge) =>
-                                  resourceNames.has(edge.from) && resourceNames.has(edge.to),
-                          );
+                        : state.proposal.edges
+                              .filter((edge) =>
+                                  edgeEndpointsAvailable(edge, resourceIds, resourceNames),
+                              )
+                              .map((edge) => synchronizeEdgeNames(edge, resourcesById));
                     const unavailableEdges = generatedEdges.filter(
-                        (edge) =>
-                            !resourceNames.has(edge.from) || !resourceNames.has(edge.to),
+                        (edge) => !edgeEndpointsAvailable(edge, resourceIds, resourceNames),
                     );
                     if (unavailableEdges.length) {
                         throw new CanvasError(
