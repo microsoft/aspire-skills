@@ -159,36 +159,53 @@ stimuli:
         config:
           substring: modify .aspire/modules/
   - name: aspireify-defaults-001
-    prompt: I just wired my AppHost. Now wire ServiceDefaults and OpenTelemetry into each of my projects.
+    prompt: Use the aspireify skill before answering. I just wired my AppHost. Wire ServiceDefaults and OpenTelemetry into the ApiService and Web projects, including their project references. Do not run build, restore, or start commands.
     tags:
       priority: p1
+      scenario: non-executing-guidance
       area:
         - service-defaults
         - otel
+    constraints:
+      max_agent_duration: 5m
     environment:
       files:
         - src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs
           dest: csharp-apphost/MyApp.AppHost/Program.cs
+        - src: ../../../evals/csharp-apphost/MyApp.ApiService/Program.cs
+          dest: csharp-apphost/MyApp.ApiService/Program.cs
+        - src: ../../../evals/csharp-apphost/MyApp.ApiService/MyApp.ApiService.csproj
+          dest: csharp-apphost/MyApp.ApiService/MyApp.ApiService.csproj
+        - src: ../../../evals/csharp-apphost/MyApp.Web/Program.cs
+          dest: csharp-apphost/MyApp.Web/Program.cs
+        - src: ../../../evals/csharp-apphost/MyApp.Web/MyApp.Web.csproj
+          dest: csharp-apphost/MyApp.Web/MyApp.Web.csproj
+        - src: ../../../evals/csharp-apphost/MyApp.ServiceDefaults/MyApp.ServiceDefaults.csproj
+          dest: csharp-apphost/MyApp.ServiceDefaults/MyApp.ServiceDefaults.csproj
     graders:
       - type: prompt
         name: adds_service_defaults
         config:
+          scoring: binary
           prompt: Does the assistant's response add builder.AddServiceDefaults() to each service's Program.cs
-            (Api and Worker)?
+            (the ApiService and Web projects)?
       - type: prompt
         name: maps_default_endpoints
         config:
+          scoring: binary
           prompt: Does the assistant's response add app.MapDefaultEndpoints() so /health and /alive are
             exposed for use by AppHost's WaitFor / HealthChecks?
       - type: prompt
         name: mentions_otel_health_discovery
         config:
+          scoring: binary
           prompt: Does the assistant's response explain that AddServiceDefaults wires OpenTelemetry (tracing,
             metrics, logs), health checks, service discovery, and HTTP resilience — i.e., the agent
             understands what they are configuring?
       - type: prompt
         name: project_reference
         config:
+          scoring: binary
           prompt: Does the assistant's response add a ProjectReference from each service project to the
             Aspire.ServiceDefaults project (or equivalent NuGet package)?
       - type: output-contains
@@ -467,12 +484,15 @@ stimuli:
         config:
           substring: modify .aspire/modules/
   - name: aspireify-ts-001
-    prompt: Wire up my apphost.ts so my Node API gets the Redis endpoint as an env var.
+    prompt: Use the aspireify skill before answering. Wire apphost.ts so my Node API gets the Redis endpoint as an environment variable. Do not run build, restore, or start commands.
     tags:
       priority: p0
+      scenario: non-executing-guidance
       area:
         - authoring
         - typescript
+    constraints:
+      max_agent_duration: 5m
     environment:
       files:
         - src: ../../../evals/ts-apphost/apphost.ts

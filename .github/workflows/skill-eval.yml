@@ -66,9 +66,16 @@ jobs:
 
       - name: Install vally and Copilot runtime
         if: steps.preflight.outputs.has_token == 'true'
-        # Install the Ubuntu x64 package at the global module root where
-        # Vally's copilot-sdk executor resolves platform packages.
-        run: npm install -g @microsoft/vally-cli @github/copilot-linux-x64
+        # Keep Vally and its native runtime under one node_modules ancestor so
+        # @github/copilot-sdk can resolve the platform package.
+        run: |
+          tools_dir="$RUNNER_TEMP/aspire-eval-tools"
+          npm install --prefix "$tools_dir" @microsoft/vally-cli @github/copilot-linux-x64
+          cli_path="$tools_dir/node_modules/@github/copilot-linux-x64/index.js"
+          test -f "$cli_path"
+          node "$cli_path" --version
+          echo "$tools_dir/node_modules/.bin" >> "$GITHUB_PATH"
+          echo "COPILOT_CLI_PATH=$cli_path" >> "$GITHUB_ENV"
 
       - name: Determine changed skill eval specs
         id: changed
@@ -78,11 +85,10 @@ jobs:
         # workflow. Beyond keeping the gate fast, this stops a PR from being
         # blocked by a flaky trial in an unrelated skill it never modified.
         #
-        # Global changes are the exception: a PR that touches `.vally.yaml`
-        # (suite / tag / path definitions) or this gate workflow itself can
-        # affect every evaluation, so it falls back to the full `ci-gate` suite
-        # rather than a per-skill subset (which would otherwise soft-skip green
-        # and hide a regression a global change introduced).
+        # A `.vally.yaml` change is the exception because its suite / tag / path
+        # definitions can affect every evaluation. Gate-workflow-only changes
+        # use the router spec as a runtime smoke test instead of pulling every
+        # unrelated, potentially flaky skill into the PR gate.
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -92,9 +98,14 @@ jobs:
               --repo "${{ github.repository }}" --name-only
           )"
 
-          # Global eval config / gate-workflow change -> evaluate everything.
+          workflow_changed=false
           if printf '%s\n' "$changed_files" \
-              | grep -Eq '^(\.vally\.yaml|\.github/workflows/skill-eval\.yml)$'; then
+              | grep -Eq '^\.github/workflows/skill-eval\.yml$'; then
+            workflow_changed=true
+          fi
+
+          # Global suite config change -> evaluate everything.
+          if printf '%s\n' "$changed_files" | grep -Eq '^\.vally\.yaml$'; then
             echo "Global eval config changed — running the full ci-gate suite."
             echo "run_full=true" >> "$GITHUB_OUTPUT"
             echo "has_specs=false" >> "$GITHUB_OUTPUT"
@@ -110,30 +121,35 @@ jobs:
               | sort -u
           )"
 
-          spec_args=""
           matched=""
           for skill in $changed_skills; do
+            if ! printf '%s' "$skill" | grep -Eq '^[a-z0-9][a-z0-9-]*$'; then
+              echo "::error::Invalid skill directory name: $skill" >&2
+              exit 1
+            fi
             spec="skills/${skill}/evals/eval.yaml"
             if [ -f "$spec" ]; then
-              spec_args="${spec_args} -e ${spec}"
               matched="${matched} ${skill}"
             fi
           done
 
-          if [ -z "$spec_args" ]; then
+          if [ -z "$matched" ] && [ "$workflow_changed" = true ]; then
+            matched=" aspire"
+          fi
+
+          if [ -z "$matched" ]; then
             echo "has_specs=false" >> "$GITHUB_OUTPUT"
           else
             echo "has_specs=true" >> "$GITHUB_OUTPUT"
-            echo "spec_args=${spec_args# }" >> "$GITHUB_OUTPUT"
             echo "matched=${matched# }" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run full ci-gate suite (global change)
         if: steps.preflight.outputs.has_token == 'true' && steps.changed.outputs.run_full == 'true'
-        # A `.vally.yaml` / gate-workflow change landed us here. `--suite ci-gate`
-        # applies the p0 + p1 priority filter across every skill. (`--suite`
-        # can't be combined with `-e`, which is why the scoped path below
-        # expresses the same filter with `--tag` instead.)
+        # A `.vally.yaml` change landed us here. `--suite ci-gate` applies the
+        # p0 + p1 priority filter across every skill. (`--suite` can't be
+        # combined with `-e`, which is why the scoped path below expresses the
+        # same filter with `--tag` instead.)
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
         run: |
@@ -148,18 +164,34 @@ jobs:
         # `copilot-sdk` executor) to invoke Copilot models. It is scoped to
         # this step only so install / upload never see it.
         #
-        # Run the changed specs directly via `-e`, applying the same priority
-        # filter as the `ci-gate` suite (p0 + p1) so forward-looking p2 stimuli
-        # stay out of the PR gate. `--suite` can't be combined with `-e`, so the
-        # filter is expressed with `--tag` instead.
+        # Run each changed spec in an isolated Vally process. Vally's session
+        # filesystem provider is process-global, so multiple workers can race
+        # while configuring it; one worker per process avoids that race while
+        # the processes still run concurrently. Apply the ci-gate-equivalent
+        # p0 + p1 filter so forward-looking p2 stimuli stay out of the PR gate.
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
         run: |
-          echo "Evaluating changed skills: ${{ steps.changed.outputs.matched }}"
-          vally eval \
-            ${{ steps.changed.outputs.spec_args }} \
-            --tag priority=p0,p1 \
-            --output-dir ./results
+          set -uo pipefail
+          pids=()
+
+          for skill in ${{ steps.changed.outputs.matched }}; do
+            echo "Evaluating changed skill: $skill"
+            vally eval \
+              --eval-spec "skills/${skill}/evals/eval.yaml" \
+              --tag priority=p0,p1 \
+              --workers 1 \
+              --output-dir "./results/${skill}" &
+            pids+=("$!")
+          done
+
+          status=0
+          for pid in "${pids[@]}"; do
+            if ! wait "$pid"; then
+              status=1
+            fi
+          done
+          exit "$status"
 
       - name: Note no skills changed
         if: steps.preflight.outputs.has_token == 'true' && steps.changed.outputs.run_full == 'false' && steps.changed.outputs.has_specs == 'false'
