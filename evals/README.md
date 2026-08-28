@@ -144,13 +144,13 @@ Use `--workers 4` to fan stimuli out and shave wall-clock time; expect higher co
 
 | Skill | Task stimuli | Routing stimuli | Focus |
 |-------|--------------|-----------------|-------|
-| `aspire` (router) | 6 | 16 | Routing precision to sub-skills |
+| `aspire` (router) | 7 | 16 | Routing precision to sub-skills |
 | `aspire-init` | 5 | 15 | Skeleton drop, `aspire new` / `aspire init` decision, aspireify handoff |
-| `aspireify` | 8 | 18 | AppHost wiring (C# / file-based C# / TS), validation, never edit `.aspire/modules/` |
+| `aspireify` | 11 | 18 | AppHost wiring (C# / file-based C# / TS), package-manager resolution, validation, never edit `.aspire/modules/` |
 | `aspire-orchestration` | 28 | 24 | Lifecycle tools, file lock recovery, `--include-hidden`, `aspire update --self` |
 | `aspire-deployment` | 8 | 21 | Multi-target deploy, `aspire destroy`, JS publishing, pipeline previews |
 | `aspire-monitoring` | 11 | 19 | Diagnostics bridge, standalone dashboard, browser logs, `--include-hidden` |
-| **Total** | **66** | **113** | |
+| **Total** | **70** | **113** | |
 
 Run `vally lint --eval-spec skills/<skill>/evals/eval.yaml --verbose` to dump the per-spec stimulus list.
 

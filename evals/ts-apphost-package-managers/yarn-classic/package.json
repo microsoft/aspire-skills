@@ -1,0 +1,5 @@
+{
+  "name": "yarn-classic-apphost",
+  "packageManager": "yarn@1.22.22",
+  "type": "module"
+}

@@ -1,8 +1,9 @@
 name: aspireify-eval
 description: "Evaluates the aspireify skill for correct agentic AppHost wiring guidance:
-  language-aware authoring (C#, file-based C#, TypeScript), current Aspire features (unified
-  withEnvironment, AddNextJsApp, WithBrowserLogs, ExcludeReferenceEndpoint), ServiceDefaults wiring,
-  validation flow, and proper hand-off to other Aspire skills."
+  language-aware authoring (C#, file-based C#, TypeScript), TypeScript AppHost package-manager
+  resolution, current Aspire features (unified withEnvironment, AddNextJsApp, WithBrowserLogs,
+  ExcludeReferenceEndpoint), ServiceDefaults wiring, validation flow, and proper hand-off to
+  other Aspire skills."
 version: "1.0"
 type: capability
 tags:
@@ -158,36 +159,53 @@ stimuli:
         config:
           substring: modify .aspire/modules/
   - name: aspireify-defaults-001
-    prompt: I just wired my AppHost. Now wire ServiceDefaults and OpenTelemetry into each of my projects.
+    prompt: Use the aspireify skill before answering. I just wired my AppHost. Wire ServiceDefaults and OpenTelemetry into the ApiService and Web projects, including their project references. Do not run build, restore, or start commands.
     tags:
       priority: p1
+      scenario: non-executing-guidance
       area:
         - service-defaults
         - otel
+    constraints:
+      max_agent_duration: 5m
     environment:
       files:
         - src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs
           dest: csharp-apphost/MyApp.AppHost/Program.cs
+        - src: ../../../evals/csharp-apphost/MyApp.ApiService/Program.cs
+          dest: csharp-apphost/MyApp.ApiService/Program.cs
+        - src: ../../../evals/csharp-apphost/MyApp.ApiService/MyApp.ApiService.csproj
+          dest: csharp-apphost/MyApp.ApiService/MyApp.ApiService.csproj
+        - src: ../../../evals/csharp-apphost/MyApp.Web/Program.cs
+          dest: csharp-apphost/MyApp.Web/Program.cs
+        - src: ../../../evals/csharp-apphost/MyApp.Web/MyApp.Web.csproj
+          dest: csharp-apphost/MyApp.Web/MyApp.Web.csproj
+        - src: ../../../evals/csharp-apphost/MyApp.ServiceDefaults/MyApp.ServiceDefaults.csproj
+          dest: csharp-apphost/MyApp.ServiceDefaults/MyApp.ServiceDefaults.csproj
     graders:
       - type: prompt
         name: adds_service_defaults
         config:
+          scoring: binary
           prompt: Does the assistant's response add builder.AddServiceDefaults() to each service's Program.cs
-            (Api and Worker)?
+            (the ApiService and Web projects)?
       - type: prompt
         name: maps_default_endpoints
         config:
+          scoring: binary
           prompt: Does the assistant's response add app.MapDefaultEndpoints() so /health and /alive are
             exposed for use by AppHost's WaitFor / HealthChecks?
       - type: prompt
         name: mentions_otel_health_discovery
         config:
+          scoring: binary
           prompt: Does the assistant's response explain that AddServiceDefaults wires OpenTelemetry (tracing,
             metrics, logs), health checks, service discovery, and HTTP resilience — i.e., the agent
             understands what they are configuring?
       - type: prompt
         name: project_reference
         config:
+          scoring: binary
           prompt: Does the assistant's response add a ProjectReference from each service project to the
             Aspire.ServiceDefaults project (or equivalent NuGet package)?
       - type: output-contains
@@ -466,12 +484,15 @@ stimuli:
         config:
           substring: modify .aspire/modules/
   - name: aspireify-ts-001
-    prompt: Wire up my apphost.ts so my Node API gets the Redis endpoint as an env var.
+    prompt: Use the aspireify skill before answering. Wire apphost.ts so my Node API gets the Redis endpoint as an environment variable. Do not run build, restore, or start commands.
     tags:
       priority: p0
+      scenario: non-executing-guidance
       area:
         - authoring
         - typescript
+    constraints:
+      max_agent_duration: 5m
     environment:
       files:
         - src: ../../../evals/ts-apphost/apphost.ts
@@ -765,4 +786,100 @@ stimuli:
         name: does_not_invoke_aspireify
         config:
           disallowed:
+            - aspireify
+  - name: aspireify-package-manager-pnpm-001
+    prompt: Use the aspireify skill before answering. A generated TypeScript AppHost has an AppHost-local pnpm-lock.yaml, while its immediate parent's package.json declares yarn@4.10.3. Do not run commands. Tell me which exact dependency command to run, why that manager was selected, and how to start the AppHost afterward.
+    tags:
+      priority: p1
+      area:
+        - typescript
+        - package-manager
+    environment:
+      files:
+        - src: ../../../evals/ts-apphost-package-managers/pnpm/apphost.mts
+          dest: case-a/apphost/apphost.mts
+        - src: ../../../evals/ts-apphost-package-managers/pnpm/package.json
+          dest: case-a/apphost/package.json
+        - src: ../../../evals/ts-apphost-package-managers/pnpm/pnpm-lock.yaml
+          dest: case-a/apphost/pnpm-lock.yaml
+        - src: ../../../evals/ts-apphost-package-managers/package.json
+          dest: case-a/package.json
+    rubric:
+      - The assistant selects pnpm because the AppHost-local pnpm-lock.yaml takes precedence over the parent package.json declaring Yarn.
+      - Aspire's generated brownfield AppHost resolver uses pnpm install --ignore-workspace so the nested AppHost does not join or require changes to any parent pnpm workspace.
+      - The assistant preserves the existing package-manager metadata and lockfiles instead of recommending that they be created, replaced, or regenerated.
+    graders:
+      - type: output-contains
+        name: uses_pnpm_install
+        config:
+          substring: pnpm install --ignore-workspace
+      - type: output-contains
+        name: retains_aspire_lifecycle
+        config:
+          substring: aspire start
+      - type: prompt
+        name: explains_selection_and_preserves_metadata
+      - type: skill-invocation
+        name: invokes_aspireify
+        config:
+          required:
+            - aspireify
+  - name: aspireify-package-manager-fallback-001
+    prompt: Use the aspireify skill before answering. A TypeScript AppHost and its immediate parent have no configured package manager or lockfile. Do not run commands. Tell me how to repair its dependencies without changing repository conventions.
+    tags:
+      priority: p1
+      area:
+        - typescript
+        - package-manager
+    environment:
+      files:
+        - src: ../../../evals/ts-apphost/apphost.ts
+          dest: case-b/apphost/apphost.ts
+        - src: ../../../evals/ts-apphost/package.json
+          dest: case-b/apphost/package.json
+        - src: ../../../evals/ts-apphost/aspire.config.json
+          dest: case-b/apphost/aspire.config.json
+    rubric:
+      - The assistant explains that Aspire defaults to npm and uses npm install because neither the AppHost nor its eligible parent has a recognized package-manager marker.
+      - The assistant does not recommend changing packageManager or pre-creating, replacing, or regenerating a lockfile merely to influence detection or switch managers.
+    graders:
+      - type: output-contains
+        name: explains_npm_fallback
+        config:
+          substring: npm install
+      - type: prompt
+        name: explains_fallback_and_preserves_metadata
+      - type: skill-invocation
+        name: invokes_aspireify
+        config:
+          required:
+            - aspireify
+  - name: aspireify-package-manager-yarn-classic-001
+    prompt: Use the aspireify skill before answering. A TypeScript AppHost's package.json declares packageManager yarn@1.22.22, and dependency restore is failing. Do not run commands. Tell me what to do.
+    tags:
+      priority: p1
+      area:
+        - typescript
+        - package-manager
+        - safety
+    environment:
+      files:
+        - src: ../../../evals/ts-apphost-package-managers/yarn-classic/apphost.mts
+          dest: case-c/apphost/apphost.mts
+        - src: ../../../evals/ts-apphost-package-managers/yarn-classic/package.json
+          dest: case-c/apphost/package.json
+    rubric:
+      - The assistant explicitly rejects Yarn Classic 1.22.22 because TypeScript AppHosts require Yarn 4+ or npm, pnpm, or Bun.
+      - The assistant does not treat another package manager as a drop-in fallback; it preserves the existing files until the user explicitly chooses an upgrade or migration.
+    graders:
+      - type: output-contains
+        name: rejects_yarn_classic
+        config:
+          substring: Yarn Classic
+      - type: prompt
+        name: recommends_explicit_supported_migration
+      - type: skill-invocation
+        name: invokes_aspireify
+        config:
+          required:
             - aspireify

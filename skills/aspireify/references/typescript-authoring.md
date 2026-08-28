@@ -130,6 +130,68 @@ await builder.addProject('api', '../Api/Api.csproj')
 
 Package managers: **Bun, Yarn, pnpm** are first-class alongside npm.
 
+## TypeScript AppHost Package Managers
+
+Use `aspire start --non-interactive` to start a TypeScript AppHost. Do **not** replace
+the normal Aspire lifecycle with a raw `npm`, `pnpm`, `yarn`, or `bun` launcher.
+
+When Aspire reports a TypeScript AppHost dependency or toolchain problem, determine the
+existing package manager before recommending an install or toolchain command. Report both
+the selected manager and the marker that selected it.
+
+### Detection Order
+
+Check the AppHost directory first, then its immediate eligible parent only. Do not walk
+higher because a home or unrelated repository marker must not influence the AppHost.
+
+Within each directory, use this order:
+
+1. A recognized `packageManager` field in `package.json` (`npm`, `pnpm`, `yarn`, or `bun`,
+   optionally followed by an `@version` suffix). Ignore an unknown, malformed, or unreadable
+   value and continue.
+2. `bun.lock`
+3. `bun.lockb`
+4. `pnpm-lock.yaml`
+5. `yarn.lock`
+6. `.yarnrc.yml`
+7. `package-lock.json`
+
+The first marker found wins. This means an AppHost-local marker wins over a parent marker,
+and a recognized `packageManager` value wins over lockfiles in its own directory.
+
+If no marker is found, say that Aspire defaults to **npm**. Do not add a `packageManager`
+field, generate a lockfile, or replace package-manager files to make detection succeed.
+
+### Commands and Yarn Classic
+
+Use the detected manager only when dependency repair or the TypeScript AppHost toolchain
+requires it. These commands diagnose dependencies and toolchains; they do not replace
+`aspire start --non-interactive` for normal AppHost execution:
+
+| Manager | Dependency command | Type-check | Diagnostic AppHost run |
+|---------|--------------------|------------|-----------------------|
+| npm | `npm install` | `npx --no-install tsc --noEmit -p tsconfig.apphost.json` | `npx --no-install tsx --tsconfig tsconfig.apphost.json apphost.mts` |
+| Bun | `bun install` | `bun run tsc --noEmit -p tsconfig.apphost.json` | `bun run apphost.mts` |
+| Yarn 4+ | `yarn install` | `yarn run tsc --noEmit -p tsconfig.apphost.json` | `yarn run tsx --tsconfig tsconfig.apphost.json apphost.mts` |
+| pnpm | `pnpm install` | `pnpm exec tsc --noEmit -p tsconfig.apphost.json` | `pnpm exec tsx --tsconfig tsconfig.apphost.json apphost.mts` |
+
+`apphost.mts` is the default entry point. When the AppHost configuration selects a
+different file, use that configured entry point instead.
+
+`--ignore-workspace` applies only to the generated brownfield pnpm AppHost package. It
+prevents pnpm from requiring an edit to the user's workspace configuration. Use
+`pnpm install --ignore-workspace` only in that scenario; do not generalize it to
+arbitrary application dependency installs.
+
+Yarn Classic is unsupported for TypeScript AppHosts. If `packageManager` is `yarn@1...`
+or the first lines of `yarn.lock` identify lockfile v1, stop and tell the user to upgrade
+to Yarn 4+ or use npm, pnpm, or Bun. Do not silently fall back to npm.
+
+Preserve repository conventions: do not change `packageManager` or create, replace, or
+regenerate lockfiles, `.yarnrc.yml`, or workspace files merely to influence detection or
+switch managers. Preserve existing files until the user explicitly chooses an upgrade or
+migration.
+
 Publish hooks (mirror C# `PublishAs*`):
 
 ```ts

@@ -1,14 +1,14 @@
 ---
 name: aspire
 description: >-
-  **WORKFLOW SKILL** - Top-level router for Aspire 13.4 distributed apps. Detects the
-  AppHost, enforces safety guardrails, and routes to the right sub-skill.
+  **WORKFLOW SKILL** - Aspire 13.4 router. Detects AppHosts, enforces guardrails,
+  and selects the right sub-skill.
   USE FOR: Aspire AppHost detected, aspire CLI, distributed app, cloud-native .NET,
   aspire start, aspire stop, aspire resource, aspire deploy, aspire destroy, aspire publish,
   aspire init, aspire new, aspire add, aspire integration list/search, aspire wait,
   aspire describe, aspire ps, aspire dashboard run, aspire doctor, aspire update,
   aspire logs, aspire otel, aspire agent init, --include-hidden, aspireify,
-  WithBrowserLogs, custom
+  WithBrowserLogs, TS AppHost package managers, Yarn Classic, custom
   dashboard/resource commands, .aspire/modules recovery, Playwright URL discovery.
   DO NOT USE FOR: non-Aspire .NET projects (use dotnet directly), Azure provisioning
   without Aspire (use azure-prepare), container-only repos with no AppHost, ordinary
@@ -89,6 +89,11 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 - Use `aspire integration list --format Json` and `aspire integration search <query> --format Json` for read-only integration discovery
 - **Never** install the obsolete Aspire workload
 - **Never** edit `.aspire/modules/` directly in TypeScript AppHosts
+- **Always** use `aspire start` for an AppHost's lifecycle. When diagnosing or repairing
+  a TypeScript AppHost's package-manager toolchain, defer to
+  [`aspireify`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md)
+  and its package-manager rules; do not substitute a raw package-manager launcher for
+  `aspire start`.
 
 ## Routing
 
