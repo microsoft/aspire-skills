@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-test("bundle manifests emit Aspire-compatible SHA-512 file hashes", () => {
+test("bundle manifests emit Aspire-compatible SHA-256 and SHA-512 file hashes", () => {
   const outputRoot = mkdtempSync(join(tmpdir(), "aspire-bundle-manifest-"));
 
   try {
@@ -58,7 +58,11 @@ function assertManifestHashes({
     assert.ok(entry.files.length > 0, `${entry.name} must contain files.`);
 
     for (const file of entry.files) {
-      assert.equal(file.sha256, undefined, `${entry.name}/${file.relativePath} must not emit sha256.`);
+      assert.match(
+        file.sha256,
+        /^[0-9a-f]{64}$/,
+        `${entry.name}/${file.relativePath} must emit a raw lowercase SHA-256 hash.`
+      );
       assert.match(
         file.sha512,
         /^[0-9a-f]{128}$/,
@@ -71,8 +75,11 @@ function assertManifestHashes({
         entry.name,
         ...file.relativePath.split("/")
       );
-      const expectedHash = createHash("sha512").update(readFileSync(filePath)).digest("hex");
-      assert.equal(file.sha512, expectedHash, `${entry.name}/${file.relativePath} hash must match its contents.`);
+      const contents = readFileSync(filePath);
+      const expectedSha256 = createHash("sha256").update(contents).digest("hex");
+      const expectedSha512 = createHash("sha512").update(contents).digest("hex");
+      assert.equal(file.sha256, expectedSha256, `${entry.name}/${file.relativePath} SHA-256 must match its contents.`);
+      assert.equal(file.sha512, expectedSha512, `${entry.name}/${file.relativePath} SHA-512 must match its contents.`);
     }
   }
 }
