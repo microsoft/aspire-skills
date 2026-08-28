@@ -509,6 +509,16 @@ stimuli:
         - lifecycle
         - safety
         - aspire-13-5
+    environment:
+      files:
+        - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
+          dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
+        - src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs
+          dest: csharp-apphost/MyApp.AppHost/Program.cs
+        - src: ../../../evals/csharp-apphost/aspire.config.json
+          dest: csharp-apphost/aspire.config.json
+    constraints:
+      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
         name: warns_about_data_loss
@@ -530,6 +540,10 @@ stimuli:
             Does the assistant's response avoid recommending or executing
             `aspire stop --force --all`, while allowing it to quote that invalid form
             when explaining why it is rejected?
+      - type: skill-invocation
+        name: invokes_orchestration
+        config:
+          required: [aspire-orchestration]
   - name: orch-aspireify-001
     prompt: I just ran `aspire init` in my existing Node.js + .NET repo and it created an apphost.cs and
       aspire.config.json. What's next? Wire up my services.

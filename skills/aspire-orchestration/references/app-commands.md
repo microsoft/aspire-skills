@@ -107,8 +107,9 @@ aspire restore
 - Use **`aspire update --yes --non-interactive`** to refresh AppHost package references
   only after approval. Update every Aspire SDK/hosting package together; do not mix 13.4
   and 13.5 package families.
-- Use **`aspire update --migrate`** to migrate a legacy `apphost.ts` entry point to
-  `apphost.mts`; include `--yes --non-interactive` for approved agent execution.
+- Use **`aspire update --migrate --yes --non-interactive`** only after approval for both
+  parts of the operation: it updates Aspire packages first, then migrates `apphost.ts`,
+  config, tsconfig, generated imports, and the entry point to `apphost.mts`.
 - Use `aspire restore` after pulls, cleans, or missing generated files.
 - Use `--apphost <path>` when the workspace has multiple AppHosts. The CLI's global config validates configured AppHost paths to catch typos early.
 - In 13.5, `aspire doctor --format Json` includes a structured `operating-system` check,

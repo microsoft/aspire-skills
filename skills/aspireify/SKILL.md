@@ -275,7 +275,7 @@ catalog.
 | Use `WithEndpoint("name", e => ...)` to update endpoints | Endpoint callbacks update existing endpoints rather than throwing on duplicates |
 | Mark admin endpoints with `ExcludeReferenceEndpoint = true` | Prevents consumers from receiving admin URLs via `WithReference()` |
 | Look up unfamiliar API: `aspire docs api search <query> --language csharp\|typescript` | Don't guess overloads or builder chains |
-| Use context `.Services` / `ctx.services()` | `.ServiceProvider` is obsolete in 13.5 |
+| Use context `.Services` / `await ctx.services().getInteractionService()` | `.ServiceProvider` is obsolete, and `ctx.services()` alone returns a services accessor |
 | Use `AddConnectionString` for external connection strings | `PublishAsConnectionString` is obsolete |
 | Check `IInteractionService.IsAvailable` before prompting | CLI-invoked commands may be noninteractive; prefer command arguments for dashboard + CLI input |
 | Treat `WithTerminal()` as experimental | Suppress `ASPIRETERMINAL001`; do not generate removed `TerminalOptions.Shell` or TypeScript dimension options |

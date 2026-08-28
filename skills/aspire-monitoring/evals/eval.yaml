@@ -426,8 +426,11 @@ stimuli:
       - type: prompt
         name: avoids_unnecessary_rewiring
         config:
-          prompt: Does the assistant's response avoid treating a healthy DevTunnel's missing URL on
-            13.5.1 as proof that the AppHost endpoint model is wrong?
+          prompt: >
+            Aspire 13.5.3 fixed the 13.5.0-13.5.2 regression where healthy DevTunnel
+            resources omitted public URLs from the dashboard and MCP snapshots. Does the
+            assistant's response avoid treating that missing URL on 13.5.1 as proof that
+            the AppHost endpoint model is wrong? Answer based on intent.
       - type: output-contains
         config:
           substring: 13.5.3

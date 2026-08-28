@@ -596,6 +596,54 @@ stimuli:
             Does the assistant's response avoid using obsolete
             `context.ServiceProvider` as implementation code? It may mention the old
             property only to explain migration to `context.Services`.
+  - name: aspireify-ts-interaction-service-135-001
+    prompt: >
+      Use the aspireify skill before answering. Show a TypeScript AppHost resource-command
+      callback that gets the Interaction Service and prompts only when a dashboard UI is
+      available. Do not run build, restore, or start commands.
+    tags:
+      priority: p1
+      scenario: non-executing-guidance
+      area:
+        - authoring
+        - aspire-13-5
+        - interactions
+        - typescript
+    constraints:
+      max_agent_duration: 5m
+      expect_skills: [aspireify]
+    environment:
+      files:
+        - src: ../../../evals/ts-apphost/apphost.mts
+          dest: ts-apphost/apphost.mts
+        - src: ../../../evals/ts-apphost/aspire.config.json
+          dest: ts-apphost/aspire.config.json
+    graders:
+      - type: prompt
+        name: resolves_interaction_service
+        config:
+          prompt: >
+            Does the assistant's response obtain the TypeScript Interaction Service with
+            `await context.services().getInteractionService()` (or an equivalent chained
+            services-accessor call), rather than treating `context.services()` itself as
+            the Interaction Service? Answer based on intent.
+      - type: prompt
+        name: checks_interaction_availability
+        config:
+          prompt: >
+            Does the assistant's response call and await `interaction.isAvailable()`
+            before prompting, and provide a noninteractive path when no UI is attached?
+            Answer based on intent.
+      - type: output-contains
+        config:
+          substring: getInteractionService
+      - type: output-contains
+        config:
+          substring: isAvailable
+      - type: skill-invocation
+        name: invokes_aspireify
+        config:
+          required: [aspireify]
   - name: should_trigger_01
     description: "Reason: Direct wiring request — aspireify owns AppHost wiring"
     prompt: Wire up my Aspire AppHost

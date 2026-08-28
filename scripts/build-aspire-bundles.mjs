@@ -113,6 +113,7 @@ function buildSkill(skillDirectory) {
 
     files.push({
       relativePath: toManifestPath(relativePath),
+      sha256: sha256(targetPath),
       sha512: sha512(targetPath)
     });
   }
@@ -158,6 +159,7 @@ function buildExtension(extensionDirectory) {
 
     files.push({
       relativePath: toManifestPath(relativePath),
+      sha256: sha256(targetPath),
       sha512: sha512(targetPath)
     });
   }
@@ -303,6 +305,10 @@ function readScalar(lines, key) {
   }
 
   return value.replace(/^['"]|['"]$/g, "");
+}
+
+function sha256(path) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
 function sha512(path) {

@@ -10,7 +10,7 @@ Look for `.csproj` files containing the Aspire AppHost SDK reference:
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
-  <Sdk Name="Aspire.AppHost.Sdk" Version="13.5.0" />
+  <Sdk Name="Aspire.AppHost.Sdk" Version="13.5.3" />
   <PropertyGroup>
     <AspireUseCliBundle>true</AspireUseCliBundle>
   </PropertyGroup>
@@ -56,7 +56,9 @@ find . \( -name "apphost.mts" -o -name "apphost.ts" \) -not -path "*/node_module
 
 A current TypeScript AppHost imports `createBuilder` from
 `./.aspire/modules/aspire.mjs`. Treat `apphost.ts` as a migration-compatible legacy
-layout and offer `aspire update --migrate`.
+layout. Explain that `aspire update --migrate` updates Aspire packages and migration
+artifacts together, then run `aspire update --migrate --yes --non-interactive` only after
+the user approves both mutation scopes.
 
 ### 3. `.aspire/modules/` Directory (High Confidence)
 

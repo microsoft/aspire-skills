@@ -11,7 +11,7 @@ metadata:
 
 Use this skill when the task is to publish, preview, validate, deploy, or tear down an Aspire application deployment. This skill owns Aspire deployment routing. Do not start with a generic Azure, Docker, Kubernetes, Helm, or Bicep workflow until you have checked whether the workspace is an Aspire app.
 
-Aspire deployment starts from the AppHost model. Treat `aspire deploy`, `aspire publish`, `aspire destroy`, `aspire do`, and the deployment environment resources in the AppHost as the primary path. This guidance targets Aspire 13.5.3 with the stable 13.5.0 SDK/package family.
+Aspire deployment starts from the AppHost model. Treat `aspire deploy`, `aspire publish`, `aspire destroy`, `aspire do`, and the deployment environment resources in the AppHost as the primary path. This guidance targets Aspire 13.5.3: use stable 13.5.3 SDK/hosting packages and matching `13.5.3-preview.*` builds for preview-only integrations such as Kubernetes and Radius.
 
 Keep this as one skill with target-specific references. Load only the reference files that match the target you discover or the user requests.
 
@@ -114,10 +114,11 @@ The Azure deployment path in this skill is `aspire add <azure-target>`, AppHost 
 
 ### Keep Aspire packages on one release family
 
-Before publish or deploy, verify that `Aspire.AppHost.Sdk` and every
-`Aspire.Hosting.*` package use the matching 13.5 family. A 13.5 CLI does not make mixed
-13.4/13.5 hosting packages safe; mixed graphs can fail at startup with
-`MissingMethodException` or `TypeLoadException`.
+Before publish or deploy, verify that `Aspire.AppHost.Sdk` and every hosting package use
+the matching 13.5 servicing line. Stable packages should be 13.5.3; preview-only
+integrations use matching `13.5.3-preview.*` builds selected by `aspire add` or current
+docs. A 13.5 CLI does not make mixed 13.4/13.5 hosting packages safe; mixed graphs can
+fail at startup with `MissingMethodException` or `TypeLoadException`.
 
 Migrate obsolete 13.5 surfaces while editing deployment code:
 

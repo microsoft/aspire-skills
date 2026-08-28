@@ -486,8 +486,8 @@ stimuli:
           substring: azure-deploy
   - name: deploy-mixed-package-family-135-001
     prompt: >
-      My AppHost uses Aspire.AppHost.Sdk 13.5.0 but Aspire.Hosting.Kubernetes
-      13.4.6, and startup fails with MissingMethodException before deployment.
+      My AppHost uses Aspire.AppHost.Sdk 13.5.3 but Aspire.Hosting.Kubernetes
+      13.4.6-preview.1.26319.6, and startup fails with MissingMethodException before deployment.
       The Aspire CLI is 13.5.3. Can I deploy as-is?
     tags:
       priority: p0

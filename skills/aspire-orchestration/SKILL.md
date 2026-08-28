@@ -165,7 +165,7 @@ See [safety-guardrails.md](references/safety-guardrails.md) for detailed rules a
 | Discover integrations | `aspire integration list --format Json` / `aspire integration search <query> --format Json` |
 | Upgrade the CLI itself | `aspire update --self` (managed installs may print the npm/.NET/Nix update command) |
 | Update project package refs | `aspire update --yes --non-interactive` after approval |
-| Migrate legacy TypeScript entry point | `aspire update --migrate --yes --non-interactive` after approval |
+| Migrate legacy TypeScript entry point | Explain that package references, config, tsconfig, imports, and the entry point all change; after approval for the package update and migration, run `aspire update --migrate --yes --non-interactive` |
 | Restore generated files | `aspire restore` |
 | Environment maintenance | `aspire cache clear`, `aspire certs trust`, `aspire certs clean` |
 | Diagnose environment | `aspire doctor` |
@@ -248,8 +248,9 @@ The same rule applies to any "file in use", "cannot access the file", or
 ## TypeScript AppHost Note
 
 Detection covers current `apphost.mts` and legacy `apphost.ts`, but **all TS AppHost
-authoring is delegated to `aspireify`**. Offer `aspire update --migrate` for the legacy
-entry point only after approval.
+authoring is delegated to `aspireify`**. Explain that legacy migration also updates Aspire
+packages, config, tsconfig, and imports. Offer
+`aspire update --migrate --yes --non-interactive` only after approval for the full change.
 Current rules to apply when handing off:
 
 | Rule | Why |

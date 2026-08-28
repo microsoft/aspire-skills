@@ -87,8 +87,10 @@ C# has two sub-modes the agent may encounter:
    ```bash
    aspire init --language <csharp|typescript> --non-interactive
    ```
-3. **Confirm artifacts** — `apphost.cs` (or `apphost.mts` + `.aspire/modules/`) and
-   `aspire.config.json` should be in the repo root.
+3. **Confirm artifacts** — verify root `aspire.config.json`, resolve its
+   `appHost.path` relative to that file, and confirm the selected `apphost.cs`, AppHost
+   project, or TypeScript `apphost.mts` exists there. For TypeScript, also confirm the
+   adjacent generated `.aspire/modules/`; do not assume the AppHost is at the repo root.
 4. **Confirm `aspireify` skill installed** — the agent's skill directory contains
    `aspireify/SKILL.md`. If missing, run `aspire agent init` to install it.
 5. **Hand off to `aspireify`** for wiring:
@@ -122,7 +124,7 @@ The same precedence applies to a legacy `.agents/skills/aspire-init/SKILL.md` fr
 | Skeleton dropped but no `aspireify` skill | Agent skill directory not detected during init | Run `aspire agent init` to install `aspireify`, then continue |
 | `apphost.cs` references a missing `#:package` | Channel mismatch or transient feed issue | Re-run with `--channel stable` (or `daily` for pre-release) |
 | `aspire start` after wiring fails immediately | Wiring incomplete or wrong AppHost path | Re-invoke `aspireify`; confirm `aspire.config.json` `appHost.path` is correct |
-| Existing TypeScript AppHost uses `apphost.ts` | Legacy entry point | Run `aspire update --migrate` after updating the CLI |
+| Existing TypeScript AppHost uses `apphost.ts` | Legacy entry point and package graph | Explain that migration updates Aspire packages, config, tsconfig, imports, and the entry point; after approval for all changes, run `aspire update --migrate --yes --non-interactive` |
 
 ## Don't Do This
 

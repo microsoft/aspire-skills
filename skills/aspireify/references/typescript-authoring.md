@@ -1,8 +1,10 @@
 # TypeScript AppHost Authoring
 
 Patterns for editing current `apphost.mts`. **Never edit `.aspire/modules/`** — that
-directory is generated and any changes will be clobbered. Legacy `apphost.ts` should be
-migrated with `aspire update --migrate`, not hand-renamed.
+directory is generated and any changes will be clobbered. Migrating legacy `apphost.ts`
+also updates Aspire packages, configuration, TypeScript configuration, and generated
+imports. Run `aspire update --migrate --yes --non-interactive` only after approval for
+both the package update and migration; do not hand-rename it.
 
 > Look up unfamiliar API: `aspire docs api search <query> --language typescript`
 > then `aspire docs api get <id>`.
@@ -120,9 +122,18 @@ argument name collides with an Aspire option, place command arguments after `--`
 
 ### Interactions and terminals
 
-Use `await context.services()` to obtain the Interaction Service. Check
-`isAvailable()` before prompting because CLI-invoked commands may have no attached UI;
-prefer command arguments when input must work in both environments.
+`context.services()` returns the services accessor, not the Interaction Service. Resolve
+the service explicitly and check availability before prompting because CLI-invoked
+commands may have no attached UI:
+
+```ts
+const interaction = await context.services().getInteractionService();
+if (await interaction.isAvailable()) {
+    // Prompt through the interaction service.
+}
+```
+
+Prefer command arguments when input must work in both environments.
 
 `withTerminal()` is experimental and uses default dimensions in TypeScript:
 

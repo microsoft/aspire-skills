@@ -70,7 +70,7 @@ package use the same 13.5 package family. Do not mix 13.4 and 13.5 packages.
 
 | Area | Current rule |
 |------|--------------|
-| Hosting callback services | Use `context.Services` in C# or `await context.services()` in TypeScript. `ServiceProvider` is obsolete. |
+| Hosting callback services | Use `context.Services` in C#. In TypeScript, get the Interaction Service with `await context.services().getInteractionService()`. `ServiceProvider` is obsolete. |
 | External connection string | Use `AddConnectionString` / `addConnectionString`; do not generate obsolete `PublishAsConnectionString`. |
 | Command input | Prefer `CommandOptions.Arguments`; values become dashboard fields and CLI `--<name>` options. |
 | Direct interaction prompt | Check `IInteractionService.IsAvailable` (or TS equivalent) and provide a noninteractive path before prompting. |

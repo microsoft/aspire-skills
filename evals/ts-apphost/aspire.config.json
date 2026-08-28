@@ -4,7 +4,7 @@
     "language": "typescript/nodejs"
   },
   "packages": {
-    "Aspire.Hosting.JavaScript": "13.5.0",
-    "Aspire.Hosting.Redis": "13.5.0"
+    "Aspire.Hosting.JavaScript": "13.5.3",
+    "Aspire.Hosting.Redis": "13.5.3"
   }
 }

@@ -55,9 +55,9 @@ Top of file uses `#:sdk` and `#:package` directives — no `.csproj` required:
 ```csharp
 #:sdk Aspire.AppHost.Sdk
 #:property AspireUseCliBundle=true
-#:package Aspire.Hosting.PostgreSQL@13.5.0
-#:package Aspire.Hosting.Redis@13.5.0
-#:package Aspire.Hosting.JavaScript@13.5.0
+#:package Aspire.Hosting.PostgreSQL@13.5.3
+#:package Aspire.Hosting.Redis@13.5.3
+#:package Aspire.Hosting.JavaScript@13.5.3
 
 var builder = DistributedApplication.CreateBuilder(args);
 

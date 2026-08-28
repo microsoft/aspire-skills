@@ -105,8 +105,9 @@ If the AppHost is current `apphost.mts` (or legacy `apphost.ts`), the
 - Use `aspire add <package>` to regenerate the available APIs when adding integrations.
 - Use `aspire restore` if `.aspire/modules/` disappeared after a pull, clean, or branch switch.
 - Inspect `.aspire/modules/aspire.mts` after regeneration or restore to see the newly available APIs.
-- For legacy `apphost.ts`, offer `aspire update --migrate` after approval instead of
-  hand-renaming the entry point or generated imports.
+- For legacy `apphost.ts`, explain that migration updates Aspire packages, config,
+  tsconfig, generated imports, and the entry point. After approval for the full operation,
+  use `aspire update --migrate --yes --non-interactive` instead of hand-renaming files.
 
 ## Scenario: I Need Secrets, Deployment, Or A Playwright Handoff
 

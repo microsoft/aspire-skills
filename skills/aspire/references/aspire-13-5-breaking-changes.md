@@ -11,8 +11,10 @@ for Aspire 13.5. Sources:
 ## Version target
 
 - The latest Aspire CLI in this line is **13.5.3**.
-- Stable Aspire SDK and `Aspire.Hosting.*` package references use the matching **13.5.0**
-  package family.
+- Stable Aspire SDK and hosting package references use the serviced **13.5.3** release.
+- Preview-only integrations use matching preview packages instead of nonexistent stable
+  versions. For example, Kubernetes and Radius publish `13.5.3-preview.*`; let
+  `aspire add` or the current integration docs select the exact preview build.
 - Do not mix 13.4 and 13.5 SDK or hosting integration packages. Mixed graphs can fail at
   startup with `MissingMethodException` or `TypeLoadException`, especially for Kubernetes,
   Azure Functions, Go, JavaScript, and Python integrations.
@@ -51,8 +53,10 @@ with `ASPIRE_PROXYLESS_ENDPOINT_PORT_RANGE=start-end`.
 
 - Current entry points are `apphost.mts`. `apphost.ts` is a legacy entry point that should
   still be detected.
-- Use `aspire update --migrate` to migrate a legacy `apphost.ts` entry point. Approved
-  agent execution also requires `--yes --non-interactive`.
+- `aspire update --migrate` updates the project's Aspire packages first, then migrates
+  legacy `apphost.ts`, configuration, TypeScript configuration, and generated imports.
+  Run `aspire update --migrate --yes --non-interactive` only after the user approves both
+  the package update and migration.
 - TypeScript AppHosts are generally available. Remove stale `ASPIREATS001` suppressions.
 - Continue importing generated APIs from `./.aspire/modules/aspire.mjs`; never edit
   `.aspire/modules/` directly.
@@ -66,7 +70,9 @@ with `ASPIRE_PROXYLESS_ENDPOINT_PORT_RANGE=start-end`.
   The dashboard renders input controls and the CLI exposes named `--<name>` options.
 - Prefer command arguments when input must work from both dashboard and CLI. Direct
   Interaction Service prompts require an attached UI; check `IInteractionService.IsAvailable`
-  (or the TypeScript equivalent) and provide a noninteractive path before prompting.
+  in C#. In TypeScript, call
+  `const interaction = await context.services().getInteractionService()`, then check
+  `await interaction.isAvailable()`. Provide a noninteractive path before prompting.
 - Interaction inputs and file uploads are stable. C# reads uploaded `InteractionFile`
   content; TypeScript receives an on-disk `filePath`. Progress dialogs remain experimental
   under `ASPIREINTERACTION001`.
