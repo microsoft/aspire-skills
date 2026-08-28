@@ -190,6 +190,30 @@ function edgeIdentitiesMatch(left, right) {
     return Boolean(left.sourceId && right.sourceId && left.sourceId === right.sourceId);
 }
 
+function rememberRemovedGeneratedEdge(state, edge) {
+    if (edge.userAdded) {
+        return;
+    }
+    const removedEdge = {
+        sourceId: edge.sourceId,
+        sourceKey: edge.sourceKey,
+    };
+    if (
+        !state.removedGeneratedEdges.some((candidate) =>
+            edgeIdentitiesMatch(candidate, removedEdge),
+        )
+    ) {
+        state.removedGeneratedEdges.push(removedEdge);
+    }
+}
+
+function edgeReferencesResource(edge, resource) {
+    return (
+        (edge.fromId ? edge.fromId === resource.id : edge.from === resource.name) ||
+        (edge.toId ? edge.toId === resource.id : edge.to === resource.name)
+    );
+}
+
 function normalizeProposalEdge(edge, index, userAdded = false) {
     const normalized = {
         id: String(edge?.id ?? `edge-${index + 1}`),
@@ -1055,22 +1079,24 @@ async function handlePost(entry, path, body, response) {
         const linkedService = snapshot.services.find(
             (candidate) => candidate.id === proposalResource.serviceId,
         );
-        const nextName =
-            typeof body.name === "string" ? body.name.trim() : proposalResource.name;
-        const nameIssues = resourceNameIssues(nextName);
-        const duplicate = resourceNameConflict(
-            snapshot.proposal.resources,
-            nextName,
-            proposalResource.id,
-        );
-        if (duplicate) {
-            nameIssues.push(`The name "${nextName}" is already used by another resource.`);
-        }
-        if (nameIssues.length) {
-            return sendJson(response, duplicate ? 409 : 400, {
-                ok: false,
-                error: `Resource "${nextName || proposalResource.id}": ${nameIssues.join(" ")}`,
-            });
+        const hasNameUpdate = typeof body.name === "string";
+        const nextName = hasNameUpdate ? body.name.trim() : proposalResource.name;
+        if (hasNameUpdate) {
+            const nameIssues = resourceNameIssues(nextName);
+            const duplicate = resourceNameConflict(
+                snapshot.proposal.resources,
+                nextName,
+                proposalResource.id,
+            );
+            if (duplicate) {
+                nameIssues.push(`The name "${nextName}" is already used by another resource.`);
+            }
+            if (nameIssues.length) {
+                return sendJson(response, duplicate ? 409 : 400, {
+                    ok: false,
+                    error: `Resource "${nextName || proposalResource.id}": ${nameIssues.join(" ")}`,
+                });
+            }
         }
         const nextType =
             typeof body.type === "string"
@@ -1263,17 +1289,17 @@ async function handlePost(entry, path, body, response) {
                     state.removedGeneratedResources.push(removedResource);
                 }
             }
+            const removedEdges = state.proposal.edges.filter((edge) =>
+                edgeReferencesResource(edge, proposalResource),
+            );
+            for (const edge of removedEdges) {
+                rememberRemovedGeneratedEdge(state, edge);
+            }
             state.proposal.resources = state.proposal.resources.filter(
                 (candidate) => candidate.id !== proposalResource.id,
             );
             state.proposal.edges = state.proposal.edges.filter(
-                (edge) =>
-                    (edge.fromId
-                        ? edge.fromId !== proposalResource.id
-                        : edge.from !== proposalResource.name) &&
-                    (edge.toId
-                        ? edge.toId !== proposalResource.id
-                        : edge.to !== proposalResource.name),
+                (edge) => !edgeReferencesResource(edge, proposalResource),
             );
             state.confirmed = false;
             state.proposalEdited = true;
@@ -1336,19 +1362,7 @@ async function handlePost(entry, path, body, response) {
 
     if (path === "/api/proposal/edge/delete" && proposalEdge) {
         updateSnapshot(domainId, (state) => {
-            if (!proposalEdge.userAdded) {
-                const removedEdge = {
-                    sourceId: proposalEdge.sourceId,
-                    sourceKey: proposalEdge.sourceKey,
-                };
-                if (
-                    !state.removedGeneratedEdges.some((candidate) =>
-                        edgeIdentitiesMatch(candidate, removedEdge),
-                    )
-                ) {
-                    state.removedGeneratedEdges.push(removedEdge);
-                }
-            }
+            rememberRemovedGeneratedEdge(state, proposalEdge);
             state.proposal.edges = state.proposal.edges.filter((candidate) => candidate.id !== proposalEdge.id);
             state.confirmed = false;
             state.proposalEdited = true;
