@@ -4,6 +4,7 @@
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Aspireify</title>
+        <link rel="icon" href="data:," />
         <link rel="stylesheet" href="/styles.css" />
     </head>
     <body class="is-loading">
@@ -12,7 +13,13 @@
                 <div class="tb-title">
                     <div>
                         <div class="tb-heading">Aspireify</div>
-                        <div class="tb-sub muted" id="status-line">
+                        <div
+                            class="tb-sub muted"
+                            id="status-line"
+                            role="status"
+                            aria-live="polite"
+                            aria-atomic="true"
+                        >
                             Receiving AppHost proposal snapshot…
                         </div>
                     </div>
@@ -136,21 +143,33 @@
         </footer>
 
         <dialog id="add-resource-dialog" aria-labelledby="add-resource-dialog-title">
-            <form method="dialog" id="add-resource-form">
+            <form method="dialog" id="add-resource-form" novalidate>
                 <div class="dialog-head">
                     <div>
                         <h2 id="add-resource-dialog-title">Add resource</h2>
                         <p class="muted" id="add-resource-dialog-detail"></p>
                     </div>
+                    <button
+                        class="btn btn-quiet btn-icon dialog-close"
+                        type="button"
+                        data-close-dialog
+                        aria-label="Close"
+                    ></button>
                 </div>
-                <input id="add-resource-group" type="hidden" />
+                <input id="add-resource-group" name="resourceGroup" type="hidden" />
                 <label class="field">
                     <span>Resource name</span>
-                    <input id="add-resource-name" required spellcheck="false" />
+                    <input
+                        id="add-resource-name"
+                        name="resourceName"
+                        required
+                        spellcheck="false"
+                        aria-describedby="add-resource-dialog-error"
+                    />
                 </label>
                 <label class="field">
                     <span>Resource type</span>
-                    <select id="add-resource-type" required>
+                    <select id="add-resource-type" name="resourceType" required>
                         <option value=".NET project" data-group="applications">.NET project</option>
                         <option value="Next.js" data-group="applications">Next.js</option>
                         <option value="Vite" data-group="applications">Vite</option>
@@ -171,10 +190,14 @@
                 </label>
                 <label class="field">
                     <span>Details <small class="muted">(optional)</small></span>
-                    <input id="add-resource-detail" />
+                    <input id="add-resource-detail" name="resourceDetail" />
                 </label>
                 <label class="check-field" id="add-defaults-field" hidden>
-                    <input id="add-resource-defaults" type="checkbox" />
+                    <input
+                        id="add-resource-defaults"
+                        name="serviceDefaults"
+                        type="checkbox"
+                    />
                     <span>
                         <strong>Service Defaults</strong>
                         <small class="muted">Telemetry, health checks, discovery, and HTTP resilience</small>
@@ -221,15 +244,21 @@
                         <h2 id="connection-dialog-title">Add connection</h2>
                         <p class="muted">Describe how two AppHost resources relate.</p>
                     </div>
+                    <button
+                        class="btn btn-quiet btn-icon dialog-close"
+                        type="button"
+                        data-close-dialog
+                        aria-label="Close"
+                    ></button>
                 </div>
-                <input id="connection-id" type="hidden" />
+                <input id="connection-id" name="connectionId" type="hidden" />
                 <label class="field">
                     <span>From</span>
-                    <select id="connection-from"></select>
+                    <select id="connection-from" name="connectionFrom"></select>
                 </label>
                 <label class="field">
                     <span>Relationship</span>
-                    <select id="connection-kind">
+                    <select id="connection-kind" name="connectionKind">
                         <option value="reference">references</option>
                         <option value="waitFor">waits for</option>
                         <option value="parent">child of</option>
@@ -237,7 +266,7 @@
                 </label>
                 <label class="field">
                     <span>To</span>
-                    <select id="connection-to"></select>
+                    <select id="connection-to" name="connectionTo"></select>
                 </label>
                 <p
                     class="dialog-error"
@@ -251,6 +280,41 @@
                     <span class="dialog-spacer"></span>
                     <button class="btn btn-outline" type="button" data-close-dialog>Cancel</button>
                     <button class="btn btn-primary" id="save-connection" value="default">Save</button>
+                </div>
+            </form>
+        </dialog>
+
+        <dialog
+            id="remove-dialog"
+            aria-labelledby="remove-dialog-title"
+            aria-describedby="remove-dialog-detail remove-dialog-error"
+        >
+            <form method="dialog" id="remove-form">
+                <div class="dialog-head">
+                    <div>
+                        <h2 id="remove-dialog-title">Remove item</h2>
+                        <p class="muted" id="remove-dialog-detail"></p>
+                    </div>
+                    <button
+                        class="btn btn-quiet btn-icon dialog-close"
+                        type="button"
+                        data-close-dialog
+                        aria-label="Close"
+                    ></button>
+                </div>
+                <p
+                    class="dialog-error"
+                    id="remove-dialog-error"
+                    role="alert"
+                    tabindex="-1"
+                    hidden
+                ></p>
+                <div class="dialog-actions">
+                    <span class="dialog-spacer"></span>
+                    <button class="btn btn-outline" type="button" data-close-dialog>Cancel</button>
+                    <button class="btn btn-danger-primary" id="confirm-remove" value="default">
+                        Remove
+                    </button>
                 </div>
             </form>
         </dialog>

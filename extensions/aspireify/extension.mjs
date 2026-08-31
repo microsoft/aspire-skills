@@ -12,6 +12,7 @@ import {
     classifyServiceKind,
     exactType,
     freezeSnapshot,
+    isCompatibleAspireResourceKind,
     isCompatibleAspireResourceType,
     isDotNetType,
     presentationMode,
@@ -1111,6 +1112,17 @@ async function handlePost(entry, path, body, response) {
             return sendJson(response, 400, {
                 ok: false,
                 error: `The detected ${linkedService.type} service cannot be hosted as ${nextType}. Add a separate resource instead.`,
+            });
+        }
+        if (
+            !linkedService &&
+            typeof body.type === "string" &&
+            nextType !== proposalResource.type &&
+            !isCompatibleAspireResourceKind(proposalResource.type, nextType)
+        ) {
+            return sendJson(response, 400, {
+                ok: false,
+                error: `The ${proposalResource.type} resource cannot be changed to ${nextType}. Add a separate resource instead.`,
             });
         }
         const previousType = proposalResource.type;

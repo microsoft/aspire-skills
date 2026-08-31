@@ -22,6 +22,21 @@ export function isDotNetType(value) {
     return classifyServiceKind(value) === "dotnet";
 }
 
+export function classifyAspireResourceKind(value) {
+    const type = String(value ?? "").trim().toLowerCase();
+    if (/next|vite|frontend|web/.test(type)) return "frontend";
+    if (/\.net project|node|python|executable/.test(type)) return "project";
+    if (/postgres|sql|database|mongo|cosmos/.test(type)) return "database";
+    if (/redis|cache/.test(type)) return "cache";
+    if (/rabbit|broker|service bus|messag/.test(type)) return "broker";
+    if (/container|docker/.test(type)) return "container";
+    return "external";
+}
+
+export function isCompatibleAspireResourceKind(currentType, candidateType) {
+    return classifyAspireResourceKind(currentType) === classifyAspireResourceKind(candidateType);
+}
+
 export function isCompatibleAspireResourceType(serviceType, resourceType) {
     const type = String(resourceType ?? "").trim().toLowerCase();
     if (!type) {

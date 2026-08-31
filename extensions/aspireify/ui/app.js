@@ -1,6 +1,8 @@
 "use strict";
 
 import {
+    classifyAspireResourceKind,
+    isCompatibleAspireResourceKind,
     isCompatibleAspireResourceType,
     isDotNetType,
 } from "./resource-types.js";
@@ -8,9 +10,9 @@ import {
 const apiToken = new URLSearchParams(window.location.search).get("token") || "";
 
 const EDGE_LABELS = {
-    reference: { outgoing: "references", incoming: "referenced by" },
-    waitFor: { outgoing: "waits for", incoming: "unblocks" },
-    parent: { outgoing: "child of", incoming: "parent of" },
+    reference: { outgoing: "references", incoming: "referenced by", tone: "reference" },
+    waitFor: { outgoing: "waits for", incoming: "unblocks", tone: "wait" },
+    parent: { outgoing: "child of", incoming: "parent of", tone: "parent" },
 };
 
 const RESOURCE_GROUPS = [
@@ -92,12 +94,20 @@ const elements = {
     connectionKind: document.getElementById("connection-kind"),
     connectionTo: document.getElementById("connection-to"),
     deleteConnection: document.getElementById("delete-connection"),
+    removeDialog: document.getElementById("remove-dialog"),
+    removeForm: document.getElementById("remove-form"),
+    removeDialogTitle: document.getElementById("remove-dialog-title"),
+    removeDialogDetail: document.getElementById("remove-dialog-detail"),
+    removeDialogError: document.getElementById("remove-dialog-error"),
+    confirmRemove: document.getElementById("confirm-remove"),
 };
 
 let snapshot;
 let firstRender = true;
 let pendingMutations = 0;
 let mutationError = "";
+let connectionRowSequence = 0;
+let pendingRemoval;
 const detailTextareaWidths = new WeakMap();
 const detailResizeObserver =
     typeof ResizeObserver === "function"
@@ -138,7 +148,11 @@ document.addEventListener("DOMContentLoaded", () => {
     );
     elements.connectionForm.addEventListener("submit", saveConnection);
     elements.connectionFrom.addEventListener("change", () => syncConnectionTargets());
-    elements.deleteConnection.addEventListener("click", () => void deleteConnection());
+    elements.deleteConnection.addEventListener("click", requestDeleteConnection);
+    elements.removeForm.addEventListener("submit", executeRemoval);
+    elements.removeDialog.addEventListener("close", () => {
+        pendingRemoval = undefined;
+    });
     for (const button of document.querySelectorAll("[data-close-dialog]")) {
         button.addEventListener("click", () => button.closest("dialog")?.close());
     }
@@ -154,6 +168,11 @@ function updateAppHostValue() {
             "csharp-file": "File-based C#",
             typescript: "TypeScript",
         }[snapshot?.apphostStyle] ?? "Unknown";
+}
+
+function setStatusLine(message) {
+    elements.statusLine.textContent = message;
+    elements.statusLine.title = message;
 }
 
 async function loadSnapshot() {
@@ -369,6 +388,20 @@ function renderResourcePlan() {
     elements.resourceGroups.hidden = compact;
     elements.compactAddResource.hidden = !compact || snapshot.confirmed;
     if (compact) {
+        if (resources.length === 0) {
+            const empty = createElement("div", {
+                className: "empty-proposal",
+                attrs: { role: "status" },
+            });
+            empty.append(
+                createElement("strong", { text: "No resources are included" }),
+                createElement("span", {
+                    className: "muted",
+                    text: "Add a resource to make this proposal confirmable.",
+                }),
+            );
+            elements.compactResources.append(empty);
+        }
         for (const resource of resources) {
             elements.compactResources.append(
                 renderCompactResource(resource, edges, resourceIssues[resource.id] ?? []),
@@ -388,6 +421,7 @@ function renderResourcePlan() {
             }
         }
         const titleId = `resource-group-${definition.id}-title`;
+        const descriptionId = `resource-group-${definition.id}-description`;
         const group = createElement("section", {
             className: `resource-group resource-group-${definition.id}`,
             attrs: { "aria-labelledby": titleId },
@@ -405,29 +439,31 @@ function renderResourcePlan() {
                 type: "button",
                 "aria-expanded": String(!body.hidden),
                 "aria-controls": bodyId,
+                "aria-describedby": descriptionId,
             },
         });
-        const toggleCopy = createElement("span", { className: "resource-group-toggle-copy" });
-        toggleCopy.append(
-            createElement("span", {
-                className: "resource-group-title",
-                text: definition.title,
-                attrs: { id: titleId },
-            }),
-            createElement("span", {
-                className: "resource-group-description muted",
-                text: definition.description,
-            }),
-        );
         toggle.append(
             createElement("span", {
                 className: "resource-group-chevron",
                 attrs: { "aria-hidden": "true" },
             }),
-            toggleCopy,
+            createElement("span", {
+                className: "resource-group-title-text",
+                text: definition.title,
+            }),
         );
+        const title = createElement("h2", {
+            className: "resource-group-title",
+            attrs: { id: titleId },
+        });
+        title.append(toggle);
+        const description = createElement("p", {
+            className: "resource-group-description muted",
+            text: definition.description,
+            attrs: { id: descriptionId },
+        });
         const headingCopy = createElement("div", { className: "resource-group-copy" });
-        headingCopy.append(toggle);
+        headingCopy.append(title, description);
         toggle.addEventListener("click", () => {
             body.hidden = !body.hidden;
             toggle.setAttribute("aria-expanded", String(!body.hidden));
@@ -483,10 +519,14 @@ function renderResourcePlan() {
 
 function renderCompactResource(resource, edges, issues = []) {
     const service = serviceForResource(resource);
-    const item = createElement("article", { className: "compact-resource review-item" });
+    const item = createElement("article", {
+        className: `compact-resource review-item resource-${resourceKind(resource)}`,
+    });
     const header = createElement("div", { className: "compact-resource-header" });
     const identity = createElement("div", { className: "compact-resource-identity" });
-    identity.append(createElement("h3", { text: `${resource.name} (${resource.type})` }));
+    const title = createElement("h2");
+    title.append(createResourceTitleLine(resource));
+    identity.append(title);
     const mapping = renderSourceMapping(resource, service);
     if (mapping) {
         identity.append(mapping);
@@ -513,9 +553,11 @@ function createRemoveResourceButton(resource) {
     });
     remove.hidden = snapshot.confirmed;
     remove.addEventListener("click", () => {
-        if (window.confirm(`Remove ${resource.name} from this AppHost proposal?`)) {
-            void deleteResourceById(resource.id, remove);
-        }
+        openRemoveDialog({
+            title: "Remove resource",
+            detail: `Remove ${resource.name} from this AppHost proposal? Its connections will also be removed.`,
+            action: (control) => deleteResourceById(resource.id, control),
+        });
     });
     return remove;
 }
@@ -529,9 +571,24 @@ function renderSourceMapping(resource, service) {
         createElement("span", { className: "resource-mapping-value", text: service.name }),
         createElement("span", { className: "mapping-arrow", text: "→" }),
         createElement("span", { className: "resource-mapping-value", text: resource.name }),
-        createElement("span", { text: `(${resource.type})` }),
     );
     return mapping;
+}
+
+function createResourceTitleLine(resource) {
+    const line = createElement("span", {
+        className: "resource-title-line",
+        attrs: { "aria-label": `${resource.name}, ${resource.type}` },
+    });
+    line.append(
+        createElement("span", { className: "resource-title-name", text: resource.name }),
+        createElement("span", {
+            className: "resource-type-badge",
+            text: resource.type,
+            title: `Aspire resource type: ${resource.type}`,
+        }),
+    );
+    return line;
 }
 
 function renderResourceValidation(issues) {
@@ -576,9 +633,12 @@ function renderResourceFacts(resource, service) {
 }
 
 function appendEditableTextFact(list, label, resource, field, value, options = {}) {
+    const controlId = resourceControlId(resource, field);
     const input = createElement("input", {
         className: "inline-resource-input",
         attrs: {
+            id: controlId,
+            name: controlId,
             value,
             type: "text",
             "aria-label": `${label} for ${resource.name}`,
@@ -604,15 +664,16 @@ function appendEditableTextFact(list, label, resource, field, value, options = {
         }
         void saveInlineResourceField(resource, field, nextValue, input);
     });
-    appendControlFact(list, label, input);
+    appendControlFact(list, label, input, "", controlId);
 }
 
 function appendEditableDetailFact(list, resource) {
-    const detailId = `proposal-detail-${String(resource.id).replace(/[^A-Za-z0-9_-]/g, "-")}`;
+    const detailId = resourceControlId(resource, "detail");
     const textarea = createElement("textarea", {
         className: "inline-resource-input proposal-detail-input",
         attrs: {
             id: detailId,
+            name: detailId,
             rows: "2",
             "aria-label": `Proposal detail for ${resource.name}`,
             spellcheck: "true",
@@ -627,7 +688,7 @@ function appendEditableDetailFact(list, resource) {
         void saveInlineResourceField(resource, "detail", textarea.value.trim(), textarea);
     });
 
-    appendControlFact(list, "Proposal detail", textarea, "is-detail");
+    appendControlFact(list, "Proposal detail", textarea, "is-detail", detailId);
     requestAnimationFrame(() => {
         if (textarea.isConnected) {
             syncDetailTextareaHeight(textarea);
@@ -662,9 +723,14 @@ function unobserveDetailTextareas() {
 }
 
 function appendEditableTypeFact(list, resource) {
+    const controlId = resourceControlId(resource, "type");
     const select = createElement("select", {
         className: "inline-resource-input",
-        attrs: { "aria-label": `Aspire type for ${resource.name}` },
+        attrs: {
+            id: controlId,
+            name: controlId,
+            "aria-label": `Aspire type for ${resource.name}`,
+        },
     });
     const service = serviceForResource(resource);
     const values = [
@@ -674,9 +740,10 @@ function appendEditableTypeFact(list, resource) {
         (value, index, all) =>
             value &&
             all.indexOf(value) === index &&
-            (!service ||
-                value === resource.type ||
-                isCompatibleAspireResourceType(service.type, value)),
+            (value === resource.type ||
+                (service
+                    ? isCompatibleAspireResourceType(service.type, value)
+                    : isCompatibleAspireResourceKind(resource.type, value))),
     );
     for (const value of values) {
         select.append(createElement("option", { text: value, attrs: { value } }));
@@ -694,13 +761,16 @@ function appendEditableTypeFact(list, resource) {
             attrs: { "aria-hidden": "true" },
         }),
     );
-    appendControlFact(list, "Aspire type", wrapper);
+    appendControlFact(list, "Aspire type", wrapper, "", controlId);
 }
 
 function appendEditableDefaultsFact(list, resource) {
+    const controlId = resourceControlId(resource, "service-defaults");
     const control = createElement("label", { className: "inline-defaults-control" });
     const checkbox = createElement("input", {
         attrs: {
+            id: controlId,
+            name: controlId,
             type: "checkbox",
             "aria-label": `Service Defaults for ${resource.name}`,
         },
@@ -723,14 +793,26 @@ function appendEditableDefaultsFact(list, resource) {
     appendControlFact(list, "Service Defaults", control);
 }
 
-function appendControlFact(list, label, control, className = "") {
+function appendControlFact(list, label, control, className = "", controlId = "") {
     const row = createElement("div", {
         className: `resource-fact is-editable${className ? ` ${className}` : ""}`,
     });
+    const term = createElement("dt");
+    term.append(
+        createElement(controlId ? "label" : "span", {
+            text: label,
+            attrs: controlId ? { for: controlId } : {},
+        }),
+    );
     const valueElement = createElement("dd");
     valueElement.append(control);
-    row.append(createElement("dt", { text: label }), valueElement);
+    row.append(term, valueElement);
     list.append(row);
+}
+
+function resourceControlId(resource, field) {
+    const resourceId = String(resource.id).replace(/[^A-Za-z0-9_-]/g, "-");
+    return `resource-${resourceId}-${field}`;
 }
 
 async function saveInlineResourceField(resource, field, value, control) {
@@ -753,7 +835,9 @@ async function saveInlineResourceField(resource, field, value, control) {
 }
 
 function appendFact(list, label, value, code = false) {
-    const row = createElement("div", { className: "resource-fact" });
+    const row = createElement("div", {
+        className: `resource-fact${code ? " is-code" : ""}`,
+    });
     const valueElement = createElement("dd", { title: value || "" });
     valueElement.append(
         createElement(code ? "code" : "span", {
@@ -776,7 +860,7 @@ function renderCompactConnections(resource, edges) {
     const chips = createElement("div", { className: "connection-chips" });
     for (const relationship of relationships) {
         const chip = createElement("button", {
-            className: "connection-chip",
+            className: relationshipClassName(relationship),
             text: relationshipText(relationship),
             attrs: { type: "button" },
         });
@@ -831,7 +915,7 @@ function renderResourceCard(resource, edges, issues = []) {
         },
     });
     const toggleCopy = createElement("span", { className: "resource-card-toggle-copy" });
-    toggleCopy.append(createElement("span", { text: resource.name }));
+    toggleCopy.append(createResourceTitleLine(resource));
     const mapping = renderSourceMapping(resource, service);
     if (mapping) {
         toggleCopy.append(mapping);
@@ -900,7 +984,7 @@ function renderResourceCard(resource, edges, issues = []) {
         const chips = createElement("div", { className: "connection-chips" });
         for (const relationship of relationships) {
             const chip = createElement("button", {
-                className: "connection-chip",
+                className: relationshipClassName(relationship),
                 text: relationshipText(relationship),
                 title: `Edit connection from ${relationship.edge.from} to ${relationship.edge.to}`,
                 attrs: {
@@ -954,6 +1038,11 @@ function relationshipText(relationship) {
     return `${labels[relationship.direction]} ${relationship.peer}`;
 }
 
+function relationshipClassName(relationship) {
+    const tone = EDGE_LABELS[relationship.edge.kind]?.tone ?? "reference";
+    return `connection-chip connection-${tone}`;
+}
+
 function renderProposalIdentity() {
     const generatedAt = new Date(snapshot.proposal.generatedAt);
     const generatedLabel = Number.isNaN(generatedAt.getTime())
@@ -987,21 +1076,17 @@ function renderStatus() {
         (edge) => includedNames.has(edge.from) && includedNames.has(edge.to),
     ).length;
     if (snapshot.proposalError) {
-        elements.statusLine.textContent = snapshot.proposalError;
+        setStatusLine(snapshot.proposalError);
     } else if (snapshot.confirmed) {
-        elements.statusLine.textContent = `Proposal generation ${
+        setStatusLine(`Generation ${
             snapshot.confirmedGeneration ?? snapshot.proposalGeneration
-        } confirmed · ${shortHash(snapshot.proposalHash)} · Implementation continues in chat`;
+        } confirmed · Implementation continues in chat`);
     } else {
-        const generatedAt = new Date(snapshot.proposal.generatedAt);
-        const time = Number.isNaN(generatedAt.getTime())
-            ? "time not supplied"
-            : generatedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-        elements.statusLine.textContent = `AppHost proposal generated at ${time} — awaiting confirmation · ${
+        setStatusLine(`${
             includedResources.length
         } resource${includedResources.length === 1 ? "" : "s"} · ${activeEdges} connection${
             activeEdges === 1 ? "" : "s"
-        }`;
+        } · Awaiting confirmation`);
     }
 }
 
@@ -1098,16 +1183,37 @@ function validateResourceNameField(input, resourceId, errorElement, report = fal
     errorElement.textContent = message;
     errorElement.hidden = issues.length === 0;
     if (report && issues.length > 0) {
-        input.reportValidity();
+        input.focus();
     }
     return issues.length === 0;
 }
 
 async function deleteResourceById(id, control, onDeleted) {
-    await runBusy(control, async () => {
+    return await runBusy(control, async () => {
         await post("/api/proposal/resource/delete", { id });
         onDeleted?.();
     });
+}
+
+function openRemoveDialog({ title, detail, action }) {
+    clearDialogError(elements.removeDialogError);
+    elements.removeDialogTitle.textContent = title;
+    elements.removeDialogDetail.textContent = detail;
+    pendingRemoval = action;
+    elements.removeDialog.showModal();
+    elements.confirmRemove.focus();
+}
+
+async function executeRemoval(event) {
+    event.preventDefault();
+    if (!pendingRemoval) {
+        return;
+    }
+    const removed = await pendingRemoval(elements.confirmRemove);
+    if (removed) {
+        pendingRemoval = undefined;
+        elements.removeDialog.close();
+    }
 }
 
 function openAddResourceDialog(groupId) {
@@ -1127,6 +1233,8 @@ function openAddResourceDialog(groupId) {
     }
     elements.addResourceForm.reset();
     clearDialogError(elements.addResourceDialogError);
+    elements.addResourceName.setCustomValidity("");
+    elements.addResourceName.setAttribute("aria-invalid", "false");
     elements.addResourceGroup.value = groupId;
     elements.addResourceDialogTitle.textContent = definition.addTitle;
     elements.addResourceDialogDetail.textContent = definition.addDescription;
@@ -1197,9 +1305,12 @@ function addResourceConnectionRow() {
         return;
     }
     elements.addResourceConnections.querySelector(".dialog-connection-empty")?.remove();
+    const rowId = `add-resource-connection-${++connectionRowSequence}`;
     const row = createElement("div", { className: "add-connection-row" });
     const direction = createElement("select", {
         attrs: {
+            id: `${rowId}-direction`,
+            name: `${rowId}-direction`,
             "aria-label": "Connection direction",
             "data-add-connection-direction": "",
         },
@@ -1216,6 +1327,8 @@ function addResourceConnectionRow() {
     );
     const kind = createElement("select", {
         attrs: {
+            id: `${rowId}-kind`,
+            name: `${rowId}-kind`,
             "aria-label": "Connection relationship",
             "data-add-connection-kind": "",
         },
@@ -1227,6 +1340,8 @@ function addResourceConnectionRow() {
     );
     const target = createElement("select", {
         attrs: {
+            id: `${rowId}-target`,
+            name: `${rowId}-target`,
             "aria-label": "Connected resource",
             "data-add-connection-target": "",
         },
@@ -1312,19 +1427,25 @@ function syncConnectionTargets(preferredTarget = elements.connectionTo.value) {
     elements.connectionTo.setCustomValidity("");
 }
 
-async function deleteConnection() {
+function requestDeleteConnection() {
     const edge = snapshot.proposal.edges.find(
         (candidate) => candidate.id === elements.connectionId.value,
     );
-    if (
-        !edge ||
-        !window.confirm(`Remove the connection from ${edge.from} to ${edge.to}?`)
-    ) {
+    if (!edge) {
         return;
     }
-    await runBusy(elements.deleteConnection, async () => {
-        await post("/api/proposal/edge/delete", { id: edge.id });
-        elements.connectionDialog.close();
+    openRemoveDialog({
+        title: "Remove connection",
+        detail: `Remove the connection from ${edge.from} to ${edge.to}?`,
+        action: async (control) => {
+            const removed = await runBusy(control, async () => {
+                await post("/api/proposal/edge/delete", { id: edge.id });
+            });
+            if (removed) {
+                elements.connectionDialog.close();
+            }
+            return removed;
+        },
     });
 }
 
@@ -1342,14 +1463,7 @@ function serviceForResource(resource) {
 }
 
 function resourceKind(resource) {
-    const type = String(resource.type ?? "").toLowerCase();
-    if (/next|vite|frontend|web/.test(type)) return "frontend";
-    if (/\.net project|node|python|executable/.test(type)) return "project";
-    if (/postgres|sql|database|mongo|cosmos/.test(type)) return "database";
-    if (/redis|cache/.test(type)) return "cache";
-    if (/rabbit|broker|service bus|messag/.test(type)) return "broker";
-    if (/container|docker/.test(type)) return "container";
-    return resource.serviceId ? "project" : "external";
+    return classifyAspireResourceKind(resource.type);
 }
 
 function resourceGroupDefinition(resource) {
@@ -1410,7 +1524,7 @@ function showProposalPending() {
     elements.actionFooter.hidden = true;
     elements.error.hidden = true;
     elements.apphostControl.hidden = !snapshot?.apphostStyle;
-    elements.statusLine.textContent = "Receiving AppHost proposal snapshot…";
+    setStatusLine("Receiving AppHost proposal snapshot…");
 }
 
 function showError(error) {
@@ -1420,19 +1534,20 @@ function showError(error) {
     elements.actionFooter.hidden = true;
     elements.error.hidden = false;
     elements.apphostControl.hidden = true;
-    elements.statusLine.textContent = "Proposal unavailable";
+    setStatusLine("Proposal unavailable");
     elements.retry.textContent = "Try again";
     elements.errorMessage.textContent = error?.message ?? String(error);
 }
 
 function showProposalError(error) {
     showError(new Error(String(error ?? "Proposal generation failed.")));
-    elements.statusLine.textContent = "Proposal generation failed";
+    setStatusLine("Proposal generation failed");
     elements.retry.textContent = "Retry proposal";
 }
 
 function showInlineError(error) {
     const dialogError = [
+        [elements.removeDialog, elements.removeDialogError],
         [elements.addResourceDialog, elements.addResourceDialogError],
         [elements.connectionDialog, elements.connectionDialogError],
     ].find(([dialog]) => dialog.open)?.[1];

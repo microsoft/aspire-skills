@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 export {
+    classifyAspireResourceKind,
     classifyServiceKind,
+    isCompatibleAspireResourceKind,
     isCompatibleAspireResourceType,
     isDotNetType,
 } from "./ui/resource-types.js";
