@@ -6,12 +6,12 @@ description: >-
   AppHosts, wires ServiceDefaults + OTel, validates with `aspire start`, then stops.
   USE FOR: wire/scaffold AppHost, add Postgres/Redis/Rabbit/Mongo, connect frontend
   to API, after `aspire init`, AddNextJsApp, AddViteApp, WithBrowserLogs, WithTerminal,
-  Interaction Service, command arguments, apphost.cs, apphost.mts, legacy apphost.ts
-  migration, unified withEnvironment, .aspire/modules refusal, config/secrets,
+  Interaction Service, command arguments, apphost.cs, apphost.mts, unified
+  withEnvironment, .aspire/modules refusal, config/secrets,
   TS dependency restore, pnpm/yarn/bun, or Yarn Classic.
   DO NOT USE FOR: skeleton drop (aspire-init), lifecycle-only start/stop/wait/restart
-  (aspire-orchestration), publish/deploy/destroy (aspire-deployment), logs/traces
-  (aspire-monitoring).
+  or `aspire update --migrate` (aspire-orchestration), publish/deploy/destroy
+  (aspire-deployment), logs/traces (aspire-monitoring).
   INVOKES: aspire CLI, AppHost source edits, ServiceDefaults wiring.
   FOR SINGLE OPERATIONS: Run `aspire add PACKAGE` directly for a one-off integration.
 license: MIT
@@ -147,6 +147,10 @@ the app → `aspire-orchestration`. If the user wants to **deploy** → `aspire-
 
 See [references/csharp-authoring.md](references/csharp-authoring.md) and
 [references/typescript-authoring.md](references/typescript-authoring.md).
+
+`aspire-orchestration` owns the CLI-driven migration from legacy `apphost.ts`. After it
+updates packages and migration artifacts, return to aspireify only when the user still
+needs AppHost source wiring or authoring.
 
 ### TypeScript AppHost package managers
 

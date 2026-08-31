@@ -1,10 +1,10 @@
 # TypeScript AppHost Authoring
 
 Patterns for editing current `apphost.mts`. **Never edit `.aspire/modules/`** — that
-directory is generated and any changes will be clobbered. Migrating legacy `apphost.ts`
-also updates Aspire packages, configuration, TypeScript configuration, and generated
-imports. Run `aspire update --migrate --yes --non-interactive` only after approval for
-both the package update and migration; do not hand-rename it.
+directory is generated and any changes will be clobbered. Hand legacy `apphost.ts`
+migration to `aspire-orchestration`; it owns approval and
+`aspire update --migrate --yes --non-interactive`. Return here only if source authoring
+remains after migration.
 
 > Look up unfamiliar API: `aspire docs api search <query> --language typescript`
 > then `aspire docs api get <id>`.

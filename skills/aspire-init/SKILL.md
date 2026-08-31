@@ -145,7 +145,7 @@ copy and warn.
 | `aspire doctor` reports missing .NET 10 | SDK missing | Install .NET 10 SDK before retrying |
 | `aspire init` succeeded but no `aspireify` skill installed | Agent skill directory not detected | Run `aspire agent init` to install `aspireify`, then continue wiring |
 | Skeleton dropped but resources not wired | Expected — `aspire init` does not wire | Hand off to `aspireify` |
-| Existing TypeScript AppHost still uses `apphost.ts` | Legacy entry point and package graph | Explain that migration updates Aspire packages, config, tsconfig, imports, and the entry point; after approval for all changes, run `aspire update --migrate --yes --non-interactive` |
+| Existing TypeScript AppHost still uses `apphost.ts` | Legacy entry point and package graph | Hand off to `aspire-orchestration`, which owns approval and `aspire update --migrate --yes --non-interactive`; return to aspireify only for later source authoring |
 
 ## References
 

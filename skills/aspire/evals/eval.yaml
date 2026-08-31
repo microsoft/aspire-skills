@@ -270,6 +270,47 @@ stimuli:
         name: routes_package_manager_repair
         config:
           scoring: binary
+  - name: router-legacy-ts-migrate-135-001
+    prompt: >
+      Use the `aspire` router skill before answering. My legacy TypeScript AppHost still
+      uses apphost.ts, and I want to migrate it with `aspire update --migrate`. Do not run
+      commands; identify the owning sub-skill and explain what approval is required.
+    tags:
+      priority: p1
+      area:
+        - routing
+        - aspire-13-5
+        - typescript-migration
+    constraints:
+      max_agent_duration: 5m
+      expect_skills:
+        - aspire
+        - aspire-orchestration
+    rubric:
+      - The assistant routes the CLI-driven package and apphost.ts migration to aspire-orchestration, not aspireify.
+      - The assistant explains that package, config, tsconfig, import, and entry-point changes require approval before noninteractive migration.
+    graders:
+      - type: prompt
+        name: routes_migration_to_orchestration
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response assign `aspire update --migrate` to
+            aspire-orchestration and reserve aspireify for source authoring after the
+            migration? Answer based on intent.
+      - type: prompt
+        name: explains_migration_scope
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response explain that migration updates Aspire packages,
+            config, tsconfig, generated imports, and the entry point, and require approval
+            before `--yes --non-interactive` execution? Answer based on intent.
+      - type: skill-invocation
+        name: invokes_orchestration
+        config:
+          required:
+            - aspire-orchestration
   # Positive-routing stimuli assert both activation and outcome. Because this
   # spec tests the top-level router, model knowledge that merely produces an
   # Aspire-flavored answer is insufficient: `constraints.expect_skills` requires

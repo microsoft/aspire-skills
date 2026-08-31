@@ -56,7 +56,8 @@ with `ASPIRE_PROXYLESS_ENDPOINT_PORT_RANGE=start-end`.
 - `aspire update --migrate` updates the project's Aspire packages first, then migrates
   legacy `apphost.ts`, configuration, TypeScript configuration, and generated imports.
   Run `aspire update --migrate --yes --non-interactive` only after the user approves both
-  the package update and migration.
+  the package update and migration. `aspire-orchestration` owns this CLI migration;
+  `aspireify` owns only any AppHost source authoring that remains afterward.
 - TypeScript AppHosts are generally available. Remove stale `ASPIREATS001` suppressions.
 - Continue importing generated APIs from `./.aspire/modules/aspire.mjs`; never edit
   `.aspire/modules/` directly.

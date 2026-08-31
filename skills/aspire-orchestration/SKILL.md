@@ -248,9 +248,11 @@ The same rule applies to any "file in use", "cannot access the file", or
 ## TypeScript AppHost Note
 
 Detection covers current `apphost.mts` and legacy `apphost.ts`, but **all TS AppHost
-authoring is delegated to `aspireify`**. Explain that legacy migration also updates Aspire
-packages, config, tsconfig, and imports. Offer
-`aspire update --migrate --yes --non-interactive` only after approval for the full change.
+authoring is delegated to `aspireify`**. The CLI-driven legacy migration is project
+maintenance owned by this orchestration skill, not authoring. Explain that it also updates
+Aspire packages, config, tsconfig, and imports; offer
+`aspire update --migrate --yes --non-interactive` only after approval for the full change,
+then hand back to aspireify only if source authoring remains.
 Current rules to apply when handing off:
 
 | Rule | Why |

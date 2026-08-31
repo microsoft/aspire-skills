@@ -108,6 +108,7 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 | Create a new Aspire project from a template (`aspire new`) | → [aspire-init](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-init/SKILL.md) (in-plugin) |
 | Add Aspire to an existing repo (`aspire init`, drop skeleton) | → [aspire-init](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-init/SKILL.md) (in-plugin) |
 | Wire AppHost / scaffold resource graph / add integrations after `aspire init` | → [aspireify](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md) (in-plugin) |
+| Migrate legacy TypeScript `apphost.ts` (`aspire update --migrate`) | → [aspire-orchestration](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-orchestration/SKILL.md); hand back to aspireify only if source authoring remains |
 | Deploy, publish, destroy, pipeline steps | → [aspire-deployment](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-deployment/SKILL.md) |
 | Logs, traces, metrics, dashboard, browser logs | → [aspire-monitoring](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/SKILL.md) |
 | Diagnose a running app — "something's wrong", "show me what's happening", investigate errors / health / unexpected behavior | → [aspire-monitoring](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/SKILL.md) — start with `aspire describe` for resource state, then `aspire logs` / `aspire otel logs` / `aspire otel traces`; **investigate before editing code** |
@@ -143,8 +144,8 @@ references, and config/secret migration).
 Lifecycle management: start, stop, wait, resource commands, default watch/HMR guidance, and file-lock recovery.
 Safety guardrails that prevent agent self-harm. Owns `aspire ps` for AppHost discovery,
 `aspire describe` for resource inspection, destructive `aspire stop --force` safeguards,
-legacy TypeScript migration, and CLI upgrades (`aspire update --self`). Does **not** edit
-AppHost code — defers to `aspireify` for wiring.
+CLI-driven legacy TypeScript migration, and CLI upgrades (`aspire update --self`). It
+hands back to `aspireify` only when AppHost source authoring remains after migration.
 
 ### aspire-deployment
 Multi-target deployment and tear-down: `aspire deploy`, `aspire publish`, `aspire destroy`,
