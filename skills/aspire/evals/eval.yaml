@@ -272,9 +272,7 @@ stimuli:
           scoring: binary
   - name: router-legacy-ts-migrate-135-001
     prompt: >
-      Use the `aspire` router skill before answering. My legacy TypeScript AppHost still
-      uses apphost.ts, and I want to migrate it with `aspire update --migrate`. Do not run
-      commands; identify the owning sub-skill and explain what approval is required.
+      My old TypeScript AppHost still uses apphost.ts. How should I migrate it?
     tags:
       priority: p1
       area:
@@ -311,6 +309,8 @@ stimuli:
         config:
           required:
             - aspire-orchestration
+          disallowed:
+            - aspireify
   # Positive-routing stimuli assert both activation and outcome. Because this
   # spec tests the top-level router, model knowledge that merely produces an
   # Aspire-flavored answer is insufficient: `constraints.expect_skills` requires
