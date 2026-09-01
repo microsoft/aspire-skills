@@ -1,3 +1,10 @@
 {
-  "version": "1.0"
+  "appHost": {
+    "path": "apphost.mts",
+    "language": "typescript/nodejs"
+  },
+  "packages": {
+    "Aspire.Hosting.JavaScript": "13.5.3",
+    "Aspire.Hosting.Redis": "13.5.3"
+  }
 }

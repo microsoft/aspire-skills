@@ -5,8 +5,9 @@ description: >-
   WHEN: "start or stop my Aspire app", "aspire_apphost_start",
   "aspire_apphost_stop", "notEditorOwned", "ambiguousSession", "aspire start",
   "aspire stop", "aspire wait", resource restart, file-lock errors (MSB3491 or
-  CS2012), port conflicts, git worktrees, "--isolated", "aspire update --self", "--include-hidden",
-  integration discovery, default watch, or hot reload.
+  CS2012), port conflicts, git worktrees, "--isolated", "aspire update --self",
+  "aspire update --migrate", "aspire describe --include-hidden", "aspire stop --force",
+  "aspire terminal", integration discovery, default watch, or hot reload.
   INVOKES: VS Code lifecycle tools first when exposed; Aspire CLI for readiness,
   inspection, resource operations, isolated worktree starts, and allowed fallbacks.
   DO NOT USE FOR: deploy/publish/destroy (aspire-deployment), logs/traces/metrics
@@ -16,7 +17,7 @@ description: >-
 license: MIT
 metadata:
   author: Microsoft
-  version: "0.0.1"
+  version: "0.0.2"
 ---
 
 # Aspire Orchestration
@@ -30,10 +31,11 @@ metadata:
 |-------------|---------|
 | .NET 10.0 SDK | https://dotnet.microsoft.com/download |
 | Aspire CLI (curl/PowerShell) | `curl -sSL https://aspire.dev/install.sh \| bash` |
+| Aspire CLI (npm) | `npm install -g @microsoft/aspire-cli` |
 | Aspire CLI (NativeAOT global tool, .NET 10) | `dotnet tool install -g Aspire.Cli` |
 
-Either install method works. The `dotnet tool install` path produces a NativeAOT binary
-(instant startup, no JIT warmup) and is the recommended option when .NET 10 is already present.
+Use the installation method owned by the user's environment. npm, Nix, Homebrew, WinGet,
+mise, and the install scripts are supported alongside the NativeAOT .NET global tool.
 
 ## Detection
 
@@ -43,7 +45,7 @@ Activate when ANY signal is present:
 |--------|---------------|------------|
 | C# AppHost | `.csproj` containing `Aspire.AppHost.Sdk` | ✅ Definitive |
 | File-based C# AppHost | `apphost.cs` or `.cs` file with `#:sdk Aspire.AppHost.Sdk` | ✅ Definitive |
-| TypeScript AppHost | `apphost.ts` file in project | ✅ Definitive |
+| TypeScript AppHost | Current `apphost.mts` or legacy `apphost.ts` file in project | ✅ Definitive |
 | Aspire config | `aspire.config.json` in project root | High |
 | Aspire settings | `.aspire/` directory present | High |
 | Generated TS modules | `.aspire/modules/` directory present | High |
@@ -122,7 +124,9 @@ its filesystem path first.
 | Wait for resource ready | `aspire wait <resource>` | `curl` / HTTP polling loops |
 | Code changed in a resource | Prefer resource commands, runtime watch/HMR, dashboard actions, or IDE-managed debugging | `dotnet build` against locked files |
 | Task complete | `aspire_apphost_stop` with the exact selected `appHostPath` when available; follow its result matrix | Use an unapproved CLI fallback |
-| Check resource status | `aspire describe` / `aspire ps` | Manual process inspection |
+| Check running AppHosts | `aspire ps` | Manual process inspection |
+| Check resource status | `aspire describe` | `aspire ps --resources` (removed in 13.5) |
+| Remove persistent resources | Confirm data loss and exact AppHost before `aspire stop --force --apphost <filesystem-path>` | Combining `--force` with `--all`, or using it for an ordinary stop |
 | Working in git worktree | `aspire start --non-interactive --isolated --apphost <filesystem-path>` | `aspire_apphost_start` when it cannot request isolation |
 | Running from AI agent | Load available lifecycle tools first; resolve CLI `--apphost` fallbacks to `<filesystem-path>`; add `--non-interactive` | Assuming interactive terminal |
 | Editing unfamiliar API | `aspire docs search <topic>` then `aspire docs api search <query>` for API reference | Guessing API shape |
@@ -149,15 +153,19 @@ See [safety-guardrails.md](references/safety-guardrails.md) for detailed rules a
 | Start app (human) | `aspire run` (foreground, dashboard) |
 | Stop app | `aspire_apphost_stop` (exact selected `appHostPath`); result-matrix fallback: `aspire stop --non-interactive --apphost <filesystem-path>` |
 | Wait for resource | `aspire wait <resource>` |
-| Check status | `aspire ps` or `aspire describe` |
-| Show hidden resources (proxies, helpers, migrations) | `aspire ps --include-hidden` / `aspire describe --include-hidden` |
+| List running AppHosts | `aspire ps` |
+| Check resource status | `aspire describe` |
+| Show hidden resources (proxies, helpers, migrations) | `aspire describe --include-hidden` |
 | Resource operation | `aspire resource <resource-name> <command>` such as `stop`, `start`, or `rebuild` when exposed |
+| Discover resource commands | `aspire resource <resource-name> --help` |
+| Attach to an experimental resource terminal | Enable `features.terminalCommandsEnabled`, then use `aspire terminal ps` / `aspire terminal attach` |
 | Create new project | `aspire new aspire-starter` |
 | Add Aspire to existing | `aspire init` (then hand off to `aspireify` skill for wiring) |
 | Add integration | `aspire add <package>` |
 | Discover integrations | `aspire integration list --format Json` / `aspire integration search <query> --format Json` |
-| Upgrade the CLI itself | `aspire update --self` |
-| Update project package refs | `aspire update` (modifies project files — get user approval) |
+| Upgrade the CLI itself | `aspire update --self` (managed installs may print the npm/.NET/Nix update command) |
+| Update project package refs | `aspire update --yes --non-interactive` after approval |
+| Migrate legacy TypeScript entry point | Explain that package references, config, tsconfig, imports, and the entry point all change; after approval for the package update and migration, run `aspire update --migrate --yes --non-interactive` |
 | Restore generated files | `aspire restore` |
 | Environment maintenance | `aspire cache clear`, `aspire certs trust`, `aspire certs clean` |
 | Diagnose environment | `aspire doctor` |
@@ -172,11 +180,10 @@ See [safety-guardrails.md](references/safety-guardrails.md) for detailed rules a
 |---------|-------|--------|
 | **File lock errors during build (`MSB3491`, `CS2012`)** | **Aspire is running and holds locks on `bin/`, `obj/`, and assemblies.** | **Stop the AppHost through the lifecycle routing above**, then rebuild or restart it. Do NOT conclude the project has a permanent build failure. |
 | "Port already in use" | Previous instance running | Stop, then restart through the lifecycle routing above |
-| Resource not found | App not started or name wrong | `aspire ps` to check |
+| Resource not found | App not started or name wrong | Use `aspire ps` to find the AppHost, then `aspire describe` to check resources |
 | Build errors in resource | Code error, not Aspire issue | Fix code, then use resource commands/watch/HMR/debug workflow or restart through the lifecycle routing if AppHost code changed |
 | Environment issues | Missing SDK or tools | `aspire doctor` to diagnose |
 | JSON parse failure from `aspire start` | Mixed human/JSON output ([#15843](https://github.com/microsoft/aspire/issues/15843)) | Strip non-JSON lines before parsing |
-| `aspire wait` rejects name | Use `displayName` not `name` ([#15842](https://github.com/microsoft/aspire/issues/15842)) | Use `displayName` from `aspire ps --format Json` |
 | `aspire ps` hangs | AppHost on breakpoint ([#15576](https://github.com/microsoft/aspire/issues/15576)) | Use timeout, check AppHost process |
 | `aspire agent init` fails | Non-interactive terminal ([#16264](https://github.com/microsoft/aspire/issues/16264)) | Run from standard terminal |
 | Docker daemon unavailable | Container-backed resources fail to start | Start Docker Desktop, then restart through the lifecycle routing above |
@@ -222,7 +229,7 @@ The same rule applies to any "file in use", "cannot access the file", or
 |----------|----------|
 | AppHost wiring after `aspire init` (scan repo, add resources, ServiceDefaults/OTel) | → `aspireify` skill ([`aspireify/SKILL.md`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md)) or project-local `.agents/skills/aspireify/SKILL.md` |
 | Browser logs (`Aspire.Hosting.Browsers` / `WithBrowserLogs()`) and dashboard authoring | → `aspireify` skill (code edits) and `aspire-monitoring` (discovery) |
-| Custom resource commands (`WithCommand`, `ExecuteCommandResult`, `HttpCommandResultMode`) | → `aspireify` skill |
+| Custom resource commands, arguments, interactions, or terminals (`WithCommand`, `CommandOptions.Arguments`, `IInteractionService`, `WithTerminal`) | → `aspireify` skill |
 | Lifecycle hooks (`SubscribeBeforeStart`, `SubscribeAfterResourcesCreated`, BeforeStart pipeline phase) | → `aspireify` skill |
 | Endpoint authoring (`WithEndpoint` updates, `ExcludeReferenceEndpoint` flag) | → `aspireify` skill |
 | Deploy, publish, pipeline steps, `aspire destroy` | → `aspire-deployment` skill |
@@ -240,7 +247,12 @@ The same rule applies to any "file in use", "cannot access the file", or
 
 ## TypeScript AppHost Note
 
-Detection covers TS AppHosts (`apphost.ts`), but **all TS AppHost authoring is delegated to `aspireify`**.
+Detection covers current `apphost.mts` and legacy `apphost.ts`, but **all TS AppHost
+authoring is delegated to `aspireify`**. The CLI-driven legacy migration is project
+maintenance owned by this orchestration skill, not authoring. Explain that it also updates
+Aspire packages, config, tsconfig, and imports; offer
+`aspire update --migrate --yes --non-interactive` only after approval for the full change,
+then hand back to aspireify only if source authoring remains.
 Current rules to apply when handing off:
 
 | Rule | Why |

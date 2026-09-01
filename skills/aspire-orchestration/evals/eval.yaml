@@ -446,11 +446,11 @@ stimuli:
         config:
           required: [aspire-orchestration]
   - name: orch-update-self-001
-    prompt: How do I upgrade my Aspire CLI to the latest 13.3?
+    prompt: How do I upgrade my Aspire CLI to the latest 13.5.3?
     tags:
       priority: p1
       area:
-        - aspire-13-3
+        - aspire-13-5
         - update
     environment:
       files:
@@ -462,8 +462,9 @@ stimuli:
       - type: prompt
         name: uses_update_self
         config:
-          prompt: Does the assistant's response recommend `aspire update --self` to upgrade the Aspire CLI
-            itself? This is the safe, no-side-effect upgrade path that an agent can run unattended.
+          prompt: Does the assistant's response recommend `aspire update --self` to check or upgrade the Aspire
+            CLI itself, while noting that package-manager-owned npm, .NET tool, or Nix installs may
+            print the matching update command rather than modifying the managed install?
       - type: prompt
         name: distinguishes_project_update
         config:
@@ -498,6 +499,51 @@ stimuli:
       - type: output-not-contains
         config:
           substring: curl.*health
+  - name: orch-stop-force-135-001
+    prompt: >
+      I want to run `aspire stop --force --all` to stop every AppHost and clear all
+      persistent databases. Is that safe, and what should I do?
+    tags:
+      priority: p0
+      area:
+        - lifecycle
+        - safety
+        - aspire-13-5
+    environment:
+      files:
+        - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
+          dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
+        - src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs
+          dest: csharp-apphost/MyApp.AppHost/Program.cs
+        - src: ../../../evals/csharp-apphost/aspire.config.json
+          dest: csharp-apphost/aspire.config.json
+    constraints:
+      expect_skills: [aspire-orchestration]
+    graders:
+      - type: prompt
+        name: warns_about_data_loss
+        config:
+          prompt: >
+            Does the assistant's response explain that Aspire 13.5 `aspire stop --force`
+            permanently removes persistent resource instances without another confirmation
+            and can lose data? Answer based on intent.
+      - type: prompt
+        name: requires_exact_apphost
+        config:
+          prompt: >
+            Does the assistant's response reject combining `--force` with `--all` and
+            require selecting and confirming one exact AppHost before destructive cleanup?
+      - type: prompt
+        name: never_recommends_force_all
+        config:
+          prompt: >
+            Does the assistant's response avoid recommending or executing
+            `aspire stop --force --all`, while allowing it to quote that invalid form
+            when explaining why it is rejected?
+      - type: skill-invocation
+        name: invokes_orchestration
+        config:
+          required: [aspire-orchestration]
   - name: orch-aspireify-001
     prompt: I just ran `aspire init` in my existing Node.js + .NET repo and it created an apphost.cs and
       aspire.config.json. What's next? Wire up my services.
@@ -726,12 +772,13 @@ stimuli:
         config:
           required: [aspire-orchestration]
   - name: orch-include-hidden-001
-    prompt: I added a YARP reverse proxy in front of my API in the AppHost, but `aspire ps` doesn't list
-      it. Did the AppHost wire it wrong?
+    prompt: >
+      `aspire ps` shows my running AppHost but not its YARP proxy resource. How should I
+      inspect the resource before deciding whether the AppHost is wired incorrectly?
     tags:
       priority: p1
       area:
-        - aspire-13-3
+        - aspire-13-5
         - include-hidden
     environment:
       files:
@@ -745,16 +792,15 @@ stimuli:
       - type: prompt
         name: suggests_include_hidden
         config:
-          prompt: Does the assistant's response recommend running `aspire ps --include-hidden` (or `aspire
-            describe --include-hidden`) BEFORE concluding that the AppHost is misconfigured? Aspire
-            13.3 filters hidden resources (proxies, helper containers, migrations) by default, so a
-            missing-from-`aspire ps` resource may exist but be filtered, not actually missing.
+          prompt: Does the assistant's response recommend running `aspire describe --include-hidden`
+            before concluding that the AppHost is misconfigured? In Aspire 13.5, `aspire ps`
+            lists AppHosts rather than resources, while `aspire describe` owns resource details.
       - type: prompt
         name: explains_default_filtering
         config:
-          prompt: Does the assistant's response explain (or imply) that filtered output is the correct default
-            for normal workflows, and that `--include-hidden` is the diagnostic opt-in for debugging
-            proxies, sidecars, or migrations?
+          prompt: Does the assistant's response explain that `aspire ps` is AppHost-level and that
+            `aspire describe --include-hidden` is the resource diagnostic for hidden proxies,
+            sidecars, or migrations?
       - type: output-contains
         config:
           substring: --include-hidden
@@ -1336,8 +1382,8 @@ stimuli:
           required:
             - aspire-orchestration
   - name: should_trigger_10
-    description: "Reason: Hidden-resource filtering = --include-hidden guidance lives in orchestration"
-    prompt: I see proxies missing in aspire ps — why?
+    description: "Reason: Aspire 13.5 separates AppHost discovery from hidden-resource inspection"
+    prompt: aspire ps shows my AppHost but not its hidden proxy resource — how do I inspect it?
     tags:
       priority: p1
       area: routing

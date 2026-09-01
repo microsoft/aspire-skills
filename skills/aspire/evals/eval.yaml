@@ -270,6 +270,47 @@ stimuli:
         name: routes_package_manager_repair
         config:
           scoring: binary
+  - name: router-legacy-ts-migrate-135-001
+    prompt: >
+      My old TypeScript AppHost still uses apphost.ts. How should I migrate it?
+    tags:
+      priority: p1
+      area:
+        - routing
+        - aspire-13-5
+        - typescript-migration
+    constraints:
+      max_agent_duration: 5m
+      expect_skills:
+        - aspire
+        - aspire-orchestration
+    rubric:
+      - The assistant routes the CLI-driven package and apphost.ts migration to aspire-orchestration, not aspireify.
+      - The assistant explains that package, config, tsconfig, import, and entry-point changes require approval before noninteractive migration.
+    graders:
+      - type: prompt
+        name: routes_migration_to_orchestration
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response assign `aspire update --migrate` to
+            aspire-orchestration and reserve aspireify for source authoring after the
+            migration? Answer based on intent.
+      - type: prompt
+        name: explains_migration_scope
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response explain that migration updates Aspire packages,
+            config, tsconfig, generated imports, and the entry point, and require approval
+            before `--yes --non-interactive` execution? Answer based on intent.
+      - type: skill-invocation
+        name: invokes_orchestration
+        config:
+          required:
+            - aspire-orchestration
+          disallowed:
+            - aspireify
   # Positive-routing stimuli assert both activation and outcome. Because this
   # spec tests the top-level router, model knowledge that merely produces an
   # Aspire-flavored answer is insufficient: `constraints.expect_skills` requires
@@ -390,7 +431,7 @@ stimuli:
             with no AppHost wiring. Answer based on intent.
   - name: should_trigger_07
     description: "Reason: TypeScript AppHost detection"
-    prompt: My apphost.ts file needs updating
+    prompt: My apphost.mts file needs updating
     tags:
       priority: p1
       area: routing
@@ -402,9 +443,9 @@ stimuli:
         name: engages_typescript_apphost
         config:
           scoring: binary
-          prompt: The user said their apphost.ts file needs updating. A correct response recognizes apphost.ts
-            as a TypeScript Aspire AppHost and engages with editing it — opening or locating the file, or
-            asking for its path/contents when it is not present — rather than treating apphost.ts as a
+          prompt: The user said their apphost.mts file needs updating. A correct response recognizes apphost.mts
+            as a current TypeScript Aspire AppHost and engages with editing it — opening or locating the file, or
+            asking for its path/contents when it is not present — rather than treating apphost.mts as a
             generic TypeScript file unrelated to Aspire. Answer based on intent.
   - name: should_trigger_08
     description: "Reason: Direct aspire CLI command"

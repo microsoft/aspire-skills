@@ -484,6 +484,75 @@ stimuli:
       - type: output-not-contains
         config:
           substring: azure-deploy
+  - name: deploy-mixed-package-family-135-001
+    prompt: >
+      My AppHost uses Aspire.AppHost.Sdk 13.5.3 but Aspire.Hosting.Kubernetes
+      13.4.6-preview.1.26319.6, and startup fails with MissingMethodException before deployment.
+      The Aspire CLI is 13.5.3. Can I deploy as-is?
+    tags:
+      priority: p0
+      area:
+        - preflight
+        - aspire-13-5
+        - package-compatibility
+    environment:
+      files:
+        - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
+          dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
+        - src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs
+          dest: csharp-apphost/MyApp.AppHost/Program.cs
+    graders:
+      - type: prompt
+        name: rejects_mixed_package_family
+        config:
+          prompt: >
+            Does the assistant's response stop deployment and explain that Aspire 13.4
+            and 13.5 SDK/hosting integration packages are not safe to mix, even with a
+            13.5.3 CLI? Answer based on intent.
+      - type: prompt
+        name: updates_all_packages_together
+        config:
+          prompt: >
+            Does the assistant's response recommend moving the SDK and all
+            Aspire.Hosting packages together to the matching 13.5 family before retrying?
+  - name: deploy-aca-unique-naming-135-001
+    prompt: >
+      Use the aspire-deployment skill before answering. My existing Azure Container Apps
+      environment is already deployed, and I want to add `WithUniqueResourceNaming()` to
+      avoid a collision with a second environment in the same resource group. Do not edit
+      or deploy; explain the risk and whether you can apply it now.
+    tags:
+      priority: p0
+      area:
+        - azure-container-apps
+        - safety
+        - aspire-13-5
+    constraints:
+      max_agent_duration: 5m
+      expect_skills: [aspire-deployment]
+    graders:
+      - type: prompt
+        name: explains_recreation_risk
+        config:
+          prompt: >
+            Does the assistant's response explain that `WithUniqueResourceNaming()` changes
+            the physical managed-environment name and can recreate an already-deployed
+            environment? Answer based on intent.
+      - type: prompt
+        name: requires_approval
+        config:
+          prompt: >
+            Does the assistant's response stop before editing or deploying and require
+            explicit user approval for the recreation risk, while noting that the API is
+            safer for new deployments or multiple colliding environments? Answer based on
+            intent.
+      - type: output-contains
+        config:
+          substring: WithUniqueResourceNaming
+      - type: skill-invocation
+        name: invokes_deployment
+        config:
+          required: [aspire-deployment]
   - name: should_trigger_01
     description: "Reason: Direct deployment request — matches 'deploy to Azure' keyword"
     prompt: Deploy my Aspire app to Azure
@@ -634,6 +703,18 @@ stimuli:
   - name: should_trigger_13
     description: "Reason: --list-steps is the canonical pipeline preview in aspire-deployment"
     prompt: Inspect the deployment pipeline steps with aspire publish --list-steps
+    tags:
+      priority: p1
+      area: routing
+    graders:
+      - type: skill-invocation
+        name: invokes_aspire_deployment
+        config:
+          required:
+            - aspire-deployment
+  - name: should_trigger_14
+    description: "Reason: Radius is a preview Aspire 13.5 deployment target"
+    prompt: Deploy my Aspire app to a Radius environment
     tags:
       priority: p1
       area: routing
