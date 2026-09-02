@@ -159,10 +159,49 @@ function normalizeProposalResource(resource, index, userAdded = false) {
         userAdded: Boolean(resource?.userAdded ?? userAdded),
         userEdited: Boolean(resource?.userEdited),
     };
+    const generated = resource?.generated
+        ? {
+              name: String(resource.generated.name ?? normalized.name).trim(),
+              type: normalizeResourceType(resource.generated.type ?? normalized.type),
+              detail: String(resource.generated.detail ?? normalized.detail).trim(),
+              serviceDefaults: Boolean(
+                  resource.generated.serviceDefaults ?? normalized.serviceDefaults,
+              ),
+          }
+        : userAdded
+          ? null
+          : {
+                name: normalized.name,
+                type: normalized.type,
+                detail: normalized.detail,
+                serviceDefaults: normalized.serviceDefaults,
+            };
     return {
         ...normalized,
         sourceName: userAdded ? "" : String(resource?.sourceName ?? normalized.name),
+        generated,
     };
+}
+
+function resourceDiffersFromGenerated(resource) {
+    if (resource.userAdded || !resource.generated) {
+        return Boolean(resource.userAdded);
+    }
+    return (
+        resource.name !== resource.generated.name ||
+        resource.type !== resource.generated.type ||
+        resource.detail !== resource.generated.detail ||
+        resource.serviceDefaults !== resource.generated.serviceDefaults
+    );
+}
+
+function proposalHasUserEdits(proposal) {
+    return (
+        proposal.resources.some(
+            (resource) => resource.userAdded || resourceDiffersFromGenerated(resource),
+        ) ||
+        proposal.edges.some((edge) => edge.userAdded || edge.userEdited)
+    );
 }
 
 function resourceIdentitiesMatch(left, right) {
@@ -585,7 +624,7 @@ function confirmedProposal(proposal) {
     const names = new Set(resources.map((resource) => resource.name));
     return {
         resources: resources.map(
-            ({ userAdded, userEdited, sourceName, ...resource }) => resource,
+            ({ userAdded, userEdited, sourceName, generated, ...resource }) => resource,
         ),
         edges: proposal.edges
             .filter((edge) => names.has(edge.from) && names.has(edge.to))
@@ -641,7 +680,16 @@ function projectService(service) {
 function proposalForClient(proposal) {
     return {
         resources: proposal.resources.map(
-            ({ userAdded, userEdited, sourceName, ...resource }) => ({ ...resource }),
+            ({ userAdded, userEdited, sourceName, generated, ...resource }) => ({
+                ...resource,
+                origin: userAdded ? "user" : "generated",
+                edited: resourceDiffersFromGenerated({
+                    ...resource,
+                    userAdded,
+                    generated,
+                }),
+                generated: generated ? { ...generated } : null,
+            }),
         ),
         edges: proposal.edges.map(
             ({
@@ -1107,11 +1155,16 @@ async function handlePost(entry, path, body, response) {
             linkedService &&
             typeof body.type === "string" &&
             nextType !== proposalResource.type &&
-            !isCompatibleAspireResourceType(linkedService.type, nextType)
+            !isCompatibleAspireResourceType(
+                linkedService.type,
+                nextType,
+                linkedService.framework,
+                proposalResource.generated?.type,
+            )
         ) {
             return sendJson(response, 400, {
                 ok: false,
-                error: `The detected ${linkedService.type} service cannot be hosted as ${nextType}. Add a separate resource instead.`,
+                error: `"${linkedService.name}" was detected as ${linkedService.type} and cannot be hosted as ${nextType}. Add a separate resource instead.`,
             });
         }
         if (
@@ -1153,7 +1206,7 @@ async function handlePost(entry, path, body, response) {
             if (typeof body.include === "boolean") {
                 proposalResource.include = body.include;
             }
-            proposalResource.userEdited = true;
+            proposalResource.userEdited = resourceDiffersFromGenerated(proposalResource);
             if (linkedService) {
                 linkedService.resourceName = proposalResource.name;
                 linkedService.include = proposalResource.include;
@@ -1167,14 +1220,14 @@ async function handlePost(entry, path, body, response) {
                 }
             }
             state.confirmed = false;
-            state.proposalEdited = true;
+            state.proposalEdited = proposalHasUserEdits(state.proposal);
         });
         return sendJson(response, 200, { ok: true });
     }
 
     if (path === "/api/proposal/resource/add") {
         const name = String(body.name ?? "").trim();
-        const type = normalizeResourceType(body.type);
+        const type = exactType(body.type);
         const newResourceId = `resource-${Date.now().toString(36)}-${snapshot.proposal.resources.length + 1}`;
         const nameIssues = resourceNameIssues(name);
         if (nameIssues.length || !type) {
@@ -1640,7 +1693,7 @@ const aspireifyCanvas = createCanvas({
     id: CANVAS_ID,
     displayName: "Aspireify",
     description:
-        "Presents Aspireify's generated AppHost proposal for Step 3 review and confirmation before any files change.",
+        "Presents Aspireify's generated AppHost proposal for Step 3 review and confirmation before AppHost wiring begins.",
     inputSchema: {
         type: "object",
         additionalProperties: false,
@@ -1950,6 +2003,10 @@ const aspireifyCanvas = createCanvas({
                                           linkedService.include &&
                                           isDotNetType(linkedService.type) &&
                                           linkedService.serviceDefaults;
+                                      if (generated.generated) {
+                                          generated.generated.serviceDefaults =
+                                              generated.serviceDefaults;
+                                      }
                                   }
                                   return enrichResourceFromService(generated, linkedService);
                               })
@@ -2102,11 +2159,7 @@ const aspireifyCanvas = createCanvas({
                                 : new Date().toISOString(),
                     };
                     state.proposalLoaded = true;
-                    state.proposalEdited =
-                        state.proposal.resources.some(
-                            (resource) => resource.userAdded || resource.userEdited,
-                        ) ||
-                        state.proposal.edges.some((edge) => edge.userAdded || edge.userEdited);
+                    state.proposalEdited = proposalHasUserEdits(state.proposal);
                     state.proposalStale = false;
                     state.proposalError = "";
                     state.confirmed = false;

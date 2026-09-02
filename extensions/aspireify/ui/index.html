@@ -26,7 +26,9 @@
                 </div>
                 <div class="tb-actions">
                     <div class="apphost-select" id="apphost-control" hidden>
-                        <span class="apphost-label">AppHost type</span>
+                        <span class="apphost-label">AppHost</span>
+                        <code class="apphost-path" id="apphost-path"></code>
+                        <span class="apphost-separator" aria-hidden="true">·</span>
                         <span class="apphost-value" id="apphost-value">C# SDK</span>
                     </div>
                 </div>
@@ -85,14 +87,17 @@
                 <div id="plan-content" hidden>
                     <div id="plan-workspace" class="plan-workspace">
                         <section class="proposal-state" id="proposal-state">
-                            <div>
+                            <div class="proposal-state-main">
                                 <strong id="proposal-state-copy">AppHost proposal awaiting confirmation</strong>
                                 <div class="muted" id="proposal-generated-at"></div>
                             </div>
-                            <div class="proposal-identity">
-                                <span>Generation <code id="proposal-generation"></code></span>
-                                <span>Hash <code id="proposal-hash"></code></span>
-                            </div>
+                            <details class="proposal-diagnostics">
+                                <summary>Proposal details</summary>
+                                <div class="proposal-identity">
+                                    <span>Generation <code id="proposal-generation"></code></span>
+                                    <span>Hash <code id="proposal-hash"></code></span>
+                                </div>
+                            </details>
                         </section>
                         <section class="resource-plan" id="resource-plan-panel" hidden>
                             <div class="resource-plan-heading">
@@ -114,7 +119,27 @@
                                 </button>
                             </div>
                             <div class="compact-resources" id="compact-resources" hidden></div>
-                            <div class="resource-groups" id="resource-groups"></div>
+                            <div class="relationship-workspace" id="relationship-workspace" hidden>
+                                <nav
+                                    class="plan-overview"
+                                    id="plan-overview"
+                                    aria-label="Proposed AppHost resources"
+                                ></nav>
+                                <section
+                                    class="plan-inspector"
+                                    id="plan-inspector"
+                                    aria-label="Selected resource"
+                                    aria-live="polite"
+                                ></section>
+                            </div>
+                            <details
+                                class="relationship-list-disclosure"
+                                id="relationship-list-disclosure"
+                                hidden
+                            >
+                                <summary id="relationship-list-summary">All relationships</summary>
+                                <div class="relationship-list" id="relationship-list"></div>
+                            </details>
                         </section>
                     </div>
                 </div>
@@ -129,17 +154,19 @@
         </main>
 
         <footer class="action-footer" id="action-footer" hidden>
-            <span
-                class="footer-note"
-                id="footer-note"
-                role="alert"
-                aria-live="assertive"
-                aria-atomic="true"
-                hidden
-            ></span>
-            <button id="confirm" class="btn btn-primary" type="button" disabled>
-                Confirm
-            </button>
+            <div class="action-footer-inner">
+                <span
+                    class="footer-note"
+                    id="footer-note"
+                    role="alert"
+                    aria-live="assertive"
+                    aria-atomic="true"
+                    hidden
+                ></span>
+                <button id="confirm" class="btn btn-primary" type="button" disabled>
+                    Confirm
+                </button>
+            </div>
         </footer>
 
         <dialog id="add-resource-dialog" aria-labelledby="add-resource-dialog-title">
@@ -170,6 +197,7 @@
                 <label class="field">
                     <span>Resource type</span>
                     <select id="add-resource-type" name="resourceType" required>
+                        <option value="" disabled>Select a resource type</option>
                         <option value=".NET project" data-group="applications">.NET project</option>
                         <option value="Next.js" data-group="applications">Next.js</option>
                         <option value="Vite" data-group="applications">Vite</option>
@@ -177,6 +205,7 @@
                         <option value="Python" data-group="applications">Python</option>
                         <option value="Executable" data-group="applications">Executable</option>
                         <option value="Postgres" data-group="data">Postgres</option>
+                        <option value="Valkey" data-group="data">Valkey</option>
                         <option value="Redis" data-group="data">Redis</option>
                         <option value="RabbitMQ" data-group="data">RabbitMQ</option>
                         <option value="MongoDB" data-group="data">MongoDB</option>

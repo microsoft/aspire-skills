@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 export {
     classifyAspireResourceKind,
     classifyServiceKind,
+    compatibleAspireResourceTypes,
     isCompatibleAspireResourceKind,
     isCompatibleAspireResourceType,
     isDotNetType,
@@ -35,7 +36,18 @@ function stripTransientProposalFields(proposal) {
         generatedAt: String(proposal?.generatedAt ?? ""),
         resources: (proposal?.resources ?? [])
             .filter((resource) => resource.include !== false)
-            .map(({ userAdded, userEdited, sourceName, include, ...resource }) => resource),
+            .map(
+                ({
+                    userAdded,
+                    userEdited,
+                    sourceName,
+                    generated,
+                    origin,
+                    edited,
+                    include,
+                    ...resource
+                }) => resource,
+            ),
         edges: (proposal?.edges ?? []).map(
             ({ userAdded, userEdited, sourceId, sourceKey, ...edge }) => edge,
         ),

@@ -2,6 +2,7 @@
 
 import {
     classifyAspireResourceKind,
+    classifyServiceKind,
     isCompatibleAspireResourceKind,
     isCompatibleAspireResourceType,
     isDotNetType,
@@ -54,6 +55,7 @@ const elements = {
     body: document.body,
     statusLine: document.getElementById("status-line"),
     apphostControl: document.getElementById("apphost-control"),
+    apphostPath: document.getElementById("apphost-path"),
     apphostValue: document.getElementById("apphost-value"),
     skeleton: document.getElementById("skeleton"),
     snapshot: document.getElementById("snapshot"),
@@ -61,7 +63,12 @@ const elements = {
     resourcePlanPanel: document.getElementById("resource-plan-panel"),
     compactResources: document.getElementById("compact-resources"),
     compactAddResource: document.getElementById("compact-add-resource"),
-    resourceGroups: document.getElementById("resource-groups"),
+    relationshipWorkspace: document.getElementById("relationship-workspace"),
+    planOverview: document.getElementById("plan-overview"),
+    planInspector: document.getElementById("plan-inspector"),
+    relationshipListDisclosure: document.getElementById("relationship-list-disclosure"),
+    relationshipListSummary: document.getElementById("relationship-list-summary"),
+    relationshipList: document.getElementById("relationship-list"),
     proposalStateCopy: document.getElementById("proposal-state-copy"),
     proposalGeneratedAt: document.getElementById("proposal-generated-at"),
     proposalGeneration: document.getElementById("proposal-generation"),
@@ -108,6 +115,10 @@ let pendingMutations = 0;
 let mutationError = "";
 let connectionRowSequence = 0;
 let pendingRemoval;
+let eventsConnected = false;
+let activeViewTransition;
+let selectedResourceId = "";
+const fieldDrafts = new Map();
 const detailTextareaWidths = new WeakMap();
 const detailResizeObserver =
     typeof ResizeObserver === "function"
@@ -121,21 +132,22 @@ const detailResizeObserver =
               }
           })
         : null;
-const collapsedGroups = new Set();
-const collapsedCards = new Set();
-const initializedGroups = new Set();
 document.addEventListener("DOMContentLoaded", () => {
     elements.retry.addEventListener("click", () => void retryProposalOrSnapshot());
     elements.confirm.addEventListener("click", () => void confirmSnapshot());
     elements.compactAddResource.addEventListener("click", () => openAddResourceDialog("all"));
     elements.addResourceForm.addEventListener("submit", addResource);
-    elements.addResourceType.addEventListener("change", () =>
+    elements.addResourceType.addEventListener("change", () => {
+        elements.addResourceType.setCustomValidity("");
+        if (elements.addResourceDialogError.textContent === "Choose a resource type.") {
+            clearDialogError(elements.addResourceDialogError);
+        }
         syncDefaultsField(
             elements.addResourceType,
             elements.addDefaultsField,
             elements.addResourceDefaults,
-        ),
-    );
+        );
+    });
     elements.addResourceName.addEventListener("input", () =>
         validateResourceNameField(
             elements.addResourceName,
@@ -162,12 +174,26 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 function updateAppHostValue() {
+    const fullPath = String(snapshot?.appHostPath ?? "").trim();
+    elements.apphostPath.textContent = appHostPathForDisplay(fullPath);
+    elements.apphostPath.title = fullPath;
     elements.apphostValue.textContent =
         {
             "csharp-sdk": "C# SDK",
             "csharp-file": "File-based C#",
             typescript: "TypeScript",
         }[snapshot?.apphostStyle] ?? "Unknown";
+}
+
+function appHostPathForDisplay(path) {
+    const normalized = String(path ?? "").trim().replace(/\\/g, "/");
+    if (!normalized) {
+        return "Path unavailable";
+    }
+    if (/^(?:[A-Za-z]:\/|\/)/.test(normalized)) {
+        return normalized.split("/").filter(Boolean).slice(-3).join("/");
+    }
+    return normalized.replace(/^\.\//, "");
 }
 
 function setStatusLine(message) {
@@ -221,16 +247,19 @@ function connectEvents() {
         }
     };
     events.onopen = () => {
+        eventsConnected = true;
         clearInterval(fallbackPolling);
         fallbackPolling = undefined;
     };
     events.onerror = () => {
+        eventsConnected = false;
         void refreshSnapshot();
         fallbackPolling ??= setInterval(() => void refreshSnapshot(), 2000);
     };
 }
 
 async function post(path, body) {
+    const previousRevision = snapshot?.revision ?? -1;
     const response = await fetch(path, {
         method: "POST",
         headers: {
@@ -243,11 +272,27 @@ async function post(path, body) {
     if (!response.ok) {
         throw new Error(payload.error ?? "The canvas action failed.");
     }
-    await refreshSnapshot();
+    if (
+        !eventsConnected ||
+        !(await waitForRevisionAfter(previousRevision, 250))
+    ) {
+        await refreshSnapshot();
+    }
     return payload;
 }
 
-async function runBusy(control, action) {
+async function waitForRevisionAfter(revision, timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        if ((snapshot?.revision ?? -1) > revision) {
+            return true;
+        }
+        await new Promise((resolveWait) => setTimeout(resolveWait, 16));
+    }
+    return (snapshot?.revision ?? -1) > revision;
+}
+
+async function runBusy(control, action, onError) {
     const blocksConfirmation = control !== elements.confirm;
     if (blocksConfirmation) {
         pendingMutations += 1;
@@ -265,6 +310,7 @@ async function runBusy(control, action) {
         succeeded = true;
         mutationError = "";
     } catch (error) {
+        onError?.(error);
         showInlineError(error);
     } finally {
         elements.body.classList.remove("is-busy");
@@ -326,11 +372,28 @@ async function retryProposalOrSnapshot() {
     await loadSnapshot();
 }
 
+function snapshotRevisionIsStale(nextSnapshot) {
+    return (
+        !firstRender &&
+        Number.isInteger(nextSnapshot?.revision) &&
+        Number.isInteger(snapshot?.revision) &&
+        nextSnapshot.revision <= snapshot.revision
+    );
+}
+
 function render(nextSnapshot) {
+    if (snapshotRevisionIsStale(nextSnapshot)) {
+        return;
+    }
+    const focusToken = captureFocusToken();
     const draw = () => {
+        if (snapshotRevisionIsStale(nextSnapshot)) {
+            return;
+        }
         unobserveDetailTextareas();
         mutationError = "";
         snapshot = nextSnapshot;
+        reconcileFieldDrafts();
         if (snapshot.proposalError) {
             showProposalError(snapshot.proposalError);
             firstRender = false;
@@ -347,7 +410,7 @@ function render(nextSnapshot) {
         elements.skeleton.hidden = true;
         elements.error.hidden = true;
         elements.snapshot.hidden = false;
-        elements.actionFooter.hidden = false;
+        elements.actionFooter.hidden = snapshot.confirmed;
         elements.apphostControl.hidden = !snapshot.apphostStyle;
         elements.body.classList.toggle("is-confirmed", snapshot.confirmed);
         updateAppHostValue();
@@ -356,6 +419,7 @@ function render(nextSnapshot) {
         renderResourcePlan();
         renderStatus();
         renderConfirmation();
+        restoreFocusToken(focusToken);
         firstRender = false;
     };
 
@@ -365,9 +429,15 @@ function render(nextSnapshot) {
     if (
         !firstRender &&
         !prefersReducedMotion &&
-        typeof document.startViewTransition === "function"
+        typeof document.startViewTransition === "function" &&
+        !activeViewTransition
     ) {
-        document.startViewTransition(draw);
+        activeViewTransition = document.startViewTransition(draw);
+        void activeViewTransition.finished
+            .catch(() => {})
+            .finally(() => {
+                activeViewTransition = undefined;
+            });
     } else {
         draw();
     }
@@ -381,13 +451,27 @@ function renderResourcePlan() {
     const resourceIssues = proposalValidation().resourceIssues;
     elements.resourcePlanPanel.hidden = false;
     elements.compactResources.replaceChildren();
-    elements.resourceGroups.replaceChildren();
+    elements.planOverview.replaceChildren();
+    elements.planInspector.replaceChildren();
+    elements.relationshipList.replaceChildren();
+    elements.relationshipWorkspace.classList.toggle("is-confirmed", snapshot.confirmed);
     const compact = (snapshot.presentationMode ?? (resources.length <= 2 ? "compact" : "relationship")) ===
         "compact";
-    elements.compactResources.hidden = !compact;
-    elements.resourceGroups.hidden = compact;
+    elements.compactResources.hidden = !compact || snapshot.confirmed;
+    elements.relationshipWorkspace.hidden = compact && !snapshot.confirmed;
+    elements.relationshipListDisclosure.hidden = compact && !snapshot.confirmed;
     elements.compactAddResource.hidden = !compact || snapshot.confirmed;
+    if (snapshot.confirmed) {
+        selectedResourceId = "";
+        renderOverview(resources, edges, resourceIssues, true);
+        elements.planInspector.hidden = true;
+        renderRelationshipList(edges, true);
+        elements.relationshipListDisclosure.open = true;
+        return;
+    }
     if (compact) {
+        elements.relationshipWorkspace.hidden = true;
+        elements.relationshipListDisclosure.hidden = true;
         if (resources.length === 0) {
             const empty = createElement("div", {
                 className: "empty-proposal",
@@ -410,111 +494,354 @@ function renderResourcePlan() {
         return;
     }
 
-    for (const definition of RESOURCE_GROUPS) {
-        const groupedResources = resources.filter((resource) =>
-            definition.kinds.has(resourceKind(resource)),
-        );
-        if (!initializedGroups.has(definition.id)) {
-            initializedGroups.add(definition.id);
-            if (groupedResources.length === 0) {
-                collapsedGroups.add(definition.id);
-            }
+    elements.relationshipWorkspace.hidden = false;
+    elements.planInspector.hidden = false;
+    elements.relationshipListDisclosure.hidden = false;
+    const orderedResources = resourcesInOverviewOrder(resources);
+    if (!orderedResources.some((resource) => resource.id === selectedResourceId)) {
+        selectedResourceId = orderedResources[0]?.id ?? "";
+    }
+    renderOverview(resources, edges, resourceIssues, false);
+    renderInspector(
+        orderedResources.find((resource) => resource.id === selectedResourceId),
+        edges,
+        resourceIssues,
+    );
+    renderRelationshipList(edges, false);
+}
+
+function resourcesInOverviewOrder(resources) {
+    return RESOURCE_GROUPS.flatMap((definition) =>
+        resources.filter((resource) => resourceRole(resource) === definition.id),
+    );
+}
+
+function resourceRole(resource) {
+    const service = serviceForResource(resource);
+    if (service) {
+        const serviceKind = classifyServiceKind(`${service.type} ${service.framework}`);
+        if (["dotnet", "node", "python"].includes(serviceKind) || service.exposesHttp) {
+            return "applications";
         }
-        const titleId = `resource-group-${definition.id}-title`;
-        const descriptionId = `resource-group-${definition.id}-description`;
-        const group = createElement("section", {
-            className: `resource-group resource-group-${definition.id}`,
-            attrs: { "aria-labelledby": titleId },
+        if (serviceKind === "cache") {
+            return "data";
+        }
+    }
+    const kind = resourceKind(resource);
+    if (["database", "cache", "broker"].includes(kind)) {
+        return "data";
+    }
+    if (["project", "frontend"].includes(kind)) {
+        return "applications";
+    }
+    if (kind === "container") {
+        return "infrastructure";
+    }
+    return "external";
+}
+
+function renderOverview(resources, edges, resourceIssues, confirmed) {
+    elements.planOverview.classList.toggle("is-confirmed", confirmed);
+    for (const definition of RESOURCE_GROUPS) {
+        const groupedResources = resources.filter(
+            (resource) => resourceRole(resource) === definition.id,
+        );
+        if (confirmed && groupedResources.length === 0) {
+            continue;
+        }
+        const section = createElement("section", {
+            className: `overview-role overview-role-${definition.id}`,
         });
-        const heading = createElement("div", { className: "resource-group-heading" });
-        const bodyId = `resource-group-${definition.id}-body`;
-        const body = createElement("div", {
-            className: "resource-group-body",
-            attrs: { id: bodyId },
-        });
-        body.hidden = collapsedGroups.has(definition.id);
-        const toggle = createElement("button", {
-            className: "resource-group-toggle",
-            attrs: {
-                type: "button",
-                "aria-expanded": String(!body.hidden),
-                "aria-controls": bodyId,
-                "aria-describedby": descriptionId,
-            },
-        });
-        toggle.append(
-            createElement("span", {
-                className: "resource-group-chevron",
-                attrs: { "aria-hidden": "true" },
-            }),
-            createElement("span", {
-                className: "resource-group-title-text",
-                text: definition.title,
+        const heading = createElement("div", { className: "overview-role-heading" });
+        const headingCopy = createElement("div");
+        headingCopy.append(
+            createElement("h2", { text: definition.title }),
+            createElement("p", {
+                className: "muted",
+                text: definition.description,
             }),
         );
-        const title = createElement("h2", {
-            className: "resource-group-title",
-            attrs: { id: titleId },
-        });
-        title.append(toggle);
-        const description = createElement("p", {
-            className: "resource-group-description muted",
-            text: definition.description,
-            attrs: { id: descriptionId },
-        });
-        const headingCopy = createElement("div", { className: "resource-group-copy" });
-        headingCopy.append(title, description);
-        toggle.addEventListener("click", () => {
-            body.hidden = !body.hidden;
-            toggle.setAttribute("aria-expanded", String(!body.hidden));
-            if (body.hidden) {
-                collapsedGroups.add(definition.id);
-            } else {
-                collapsedGroups.delete(definition.id);
-                resizeVisibleDetailTextareas(body);
-            }
-        });
-        const headingActions = createElement("div", { className: "resource-group-heading-actions" });
-        const add = createElement("button", {
-            className: "btn btn-outline btn-icon add-icon-button resource-group-add",
-            title: `${definition.addTitle} to ${definition.title}`,
-            attrs: {
-                type: "button",
-                "aria-label": `${definition.addTitle} in ${definition.title}`,
-            },
-        });
-        add.hidden = snapshot.confirmed;
-        add.addEventListener("click", () => openAddResourceDialog(definition.id));
-        headingActions.append(
+        heading.append(
+            headingCopy,
             createElement("span", {
-                className: "resource-count",
+                className: "overview-role-count",
                 text: String(groupedResources.length),
                 title: `${groupedResources.length} resource${
                     groupedResources.length === 1 ? "" : "s"
                 }`,
             }),
-            add,
         );
-        heading.append(headingCopy, headingActions);
-        const cards = createElement("div", { className: "resource-card-grid" });
-        if (groupedResources.length === 0) {
-            cards.append(
-                createElement("div", {
-                    className: "empty-resource-group muted",
-                    text: "No resources in this section.",
+        if (!confirmed) {
+            const add = createElement("button", {
+                className: "btn btn-outline btn-sm overview-add",
+                text: "Add resource",
+                attrs: { type: "button" },
+            });
+            add.addEventListener("click", () => openAddResourceDialog(definition.id));
+            heading.append(add);
+        }
+        const list = createElement("div", {
+            className: "overview-node-list",
+        });
+        if (!groupedResources.length) {
+            list.append(
+                createElement("p", {
+                    className: "overview-empty muted",
+                    text: "No resources",
                 }),
             );
-        } else {
-            for (const resource of groupedResources) {
-                cards.append(
-                    renderResourceCard(resource, edges, resourceIssues[resource.id] ?? []),
-                );
-            }
         }
-        body.append(cards);
-        group.append(heading, body);
-        elements.resourceGroups.append(group);
+        for (const resource of groupedResources) {
+            list.append(
+                renderOverviewNode(
+                    resource,
+                    edges,
+                    resourceIssues[resource.id] ?? [],
+                    confirmed,
+                ),
+            );
+        }
+        section.append(heading, list);
+        elements.planOverview.append(section);
     }
+}
+
+function renderOverviewNode(resource, edges, issues, confirmed) {
+    const service = serviceForResource(resource);
+    const selected = resource.id === selectedResourceId;
+    const drafts = [...fieldDrafts.values()].filter(
+        (draft) => draft.resourceId === resource.id,
+    );
+    const invalidDraft = drafts.some(
+        (draft) => draft.status === "invalid" || draft.status === "error",
+    );
+    const tag = confirmed ? "div" : "button";
+    const node = createElement(tag, {
+        className: `overview-node resource-${resourceKind(resource)}${
+            selected ? " is-selected" : ""
+        }${issues.length || invalidDraft ? " has-issues" : ""}`,
+        attrs: {
+            id: overviewNodeId(resource.id),
+            "data-resource-id": resource.id,
+            ...(confirmed
+                ? {}
+                : {
+                      type: "button",
+                      "aria-pressed": String(selected),
+                      tabindex: selected ? "0" : "-1",
+                  }),
+        },
+    });
+    const marker = createElement("span", {
+        className: "overview-kind-marker",
+        attrs: { "aria-hidden": "true" },
+    });
+    const copy = createElement("span", { className: "overview-node-copy" });
+    copy.append(createResourceTitleLine(resource));
+    if (service) {
+        copy.append(
+            createElement("span", {
+                className: "overview-source muted",
+                text: `${service.name} → ${resource.name}`,
+            }),
+        );
+    }
+    const relationshipCount = relationshipsFor(resource, edges).length;
+    const meta = createElement("span", { className: "overview-node-meta" });
+    meta.append(
+        createElement("span", {
+            text: `${relationshipCount} connection${relationshipCount === 1 ? "" : "s"}`,
+        }),
+    );
+    if (drafts.length) {
+        meta.append(
+            createElement("span", {
+                className: invalidDraft ? "overview-invalid" : "overview-edited",
+                text: invalidDraft ? "Needs attention" : "Unsaved",
+            }),
+        );
+    } else if (resource.edited) {
+        meta.append(createElement("span", { className: "overview-edited", text: "Edited" }));
+    }
+    if (issues.length && !invalidDraft) {
+        meta.append(createElement("span", { className: "overview-invalid", text: "Needs attention" }));
+    }
+    node.append(marker, copy, meta);
+    if (!confirmed) {
+        node.addEventListener("click", () => selectResource(resource.id, true));
+        node.addEventListener("keydown", handleOverviewKeydown);
+    }
+    return node;
+}
+
+function overviewNodeId(resourceId) {
+    return `overview-node-${String(resourceId).replace(/[^A-Za-z0-9_-]/g, "-")}`;
+}
+
+function handleOverviewKeydown(event) {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+        return;
+    }
+    event.preventDefault();
+    const nodes = [...elements.planOverview.querySelectorAll(".overview-node[type='button']")];
+    const currentIndex = nodes.indexOf(event.currentTarget);
+    const nextIndex =
+        event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? nodes.length - 1
+              : event.key === "ArrowDown"
+                ? (currentIndex + 1) % nodes.length
+                : (currentIndex - 1 + nodes.length) % nodes.length;
+    const resourceId = nodes[nextIndex]?.dataset.resourceId;
+    if (resourceId) {
+        selectResource(resourceId, true);
+    }
+}
+
+function selectResource(resourceId, restoreNodeFocus = false) {
+    selectedResourceId = resourceId;
+    renderResourcePlan();
+    if (restoreNodeFocus) {
+        requestAnimationFrame(() => {
+            document.getElementById(overviewNodeId(resourceId))?.focus();
+            if (window.matchMedia("(max-width: 719px)").matches) {
+                elements.planInspector.scrollIntoView({
+                    block: "start",
+                    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+                        ? "auto"
+                        : "smooth",
+                });
+            }
+        });
+    }
+}
+
+function renderInspector(resource, edges, resourceIssues) {
+    if (!resource) {
+        elements.planInspector.append(
+            createElement("div", {
+                className: "empty-proposal",
+                text: "Select a resource to review its details.",
+            }),
+        );
+        return;
+    }
+    const service = serviceForResource(resource);
+    const inspector = createElement("article", {
+        className: `resource-inspector resource-${resourceKind(resource)}`,
+    });
+    const header = createElement("div", { className: "inspector-header" });
+    const identity = createElement("div", { className: "inspector-identity" });
+    const title = createElement("h2");
+    title.append(createResourceTitleLine(resource));
+    identity.append(title);
+    const mapping = renderSourceMapping(resource, service);
+    if (mapping) {
+        identity.append(mapping);
+    }
+    header.append(identity, createRemoveResourceButton(resource));
+    inspector.append(header);
+    const issues = resourceIssues[resource.id] ?? [];
+    if (issues.length) {
+        inspector.append(renderResourceValidation(issues));
+    }
+    inspector.append(renderResourceFacts(resource, service));
+    const relationships = relationshipsFor(resource, edges);
+    const connectionSection = createElement("div", { className: "resource-connections" });
+    connectionSection.append(createConnectionHeading(resource, true));
+    if (!relationships.length) {
+        connectionSection.append(
+            createElement("span", {
+                className: "resource-independent muted",
+                text: "No direct connections",
+            }),
+        );
+    } else {
+        const chips = createElement("div", { className: "connection-chips" });
+        for (const relationship of relationships) {
+            const chip = createElement("button", {
+                className: relationshipClassName(relationship),
+                text: relationshipText(relationship),
+                title: `Edit connection from ${relationship.edge.from} to ${relationship.edge.to}`,
+                attrs: {
+                    type: "button",
+                    "aria-label": `Edit connection from ${relationship.edge.from} to ${relationship.edge.to}`,
+                },
+            });
+            chip.addEventListener("click", () => openConnectionDialog(relationship.edge.id));
+            chips.append(chip);
+        }
+        connectionSection.append(chips);
+    }
+    inspector.append(connectionSection);
+    elements.planInspector.append(inspector);
+}
+
+function renderRelationshipList(edges, confirmed) {
+    elements.relationshipListSummary.textContent = `All relationships (${edges.length})`;
+    if (!edges.length) {
+        elements.relationshipList.append(
+            createElement("p", { className: "muted", text: "No relationships in this proposal." }),
+        );
+        return;
+    }
+    for (const edge of edges) {
+        const row = createElement(confirmed ? "div" : "button", {
+            className: `relationship-row connection-${EDGE_LABELS[edge.kind]?.tone ?? "reference"}`,
+            attrs: confirmed ? {} : { type: "button" },
+        });
+        row.append(
+            createElement("strong", { text: edge.from }),
+            createElement("span", {
+                className: "relationship-kind",
+                text: EDGE_LABELS[edge.kind]?.outgoing ?? edge.kind,
+            }),
+            createElement("strong", { text: edge.to }),
+        );
+        if (!confirmed) {
+            row.addEventListener("click", () => openConnectionDialog(edge.id));
+        }
+        elements.relationshipList.append(row);
+    }
+}
+
+function captureFocusToken() {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement) || !active.id) {
+        return null;
+    }
+    return {
+        id: active.id,
+        start:
+            active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement
+                ? active.selectionStart
+                : null,
+        end:
+            active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement
+                ? active.selectionEnd
+                : null,
+    };
+}
+
+function restoreFocusToken(token) {
+    if (!token) {
+        return;
+    }
+    requestAnimationFrame(() => {
+        const target = document.getElementById(token.id);
+        if (!(target instanceof HTMLElement)) {
+            return;
+        }
+        target.focus({ preventScroll: true });
+        if (
+            (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) &&
+            token.start != null &&
+            token.end != null
+        ) {
+            target.setSelectionRange(token.start, token.end);
+        }
+    });
 }
 
 function renderCompactResource(resource, edges, issues = []) {
@@ -634,6 +961,7 @@ function renderResourceFacts(resource, service) {
 
 function appendEditableTextFact(list, label, resource, field, value, options = {}) {
     const controlId = resourceControlId(resource, field);
+    const draft = fieldDraft(resource, field);
     const input = createElement("input", {
         className: "inline-resource-input",
         attrs: {
@@ -645,6 +973,9 @@ function appendEditableTextFact(list, label, resource, field, value, options = {
             spellcheck: "false",
         },
     });
+    input.value = String(draft?.value ?? value);
+    input.setCustomValidity(draft?.status === "invalid" ? draft.message : "");
+    input.setAttribute("aria-invalid", String(draft?.status === "invalid"));
     input.disabled = snapshot.confirmed;
     input.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
@@ -652,23 +983,35 @@ function appendEditableTextFact(list, label, resource, field, value, options = {
             input.blur();
         }
     });
-    input.addEventListener("change", () => {
+    const editor = createFieldEditor(resource, field, input);
+    input.addEventListener("input", () => {
         const nextValue = input.value.trim();
         const issues =
             options.validate?.(nextValue) ??
             (nextValue || options.allowEmpty ? [] : [`Enter ${label.toLowerCase()}.`]);
         input.setCustomValidity(issues.join(" "));
+        input.setAttribute("aria-invalid", String(issues.length > 0));
+        setFieldDraft(resource, field, nextValue, issues.length ? "invalid" : "dirty", issues.join(" "));
+        updateFieldEditor(resource, field, editor);
+        renderConfirmation();
+    });
+    input.addEventListener("change", () => {
+        const nextValue = input.value.trim();
+        const issues =
+            options.validate?.(nextValue) ??
+            (nextValue || options.allowEmpty ? [] : [`Enter ${label.toLowerCase()}.`]);
         if (issues.length) {
-            input.reportValidity();
+            input.focus();
             return;
         }
-        void saveInlineResourceField(resource, field, nextValue, input);
+        void saveFieldDraft(resource, field, nextValue, input, editor);
     });
-    appendControlFact(list, label, input, "", controlId);
+    appendControlFact(list, label, editor.element, "", controlId);
 }
 
 function appendEditableDetailFact(list, resource) {
     const detailId = resourceControlId(resource, "detail");
+    const draft = fieldDraft(resource, "detail");
     const textarea = createElement("textarea", {
         className: "inline-resource-input proposal-detail-input",
         attrs: {
@@ -679,16 +1022,26 @@ function appendEditableDetailFact(list, resource) {
             spellcheck: "true",
         },
     });
-    textarea.value = resource.detail ?? "";
+    textarea.value = String(draft?.value ?? resource.detail ?? "");
     textarea.disabled = snapshot.confirmed;
+    const editor = createFieldEditor(resource, "detail", textarea);
     textarea.addEventListener("input", () => {
         syncDetailTextareaHeight(textarea);
+        setFieldDraft(resource, "detail", textarea.value, "dirty");
+        updateFieldEditor(resource, "detail", editor);
+        renderConfirmation();
     });
     textarea.addEventListener("change", () => {
-        void saveInlineResourceField(resource, "detail", textarea.value.trim(), textarea);
+        void saveFieldDraft(
+            resource,
+            "detail",
+            textarea.value.trim(),
+            textarea,
+            editor,
+        );
     });
 
-    appendControlFact(list, "Proposal detail", textarea, "is-detail", detailId);
+    appendControlFact(list, "Proposal detail", editor.element, "is-detail", detailId);
     requestAnimationFrame(() => {
         if (textarea.isConnected) {
             syncDetailTextareaHeight(textarea);
@@ -724,6 +1077,7 @@ function unobserveDetailTextareas() {
 
 function appendEditableTypeFact(list, resource) {
     const controlId = resourceControlId(resource, "type");
+    const draft = fieldDraft(resource, "type");
     const select = createElement("select", {
         className: "inline-resource-input",
         attrs: {
@@ -735,6 +1089,8 @@ function appendEditableTypeFact(list, resource) {
     const service = serviceForResource(resource);
     const values = [
         resource.type,
+        resource.generated?.type,
+        draft?.value,
         ...[...elements.addResourceType.options].map((option) => option.value),
     ].filter(
         (value, index, all) =>
@@ -742,16 +1098,25 @@ function appendEditableTypeFact(list, resource) {
             all.indexOf(value) === index &&
             (value === resource.type ||
                 (service
-                    ? isCompatibleAspireResourceType(service.type, value)
+                    ? isCompatibleAspireResourceType(
+                          service.type,
+                          value,
+                          service.framework,
+                          resource.generated?.type,
+                      )
                     : isCompatibleAspireResourceKind(resource.type, value))),
     );
     for (const value of values) {
         select.append(createElement("option", { text: value, attrs: { value } }));
     }
-    select.value = resource.type;
+    select.value = String(draft?.value ?? resource.type);
     select.disabled = snapshot.confirmed;
+    const editor = createFieldEditor(resource, "type", select);
     select.addEventListener("change", () => {
-        void saveInlineResourceField(resource, "type", select.value, select);
+        setFieldDraft(resource, "type", select.value, "dirty");
+        updateFieldEditor(resource, "type", editor);
+        renderConfirmation();
+        void saveFieldDraft(resource, "type", select.value, select, editor);
     });
     const wrapper = createElement("span", { className: "inline-select-wrap" });
     wrapper.append(
@@ -761,11 +1126,13 @@ function appendEditableTypeFact(list, resource) {
             attrs: { "aria-hidden": "true" },
         }),
     );
-    appendControlFact(list, "Aspire type", wrapper, "", controlId);
+    editor.control.replaceChildren(wrapper);
+    appendControlFact(list, "Aspire type", editor.element, "", controlId);
 }
 
 function appendEditableDefaultsFact(list, resource) {
     const controlId = resourceControlId(resource, "service-defaults");
+    const draft = fieldDraft(resource, "serviceDefaults");
     const control = createElement("label", { className: "inline-defaults-control" });
     const checkbox = createElement("input", {
         attrs: {
@@ -775,22 +1142,183 @@ function appendEditableDefaultsFact(list, resource) {
             "aria-label": `Service Defaults for ${resource.name}`,
         },
     });
-    checkbox.checked = Boolean(resource.serviceDefaults);
+    checkbox.checked = Boolean(draft?.value ?? resource.serviceDefaults);
     checkbox.disabled = snapshot.confirmed;
     control.append(
         checkbox,
         createElement("span", { text: checkbox.checked ? "Enabled" : "Disabled" }),
     );
+    const editor = createFieldEditor(resource, "serviceDefaults", control);
     checkbox.addEventListener("change", () => {
         control.querySelector("span").textContent = checkbox.checked ? "Enabled" : "Disabled";
-        void saveInlineResourceField(
+        setFieldDraft(resource, "serviceDefaults", checkbox.checked, "dirty");
+        updateFieldEditor(resource, "serviceDefaults", editor);
+        renderConfirmation();
+        void saveFieldDraft(
             resource,
             "serviceDefaults",
             checkbox.checked,
             checkbox,
+            editor,
         );
     });
-    appendControlFact(list, "Service Defaults", control);
+    appendControlFact(list, "Service Defaults", editor.element, "", controlId);
+}
+
+function fieldDraftKey(resourceId, field) {
+    return `${resourceId}:${field}`;
+}
+
+function fieldDraft(resource, field) {
+    return fieldDrafts.get(fieldDraftKey(resource.id, field));
+}
+
+function valuesEqual(left, right) {
+    return typeof left === "boolean" || typeof right === "boolean"
+        ? Boolean(left) === Boolean(right)
+        : String(left ?? "") === String(right ?? "");
+}
+
+function setFieldDraft(resource, field, value, status, message = "") {
+    const key = fieldDraftKey(resource.id, field);
+    if (valuesEqual(resource[field], value) && status !== "saving" && status !== "error") {
+        fieldDrafts.delete(key);
+        return;
+    }
+    fieldDrafts.set(key, {
+        resourceId: resource.id,
+        resourceName: resource.name,
+        field,
+        value,
+        status,
+        message,
+    });
+}
+
+function clearFieldDraft(resource, field) {
+    fieldDrafts.delete(fieldDraftKey(resource.id, field));
+}
+
+function reconcileFieldDrafts() {
+    for (const [key, draft] of fieldDrafts) {
+        const resource = snapshot?.proposal?.resources?.find(
+            (candidate) => candidate.id === draft.resourceId,
+        );
+        if (!resource || (draft.status === "saving" && valuesEqual(resource[draft.field], draft.value))) {
+            fieldDrafts.delete(key);
+        }
+    }
+}
+
+function fieldHasGeneratedOverride(resource, field) {
+    return Boolean(resource.generated) &&
+        !valuesEqual(resource[field], resource.generated[field]);
+}
+
+function createFieldEditor(resource, field, control) {
+    const element = createElement("div", {
+        className: "resource-field-editor",
+        attrs: { "data-field": field },
+    });
+    const controlContainer = createElement("div", { className: "resource-field-control" });
+    const meta = createElement("div", { className: "resource-field-meta" });
+    const status = createElement("span", {
+        className: "resource-field-status muted",
+        attrs: { "aria-live": "polite" },
+    });
+    const reset = createElement("button", {
+        className: "resource-field-reset",
+        text: "Reset",
+        attrs: {
+            type: "button",
+            "aria-label": `Reset ${field} for ${resource.name} to the generated value`,
+        },
+    });
+    reset.addEventListener("click", () => {
+        void resetResourceField(resource, field, control, { element, control: controlContainer, meta, status, reset });
+    });
+    controlContainer.append(control);
+    meta.append(status, reset);
+    element.append(controlContainer, meta);
+    const editor = { element, control: controlContainer, meta, status, reset };
+    updateFieldEditor(resource, field, editor);
+    return editor;
+}
+
+function updateFieldEditor(resource, field, editor) {
+    const draft = fieldDraft(resource, field);
+    const labels = {
+        dirty: "Unsaved",
+        saving: "Saving…",
+        invalid: draft?.message ? `Invalid · ${draft.message}` : "Invalid",
+        error: draft?.message ? `Not saved · ${draft.message}` : "Not saved",
+    };
+    editor.status.textContent = draft ? labels[draft.status] ?? "" : "";
+    editor.status.className = `resource-field-status${draft?.status ? ` is-${draft.status}` : " muted"}`;
+    editor.reset.hidden =
+        snapshot.confirmed ||
+        (!draft && !fieldHasGeneratedOverride(resource, field));
+    editor.meta.hidden = !editor.status.textContent && editor.reset.hidden;
+}
+
+async function saveFieldDraft(resource, field, value, control, editor) {
+    if (valuesEqual(resource[field], value)) {
+        clearFieldDraft(resource, field);
+        updateFieldEditor(resource, field, editor);
+        renderConfirmation();
+        return true;
+    }
+    setFieldDraft(resource, field, value, "saving");
+    updateFieldEditor(resource, field, editor);
+    renderConfirmation();
+    let failure;
+    const saved = await runBusy(
+        control,
+        async () => {
+            await post("/api/proposal/resource", {
+                id: resource.id,
+                [field]: value,
+            });
+        },
+        (error) => {
+            failure = error;
+        },
+    );
+    if (saved) {
+        clearFieldDraft(resource, field);
+    } else {
+        setFieldDraft(
+            resource,
+            field,
+            value,
+            "error",
+            failure?.message ?? String(failure ?? "The change could not be saved."),
+        );
+    }
+    updateFieldEditor(resource, field, editor);
+    renderConfirmation();
+    return saved;
+}
+
+async function resetResourceField(resource, field, control, editor) {
+    if (!resource.generated) {
+        return;
+    }
+    const generatedValue = resource.generated[field];
+    clearFieldDraft(resource, field);
+    if (control instanceof HTMLInputElement && control.type === "checkbox") {
+        control.checked = Boolean(generatedValue);
+        control.closest("label")?.querySelector("span")?.replaceChildren(
+            control.checked ? "Enabled" : "Disabled",
+        );
+    } else {
+        control.value = String(generatedValue ?? "");
+    }
+    updateFieldEditor(resource, field, editor);
+    renderConfirmation();
+    if (!valuesEqual(resource[field], generatedValue)) {
+        await saveFieldDraft(resource, field, generatedValue, control, editor);
+    }
 }
 
 function appendControlFact(list, label, control, className = "", controlId = "") {
@@ -813,25 +1341,6 @@ function appendControlFact(list, label, control, className = "", controlId = "")
 function resourceControlId(resource, field) {
     const resourceId = String(resource.id).replace(/[^A-Za-z0-9_-]/g, "-");
     return `resource-${resourceId}-${field}`;
-}
-
-async function saveInlineResourceField(resource, field, value, control) {
-    const saved = await runBusy(control, async () => {
-        await post("/api/proposal/resource", {
-            id: resource.id,
-            [field]: value,
-        });
-    });
-    if (!saved) {
-        if (control instanceof HTMLInputElement && control.type === "checkbox") {
-            control.checked = Boolean(resource[field]);
-            control.closest("label")?.querySelector("span")?.replaceChildren(
-                control.checked ? "Enabled" : "Disabled",
-            );
-        } else {
-            control.value = resource[field] ?? "";
-        }
-    }
 }
 
 function appendFact(list, label, value, code = false) {
@@ -872,10 +1381,13 @@ function renderCompactConnections(resource, edges) {
     return section;
 }
 
-function createConnectionHeading(resource) {
+function createConnectionHeading(resource, labeled = false) {
     const heading = createElement("div", { className: "connection-heading" });
     const add = createElement("button", {
-        className: "btn btn-outline btn-icon add-icon-button connection-add",
+        className: labeled
+            ? "btn btn-outline btn-sm connection-add connection-add-labeled"
+            : "btn btn-outline btn-icon add-icon-button connection-add",
+        text: labeled ? "Add connection" : "",
         title: `Add connection for ${resource.name}`,
         attrs: {
             type: "button",
@@ -891,115 +1403,6 @@ function createConnectionHeading(resource) {
         add,
     );
     return heading;
-}
-
-function renderResourceCard(resource, edges, issues = []) {
-    const service = serviceForResource(resource);
-    const collapsed = collapsedCards.has(resource.id);
-    const card = createElement("article", {
-        className: `resource-card resource-${resourceKind(resource)}`,
-    });
-    const header = createElement("div", { className: "resource-card-header" });
-    const bodyId = `resource-card-${String(resource.id).replace(/[^A-Za-z0-9_-]/g, "-")}-body`;
-    const body = createElement("div", {
-        className: "resource-card-body",
-        attrs: { id: bodyId },
-    });
-    body.hidden = collapsed;
-    const toggle = createElement("button", {
-        className: "resource-card-toggle",
-        attrs: {
-            type: "button",
-            "aria-expanded": String(!collapsed),
-            "aria-controls": bodyId,
-        },
-    });
-    const toggleCopy = createElement("span", { className: "resource-card-toggle-copy" });
-    toggleCopy.append(createResourceTitleLine(resource));
-    const mapping = renderSourceMapping(resource, service);
-    if (mapping) {
-        toggleCopy.append(mapping);
-    }
-    toggle.append(
-        createElement("span", {
-            className: "resource-card-chevron",
-            attrs: { "aria-hidden": "true" },
-        }),
-        toggleCopy,
-    );
-    const identity = createElement("div", { className: "resource-identity" });
-    const title = createElement("h3");
-    title.append(toggle);
-    identity.append(title);
-    toggle.addEventListener("click", () => {
-        body.hidden = !body.hidden;
-        toggle.setAttribute("aria-expanded", String(!body.hidden));
-        card.classList.toggle("is-collapsed", body.hidden);
-        if (body.hidden) {
-            collapsedCards.add(resource.id);
-        } else {
-            collapsedCards.delete(resource.id);
-            resizeVisibleDetailTextareas(body);
-        }
-    });
-    header.append(identity, createRemoveResourceButton(resource));
-    card.classList.toggle("is-collapsed", collapsed);
-    card.append(header);
-    if (issues.length > 0) {
-        const validationId = `${bodyId}-validation`;
-        const validation = createElement("div", {
-            className: "resource-validation",
-            attrs: {
-                id: validationId,
-            },
-        });
-        validation.append(
-            createElement("span", {
-                className: "resource-validation-icon",
-                text: "!",
-                attrs: { "aria-hidden": "true" },
-            }),
-            createElement("span", {
-                text: issues.join(" "),
-            }),
-        );
-        toggle.setAttribute("aria-describedby", validationId);
-        card.append(validation);
-    }
-    card.append(body);
-
-    body.append(renderResourceFacts(resource, service));
-
-    const relationships = relationshipsFor(resource, edges);
-    const connectionSection = createElement("div", { className: "resource-connections" });
-    connectionSection.append(createConnectionHeading(resource));
-    if (relationships.length === 0) {
-        connectionSection.append(
-            createElement("span", {
-                className: "resource-independent muted",
-                text: "No direct connections",
-            }),
-        );
-    } else {
-        const chips = createElement("div", { className: "connection-chips" });
-        for (const relationship of relationships) {
-            const chip = createElement("button", {
-                className: relationshipClassName(relationship),
-                text: relationshipText(relationship),
-                title: `Edit connection from ${relationship.edge.from} to ${relationship.edge.to}`,
-                attrs: {
-                    type: "button",
-                    "aria-label": `Edit connection from ${relationship.edge.from} to ${relationship.edge.to}`,
-                },
-            });
-            chip.disabled = snapshot.confirmed;
-            chip.addEventListener("click", () => openConnectionDialog(relationship.edge.id));
-            chips.append(chip);
-        }
-        connectionSection.append(chips);
-    }
-    body.append(connectionSection);
-    return card;
 }
 
 function servicePathForDisplay(path) {
@@ -1052,11 +1455,11 @@ function renderProposalIdentity() {
               timeStyle: "short",
           })}`;
     elements.proposalStateCopy.textContent = snapshot.confirmed
-        ? "AppHost proposal confirmed — Implementation continues in chat."
+        ? "AppHost proposal confirmed"
         : "AppHost proposal awaiting confirmation";
     elements.proposalGeneratedAt.textContent = snapshot.confirmed
-        ? `${generatedLabel} · Confirmed snapshot is read-only.`
-        : `${generatedLabel} · No files have changed.`;
+        ? `${generatedLabel} · Immutable snapshot. Implementation continues in chat.`
+        : `${generatedLabel} · AppHost wiring has not started.`;
     elements.proposalGeneration.textContent = String(
         snapshot.confirmedGeneration ?? snapshot.proposalGeneration,
     );
@@ -1078,9 +1481,7 @@ function renderStatus() {
     if (snapshot.proposalError) {
         setStatusLine(snapshot.proposalError);
     } else if (snapshot.confirmed) {
-        setStatusLine(`Generation ${
-            snapshot.confirmedGeneration ?? snapshot.proposalGeneration
-        } confirmed · Implementation continues in chat`);
+        setStatusLine("Proposal confirmed");
     } else {
         setStatusLine(`${
             includedResources.length
@@ -1093,6 +1494,7 @@ function renderStatus() {
 function renderConfirmation() {
     const issues = confirmationIssues();
     const resourceIssueCount = Object.keys(proposalValidation().resourceIssues).length;
+    const unresolvedDrafts = [...fieldDrafts.values()];
     const nonResourceIssues = issues.filter((issue) => !issue.startsWith('Resource "'));
     elements.confirm.disabled =
         !snapshot.proposalLoaded ||
@@ -1106,7 +1508,9 @@ function renderConfirmation() {
     elements.footerNote.textContent = mutationError
         ? mutationError
         : snapshot.confirmed
-          ? "Implementation continues in chat."
+          ? ""
+          : unresolvedDrafts.length
+            ? `${unresolvedDrafts.length} edit${unresolvedDrafts.length === 1 ? "" : "s"} must be saved or reset before confirmation.`
           : resourceIssueCount
             ? `${resourceIssueCount} resource${resourceIssueCount === 1 ? "" : "s"} need attention before confirmation.${
                   nonResourceIssues.length ? ` ${nonResourceIssues.join(" ")}` : ""
@@ -1118,7 +1522,12 @@ function confirmationIssues() {
     if (!snapshot.proposalLoaded || snapshot.proposalStale) {
         return [];
     }
-    return [...new Set(proposalValidation().issues)];
+    const draftIssues = [...fieldDrafts.values()].map((draft) =>
+        draft.status === "invalid"
+            ? `${draft.resourceName} has an invalid ${draft.field} edit.`
+            : `${draft.resourceName} has an unsaved ${draft.field} edit.`,
+    );
+    return [...new Set([...proposalValidation().issues, ...draftIssues])];
 }
 
 function proposalValidation() {
@@ -1166,8 +1575,9 @@ function resourceNameFieldIssues(value, resourceId) {
     const duplicate = snapshot?.proposal?.resources?.find(
         (resource) =>
             resource.id !== resourceId &&
-            resource.include &&
-            resource.name.trim().toLowerCase() === name.toLowerCase(),
+            String(fieldDraft(resource, "name")?.value ?? resource.name)
+                .trim()
+                .toLowerCase() === name.toLowerCase(),
     );
     if (name && duplicate) {
         issues.push(`The name "${name}" is already used by another resource.`);
@@ -1201,7 +1611,7 @@ function openRemoveDialog({ title, detail, action }) {
     elements.removeDialogDetail.textContent = detail;
     pendingRemoval = action;
     elements.removeDialog.showModal();
-    elements.confirmRemove.focus();
+    elements.removeDialog.querySelector(".dialog-actions [data-close-dialog]")?.focus();
 }
 
 async function executeRemoval(event) {
@@ -1234,14 +1644,17 @@ function openAddResourceDialog(groupId) {
     elements.addResourceForm.reset();
     clearDialogError(elements.addResourceDialogError);
     elements.addResourceName.setCustomValidity("");
+    elements.addResourceType.setCustomValidity("");
     elements.addResourceName.setAttribute("aria-invalid", "false");
     elements.addResourceGroup.value = groupId;
     elements.addResourceDialogTitle.textContent = definition.addTitle;
     elements.addResourceDialogDetail.textContent = definition.addDescription;
     filterResourceTypeOptions(elements.addResourceType, groupId);
     const firstOption = [...elements.addResourceType.options].find((option) => !option.disabled);
-    elements.addResourceType.value = firstOption?.value ?? "";
-    elements.addResourceDefaults.checked = elements.addResourceType.value === ".NET project";
+    elements.addResourceType.value =
+        suggestedResourceType(elements.addResourceGroup.value) ?? firstOption?.value ?? "";
+    elements.addResourceDefaults.checked =
+        elements.addResourceType.value === ".NET project";
     syncDefaultsField(
         elements.addResourceType,
         elements.addDefaultsField,
@@ -1255,6 +1668,13 @@ function openAddResourceDialog(groupId) {
 
 async function addResource(event) {
     event.preventDefault();
+    if (!elements.addResourceType.value) {
+        elements.addResourceType.setCustomValidity("Choose a resource type.");
+        elements.addResourceDialogError.textContent = "Choose a resource type.";
+        elements.addResourceDialogError.hidden = false;
+        elements.addResourceType.focus();
+        return;
+    }
     if (
         !validateResourceNameField(
             elements.addResourceName,
@@ -1266,7 +1686,6 @@ async function addResource(event) {
         return;
     }
     await runBusy(event.submitter, async () => {
-        collapsedGroups.delete(elements.addResourceGroup.value);
         await post("/api/proposal/resource/add", {
             name: elements.addResourceName.value,
             type: elements.addResourceType.value,
@@ -1391,6 +1810,7 @@ function openConnectionDialog(edgeId = "", initialFrom = "") {
     elements.connectionKind.value = edge?.kind ?? "reference";
     elements.deleteConnection.hidden = !edge;
     elements.connectionDialog.showModal();
+    elements.connectionFrom.focus();
 }
 
 async function saveConnection(event) {
@@ -1490,17 +1910,56 @@ function resourceGroupDefinition(resource) {
 function filterResourceTypeOptions(select, groupId) {
     for (const option of select.options) {
         const matches =
+            !option.value ||
             groupId === "all" ||
             option.dataset.group === groupId ||
             option.dataset.detected === "true";
         option.hidden = !matches;
-        option.disabled = !matches;
+        option.disabled = !option.value || !matches;
     }
     for (const optgroup of select.querySelectorAll("optgroup")) {
         optgroup.hidden = [...optgroup.querySelectorAll("option")].every(
             (option) => option.hidden,
         );
     }
+}
+
+function suggestedResourceType(groupId) {
+    const candidates = snapshot.proposal.resources.filter((resource) => {
+        if (!resource.include) {
+            return false;
+        }
+        if (groupId === "all") {
+            return true;
+        }
+        return resourceGroupDefinition(resource).id === groupId;
+    });
+    const available = new Set(
+        [...elements.addResourceType.options]
+            .filter((option) => option.value && !option.disabled)
+            .map((option) => option.value),
+    );
+    const counts = new Map();
+    for (const resource of candidates) {
+        if (available.has(resource.type)) {
+            counts.set(resource.type, (counts.get(resource.type) ?? 0) + 1);
+        }
+    }
+    const ranked = [...counts].sort(
+        ([leftType, leftCount], [rightType, rightCount]) =>
+            rightCount - leftCount || leftType.localeCompare(rightType),
+    );
+    if (ranked.length && (ranked.length === 1 || ranked[0][1] > ranked[1][1])) {
+        return ranked[0][0];
+    }
+    if (
+        groupId === "applications" &&
+        snapshot.apphostStyle !== "typescript" &&
+        available.has(".NET project")
+    ) {
+        return ".NET project";
+    }
+    return "";
 }
 
 function syncDefaultsField(select, field, checkbox, defaultWhenShown = true) {
