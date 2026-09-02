@@ -49,7 +49,16 @@ function stripTransientProposalFields(proposal) {
                 }) => resource,
             ),
         edges: (proposal?.edges ?? []).map(
-            ({ userAdded, userEdited, sourceId, sourceKey, ...edge }) => edge,
+            ({
+                userAdded,
+                userEdited,
+                sourceId,
+                sourceKey,
+                generated,
+                origin,
+                edited,
+                ...edge
+            }) => edge,
         ),
     };
 }

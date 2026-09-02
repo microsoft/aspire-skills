@@ -135,9 +135,15 @@
                             <details
                                 class="relationship-list-disclosure"
                                 id="relationship-list-disclosure"
+                                open
                                 hidden
                             >
                                 <summary id="relationship-list-summary">All relationships</summary>
+                                <p class="relationship-help muted">
+                                    References pass connection information. Wait-for connections
+                                    control startup order. Parent relationships model resource
+                                    ownership.
+                                </p>
                                 <div class="relationship-list" id="relationship-list"></div>
                             </details>
                         </section>
@@ -155,6 +161,15 @@
 
         <footer class="action-footer" id="action-footer" hidden>
             <div class="action-footer-inner">
+                <div class="history-actions" aria-label="Proposal history">
+                    <button class="btn btn-outline btn-sm" id="undo" type="button" disabled>
+                        Undo
+                    </button>
+                    <button class="btn btn-outline btn-sm" id="redo" type="button" disabled>
+                        Redo
+                    </button>
+                </div>
+                <span class="confirm-summary muted" id="confirm-summary"></span>
                 <span
                     class="footer-note"
                     id="footer-note"
@@ -163,6 +178,7 @@
                     aria-atomic="true"
                     hidden
                 ></span>
+                <span class="sr-only" id="history-announcement" aria-live="polite"></span>
                 <button id="confirm" class="btn btn-primary" type="button" disabled>
                     Confirm
                 </button>
@@ -305,7 +321,14 @@
                     hidden
                 ></p>
                 <div class="dialog-actions">
-                    <button class="btn btn-danger" id="delete-connection" type="button" hidden>Remove</button>
+                    <div class="dialog-secondary-actions">
+                        <button class="btn btn-outline" id="reset-connection" type="button" hidden>
+                            Reset
+                        </button>
+                        <button class="btn btn-danger" id="delete-connection" type="button" hidden>
+                            Remove
+                        </button>
+                    </div>
                     <span class="dialog-spacer"></span>
                     <button class="btn btn-outline" type="button" data-close-dialog>Cancel</button>
                     <button class="btn btn-primary" id="save-connection" value="default">Save</button>

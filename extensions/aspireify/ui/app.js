@@ -74,7 +74,11 @@ const elements = {
     proposalGeneration: document.getElementById("proposal-generation"),
     proposalHash: document.getElementById("proposal-hash"),
     actionFooter: document.getElementById("action-footer"),
+    undo: document.getElementById("undo"),
+    redo: document.getElementById("redo"),
+    confirmSummary: document.getElementById("confirm-summary"),
     footerNote: document.getElementById("footer-note"),
+    historyAnnouncement: document.getElementById("history-announcement"),
     confirm: document.getElementById("confirm"),
     error: document.getElementById("error"),
     errorMessage: document.getElementById("error-message"),
@@ -100,6 +104,7 @@ const elements = {
     connectionFrom: document.getElementById("connection-from"),
     connectionKind: document.getElementById("connection-kind"),
     connectionTo: document.getElementById("connection-to"),
+    resetConnection: document.getElementById("reset-connection"),
     deleteConnection: document.getElementById("delete-connection"),
     removeDialog: document.getElementById("remove-dialog"),
     removeForm: document.getElementById("remove-form"),
@@ -135,6 +140,8 @@ const detailResizeObserver =
 document.addEventListener("DOMContentLoaded", () => {
     elements.retry.addEventListener("click", () => void retryProposalOrSnapshot());
     elements.confirm.addEventListener("click", () => void confirmSnapshot());
+    elements.undo.addEventListener("click", () => void applyHistoryChange("undo", elements.undo));
+    elements.redo.addEventListener("click", () => void applyHistoryChange("redo", elements.redo));
     elements.compactAddResource.addEventListener("click", () => openAddResourceDialog("all"));
     elements.addResourceForm.addEventListener("submit", addResource);
     elements.addResourceType.addEventListener("change", () => {
@@ -160,6 +167,7 @@ document.addEventListener("DOMContentLoaded", () => {
     );
     elements.connectionForm.addEventListener("submit", saveConnection);
     elements.connectionFrom.addEventListener("change", () => syncConnectionTargets());
+    elements.resetConnection.addEventListener("click", () => void resetConnection());
     elements.deleteConnection.addEventListener("click", requestDeleteConnection);
     elements.removeForm.addEventListener("submit", executeRemoval);
     elements.removeDialog.addEventListener("close", () => {
@@ -169,6 +177,7 @@ document.addEventListener("DOMContentLoaded", () => {
         button.addEventListener("click", () => button.closest("dialog")?.close());
     }
     window.addEventListener("resize", () => resizeVisibleDetailTextareas());
+    window.addEventListener("keydown", handleHistoryShortcut);
     void loadSnapshot();
     connectEvents();
 });
@@ -336,6 +345,54 @@ async function runBusy(control, action, onError) {
     return succeeded;
 }
 
+function historyChangeBlocked() {
+    return (
+        !snapshot?.proposalLoaded ||
+        snapshot.proposalStale ||
+        snapshot.confirmed ||
+        pendingMutations > 0 ||
+        fieldDrafts.size > 0
+    );
+}
+
+async function applyHistoryChange(direction, control) {
+    if (historyChangeBlocked() || !snapshot?.history?.[`can${direction === "undo" ? "Undo" : "Redo"}`]) {
+        return;
+    }
+    let label = "";
+    const changed = await runBusy(control, async () => {
+        const result = await post(`/api/history/${direction}`, {});
+        label = result.label ?? "";
+    });
+    if (changed) {
+        elements.historyAnnouncement.textContent = `${
+            direction === "undo" ? "Undid" : "Redid"
+        } ${label || "proposal change"}.`;
+    }
+}
+
+function handleHistoryShortcut(event) {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey) {
+        return;
+    }
+    const active = document.activeElement;
+    if (
+        active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement ||
+        active instanceof HTMLSelectElement ||
+        active?.isContentEditable
+    ) {
+        return;
+    }
+    const key = event.key.toLowerCase();
+    const redo = key === "y" || (key === "z" && event.shiftKey);
+    if (key !== "z" && key !== "y") {
+        return;
+    }
+    event.preventDefault();
+    void applyHistoryChange(redo ? "redo" : "undo", redo ? elements.redo : elements.undo);
+}
+
 async function confirmSnapshot() {
     if (pendingMutations > 0) {
         return;
@@ -460,7 +517,7 @@ function renderResourcePlan() {
     elements.compactResources.hidden = !compact || snapshot.confirmed;
     elements.relationshipWorkspace.hidden = compact && !snapshot.confirmed;
     elements.relationshipListDisclosure.hidden = compact && !snapshot.confirmed;
-    elements.compactAddResource.hidden = !compact || snapshot.confirmed;
+    elements.compactAddResource.hidden = snapshot.confirmed;
     if (snapshot.confirmed) {
         selectedResourceId = "";
         renderOverview(resources, edges, resourceIssues, true);
@@ -546,7 +603,7 @@ function renderOverview(resources, edges, resourceIssues, confirmed) {
         const groupedResources = resources.filter(
             (resource) => resourceRole(resource) === definition.id,
         );
-        if (confirmed && groupedResources.length === 0) {
+        if (groupedResources.length === 0) {
             continue;
         }
         const section = createElement("section", {
@@ -571,26 +628,9 @@ function renderOverview(resources, edges, resourceIssues, confirmed) {
                 }`,
             }),
         );
-        if (!confirmed) {
-            const add = createElement("button", {
-                className: "btn btn-outline btn-sm overview-add",
-                text: "Add resource",
-                attrs: { type: "button" },
-            });
-            add.addEventListener("click", () => openAddResourceDialog(definition.id));
-            heading.append(add);
-        }
         const list = createElement("div", {
             className: "overview-node-list",
         });
-        if (!groupedResources.length) {
-            list.append(
-                createElement("p", {
-                    className: "overview-empty muted",
-                    text: "No resources",
-                }),
-            );
-        }
         for (const resource of groupedResources) {
             list.append(
                 renderOverviewNode(
@@ -740,7 +780,7 @@ function renderInspector(resource, edges, resourceIssues) {
     if (mapping) {
         identity.append(mapping);
     }
-    header.append(identity, createRemoveResourceButton(resource));
+    header.append(identity, createResourceActions(resource));
     inspector.append(header);
     const issues = resourceIssues[resource.id] ?? [];
     if (issues.length) {
@@ -760,17 +800,7 @@ function renderInspector(resource, edges, resourceIssues) {
     } else {
         const chips = createElement("div", { className: "connection-chips" });
         for (const relationship of relationships) {
-            const chip = createElement("button", {
-                className: relationshipClassName(relationship),
-                text: relationshipText(relationship),
-                title: `Edit connection from ${relationship.edge.from} to ${relationship.edge.to}`,
-                attrs: {
-                    type: "button",
-                    "aria-label": `Edit connection from ${relationship.edge.from} to ${relationship.edge.to}`,
-                },
-            });
-            chip.addEventListener("click", () => openConnectionDialog(relationship.edge.id));
-            chips.append(chip);
+            chips.append(createConnectionChip(relationship));
         }
         connectionSection.append(chips);
     }
@@ -859,7 +889,7 @@ function renderCompactResource(resource, edges, issues = []) {
         identity.append(mapping);
     }
     const actions = createElement("div", { className: "compact-resource-actions" });
-    actions.append(createRemoveResourceButton(resource));
+    actions.append(...createResourceActionButtons(resource));
     header.append(identity, actions);
     item.append(header);
 
@@ -869,6 +899,46 @@ function renderCompactResource(resource, edges, issues = []) {
     item.append(renderResourceFacts(resource, service));
     item.append(renderCompactConnections(resource, edges));
     return item;
+}
+
+function createResourceActions(resource) {
+    const actions = createElement("div", { className: "compact-resource-actions" });
+    actions.append(...createResourceActionButtons(resource));
+    return actions;
+}
+
+function createResourceActionButtons(resource) {
+    const buttons = [];
+    const hasDrafts = [...fieldDrafts.values()].some(
+        (draft) => draft.resourceId === resource.id,
+    );
+    if (resource.generated && (resource.edited || hasDrafts)) {
+        const reset = createElement("button", {
+            className: "btn btn-quiet btn-sm",
+            text: "Reset fields",
+            title: `Reset ${resource.name} fields to generated values`,
+            attrs: { type: "button" },
+        });
+        reset.addEventListener("click", () => void resetEntireResource(resource, reset));
+        buttons.push(reset);
+    }
+    buttons.push(createRemoveResourceButton(resource));
+    return buttons;
+}
+
+async function resetEntireResource(resource, control) {
+    const reset = await runBusy(control, async () => {
+        await post("/api/proposal/resource/reset", { id: resource.id });
+    });
+    if (reset) {
+        for (const key of [...fieldDrafts.keys()]) {
+            if (key.startsWith(`${resource.id}:`)) {
+                fieldDrafts.delete(key);
+            }
+        }
+        renderResourcePlan();
+        renderConfirmation();
+    }
 }
 
 function createRemoveResourceButton(resource) {
@@ -933,9 +1003,6 @@ function renderResourceValidation(issues) {
 
 function renderResourceFacts(resource, service) {
     const facts = createElement("dl", { className: "resource-facts" });
-    if (service) {
-        appendFact(facts, "Source service", service.name);
-    }
     appendEditableTextFact(facts, "Resource name", resource, "name", resource.name, {
         validate: (value) => resourceNameFieldIssues(value, resource.id),
     });
@@ -1314,6 +1381,10 @@ async function resetResourceField(resource, field, control, editor) {
     } else {
         control.value = String(generatedValue ?? "");
     }
+    if (control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement) {
+        control.setCustomValidity("");
+        control.setAttribute("aria-invalid", "false");
+    }
     updateFieldEditor(resource, field, editor);
     renderConfirmation();
     if (!valuesEqual(resource[field], generatedValue)) {
@@ -1368,14 +1439,7 @@ function renderCompactConnections(resource, edges) {
     }
     const chips = createElement("div", { className: "connection-chips" });
     for (const relationship of relationships) {
-        const chip = createElement("button", {
-            className: relationshipClassName(relationship),
-            text: relationshipText(relationship),
-            attrs: { type: "button" },
-        });
-        chip.disabled = snapshot.confirmed;
-        chip.addEventListener("click", () => openConnectionDialog(relationship.edge.id));
-        chips.append(chip);
+        chips.append(createConnectionChip(relationship));
     }
     section.append(chips);
     return section;
@@ -1446,6 +1510,41 @@ function relationshipClassName(relationship) {
     return `connection-chip connection-${tone}`;
 }
 
+function connectionKindName(kind) {
+    return (
+        {
+            reference: "reference",
+            waitFor: "wait-for",
+            parent: "parent",
+        }[kind] ?? kind
+    );
+}
+
+function createConnectionChip(relationship) {
+    const accessibleLabel = `Edit ${connectionKindName(
+        relationship.edge.kind,
+    )} connection from ${relationship.edge.from} to ${relationship.edge.to}`;
+    const chip = createElement("button", {
+        className: relationshipClassName(relationship),
+        title: accessibleLabel,
+        attrs: {
+            type: "button",
+            "aria-label": accessibleLabel,
+        },
+    });
+    chip.append(
+        createElement("span", { text: relationshipText(relationship) }),
+        createElement("span", {
+            className: "connection-chip-affordance",
+            text: "Edit",
+            attrs: { "aria-hidden": "true" },
+        }),
+    );
+    chip.disabled = snapshot.confirmed;
+    chip.addEventListener("click", () => openConnectionDialog(relationship.edge.id));
+    return chip;
+}
+
 function renderProposalIdentity() {
     const generatedAt = new Date(snapshot.proposal.generatedAt);
     const generatedLabel = Number.isNaN(generatedAt.getTime())
@@ -1503,8 +1602,12 @@ function renderConfirmation() {
         snapshot.confirmed ||
         pendingMutations > 0;
     elements.confirm.textContent = snapshot.confirmed ? "Confirmed" : "Confirm";
-    elements.footerNote.hidden =
-        !mutationError && issues.length === 0 && !snapshot.confirmed;
+    const hasBlockingMessage = Boolean(mutationError || issues.length);
+    elements.confirmSummary.hidden = hasBlockingMessage || snapshot.confirmed;
+    elements.confirmSummary.textContent = hasBlockingMessage
+        ? ""
+        : confirmationSummaryText();
+    elements.footerNote.hidden = !hasBlockingMessage || snapshot.confirmed;
     elements.footerNote.textContent = mutationError
         ? mutationError
         : snapshot.confirmed
@@ -1516,6 +1619,33 @@ function renderConfirmation() {
                   nonResourceIssues.length ? ` ${nonResourceIssues.join(" ")}` : ""
               }`
             : (issues[0] ?? "");
+    renderHistoryControls();
+}
+
+function confirmationSummaryText() {
+    const resources = snapshot.proposal.resources.filter((resource) => resource.include);
+    const names = new Set(resources.map((resource) => resource.name));
+    const connections = snapshot.proposal.edges.filter(
+        (edge) => names.has(edge.from) && names.has(edge.to),
+    );
+    return `Confirm ${resources.length} resource${
+        resources.length === 1 ? "" : "s"
+    } and ${connections.length} connection${
+        connections.length === 1 ? "" : "s"
+    } for ${appHostPathForDisplay(snapshot.appHostPath)}. Wiring continues in chat; nothing starts here.`;
+}
+
+function renderHistoryControls() {
+    const blocked = historyChangeBlocked();
+    const history = snapshot?.history ?? {};
+    elements.undo.disabled = blocked || !history.canUndo;
+    elements.redo.disabled = blocked || !history.canRedo;
+    elements.undo.title = history.canUndo
+        ? `Undo ${history.undoLabel || "proposal change"}`
+        : "Nothing to undo";
+    elements.redo.title = history.canRedo
+        ? `Redo ${history.redoLabel || "proposal change"}`
+        : "Nothing to redo";
 }
 
 function confirmationIssues() {
@@ -1808,9 +1938,23 @@ function openConnectionDialog(edgeId = "", initialFrom = "") {
             : resources[0].name);
     syncConnectionTargets(edge?.to ?? resources[1].name);
     elements.connectionKind.value = edge?.kind ?? "reference";
+    elements.resetConnection.hidden = !edge?.generated || !edge.edited;
     elements.deleteConnection.hidden = !edge;
     elements.connectionDialog.showModal();
     elements.connectionFrom.focus();
+}
+
+async function resetConnection() {
+    const id = elements.connectionId.value;
+    if (!id) {
+        return;
+    }
+    const reset = await runBusy(elements.resetConnection, async () => {
+        await post("/api/proposal/edge/reset", { id });
+    });
+    if (reset) {
+        elements.connectionDialog.close();
+    }
 }
 
 async function saveConnection(event) {

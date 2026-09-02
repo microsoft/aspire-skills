@@ -27,6 +27,7 @@ const BODY_LIMIT = 256 * 1024;
 const TOKEN_BYTES = 32;
 const AUTH_HEADER = "x-aspireify-token";
 const SCAN_TIMEOUT_MS = 120_000;
+const HISTORY_LIMIT = 50;
 
 const CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -40,6 +41,7 @@ const instances = new Map();
 const snapshots = new Map();
 const scanTimers = new Map();
 const confirmationRequests = new Map();
+const editHistories = new Map();
 let sessionRef;
 let ownExtensionId = "";
 
@@ -164,6 +166,10 @@ function normalizeProposalResource(resource, index, userAdded = false) {
               name: String(resource.generated.name ?? normalized.name).trim(),
               type: normalizeResourceType(resource.generated.type ?? normalized.type),
               detail: String(resource.generated.detail ?? normalized.detail).trim(),
+              include:
+                  typeof resource.generated.include === "boolean"
+                      ? resource.generated.include
+                      : normalized.include,
               serviceDefaults: Boolean(
                   resource.generated.serviceDefaults ?? normalized.serviceDefaults,
               ),
@@ -174,6 +180,7 @@ function normalizeProposalResource(resource, index, userAdded = false) {
                 name: normalized.name,
                 type: normalized.type,
                 detail: normalized.detail,
+                include: normalized.include,
                 serviceDefaults: normalized.serviceDefaults,
             };
     return {
@@ -191,6 +198,7 @@ function resourceDiffersFromGenerated(resource) {
         resource.name !== resource.generated.name ||
         resource.type !== resource.generated.type ||
         resource.detail !== resource.generated.detail ||
+        resource.include !== resource.generated.include ||
         resource.serviceDefaults !== resource.generated.serviceDefaults
     );
 }
@@ -200,7 +208,7 @@ function proposalHasUserEdits(proposal) {
         proposal.resources.some(
             (resource) => resource.userAdded || resourceDiffersFromGenerated(resource),
         ) ||
-        proposal.edges.some((edge) => edge.userAdded || edge.userEdited)
+        proposal.edges.some((edge) => edge.userAdded || edgeDiffersFromGenerated(edge))
     );
 }
 
@@ -256,7 +264,7 @@ function edgeReferencesResource(edge, resource) {
 
 function normalizeProposalEdge(edge, index, userAdded = false) {
     const normalized = {
-        id: String(edge?.id ?? `edge-${index + 1}`),
+        id: String(edge?.id ?? "").trim() || `edge-${index + 1}`,
         from: String(edge?.from ?? "").trim(),
         to: String(edge?.to ?? "").trim(),
         fromId: String(edge?.fromId ?? "").trim(),
@@ -265,10 +273,65 @@ function normalizeProposalEdge(edge, index, userAdded = false) {
         userAdded: Boolean(edge?.userAdded ?? userAdded),
         userEdited: Boolean(edge?.userEdited),
     };
+    const generated = edge?.generated
+        ? {
+              from: String(edge.generated.from ?? normalized.from).trim(),
+              to: String(edge.generated.to ?? normalized.to).trim(),
+              fromId: String(edge.generated.fromId ?? normalized.fromId).trim(),
+              toId: String(edge.generated.toId ?? normalized.toId).trim(),
+              kind: ["reference", "waitFor", "parent"].includes(edge.generated.kind)
+                  ? edge.generated.kind
+                  : normalized.kind,
+          }
+        : normalized.userAdded
+          ? null
+          : {
+                from: normalized.from,
+                to: normalized.to,
+                fromId: normalized.fromId,
+                toId: normalized.toId,
+                kind: normalized.kind,
+            };
     return {
         ...normalized,
         sourceId: userAdded ? "" : String(edge?.sourceId ?? (edge?.id == null ? "" : edge.id)),
         sourceKey: userAdded ? "" : String(edge?.sourceKey ?? proposalEdgeKey(normalized)),
+        generated,
+    };
+}
+
+function edgeDiffersFromGenerated(edge) {
+    if (edge.userAdded || !edge.generated) {
+        return Boolean(edge.userAdded);
+    }
+    const fromMatches = edge.generated.fromId
+        ? edge.fromId === edge.generated.fromId
+        : edge.from === edge.generated.from;
+    const toMatches = edge.generated.toId
+        ? edge.toId === edge.generated.toId
+        : edge.to === edge.generated.to;
+    return !fromMatches || !toMatches || edge.kind !== edge.generated.kind;
+}
+
+function generatedEdgeState(edge, resources) {
+    if (!edge.generated) {
+        return null;
+    }
+    const fromResource = edge.generated.fromId
+        ? resources.find((resource) => resource.id === edge.generated.fromId)
+        : uniqueResourceByName(resources, edge.generated.from);
+    const toResource = edge.generated.toId
+        ? resources.find((resource) => resource.id === edge.generated.toId)
+        : uniqueResourceByName(resources, edge.generated.to);
+    if (!fromResource || !toResource) {
+        return null;
+    }
+    return {
+        from: fromResource.name,
+        to: toResource.name,
+        fromId: fromResource.id,
+        toId: toResource.id,
+        kind: edge.generated.kind,
     };
 }
 
@@ -311,6 +374,32 @@ function resolveSubmittedProposalEdges(edges, resources) {
         );
     }
     return resolvedEdges;
+}
+
+function validateSubmittedProposalEdges(edges) {
+    const keys = new Set();
+    const ids = new Set();
+    const issues = [];
+    for (const [index, edge] of edges.entries()) {
+        const id = String(edge?.id ?? "").trim() || `edge-${index + 1}`;
+        if (ids.has(id)) {
+            issues.push(`Edge ID "${id}" is duplicated; edge IDs must be unique.`);
+        }
+        ids.add(id);
+        const key = proposalEdgeKey(edge);
+        if (keys.has(key)) {
+            issues.push(
+                `Edge "${String(edge?.id ?? "").trim() || `#${index + 1}`}" duplicates the ${edge.kind} relationship from "${edge.from}" to "${edge.to}".`,
+            );
+        }
+        keys.add(key);
+    }
+    if (issues.length) {
+        throw new CanvasError(
+            "aspireify_edge_duplicate",
+            `Cannot apply the AppHost proposal. ${issues.join(" ")}`,
+        );
+    }
 }
 
 function validateProposalResourceIds(resources) {
@@ -601,7 +690,19 @@ function validateProposalDetails(proposal) {
         issues.push("Include at least one proposed resource.");
     }
 
+    const edgeKeys = new Set();
     for (const edge of proposal.edges) {
+        const edgeKey = JSON.stringify([
+            edge.from.toLowerCase(),
+            edge.kind,
+            edge.to.toLowerCase(),
+        ]);
+        if (edgeKeys.has(edgeKey)) {
+            issues.push(
+                `Connection "${edge.from}" to "${edge.to}" duplicates an existing ${edge.kind} relationship.`,
+            );
+        }
+        edgeKeys.add(edgeKey);
         if (!allNames.has(edge.from.toLowerCase()) || !allNames.has(edge.to.toLowerCase())) {
             issues.push(`Connection "${edge.from}" to "${edge.to}" references a missing resource.`);
         } else if (
@@ -636,6 +737,7 @@ function confirmedProposal(proposal) {
                     sourceKey,
                     fromId,
                     toId,
+                    generated,
                     ...edge
                 }) => edge,
             ),
@@ -699,8 +801,20 @@ function proposalForClient(proposal) {
                 sourceKey,
                 fromId,
                 toId,
+                generated,
                 ...edge
-            }) => ({ ...edge }),
+            }) => ({
+                ...edge,
+                origin: userAdded ? "user" : "generated",
+                edited: edgeDiffersFromGenerated({
+                    ...edge,
+                    fromId,
+                    toId,
+                    userAdded,
+                    generated,
+                }),
+                generated: generated ? { ...generated } : null,
+            }),
         ),
         generatedAt: proposal.generatedAt,
     };
@@ -738,6 +852,9 @@ function isConfirmed(snapshot) {
 }
 
 function snapshotForClient(snapshot) {
+    const history = isConfirmed(snapshot)
+        ? { canUndo: false, canRedo: false, undoLabel: "", redoLabel: "" }
+        : historyStatus(domainIdFrom(snapshot));
     return {
         appHostPath: snapshot.appHostPath,
         repoName: snapshot.repoName,
@@ -761,6 +878,7 @@ function snapshotForClient(snapshot) {
         updatedAt: snapshot.updatedAt,
         presentationMode: presentationMode(snapshot.proposal),
         validation: validateProposalDetails(snapshot.proposal),
+        history,
     };
 }
 
@@ -797,6 +915,96 @@ function updateSnapshot(domainId, update) {
     snapshot.updatedAt = Date.now();
     broadcast(domainId);
     return snapshot;
+}
+
+function historyFor(domainId) {
+    if (!editHistories.has(domainId)) {
+        editHistories.set(domainId, { undo: [], redo: [] });
+    }
+    return editHistories.get(domainId);
+}
+
+function historyStatus(domainId) {
+    const history = historyFor(domainId);
+    return {
+        canUndo: history.undo.length > 0,
+        canRedo: history.redo.length > 0,
+        undoLabel: history.undo.at(-1)?.label ?? "",
+        redoLabel: history.redo.at(-1)?.label ?? "",
+    };
+}
+
+function clearHistory(domainId) {
+    editHistories.delete(domainId);
+}
+
+function captureEditableState(snapshot) {
+    return structuredClone({
+        services: snapshot.services,
+        proposal: snapshot.proposal,
+        removedGeneratedResources: snapshot.removedGeneratedResources,
+        removedGeneratedEdges: snapshot.removedGeneratedEdges,
+        proposalEdited: snapshot.proposalEdited,
+        proposalStale: snapshot.proposalStale,
+    });
+}
+
+function restoreEditableState(snapshot, saved) {
+    const state = structuredClone(saved);
+    snapshot.services = state.services;
+    snapshot.proposal = state.proposal;
+    snapshot.removedGeneratedResources = state.removedGeneratedResources;
+    snapshot.removedGeneratedEdges = state.removedGeneratedEdges;
+    snapshot.proposalEdited = state.proposalEdited;
+    snapshot.proposalStale = state.proposalStale;
+    snapshot.confirmed = false;
+    snapshot.confirmation = null;
+}
+
+function pushHistoryEntry(entries, entry) {
+    entries.push(entry);
+    if (entries.length > HISTORY_LIMIT) {
+        entries.splice(0, entries.length - HISTORY_LIMIT);
+    }
+}
+
+function updateEditableSnapshot(domainId, label, update) {
+    const snapshot = getSnapshot(domainId);
+    const before = captureEditableState(snapshot);
+    try {
+        update(snapshot);
+        const history = historyFor(domainId);
+        pushHistoryEntry(history.undo, { label, state: before });
+        history.redo = [];
+        snapshot.revision += 1;
+        snapshot.updatedAt = Date.now();
+        broadcast(domainId);
+        return snapshot;
+    } catch (error) {
+        restoreEditableState(snapshot, before);
+        throw error;
+    }
+}
+
+function applyHistory(domainId, direction) {
+    const history = historyFor(domainId);
+    const source = direction === "undo" ? history.undo : history.redo;
+    const target = direction === "undo" ? history.redo : history.undo;
+    const entry = source.pop();
+    if (!entry) {
+        return null;
+    }
+    const current = captureEditableState(getSnapshot(domainId));
+    try {
+        updateSnapshot(domainId, (state) => {
+            restoreEditableState(state, entry.state);
+            pushHistoryEntry(target, { label: entry.label, state: current });
+        });
+    } catch (error) {
+        source.push(entry);
+        throw error;
+    }
+    return entry.label;
 }
 
 function clearScanTimer(domainId) {
@@ -1010,15 +1218,37 @@ async function handlePost(entry, path, body, response) {
         });
     }
 
+    if (path === "/api/history/undo" || path === "/api/history/redo") {
+        if (!snapshot.discoveryLoaded || !snapshot.proposalLoaded || snapshot.proposalStale) {
+            return sendJson(response, 409, {
+                ok: false,
+                error: "Undo and redo are unavailable while the proposal is changing.",
+            });
+        }
+        const direction = path.endsWith("/undo") ? "undo" : "redo";
+        const label = applyHistory(domainId, direction);
+        if (!label) {
+            return sendJson(response, 409, {
+                ok: false,
+                error: `There is nothing to ${direction}.`,
+            });
+        }
+        return sendJson(response, 200, { ok: true, label });
+    }
+
     if (path === "/api/service/include" && service) {
-        updateSnapshot(domainId, (state) => {
-            service.include = Boolean(body.value);
-            if (!service.include) {
-                service.serviceDefaults = false;
-            }
-            state.confirmed = false;
-            syncServiceResource(state, service);
-        });
+        updateEditableSnapshot(
+            domainId,
+            `${body.value ? "Include" : "Exclude"} ${service.name}`,
+            (state) => {
+                service.include = Boolean(body.value);
+                if (!service.include) {
+                    service.serviceDefaults = false;
+                }
+                state.confirmed = false;
+                syncServiceResource(state, service);
+            },
+        );
         return sendJson(response, 200, { ok: true });
     }
 
@@ -1040,7 +1270,7 @@ async function handlePost(entry, path, body, response) {
                 error: `Resource "${name || service.name}": ${nameIssues.join(" ")}`,
             });
         }
-        updateSnapshot(domainId, (state) => {
+        updateEditableSnapshot(domainId, `Rename ${service.resourceName} to ${name}`, (state) => {
             service.resourceName = name;
             state.confirmed = false;
             syncServiceResource(state, service, { rename: true });
@@ -1049,7 +1279,7 @@ async function handlePost(entry, path, body, response) {
     }
 
     if (path === "/api/service/type" && service) {
-        updateSnapshot(domainId, (state) => {
+        updateEditableSnapshot(domainId, `Change ${service.name} type`, (state) => {
             service.type = exactType(body.value, service.type);
             service.kind = classifyServiceKind(service.type);
             service.serviceDefaults = service.include && isDotNetType(service.type);
@@ -1065,7 +1295,7 @@ async function handlePost(entry, path, body, response) {
         service.include &&
         isDotNetType(service.type)
     ) {
-        updateSnapshot(domainId, (state) => {
+        updateEditableSnapshot(domainId, `Change ${service.name} Service Defaults`, (state) => {
             service.serviceDefaults = Boolean(body.value);
             syncServiceResource(state, service);
             state.confirmed = false;
@@ -1105,6 +1335,7 @@ async function handlePost(entry, path, body, response) {
             state.proposalError = "";
             state.proposalGeneration += 1;
             state.confirmed = false;
+            clearHistory(domainId);
         });
         const proposalGeneration = proposalSnapshot.proposalGeneration;
         const proposalRevision = proposalSnapshot.revision;
@@ -1179,7 +1410,17 @@ async function handlePost(entry, path, body, response) {
             });
         }
         const previousType = proposalResource.type;
-        updateSnapshot(domainId, (state) => {
+        const historyLabel =
+            typeof body.name === "string"
+                ? `Rename ${proposalResource.name} to ${nextName}`
+                : typeof body.type === "string"
+                  ? `Change ${proposalResource.name} type`
+                  : typeof body.detail === "string"
+                    ? `Edit ${proposalResource.name} details`
+                    : typeof body.serviceDefaults === "boolean"
+                      ? `Change ${proposalResource.name} Service Defaults`
+                      : `Edit ${proposalResource.name}`;
+        updateEditableSnapshot(domainId, historyLabel, (state) => {
             const previousName = proposalResource.name;
             if (typeof body.name === "string") {
                 proposalResource.name = nextName;
@@ -1223,6 +1464,59 @@ async function handlePost(entry, path, body, response) {
             state.proposalEdited = proposalHasUserEdits(state.proposal);
         });
         return sendJson(response, 200, { ok: true });
+    }
+
+    if (path === "/api/proposal/resource/reset" && proposalResource) {
+        if (!proposalResource.generated) {
+            return sendJson(response, 409, {
+                ok: false,
+                error: "User-added resources do not have generated values to restore.",
+            });
+        }
+        const generated = proposalResource.generated;
+        const duplicate = resourceNameConflict(
+            snapshot.proposal.resources,
+            generated.name,
+            proposalResource.id,
+        );
+        if (duplicate) {
+            return sendJson(response, 409, {
+                ok: false,
+                error: `The generated name "${generated.name}" is already used by another resource.`,
+            });
+        }
+        if (!resourceDiffersFromGenerated(proposalResource)) {
+            return sendJson(response, 200, { ok: true, changed: false });
+        }
+        updateEditableSnapshot(domainId, `Reset ${proposalResource.name} fields`, (state) => {
+            const previousName = proposalResource.name;
+            proposalResource.name = generated.name;
+            proposalResource.type = generated.type;
+            proposalResource.detail = generated.detail;
+            proposalResource.include = generated.include;
+            proposalResource.serviceDefaults =
+                generated.include &&
+                isDotNetResourceType(generated.type) &&
+                generated.serviceDefaults;
+            replaceResourceName(
+                state,
+                proposalResource.id,
+                previousName,
+                proposalResource.name,
+            );
+            proposalResource.userEdited = false;
+            const linkedService = state.services.find(
+                (candidate) => candidate.id === proposalResource.serviceId,
+            );
+            if (linkedService) {
+                linkedService.resourceName = proposalResource.name;
+                linkedService.include = proposalResource.include;
+                linkedService.serviceDefaults = proposalResource.serviceDefaults;
+            }
+            state.confirmed = false;
+            state.proposalEdited = proposalHasUserEdits(state.proposal);
+        });
+        return sendJson(response, 200, { ok: true, changed: true });
     }
 
     if (path === "/api/proposal/resource/add") {
@@ -1303,7 +1597,7 @@ async function handlePost(entry, path, body, response) {
             edgeKeys.add(key);
             connections.push(edge);
         }
-        updateSnapshot(domainId, (state) => {
+        updateEditableSnapshot(domainId, `Add ${name}`, (state) => {
             const resource = normalizeProposalResource(
                 {
                     id: newResourceId,
@@ -1332,7 +1626,7 @@ async function handlePost(entry, path, body, response) {
     }
 
     if (path === "/api/proposal/resource/delete" && proposalResource) {
-        updateSnapshot(domainId, (state) => {
+        updateEditableSnapshot(domainId, `Remove ${proposalResource.name}`, (state) => {
             const linkedService = state.services.find(
                 (candidate) => candidate.id === proposalResource.serviceId,
             );
@@ -1412,26 +1706,78 @@ async function handlePost(entry, path, body, response) {
                 error: `A ${nextKind} connection from "${nextFrom}" to "${nextTo}" already exists.`,
             });
         }
-        updateSnapshot(domainId, (state) => {
-            proposalEdge.from = nextEdge.from;
-            proposalEdge.to = nextEdge.to;
-            proposalEdge.fromId = nextEdge.fromId;
-            proposalEdge.toId = nextEdge.toId;
-            proposalEdge.kind = nextEdge.kind;
-            proposalEdge.userEdited = true;
-            state.confirmed = false;
-            state.proposalEdited = true;
-        });
+        updateEditableSnapshot(
+            domainId,
+            `Edit ${proposalEdge.from} to ${proposalEdge.to} connection`,
+            (state) => {
+                proposalEdge.from = nextEdge.from;
+                proposalEdge.to = nextEdge.to;
+                proposalEdge.fromId = nextEdge.fromId;
+                proposalEdge.toId = nextEdge.toId;
+                proposalEdge.kind = nextEdge.kind;
+                proposalEdge.userEdited = edgeDiffersFromGenerated(proposalEdge);
+                state.confirmed = false;
+                state.proposalEdited = proposalHasUserEdits(state.proposal);
+            },
+        );
         return sendJson(response, 200, { ok: true });
     }
 
+    if (path === "/api/proposal/edge/reset" && proposalEdge) {
+        const resources = snapshot.proposal.resources.filter((resource) => resource.include);
+        const generated = generatedEdgeState(proposalEdge, resources);
+        if (!generated) {
+            return sendJson(response, 409, {
+                ok: false,
+                error: "This connection does not have generated values to restore.",
+            });
+        }
+        if (
+            snapshot.proposal.edges.some(
+                (edge) =>
+                    edge.id !== proposalEdge.id &&
+                    proposalEdgeKeyForResources(edge, resources) ===
+                        proposalEdgeKey(generated),
+            )
+        ) {
+            return sendJson(response, 409, {
+                ok: false,
+                error: `Resetting this connection would duplicate the generated ${generated.kind} connection from "${generated.from}" to "${generated.to}".`,
+            });
+        }
+        if (!edgeDiffersFromGenerated(proposalEdge)) {
+            return sendJson(response, 200, { ok: true, changed: false });
+        }
+        updateEditableSnapshot(
+            domainId,
+            `Reset ${proposalEdge.from} to ${proposalEdge.to} connection`,
+            (state) => {
+                proposalEdge.from = generated.from;
+                proposalEdge.to = generated.to;
+                proposalEdge.fromId = generated.fromId;
+                proposalEdge.toId = generated.toId;
+                proposalEdge.kind = generated.kind;
+                proposalEdge.userEdited = false;
+                state.confirmed = false;
+                state.proposalEdited = proposalHasUserEdits(state.proposal);
+            },
+        );
+        return sendJson(response, 200, { ok: true, changed: true });
+    }
+
     if (path === "/api/proposal/edge/delete" && proposalEdge) {
-        updateSnapshot(domainId, (state) => {
-            rememberRemovedGeneratedEdge(state, proposalEdge);
-            state.proposal.edges = state.proposal.edges.filter((candidate) => candidate.id !== proposalEdge.id);
-            state.confirmed = false;
-            state.proposalEdited = true;
-        });
+        updateEditableSnapshot(
+            domainId,
+            `Remove ${proposalEdge.kind} connection from ${proposalEdge.from} to ${proposalEdge.to}`,
+            (state) => {
+                rememberRemovedGeneratedEdge(state, proposalEdge);
+                state.proposal.edges = state.proposal.edges.filter(
+                    (candidate) => candidate.id !== proposalEdge.id,
+                );
+                state.confirmed = false;
+                state.proposalEdited = true;
+            },
+        );
         return sendJson(response, 200, { ok: true });
     }
 
@@ -1484,11 +1830,15 @@ async function handlePost(entry, path, body, response) {
                 error: `A ${kind} connection from "${from}" to "${to}" already exists.`,
             });
         }
-        updateSnapshot(domainId, (state) => {
-            state.proposal.edges.push(edge);
-            state.confirmed = false;
-            state.proposalEdited = true;
-        });
+        updateEditableSnapshot(
+            domainId,
+            `Add ${kind} connection from ${from} to ${to}`,
+            (state) => {
+                state.proposal.edges.push(edge);
+                state.confirmed = false;
+                state.proposalEdited = true;
+            },
+        );
         return sendJson(response, 200, { ok: true });
     }
 
@@ -1507,6 +1857,7 @@ async function handlePost(entry, path, body, response) {
             state.proposalGeneration += 1;
             state.proposalError = "";
             state.confirmed = false;
+            clearHistory(domainId);
         });
         const scanGeneration = scanningSnapshot.scanGeneration;
         scheduleScanTimeout(domainId, scanGeneration);
@@ -1561,6 +1912,7 @@ async function handlePost(entry, path, body, response) {
                 updateSnapshot(domainId, (state) => {
                     state.confirmed = true;
                     state.confirmation = freezeSnapshot(confirmationResult(state, true));
+                    clearHistory(domainId);
                 });
                 return true;
             })().finally(() => confirmationRequests.delete(domainId));
@@ -1857,6 +2209,7 @@ const aspireifyCanvas = createCanvas({
                     state.confirmed = false;
                     state.proposalStale =
                         state.proposalStale || state.proposal.resources.length > 0;
+                    clearHistory(domainId);
                 });
                 return {
                     ok: true,
@@ -1941,7 +2294,13 @@ const aspireifyCanvas = createCanvas({
                                     description:
                                         "Directed relationship: from references to, from waits for to, or from is a child of to.",
                                 },
-                                id: { type: "string" },
+                                id: {
+                                    type: "string",
+                                    minLength: 1,
+                                    pattern: "^\\S(?:[\\s\\S]*\\S)?$",
+                                    description:
+                                        "Stable unique edge ID. Omit it to let Aspireify assign one.",
+                                },
                             },
                             required: ["from", "to", "kind"],
                         },
@@ -1978,6 +2337,9 @@ const aspireifyCanvas = createCanvas({
                 const resolvedIncomingEdges = Array.isArray(context.input.edges)
                     ? resolveSubmittedProposalEdges(context.input.edges, endpointResources)
                     : null;
+                if (resolvedIncomingEdges) {
+                    validateSubmittedProposalEdges(resolvedIncomingEdges);
+                }
                 const snapshot = updateSnapshot(domainId, (state) => {
                     const preservedResources = state.proposal.resources.filter(
                         (resource) => resource.userAdded,
@@ -2163,6 +2525,7 @@ const aspireifyCanvas = createCanvas({
                     state.proposalStale = false;
                     state.proposalError = "";
                     state.confirmed = false;
+                    clearHistory(domainId);
                 });
                 return {
                     ok: true,

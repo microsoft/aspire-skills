@@ -38,8 +38,10 @@
 .compact-resource-actions {
     display: flex;
     flex: 0 0 auto;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 2px;
+    justify-content: flex-end;
+    gap: 4px;
 }
 
 .resource-remove {
@@ -351,10 +353,10 @@ textarea:disabled {
 
 .apphost-select {
     display: inline-flex;
-    height: 28px;
+    height: 32px;
     align-items: center;
     gap: 8px;
-    padding: 0 10px;
+    padding: 0 12px;
     border: 1px solid var(--border-color-default, #d1d9e0);
     border-radius: var(--radius);
     background: var(--surface-raised);
@@ -763,7 +765,7 @@ body.is-loading .progress > span {
 
 .overview-role-heading {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
     align-items: center;
     padding: 10px 12px;
@@ -799,15 +801,7 @@ body.is-loading .progress > span {
     padding: 6px;
 }
 
-.overview-empty {
-    margin: 0;
-    padding: 8px 10px;
-    font-size: var(--text-meta);
-    line-height: var(--leading-meta);
-}
-
 .overview-node {
-    --resource-kind-color: var(--kind-external);
     display: grid;
     width: 100%;
     min-width: 0;
@@ -844,7 +838,7 @@ button.overview-node:hover {
     width: 4px;
     height: 32px;
     border-radius: 99px;
-    background: var(--resource-kind-color);
+    background: var(--resource-kind-color, var(--kind-external));
 }
 
 .overview-node-copy {
@@ -906,7 +900,6 @@ button.overview-node:hover {
 }
 
 .resource-inspector {
-    --resource-kind-color: var(--kind-external);
     display: flex;
     min-width: 0;
     flex-direction: column;
@@ -960,6 +953,14 @@ button.overview-node:hover {
     font-size: var(--text-detail);
     font-weight: var(--font-weight-semibold, 600);
     cursor: pointer;
+}
+
+.relationship-help {
+    max-width: 72ch;
+    margin: 0;
+    padding: 0 12px 8px;
+    font-size: var(--text-meta);
+    line-height: var(--leading-meta);
 }
 
 .relationship-list {
@@ -1333,16 +1334,17 @@ select.inline-resource-input {
     min-height: 28px;
     border-color: color-mix(
         in srgb,
-        var(--relationship-color) 34%,
+        var(--relationship-color) 58%,
         var(--border-soft)
     );
     background: color-mix(
         in srgb,
-        var(--relationship-color) 9%,
+        var(--relationship-color) 11%,
         var(--surface-raised)
     );
     color: var(--text-color-default, #1f2328);
     cursor: pointer;
+    box-shadow: inset 3px 0 0 var(--relationship-color);
 }
 
 .connection-reference {
@@ -1361,9 +1363,19 @@ select.inline-resource-input {
     border-color: var(--relationship-color);
     background: color-mix(
         in srgb,
-        var(--relationship-color) 15%,
+        var(--relationship-color) 18%,
         var(--surface-raised)
     );
+}
+
+.connection-chip-affordance {
+    margin-inline-start: 4px;
+    padding-inline-start: 6px;
+    border-inline-start: 1px solid
+        color-mix(in srgb, var(--relationship-color) 45%, transparent);
+    color: var(--relationship-color);
+    font-size: var(--text-meta);
+    font-weight: var(--font-weight-semibold, 600);
 }
 
 .connection-chip:focus-visible {
@@ -1405,14 +1417,29 @@ body:has(dialog[open]) .action-footer {
     padding: 6px var(--gutter);
 }
 
+.history-actions {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 6px;
+}
+
+.confirm-summary,
+.footer-note {
+    min-width: 0;
+    flex: 1 1 auto;
+    margin-right: auto;
+    font-size: var(--text-meta);
+    line-height: var(--leading-meta);
+}
+
+.confirm-summary {
+    max-width: 68ch;
+}
+
 .action-footer .btn-primary {
     min-width: 96px;
     height: 40px;
-}
-
-.footer-note {
-    margin-right: auto;
-    font-size: 12px;
 }
 
 .footer-note:not([hidden]) {
@@ -1561,6 +1588,7 @@ dialog form {
 }
 
 .field small {
+    font-size: var(--text-meta);
     font-weight: var(--font-weight-normal, 400);
 }
 
@@ -1662,6 +1690,12 @@ dialog form {
     flex: 1 1 auto;
 }
 
+.dialog-secondary-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 #snapshot:not([hidden]) .resource-plan,
 #snapshot:not([hidden]) .review-section,
 #snapshot:not([hidden]) .proposal-state {
@@ -1686,15 +1720,6 @@ dialog form {
 
     .plan-inspector {
         position: static;
-    }
-
-    .overview-role-heading {
-        grid-template-columns: minmax(0, 1fr) auto;
-    }
-
-    .overview-add {
-        grid-column: 1 / -1;
-        justify-self: stretch;
     }
 
     .btn-icon,
@@ -1754,10 +1779,27 @@ dialog form {
     }
 
     .action-footer-inner {
-        min-height: 52px;
+        display: grid;
+        min-height: 84px;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 6px 10px;
+    }
+
+    .confirm-summary,
+    .footer-note {
+        grid-column: 1 / -1;
+        grid-row: 1;
+        margin: 0;
+    }
+
+    .history-actions {
+        grid-column: 1;
+        grid-row: 2;
     }
 
     .action-footer .btn-primary {
+        grid-column: 3;
+        grid-row: 2;
         width: auto;
         min-width: 104px;
     }
