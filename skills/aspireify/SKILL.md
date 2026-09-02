@@ -280,7 +280,7 @@ catalog.
 |----------|----|----|
 | Postgres in compose / `Npgsql` package | `AddPostgres("pg").AddDatabase("db")` | `addPostgres('pg').addDatabase('db')` |
 | Redis in compose / `StackExchange.Redis` | `AddRedis("cache")` | `addRedis('cache')` |
-| Valkey in compose / app config | `AddValkey("cache")` | `addValkey('cache')` |
+| Valkey in compose / app config | `Aspire.Hosting.Valkey` + `AddValkey("cache")` | `addValkey('cache')` |
 | RabbitMQ | `AddRabbitMQ("mq")` (v7 client w/ pub-sub tracing) | `addRabbitMQ('mq')` |
 | MongoDB | `AddMongoDB("mongo")` | `addMongoDB('mongo')` |
 | Cosmos DB | `AddAzureCosmosDB("cosmos")` | `addAzureCosmosDB('cosmos')` |

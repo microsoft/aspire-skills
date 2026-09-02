@@ -170,7 +170,8 @@ stimuli:
       Use the aspire-init skill before answering. My existing Node repository already has a
       root package.json and no Aspire AppHost.
       Explain the TypeScript `aspire init` command and the files/layout Aspire 13.5 will
-      create. Do not run the command.
+      create. State the generated entry-point filename and whether it is nested. Do not run
+      the command.
     tags:
       priority: p1
       area:
@@ -208,8 +209,8 @@ stimuli:
       Use the aspire-init skill before answering. `aspire init --language typescript` exited
       nonzero after creating the shown
       aspire.config.json, nested AppHost file, and package.json. The root pnpm
-      workspace denies esbuild builds. Do not run commands. Explain the safe recovery
-      and the next handoff.
+      workspace denies esbuild builds. Do not run commands. Explain the safe recovery with
+      the exact policy-file path and pnpm command, then state the next handoff.
     tags:
       priority: p1
       area:

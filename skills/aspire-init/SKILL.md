@@ -118,6 +118,16 @@ nested `aspire-apphost/` package and points the root `aspire.config.json` at
 `aspire-apphost/apphost.mts`. A solution-backed C# repo can receive a project-based AppHost;
 new C# AppHosts enable `AspireUseCliBundle=true` by default. Preserve these generated choices.
 
+If TypeScript init exits nonzero after creating `aspire.config.json`, the metadata-selected
+AppHost, and its package manifest, recover that partial initialization instead of rerunning
+init. Do not alter the root `pnpm-workspace.yaml`. For a nested `aspire-apphost/`, create
+`aspire-apphost/pnpm-workspace.yaml` with `packages: ["."]` and only
+`allowBuilds.esbuild: true`, then run `pnpm --config.workspaceDir="$PWD" install` from
+that nested directory. Do not use `--ignore-workspace`: it ignores the scoped policy and
+suppresses `esbuild`'s postinstall. Use `aspire restore` if modules are absent, install
+`aspireify` with `aspire agent init --skills aspireify` if needed, and hand off the
+still-unwired AppHost to `aspireify`.
+
 See [references/init-workflow.md](references/init-workflow.md) for the full sequence
 including what `aspire.config.json` contains and what to do if `aspire init` fails partway.
 

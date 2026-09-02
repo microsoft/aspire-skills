@@ -350,12 +350,21 @@ stimuli:
             - aspire
             - aspireify
       - type: prompt
+        name: resolves_configured_authoring_path
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant identify infra/orchestrator.mts as the TypeScript AppHost
+            authoring target by following aspire.config.json appHost.path rather than
+            relying on conventional AppHost filenames? Answer based on intent.
+      - type: prompt
         name: recognizes_launch_metadata
         config:
           scoring: binary
           prompt: >
-            Does the assistant's response recognize apphost.run.json as launch-profile
-            metadata rather than the TypeScript AppHost authoring target? Answer based on intent.
+            Does the assistant explicitly identify apphost.run.json as launch-profile
+            metadata rather than the TypeScript AppHost authoring target, and route the
+            wiring work to aspireify? Answer based on intent.
   # Positive-routing stimuli assert both activation and outcome. Because this
   # spec tests the top-level router, model knowledge that merely produces an
   # Aspire-flavored answer is insufficient: skill-invocation graders require an
