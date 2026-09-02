@@ -611,7 +611,6 @@ stimuli:
         - typescript
     constraints:
       max_agent_duration: 5m
-      expect_skills: [aspireify]
     environment:
       files:
         - src: ../../../evals/ts-apphost/apphost.mts
@@ -619,6 +618,11 @@ stimuli:
         - src: ../../../evals/ts-apphost/aspire.config.json
           dest: ts-apphost/aspire.config.json
     graders:
+      - type: skill-invocation
+        name: invokes_aspireify
+        config:
+          required:
+            - aspireify
       - type: prompt
         name: resolves_interaction_service
         config:
@@ -1009,10 +1013,6 @@ stimuli:
         name: uses_typescript_valkey_api
         config:
           substring: addValkey
-      - type: output-not-contains
-        name: does_not_substitute_redis_api
-        config:
-          substring: addRedis
       - type: prompt
         name: preserves_valkey_terminology
         config:

@@ -92,21 +92,27 @@ version-appropriate approval in `aspire-apphost/pnpm-workspace.yaml`:
 
 ```yaml
 # pnpm 11+
+packages:
+  - "."
 allowBuilds:
   esbuild: true
 ```
 
 ```yaml
 # Older pnpm
+packages:
+  - "."
 onlyBuiltDependencies:
   - esbuild
 ```
 
-Then run `pnpm install --ignore-workspace` from the generated AppHost directory and
-`aspire restore` if modules are missing. This grants only the nested AppHost access to
-build `esbuild`; it does not weaken the repository's root security policy. Verify that
-`aspireify` is installed (use `aspire agent init --skills aspireify` if the failed init did
-not install it), then hand the unwired AppHost to Aspireify.
+Then run `pnpm --config.workspaceDir="$PWD" install` from the generated AppHost directory
+and `aspire restore` if modules are missing. Do not use `--ignore-workspace`: it ignores
+the nested workspace policy and leaves `esbuild`'s postinstall suppressed. This grants only
+the nested AppHost access to build `esbuild`; it does not weaken the repository's root
+security policy. Verify that `aspireify` is installed (use `aspire agent init --skills
+aspireify` if the failed init did not install it), then hand the unwired AppHost to
+Aspireify.
 
 ## TypeScript AppHost dependency configuration (Step 6)
 

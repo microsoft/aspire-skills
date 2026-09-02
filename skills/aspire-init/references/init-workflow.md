@@ -152,6 +152,8 @@ AppHost entry point, and its package manifest, treat this as **partial initializ
 
    ```yaml
    # pnpm 11+
+   packages:
+     - "."
    allowBuilds:
      esbuild: true
    ```
@@ -164,11 +166,18 @@ AppHost entry point, and its package manifest, treat this as **partial initializ
      - esbuild
    ```
 
+   Include `packages: ["."]` in either nested workspace form so it is an
+   independent workspace containing the generated AppHost.
+
    Do not add unrelated build approvals. This nested workspace policy permits only the
    AppHost toolchain to build `esbuild`; it does not change application-package policy.
 4. From that nested AppHost directory, repair its dependencies with
-   `pnpm install --ignore-workspace`, then use `aspire restore` if generated modules are
-   absent. Resume normal execution with `aspire start --non-interactive`.
+   `pnpm --config.workspaceDir="$PWD" install`, then use `aspire restore` if generated
+   modules are absent. `--ignore-workspace` is not safe here: it ignores the nested
+   `pnpm-workspace.yaml`, so pnpm still suppresses the `esbuild` postinstall. On
+   PowerShell, use `pnpm --config.workspaceDir="$PWD" install`; on shells where `$PWD`
+   is not the string path, substitute the nested AppHost's absolute path. Resume normal
+   execution with `aspire start --non-interactive`.
 5. Confirm the project-local `aspireify` skill exists. If the failed init did not install
    it, run `aspire agent init --skills aspireify`, then hand the recovered, still-unwired
    AppHost to `aspireify`. Do not perform resource wiring in the init workflow.

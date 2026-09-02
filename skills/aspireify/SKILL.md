@@ -181,10 +181,11 @@ An AppHost-local marker takes precedence over every parent marker. If neither di
 a recognized marker, Aspire defaults to npm. Report the selected manager and marker.
 
 Use the selected manager only to repair dependencies or diagnose the toolchain. The resolver
-commands are `npm install`, `bun install`, and `yarn install`; a generated brownfield pnpm
-AppHost uses `pnpm install --ignore-workspace`, while other pnpm dependency installs use
-`pnpm install`. Yarn Classic (`yarn@1...` or a v1 lockfile) is unsupported: stop and ask the
-user to upgrade to Yarn 4+ or explicitly migrate to npm, pnpm, or Bun.
+commands are `npm install`, `bun install`, `yarn install`, and `pnpm install`. A partial
+brownfield pnpm initialization blocked by its root build policy needs the scoped recovery
+described below, not `--ignore-workspace`. Yarn Classic (`yarn@1...` or a v1 lockfile) is
+unsupported: stop and ask the user to upgrade to Yarn 4+ or explicitly migrate to npm, pnpm,
+or Bun.
 
 Do not change `packageManager` or create, replace, or regenerate a lockfile merely to
 influence detection or switch managers. Preserve existing files until the user explicitly
@@ -197,8 +198,10 @@ Before running pnpm for a generated TypeScript AppHost, inspect the applicable
 `pnpm-workspace.yaml` build policy. `allowBuilds.esbuild: false`, or an older
 `onlyBuiltDependencies` list without `esbuild`, can leave `aspire init` nearly complete but
 nonzero. Preserve root policy. When the generated AppHost is nested, scope the necessary
-single-package approval in its own `pnpm-workspace.yaml`, recover with
-`pnpm install --ignore-workspace`, then hand off the still-unwired skeleton to this skill.
+single-package approval in its own `pnpm-workspace.yaml`, including `packages: ["."]`.
+From that directory, recover with `pnpm --config.workspaceDir="$PWD" install`. Do not use
+`--ignore-workspace`, because it also ignores the scoped `allowBuilds` policy. Then hand off
+the still-unwired skeleton to this skill.
 
 ## Workflow Phases
 

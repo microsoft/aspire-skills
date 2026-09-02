@@ -261,10 +261,12 @@ requires it. These commands diagnose dependencies and toolchains; they do not re
 different file, use that configured entry point instead. Do not rename it to match a
 conventional filename.
 
-`--ignore-workspace` applies only to the generated brownfield pnpm AppHost package. It
-prevents pnpm from requiring an edit to the user's workspace configuration. Use
-`pnpm install --ignore-workspace` only in that scenario; do not generalize it to
-arbitrary application dependency installs.
+For an ordinary pnpm AppHost, use `pnpm install`. If a partial brownfield initialization
+is blocked by a root build policy, follow the isolated-workspace recovery in
+`javascript-apps.md`: create a nested `pnpm-workspace.yaml` that includes only `.`,
+approves only `esbuild`, and use `pnpm --config.workspaceDir="$PWD" install` from that
+directory. Do not use `--ignore-workspace` for that recovery because it ignores the
+nested approval policy.
 
 Yarn Classic is unsupported for TypeScript AppHosts. If `packageManager` is `yarn@1...`
 or the first lines of `yarn.lock` identify lockfile v1, stop and tell the user to upgrade
