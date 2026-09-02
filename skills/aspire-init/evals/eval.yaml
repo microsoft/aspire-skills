@@ -193,6 +193,52 @@ stimuli:
         name: does_not_claim_current_apphost_ts
         config:
           substring: creates apphost.ts
+  - name: init-pnpm-policy-partial-recovery-135-001
+    prompt: >
+      `aspire init --language typescript` exited nonzero after creating the shown
+      aspire.config.json, nested AppHost file, and package.json. The root pnpm
+      workspace denies esbuild builds. Do not run commands. Explain the safe recovery
+      and the next handoff.
+    tags:
+      priority: p1
+      area:
+        - core-flow
+        - aspire-13-5
+        - pnpm
+        - recovery
+    environment:
+      files:
+        - src: ../../../evals/ts-apphost-pnpm-policy/aspire.config.json
+          dest: partial-init/aspire.config.json
+        - src: ../../../evals/ts-apphost-pnpm-policy/pnpm-workspace.yaml
+          dest: partial-init/pnpm-workspace.yaml
+        - src: ../../../evals/ts-apphost-pnpm-policy/aspire-apphost/apphost.mts
+          dest: partial-init/aspire-apphost/apphost.mts
+        - src: ../../../evals/ts-apphost-pnpm-policy/aspire-apphost/package.json
+          dest: partial-init/aspire-apphost/package.json
+    rubric:
+      - The assistant detects partial initialization from the metadata-selected nested AppHost and does not advise rerunning init or deleting generated files.
+      - The assistant preserves the root pnpm-workspace.yaml and puts a minimal esbuild approval in aspire-apphost/pnpm-workspace.yaml.
+      - The assistant uses pnpm install --ignore-workspace from the nested AppHost, then ensures aspireify is installed or runs aspire agent init --skills aspireify before handing off resource wiring.
+    graders:
+      - type: output-contains
+        name: preserves_root_policy_with_nested_recovery
+        config:
+          substring: aspire-apphost/pnpm-workspace.yaml
+      - type: output-contains
+        name: repairs_nested_apphost_dependencies
+        config:
+          substring: pnpm install --ignore-workspace
+      - type: prompt
+        name: retains_root_security_boundary
+        config:
+          prompt: >
+            Does the assistant's response preserve the root pnpm policy while allowing only
+            esbuild in the nested AppHost policy? Answer based on intent.
+      - type: output-not-contains
+        name: does_not_rerun_partial_init
+        config:
+          substring: rerun `aspire init`
   - name: init-new-001
     prompt: I'm starting a brand-new distributed app from scratch. Scaffold an Aspire starter project
       for me.

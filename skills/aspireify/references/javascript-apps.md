@@ -79,6 +79,35 @@ Tell the user: *"This is a yarn workspace monorepo — I'll skip `.withYarn()` o
 
 **This only applies to workspace monorepos with shared `node_modules`.** For standalone apps or apps with independent `node_modules` directories, `.withYarn()` / `.withPnpm()` is correct and should be used — it ensures deps are installed before the resource starts.
 
+### pnpm build-policy recovery for a generated AppHost
+
+Before repairing a pnpm TypeScript AppHost, inspect `pnpm-workspace.yaml` for a build-script
+policy. `allowBuilds.esbuild: false` (pnpm 11+) and an `onlyBuiltDependencies` list that
+omits `esbuild` (older pnpm) can block the AppHost's required binary during initialization.
+
+If `aspire init` returned nonzero but `aspire.config.json`, its resolved `appHost.path`, and
+the nested AppHost `package.json` already exist, do not rerun init or delete those artifacts.
+Keep the root policy unchanged. For a nested `aspire-apphost/`, add the minimal,
+version-appropriate approval in `aspire-apphost/pnpm-workspace.yaml`:
+
+```yaml
+# pnpm 11+
+allowBuilds:
+  esbuild: true
+```
+
+```yaml
+# Older pnpm
+onlyBuiltDependencies:
+  - esbuild
+```
+
+Then run `pnpm install --ignore-workspace` from the generated AppHost directory and
+`aspire restore` if modules are missing. This grants only the nested AppHost access to
+build `esbuild`; it does not weaken the repository's root security policy. Verify that
+`aspireify` is installed (use `aspire agent init --skills aspireify` if the failed init did
+not install it), then hand the unwired AppHost to Aspireify.
+
 ## TypeScript AppHost dependency configuration (Step 6)
 
 ### package.json
@@ -127,7 +156,8 @@ Use the AppHost-specific `tsconfig.apphost.json` scaffolded by `aspire init` or
 `tsconfig.json`; doing so can pull generated code into the application build without
 changing AppHost compilation.
 
-- Ensure `"apphost.mts"` and the generated `.aspire/modules/*.mts` entry points are in `include`
+- Ensure the resolved `aspire.config.json` `appHost.path` and generated
+  `.aspire/modules/*.mts` entry points are in `include`
 - Ensure `"module"` is `"nodenext"` or `"node16"` (ESM required)
 - Ensure `"moduleResolution"` matches
 

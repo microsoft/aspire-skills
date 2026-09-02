@@ -311,6 +311,46 @@ stimuli:
             - aspire-orchestration
           disallowed:
             - aspireify
+  - name: router-metadata-first-ts-apphost-135-001
+    prompt: >
+      Use the aspire router skill before answering. This repository contains an
+      aspire.config.json pointing at infra/orchestrator.mts and an apphost.run.json.
+      I need to wire the existing TypeScript AppHost. Do not edit files; identify the
+      correct authoring target and route the work.
+    tags:
+      priority: p1
+      area:
+        - routing
+        - aspire-13-5
+        - typescript
+    constraints:
+      expect_skills:
+        - aspire
+        - aspireify
+    environment:
+      files:
+        - src: ../../../evals/ts-apphost-metadata/aspire.config.json
+          dest: metadata-apphost/aspire.config.json
+        - src: ../../../evals/ts-apphost-metadata/apphost.run.json
+          dest: metadata-apphost/apphost.run.json
+        - src: ../../../evals/ts-apphost-metadata/infra/orchestrator.mts
+          dest: metadata-apphost/infra/orchestrator.mts
+    rubric:
+      - The assistant selects infra/orchestrator.mts by resolving aspire.config.json appHost.path before filename heuristics.
+      - The assistant recognizes apphost.run.json as launch metadata, not an AppHost source to edit.
+      - The assistant routes resource wiring for the existing AppHost to aspireify.
+    graders:
+      - type: output-contains
+        name: preserves_configured_authoring_path
+        config:
+          substring: infra/orchestrator.mts
+      - type: prompt
+        name: recognizes_launch_metadata
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response recognize apphost.run.json as launch-profile
+            metadata rather than the TypeScript AppHost authoring target? Answer based on intent.
   # Positive-routing stimuli assert both activation and outcome. Because this
   # spec tests the top-level router, model knowledge that merely produces an
   # Aspire-flavored answer is insufficient: `constraints.expect_skills` requires

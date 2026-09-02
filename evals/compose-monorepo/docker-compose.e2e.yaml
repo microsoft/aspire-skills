@@ -1,0 +1,6 @@
+services:
+  browser-tests:
+    image: mcr.microsoft.com/playwright:v1.55.0-noble
+    working_dir: /work
+    command: npm run test:e2e
+    profiles: [e2e]

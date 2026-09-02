@@ -1,7 +1,8 @@
 # TypeScript AppHost Authoring
 
-Patterns for editing current `apphost.mts`. **Never edit `.aspire/modules/`** — that
-directory is generated and any changes will be clobbered. Hand legacy `apphost.ts`
+Patterns for editing the metadata-selected TypeScript AppHost entry point (normally
+`apphost.mts`). **Never edit `.aspire/modules/`** — that directory is generated and any
+changes will be clobbered. Hand legacy `apphost.ts`
 migration to `aspire-orchestration`; it owns approval and
 `aspire update --migrate --yes --non-interactive`. Return here only if source authoring
 remains after migration.
@@ -31,7 +32,7 @@ AppHost and any edits get clobbered on the next build / `aspire add` / `aspire s
 
 The right place to make this change is apphost.mts. Here is the equivalent edit:
 
-  // apphost.mts
+  // <the path in aspire.config.json appHost.path>
   builder.addPostgres('pg', { /* the options you wanted to set */ });
 
 If you wanted to add a new integration, run `aspire add <package>` and Aspire will
@@ -44,12 +45,18 @@ these get the same refusal-plus-redirect.
 
 | ❌ NEVER | ✅ ALWAYS |
 |---------|----------|
-| Edit `.aspire/modules/postgres.module.ts` | Edit `apphost.mts` `addPostgres('pg', {...})` |
-| Edit `.aspire/modules/api.module.ts` | Edit `apphost.mts` `addProject('api', '...')` |
-| Comment out lines in any `.aspire/modules/*` file | Remove / guard the declaration in `apphost.mts` |
+| Edit `.aspire/modules/postgres.module.ts` | Edit the configured AppHost `addPostgres('pg', {...})` |
+| Edit `.aspire/modules/api.module.ts` | Edit the configured AppHost `addProject('api', '...')` |
+| Comment out lines in any `.aspire/modules/*` file | Remove / guard the declaration in the configured AppHost |
 | Run codegen against `.aspire/modules/` and patch the output | Add the integration via `aspire add <package>` |
 
 ## Skeleton
+
+Before editing, read `aspire.config.json` and resolve `appHost.path` relative to that file.
+That exact path is the AppHost source, even when it is a nested
+`aspire-apphost/apphost.mts`. `apphost.run.json` is launch-profile metadata; recognize it
+when present but never edit it as an AppHost or let it override `appHost.path`. The example
+below uses the default `apphost.mts` name only as an example.
 
 ```ts
 import { createBuilder } from './.aspire/modules/aspire.mjs';
@@ -251,7 +258,8 @@ requires it. These commands diagnose dependencies and toolchains; they do not re
 | pnpm | `pnpm install` | `pnpm exec tsc --noEmit -p tsconfig.apphost.json` | `pnpm exec tsx --tsconfig tsconfig.apphost.json apphost.mts` |
 
 `apphost.mts` is the default entry point. When the AppHost configuration selects a
-different file, use that configured entry point instead.
+different file, use that configured entry point instead. Do not rename it to match a
+conventional filename.
 
 `--ignore-workspace` applies only to the generated brownfield pnpm AppHost package. It
 prevents pnpm from requiring an edit to the user's workspace configuration. Use
@@ -378,7 +386,7 @@ await builder.addViteApp('frontend', '../frontend')
 
 | Rule | Why |
 |------|-----|
-| **Never edit `.aspire/modules/`** | Generated; edits are clobbered. Edit current `apphost.mts` (or configured legacy `apphost.ts`) |
+| **Never edit `.aspire/modules/`** | Generated; edits are clobbered. Edit the metadata-selected AppHost source |
 | Use unified `withEnvironment(name, value)` | Per-kind helpers are deprecated |
 | Use `addNextJsApp` / `addViteApp` over hand-rolled Dockerfiles | First-class lifecycle + publish helpers |
 | Use `publishAs*` for JS publish — never raw Dockerfile when a helper fits | Maintained, tested, and works with `aspire deploy` |
