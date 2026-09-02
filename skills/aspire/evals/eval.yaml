@@ -20,10 +20,16 @@ scoring:
   # scale_1_5 an "adequate" 3/5 answer normalises to 0.5 — below this eval's
   # 0.7 per-trial gate — so a correctly routed response could still fail the
   # trial. Binary scoring makes the grader verdict ("did it route correctly?")
-  # match the trial gate. Each stimulus is then scored by the weighted share of
-  # graders that pass and gated on the aggregate (>= threshold); genuine
-  # regressions still drag the aggregate below the bar.
+  # match the trial gate. Outcome graders therefore carry 90% of the score.
+  # `skill-invocation` is still a 10% activation signal, but cannot make an
+  # otherwise correctly routed response fail because the executor selected an
+  # equivalent specialist skill directly.
   threshold: 0.7
+  weights:
+    prompt: 0.50
+    output-contains: 0.25
+    output-not-contains: 0.15
+    skill-invocation: 0.10
 environment:
   # vally 0.8.0 loads no skills unless declared here (paths resolve relative to
   # this eval file). The router fans out to every sub-skill (see SKILL.md
