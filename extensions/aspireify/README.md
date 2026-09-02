@@ -1,7 +1,7 @@
 # Aspireify canvas
 
 This canvas is Aspireify's strict Step 3 confirmation boundary: one generated,
-timestamped AppHost proposal snapshot shown before any files change.
+timestamped AppHost proposal snapshot shown before AppHost wiring begins.
 
 The Aspireify skill owns scanning, proposal logic, AppHost edits, and validation.
 Discovery questions and implementation tradeoffs stay in chat; the proposal is the
