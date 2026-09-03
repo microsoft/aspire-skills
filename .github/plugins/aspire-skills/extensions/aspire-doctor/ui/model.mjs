@@ -1,0 +1,1 @@
+../../../../../../extensions/aspire-doctor/ui/model.mjs
