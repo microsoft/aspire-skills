@@ -32,12 +32,39 @@
     --req: var(--true-color-red, #cf222e);
 }
 
+@media (prefers-color-scheme: dark) {
+    html:not([data-color-mode]) {
+        --background-color-default: #0d1117;
+        --border-color-default: #30363d;
+        --text-color-default: #e6edf3;
+        --text-color-muted: #8d96a0;
+        --color-focus-outline: #58a6ff;
+        --true-color-blue: #58a6ff;
+        --true-color-green: #56d364;
+        --true-color-orange: #e3b341;
+        --true-color-red: #ff7b72;
+    }
+}
+
 * {
     box-sizing: border-box;
 }
 
 [hidden] {
     display: none !important;
+}
+
+.sr-only,
+.clipboard-fallback {
+    position: fixed;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }
 
 /* App-style scrollbars without Windows stepper buttons. */
@@ -130,6 +157,15 @@ code {
 .btn-outline:hover {
     background: var(--surface-muted);
 }
+.btn-quiet {
+    border-color: var(--border-soft);
+    background: transparent;
+    color: var(--text-color-muted, #59636e);
+}
+.btn-quiet:hover {
+    color: var(--text-color-default, #1f2328);
+    background: var(--surface-inset);
+}
 .btn-sm {
     height: 28px;
     padding: 0 10px;
@@ -166,6 +202,7 @@ code {
     flex: 1;
 }
 .tb-heading {
+    margin: 0;
     font-size: 14px;
     font-weight: var(--font-weight-semibold, 600);
     line-height: 1.2;
@@ -185,6 +222,13 @@ code {
 }
 
 .tb-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 0 var(--gutter) 10px;
+}
+.tb-controls {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -292,6 +336,7 @@ body.is-busy #rerun .btn-ico svg {
     padding: 2px 2px 0;
 }
 .diag-sec-title {
+    margin: 0;
     font-size: 11px;
     font-weight: var(--font-weight-semibold, 600);
     letter-spacing: 0.06em;
@@ -505,22 +550,27 @@ details.diag-item[open] > summary .diag-chevron {
 .diag-meta-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-}
-.diag-meta-row {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    min-width: 0;
-    padding: 8px 10px;
+    overflow: hidden;
     background: var(--surface-inset);
     border: 1px solid var(--border-soft);
     border-radius: var(--radius);
+}
+.diag-meta-row {
+    display: grid;
+    grid-template-columns: minmax(92px, 0.35fr) minmax(0, 1fr);
+    align-items: start;
+    gap: 8px;
+    min-width: 0;
+    padding: 6px 9px;
+}
+.diag-meta-row + .diag-meta-row {
+    border-top: 1px solid var(--border-soft);
 }
 .diag-meta-key {
     color: var(--text-color-muted, #59636e);
     font-family: var(--font-mono, "SFMono-Regular", Consolas, monospace);
     font-size: 11.5px;
+    overflow-wrap: anywhere;
 }
 .diag-meta-value {
     min-width: 0;
@@ -691,10 +741,16 @@ details.diag-item[open] > summary .diag-chevron {
     color: var(--req);
 }
 .state-title {
+    margin: 0;
+    font-size: 14px;
     font-weight: var(--font-weight-semibold, 600);
 }
 .state-msg {
     max-width: 42ch;
+}
+#error .state-msg {
+    width: 100%;
+    text-align: left;
 }
 .state-raw {
     width: 100%;
@@ -847,5 +903,42 @@ details.diag-item[open] > summary .diag-chevron {
     ::view-transition-old(root),
     ::view-transition-new(root) {
         animation: none;
+    }
+}
+
+@media (max-width: 640px) {
+    .diag-fix {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .diag-fix-actions {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        align-self: stretch;
+    }
+    .fix-send {
+        justify-content: center;
+        min-height: 36px;
+    }
+}
+
+@media (max-width: 430px) {
+    .diag-fix-actions {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .diag-meta-row {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 2px;
+    }
+    .tb-controls > .btn {
+        flex: 1 1 130px;
+    }
+}
+
+@media (pointer: coarse) {
+    .btn,
+    .fix-send,
+    .path-link {
+        min-height: 44px;
     }
 }

@@ -2,18 +2,33 @@
 //
 // Renders `aspire doctor` results from the extension's loopback API.
 
+import {
+    getResultRevision,
+    normalizeDoctorData,
+    shouldApplyResult,
+    summaryStatusText,
+} from "./model.mjs";
+
 const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)") ?? { matches: false };
 
 const STATUS_CLASS = { pass: "ok", warning: "warn", fail: "req" };
 const STATUS_LABEL = { pass: "Passed", warning: "Warning", fail: "Failed" };
 const STATUS_PRIORITY = { fail: 0, warning: 1, pass: 2 };
 
-const CATEGORY_ORDER = ["aspire", "sdk", "environment", "container"];
+const CATEGORY_ORDER = ["aspire", "sdk", "environment", "devtools", "container"];
 const CATEGORY_LABEL = {
     aspire: "Aspire CLI",
     sdk: ".NET SDK",
     environment: "Environment",
+    devtools: "Developer tools",
     container: "Container runtime",
+};
+const METADATA_LABEL = {
+    currentVersion: "Current version",
+    latestVersion: "Latest version",
+    updateCommand: "Update command",
+    identityChannel: "Current channel",
+    latestVersionChannel: "Latest channel",
 };
 const apiToken = new URLSearchParams(window.location.search).get("token") || "";
 
@@ -80,9 +95,40 @@ function icon(pathKey, { size = 16, cls } = {}) {
 
 function withTransition(mutate) {
     if (document.startViewTransition && !reduceMotion.matches) {
-        document.startViewTransition(() => mutate());
+        try {
+            const transition = document.startViewTransition(() => mutate());
+            transition?.finished?.catch(() => {});
+            return;
+        } catch {
+            // Fall through when view transitions are unavailable at runtime.
+        }
+    }
+
+    mutate();
+}
+
+function announce(message) {
+    els.announcer.textContent = "";
+    requestAnimationFrame(() => {
+        els.announcer.textContent = message;
+    });
+}
+
+function setMainBusy(isBusy) {
+    els.main.setAttribute("aria-busy", String(isBusy));
+}
+
+function setBodyState(state) {
+    bodyEl.classList.remove("is-loading", "is-busy", "has-data", "has-error");
+    bodyEl.classList.add(state);
+}
+
+function setButtonText(button, text) {
+    const label = button.querySelector(".btn-label");
+    if (label) {
+        label.textContent = text;
     } else {
-        mutate();
+        button.textContent = text;
     }
 }
 
@@ -90,8 +136,12 @@ function withTransition(mutate) {
 
 const bodyEl = document.body;
 const els = {
+    main: document.getElementById("main-content"),
     tbSub: document.getElementById("tb-sub"),
     pills: document.getElementById("summary-pills"),
+    viewControls: document.getElementById("view-controls"),
+    togglePassed: document.getElementById("toggle-passed"),
+    toggleDetails: document.getElementById("toggle-details"),
     countOk: document.getElementById("count-ok"),
     countWarn: document.getElementById("count-warn"),
     countReq: document.getElementById("count-req"),
@@ -105,12 +155,12 @@ const els = {
     error: document.getElementById("error"),
     errorMsg: document.getElementById("error-msg"),
     errorRaw: document.getElementById("error-raw"),
+    announcer: document.getElementById("announcer"),
 };
 
-function setBodyState(state) {
-    bodyEl.classList.remove("is-loading", "is-busy", "has-data", "has-error");
-    bodyEl.classList.add(state);
-}
+let hidePassed = false;
+let latestRevision = 0;
+let currentCheckCount = 0;
 
 /* ---------------- rendering ---------------- */
 
@@ -147,72 +197,27 @@ function sortChecksBySeverity(checks) {
     return [...checks].sort((a, b) => severityRank(a.status) - severityRank(b.status) || (a.__index ?? 0) - (b.__index ?? 0));
 }
 
-function normalizeStatus(status) {
-    const text = String(status ?? "").toLowerCase();
-    return text === "passed" || text === "ok" || text === "success" ? "pass"
-        : text === "warn" ? "warning"
-        : text === "failed" || text === "error" ? "fail"
-        : text;
-}
-
-function deriveSummary(checks) {
-    const summary = { passed: 0, warnings: 0, failed: 0 };
-    for (const check of checks) {
-        if (check.status === "pass") {
-            summary.passed++;
-        } else if (check.status === "warning") {
-            summary.warnings++;
-        } else if (check.status === "fail") {
-            summary.failed++;
-        }
-    }
-    return summary;
-}
-
-function normalizeSummary(summary, checks) {
-    const derived = deriveSummary(checks);
-    return {
-        passed: Number.isFinite(Number(summary?.passed)) ? Number(summary.passed) : derived.passed,
-        warnings: Number.isFinite(Number(summary?.warnings)) ? Number(summary.warnings) : derived.warnings,
-        failed: Number.isFinite(Number(summary?.failed)) ? Number(summary.failed) : derived.failed,
-    };
-}
-
-function normalizeDoctorData(raw) {
-    const rawChecks = Array.isArray(raw?.checks) ? raw.checks : [];
-    const checks = rawChecks
-        .filter((check) => check && typeof check === "object")
-        .map((check, index) => ({
-            ...check,
-            __index: index,
-            category: String(check.category ?? "other").trim() || "other",
-            name: String(check.name ?? "check"),
-            status: normalizeStatus(check.status),
-            message: check.message == null ? "" : String(check.message),
-            fix: check.fix == null ? "" : String(check.fix),
-            metadata: check.metadata && typeof check.metadata === "object" ? check.metadata : null,
-        }));
-
-    return {
-        ...raw,
-        checks,
-        summary: normalizeSummary(raw?.summary, checks),
-        installations: Array.isArray(raw?.installations) ? raw.installations : [],
-        formatNotice: Array.isArray(raw?.checks)
-            ? null
-            : "Aspire Doctor returned JSON without a checks array. The canvas is showing the parts it can still understand.",
-    };
-}
-
 function renderMetadata(metadata) {
     const list = el("div", { class: "diag-meta-list" });
     for (const [key, value] of Object.entries(metadata)) {
         list.appendChild(el("div", { class: "diag-meta-row" }, [
-            el("div", { class: "diag-meta-key", text: key }),
+            el("div", { class: "diag-meta-key", text: metadataLabel(key) }),
             el("div", { class: "diag-meta-value" }, [renderMetadataValue(key, value)]),
         ]));
     }
     return list;
+}
+
+function metadataLabel(key) {
+    if (METADATA_LABEL[key]) {
+        return METADATA_LABEL[key];
+    }
+
+    const label = String(key)
+        .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+        .replace(/[_-]+/g, " ")
+        .trim();
+    return label ? label[0].toUpperCase() + label.slice(1) : "Detail";
 }
 
 function renderMetadataValue(key, value) {
@@ -362,7 +367,9 @@ function renderPathValue(value, variant = "default") {
         class: `path-link ${variant === "install" ? "install-path" : ""}`,
         type: "button",
         title: "Open this path",
-    }, [el("span", { text: value }), icon("link", { size: 12 })]);
+        "aria-label": variant === "install" ? "Open installation path" : "Open path",
+        "aria-description": value,
+    }, [el("span", { text: value, "aria-hidden": "true" }), icon("link", { size: 12 })]);
     btn.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -378,15 +385,84 @@ async function openPath(path, btn) {
         action: () => postJson("/api/open-path", { path }),
         onSuccess: () => {
             btn.classList.add("is-opened");
+            announce("Path opened.");
         },
         onFailure: (data) => {
             btn.classList.add("is-error");
             btn.title = data.error || "Couldn't open this path";
+            announce(data.error || "Couldn't open this path.");
         },
     });
 }
 
+function getCopyableFix(check) {
+    const updateCommand = check?.metadata?.updateCommand;
+    if (typeof updateCommand === "string" && updateCommand.trim()) {
+        return { label: "Copy command", text: updateCommand.trim() };
+    }
+
+    const fix = typeof check?.fix === "string" ? check.fix.trim() : "";
+    return fix ? { label: "Copy fix", text: fix } : null;
+}
+
+async function copyText(text) {
+    if (typeof navigator.clipboard?.writeText === "function") {
+        await navigator.clipboard.writeText(text);
+        return;
+    }
+
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.className = "clipboard-fallback";
+    document.body.appendChild(textarea);
+    textarea.select();
+    const copied = document.execCommand("copy");
+    textarea.remove();
+    if (!copied) {
+        throw new Error("Clipboard access is unavailable.");
+    }
+}
+
 function renderFixBlock(check) {
+    const actions = [];
+    const copyableFix = getCopyableFix(check);
+    if (copyableFix) {
+        const copyBtn = el("button", {
+            class: "fix-send",
+            type: "button",
+            title: `${copyableFix.label} to the clipboard`,
+            dataset: { restingLabel: copyableFix.label },
+        }, [
+            el("span", { class: "fix-send-label", text: copyableFix.label }),
+        ]);
+        copyBtn.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            runButtonAction(copyBtn, {
+                stateClasses: ["is-error", "is-sent"],
+                busyLabel: "Copying…",
+                resetLabel: copyableFix.label,
+                resetDelay: 1800,
+                action: async () => {
+                    await copyText(copyableFix.text);
+                    return { ok: true };
+                },
+                onSuccess: () => {
+                    copyBtn.classList.add("is-sent");
+                    setSendLabel(copyBtn, "Copied");
+                    announce(`${copyableFix.label} copied.`);
+                },
+                onFailure: (data) => {
+                    copyBtn.classList.add("is-error");
+                    setSendLabel(copyBtn, "Couldn't copy");
+                    announce(data.error || "Couldn't copy the suggested fix.");
+                },
+            });
+        });
+        actions.push(copyBtn);
+    }
+
     const terminalBtn = el("button", {
         class: "fix-send",
         type: "button",
@@ -401,6 +477,7 @@ function renderFixBlock(check) {
         e.stopPropagation();
         openTerminalForCheck(check, terminalBtn);
     });
+    actions.push(terminalBtn);
 
     const askBtn = el("button", {
         class: "fix-send",
@@ -416,6 +493,7 @@ function renderFixBlock(check) {
         e.stopPropagation();
         sendFixToAgent(check, askBtn);
     });
+    actions.unshift(askBtn);
 
     const bodyChildren = [el("div", { class: "diag-block-h", text: check.fix ? "Suggested fix" : "Actions" })];
     bodyChildren.push(el("div", {
@@ -425,7 +503,7 @@ function renderFixBlock(check) {
 
     return el("div", { class: "diag-fix" }, [
         el("div", { class: "diag-fix-body" }, bodyChildren),
-        el("div", { class: "diag-fix-actions" }, [askBtn, terminalBtn]),
+        el("div", { class: "diag-fix-actions" }, actions),
     ]);
 }
 
@@ -444,10 +522,12 @@ async function openTerminalForCheck(check, btn) {
         onSuccess: () => {
             btn.classList.add("is-sent");
             setSendLabel(btn, "Opened terminal");
+            announce("Terminal opened for this check.");
         },
-        onFailure: () => {
+        onFailure: (data) => {
             btn.classList.add("is-error");
             setSendLabel(btn, "Couldn't open");
+            announce(data.error || "Couldn't open a terminal for this check.");
         },
     });
 }
@@ -519,12 +599,61 @@ async function sendFixToAgent(check, btn) {
         onSuccess: () => {
             btn.classList.add("is-sent");
             setSendLabel(btn, "Queued for Copilot");
+            announce("Check queued for Copilot.");
         },
-        onFailure: () => {
+        onFailure: (data) => {
             btn.classList.add("is-error");
             setSendLabel(btn, "Couldn't send");
+            announce(data.error || "Couldn't send this check to Copilot.");
         },
     });
+}
+
+function updateViewControls() {
+    const checkItems = [...els.diagnostics.querySelectorAll(".diag-item[data-status]")];
+    for (const item of checkItems) {
+        item.hidden = hidePassed && item.dataset.status === "pass";
+    }
+
+    for (const section of els.diagnostics.querySelectorAll(".diag-section[data-check-section]")) {
+        const items = [...section.querySelectorAll(".diag-item[data-status]")];
+        section.hidden = items.length > 0 && items.every((item) => item.hidden);
+    }
+
+    const passedItems = checkItems.filter((item) => item.dataset.status === "pass");
+    const visibleDetails = [...els.diagnostics.querySelectorAll("details.diag-item")]
+        .filter((item) => !item.hidden && !item.closest(".diag-section")?.hidden);
+
+    els.togglePassed.hidden = passedItems.length === 0;
+    els.togglePassed.setAttribute("aria-pressed", String(hidePassed));
+    setButtonText(els.togglePassed, hidePassed ? "Show passed" : "Hide passed");
+
+    els.toggleDetails.hidden = visibleDetails.length === 0;
+    setButtonText(
+        els.toggleDetails,
+        visibleDetails.some((item) => item.open) ? "Collapse details" : "Expand details",
+    );
+
+    els.viewControls.hidden = currentCheckCount === 0 ||
+        (els.togglePassed.hidden && els.toggleDetails.hidden);
+}
+
+function togglePassedChecks() {
+    hidePassed = !hidePassed;
+    updateViewControls();
+    announce(hidePassed ? "Passed checks hidden." : "Passed checks shown.");
+}
+
+function toggleAllDetails() {
+    const details = [...els.diagnostics.querySelectorAll("details.diag-item")]
+        .filter((item) => !item.hidden && !item.closest(".diag-section")?.hidden);
+    const shouldOpen = !details.some((item) => item.open);
+
+    for (const item of details) {
+        item.open = shouldOpen;
+    }
+    updateViewControls();
+    announce(shouldOpen ? "All visible details expanded." : "All visible details collapsed.");
 }
 
 function renderCheck(check) {
@@ -546,10 +675,17 @@ function renderCheck(check) {
     ]);
 
     if (!expandable) {
-        return el("div", { class: itemClass }, [el("div", { class: "diag-row static" }, [iconEl, text])]);
+        return el("div", {
+            class: itemClass,
+            dataset: { status: check.status },
+        }, [el("div", { class: "diag-row static" }, [iconEl, text])]);
     }
 
-    const summary = el("summary", { class: "diag-row" }, [
+    const statusLabel = STATUS_LABEL[check.status] ?? check.status ?? "Unknown status";
+    const summary = el("summary", {
+        class: "diag-row",
+        "aria-label": `${check.name || "check"}: ${statusLabel}${check.message ? `. ${check.message}` : ""}`,
+    }, [
         iconEl,
         text,
         el("span", { class: "diag-chevron" }, [icon("chevron", { size: 14 })]),
@@ -569,18 +705,24 @@ function renderCheck(check) {
     }
 
     const open = check.status === "fail" || check.status === "warning";
-    return el("details", { class: itemClass, ...(open ? { open: "" } : {}) }, [summary, detail]);
+    const item = el("details", {
+        class: itemClass,
+        dataset: { status: check.status },
+        ...(open ? { open: "" } : {}),
+    }, [summary, detail]);
+    item.addEventListener("toggle", updateViewControls);
+    return item;
 }
 
 function renderDiagnostics(data) {
     const checks = Array.isArray(data.checks) ? data.checks.map((check, index) => ({ ...check, __index: index })) : [];
     const frag = document.createDocumentFragment();
 
-    if (data.formatNotice) {
+    for (const notice of data.notices) {
         frag.appendChild(
             el("section", { class: "state-card format-notice" }, [
-                el("div", { class: "state-title", text: "Doctor output format changed" }),
-                el("div", { class: "state-msg muted", text: data.formatNotice }),
+                el("h2", { class: "state-title", text: notice.title }),
+                el("div", { class: "state-msg muted", text: notice.message }),
             ]),
         );
     }
@@ -588,7 +730,7 @@ function renderDiagnostics(data) {
     if (checks.length === 0) {
         frag.appendChild(
             el("section", { class: "state-card" }, [
-                el("div", { class: "state-title", text: "No checks reported" }),
+                el("h2", { class: "state-title", text: "No checks reported" }),
                 el("div", { class: "state-msg muted", text: "The diagnostics command completed, but no environment checks were returned." }),
             ]),
         );
@@ -601,29 +743,34 @@ function renderDiagnostics(data) {
         }
 
         const head = el("div", { class: "diag-sec-head" }, [
-            el("span", { class: "diag-sec-title", text: CATEGORY_LABEL[category] ?? category }),
+            el("h2", { class: "diag-sec-title", text: CATEGORY_LABEL[category] ?? category }),
         ]);
         const list = el("div", { class: "diag-list" }, items.map(renderCheck));
-        frag.appendChild(el("div", { class: "diag-section" }, [head, list]));
+        frag.appendChild(el("section", {
+            class: "diag-section",
+            dataset: { checkSection: "true" },
+        }, [head, list]));
     }
 
     const installs = Array.isArray(data.installations) ? data.installations : [];
     if (installs.length > 0) {
         const head = el("div", { class: "diag-sec-head" }, [
-            el("span", { class: "diag-sec-title", text: `Detected installations (${installs.length})` }),
+            el("h2", { class: "diag-sec-title", text: `Detected installations (${installs.length})` }),
         ]);
         const list = el(
             "div",
             { class: "diag-list" },
             installs.map((inst) => el("div", { class: "diag-item install-card" }, [renderInstallation(inst)])),
         );
-        frag.appendChild(el("div", { class: "diag-section" }, [head, list]));
+        frag.appendChild(el("section", { class: "diag-section" }, [head, list]));
     }
 
+    currentCheckCount = checks.length;
     els.diagnostics.replaceChildren(frag);
+    updateViewControls();
 }
 
-function renderSummary(summary) {
+function renderSummary(summary, checkCount) {
     const passed = summary?.passed ?? 0;
     const warnings = summary?.warnings ?? 0;
     const failed = summary?.failed ?? 0;
@@ -635,15 +782,8 @@ function renderSummary(summary) {
     els.pillOk.dataset.zero = passed === 0 ? "true" : "false";
     els.pillWarn.dataset.zero = warnings === 0 ? "true" : "false";
     els.pillReq.dataset.zero = failed === 0 ? "true" : "false";
-    els.pills.hidden = false;
-
-    if (failed > 0) {
-        els.tbSub.textContent = `${failed} failed · ${warnings} warning${warnings === 1 ? "" : "s"}`;
-    } else if (warnings > 0) {
-        els.tbSub.textContent = `All required checks passed · ${warnings} warning${warnings === 1 ? "" : "s"}`;
-    } else {
-        els.tbSub.textContent = "Everything looks good";
-    }
+    els.pills.hidden = checkCount === 0;
+    els.tbSub.textContent = summaryStatusText({ passed, warnings, failed }, checkCount);
 }
 
 function renderInstallation(inst) {
@@ -679,19 +819,28 @@ function renderInstallation(inst) {
 /* ---------------- state application ---------------- */
 
 function applyResult(result) {
+    if (!shouldApplyResult(latestRevision, result)) {
+        return false;
+    }
+    const revision = getResultRevision(result);
+    if (revision != null) {
+        latestRevision = revision;
+    }
+
     if (!result || !result.ok) {
         showError(result?.error ?? "Unknown error.", result?.raw);
-        return;
+        return true;
     }
     const data = normalizeDoctorData(result.data ?? {});
     withTransition(() => {
         renderDiagnostics(data);
-        renderSummary(data.summary);
+        renderSummary(data.summary, data.checks.length);
         els.error.hidden = true;
         els.skeleton.hidden = true;
         els.diagnostics.hidden = false;
         setBodyState("has-data");
     });
+    return true;
 }
 
 function showError(message, raw) {
@@ -707,6 +856,7 @@ function showError(message, raw) {
         els.diagnostics.hidden = true;
         els.error.hidden = false;
         els.pills.hidden = true;
+        els.viewControls.hidden = true;
         els.tbSub.textContent = "Check failed to run";
         setBodyState("has-error");
     });
@@ -723,9 +873,8 @@ async function loadDiagnostics({ initial = false } = {}) {
     busy = true;
     els.rerun.disabled = true;
     bodyEl.classList.add("is-busy");
-    if (initial) {
-        els.tbSub.textContent = "Checking your environment…";
-    }
+    setMainBusy(true);
+    els.tbSub.textContent = initial ? "Checking your environment…" : "Re-running environment checks…";
 
     try {
         const res = await fetch("/api/diagnostics", {
@@ -742,6 +891,7 @@ async function loadDiagnostics({ initial = false } = {}) {
         busy = false;
         els.rerun.disabled = false;
         bodyEl.classList.remove("is-busy");
+        setMainBusy(false);
     }
 }
 
@@ -770,6 +920,8 @@ function connectEvents() {
 /* ---------------- wiring ---------------- */
 
 els.rerun.addEventListener("click", () => loadDiagnostics());
+els.togglePassed.addEventListener("click", togglePassedChecks);
+els.toggleDetails.addEventListener("click", toggleAllDetails);
 
 async function initialize() {
     connectEvents();

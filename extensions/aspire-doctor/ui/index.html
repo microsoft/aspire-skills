@@ -12,8 +12,10 @@
             <div class="tb-row">
                 <div class="tb-title">
                     <div>
-                        <div class="tb-heading">Aspire Doctor</div>
-                        <div class="tb-sub muted" id="tb-sub">Checking your environment…</div>
+                        <h1 class="tb-heading" id="page-title">Aspire Doctor</h1>
+                        <div class="tb-sub muted" id="tb-sub" role="status" aria-live="polite" aria-atomic="true">
+                            Checking your environment…
+                        </div>
                     </div>
                 </div>
                 <div class="tb-actions">
@@ -46,12 +48,31 @@
                     ><span class="pill-lbl">failed</span>
                 </span>
             </div>
+            <div class="tb-controls" id="view-controls" hidden>
+                <button
+                    class="btn btn-quiet btn-sm"
+                    id="toggle-passed"
+                    type="button"
+                    aria-controls="diagnostics"
+                    aria-pressed="false"
+                >
+                    <span class="btn-label">Hide passed</span>
+                </button>
+                <button
+                    class="btn btn-quiet btn-sm"
+                    id="toggle-details"
+                    type="button"
+                    aria-controls="diagnostics"
+                >
+                    <span class="btn-label">Collapse details</span>
+                </button>
+            </div>
             <div class="progress" id="progress" aria-hidden="true"><span></span></div>
         </header>
 
-        <main class="content">
+        <main class="content" id="main-content" aria-labelledby="page-title" aria-busy="true">
             <!-- Loading skeleton -->
-            <section id="skeleton" class="diag-groups">
+            <section id="skeleton" class="diag-groups" aria-hidden="true">
                 <div class="diag-section">
                     <div class="diag-sec-head">
                         <span class="skeleton sk-line" style="width: 120px; height: 13px"></span>
@@ -77,7 +98,7 @@
             <section id="diagnostics" class="diag-groups" hidden></section>
 
             <!-- Error state -->
-            <section id="error" class="state-card" hidden>
+            <section id="error" class="state-card" role="alert" aria-live="assertive" aria-atomic="true" hidden>
                 <div class="state-ico req" aria-hidden="true">
                     <svg width="22" height="22" viewBox="0 0 16 16">
                         <path
@@ -86,12 +107,13 @@
                         />
                     </svg>
                 </div>
-                <div class="state-title">Couldn't run <code>aspire doctor</code></div>
+                <h2 class="state-title">Couldn't run <code>aspire doctor</code></h2>
                 <div class="state-msg muted" id="error-msg"></div>
                 <pre class="state-raw" id="error-raw" hidden></pre>
             </section>
         </main>
 
-        <script src="/app.js"></script>
+        <div class="sr-only" id="announcer" aria-live="polite" aria-atomic="true"></div>
+        <script type="module" src="/app.js"></script>
     </body>
 </html>
