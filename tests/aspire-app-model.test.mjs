@@ -10,9 +10,11 @@ import {
     SnapshotGeneration,
     appHostOperationKey,
     buildCommandArgumentTokens,
+    buildDashboardViewUrl,
     buildGlobalTree,
     buildResourceTree,
     buildResourceCommandArgs,
+    buildTerminalAttachCommand,
     buildWorkspaceTree,
     combineWorkspaceAppHosts,
     filterTree,
@@ -35,11 +37,69 @@ import {
     validateCommandArguments,
 } from "../extensions/aspire-app-model/lib/app-model.mjs";
 
+const syntheticRepoRoot = join(tmpdir(), "repo");
+const syntheticAppsRoot = join(tmpdir(), "apps");
+
+function repoPath(...segments) {
+    return join(syntheticRepoRoot, ...segments);
+}
+
+function appsPath(...segments) {
+    return join(syntheticAppsRoot, ...segments);
+}
+
 test("extractJsonPayload ignores Aspire preambles and trailing text", () => {
     const payload = extractJsonPayload("Finding AppHost...\n{\n  \"resources\": [{\"name\":\"api\"}]\n}\nDone");
     assert.deepEqual(payload, { resources: [{ name: "api" }] });
     assert.deepEqual(extractJsonPayload("notice\n[]"), []);
     assert.equal(extractJsonPayload("AppHost is not running."), undefined);
+});
+
+test("dashboard resource views preserve authentication without exposing URL construction to the renderer", () => {
+    const views = new Map([
+        ["details", "/dashboard/?resource=api%20worker"],
+        ["console-logs", "/dashboard/consolelogs/resource/api%20worker"],
+        ["structured-logs", "/dashboard/structuredlogs/resource/api%20worker"],
+        ["traces", "/dashboard/traces/resource/api%20worker"],
+        ["metrics", "/dashboard/metrics/resource/api%20worker"],
+    ]);
+    for (const [view, expectedReturnUrl] of views) {
+        const result = new URL(buildDashboardViewUrl(
+            "https://localhost:18888/dashboard/login?t=private-token",
+            view,
+            "api worker",
+        ));
+        assert.equal(result.pathname, "/dashboard/login");
+        assert.equal(result.searchParams.get("returnUrl"), expectedReturnUrl);
+        assert.equal(result.searchParams.get("t"), "private-token");
+    }
+
+    assert.equal(
+        buildDashboardViewUrl("https://localhost:18888/dashboard/", "metrics", "api"),
+        "https://localhost:18888/dashboard/metrics/resource/api",
+    );
+    assert.equal(buildDashboardViewUrl("file:///tmp/dashboard", "traces", "api"), undefined);
+    assert.equal(buildDashboardViewUrl("https://localhost:18888/login?t=secret", "unknown", "api"), undefined);
+});
+
+test("terminal attach commands quote resource and AppHost arguments for the host shell", () => {
+    assert.equal(
+        buildTerminalAttachCommand({
+            resourceName: "worker'name",
+            appHostPath: "C:\\repo\\My App\\AppHost.csproj",
+            replicaIndex: "2",
+            platform: "win32",
+        }),
+        "aspire terminal attach 'worker''name' --apphost 'C:\\repo\\My App\\AppHost.csproj' --replica '2'",
+    );
+    assert.equal(
+        buildTerminalAttachCommand({
+            resourceName: "api'name",
+            appHostPath: "/tmp/My App/AppHost.csproj",
+            platform: "linux",
+        }),
+        "aspire terminal attach 'api'\\''name' --apphost '/tmp/My App/AppHost.csproj'",
+    );
 });
 
 test("sanitizeResource exposes only the app-model allow-list", () => {
@@ -56,6 +116,8 @@ test("sanitizeResource exposes only the app-model allow-list", () => {
             FEATURE_FLAG: "true",
         },
         properties: {
+            "terminal.enabled": "true",
+            "terminal.replicaIndex": "2",
             Value: "secret-value",
             "resource.connectionString": "Host=db;Password=secret",
         },
@@ -72,7 +134,7 @@ test("sanitizeResource exposes only the app-model allow-list", () => {
             isInternal: false,
         }],
         healthReports: {
-            ready: { status: "Healthy", description: "may contain sensitive text" },
+            ready: { status: "healthy", description: "may contain sensitive text" },
         },
         commands: {
             createVacation: {
@@ -92,6 +154,8 @@ test("sanitizeResource exposes only the app-model allow-list", () => {
     assert.deepEqual(resource.relationships, [{ type: "Reference", resourceName: "db" }]);
     assert.deepEqual(resource.healthReports, [{ name: "ready", status: "Healthy" }]);
     assert.equal(resource.commands[0].argumentInputs[0].value, undefined);
+    assert.equal(resource.terminalEnabled, true);
+    assert.equal(resource.terminalReplicaIndex, "2");
     assert.equal("source" in resource, false);
     assert.equal("environment" in resource, false);
     assert.equal("properties" in resource, false);
@@ -118,9 +182,59 @@ test("projectDescribePayload summarizes runtime health", () => {
     });
 });
 
+test("resource status prefers lifecycle and current health checks over stale aggregate health", () => {
+    const projected = projectDescribePayload({
+        resources: [
+            {
+                name: "cache",
+                resourceType: "Container",
+                state: "Exited",
+                healthStatus: "Healthy",
+                exitCode: 137,
+            },
+            {
+                name: "server",
+                resourceType: "Project",
+                state: "Finished",
+                healthReports: { ready: { status: "Unhealthy" } },
+            },
+            {
+                name: "installer",
+                resourceType: "Executable",
+                state: "Finished",
+                stateStyle: "success",
+            },
+        ],
+    });
+    const nodes = buildResourceTree(projected.resources, "host");
+    const byName = new Map(nodes.map((node) => [node.label, node]));
+
+    assert.equal(byName.get("cache").tone, "error");
+    assert.equal(byName.get("cache").statusLabel, "Exited · 137");
+    assert.equal(byName.get("cache").lifecycleTone, "error");
+    assert.equal(byName.get("cache").healthLabel, "Last known healthy");
+    assert.equal(byName.get("cache").healthTone, "inactive");
+    assert.equal(byName.get("server").tone, "inactive");
+    assert.equal(byName.get("server").statusLabel, "Finished");
+    assert.equal(byName.get("server").lifecycleTone, "inactive");
+    assert.equal(byName.get("server").healthLabel, "Last known unhealthy");
+    assert.equal(byName.get("server").healthTone, "error");
+    assert.equal(byName.get("installer").tone, "healthy");
+    assert.equal(byName.get("installer").statusLabel, "Finished");
+    assert.equal(byName.get("installer").lifecycleTone, "healthy");
+    assert.equal(byName.get("installer").healthLabel, undefined);
+    assert.deepEqual(projected.summary, {
+        total: 3,
+        healthy: 1,
+        warning: 0,
+        error: 1,
+        inactive: 1,
+    });
+});
+
 test("ps projection never exposes the token-bearing dashboard URL", () => {
     const records = normalizePsPayload([{
-        appHostPath: "C:\\repo\\Demo.AppHost\\Demo.AppHost.csproj",
+        appHostPath: repoPath("Demo.AppHost", "Demo.AppHost.csproj"),
         appHostPid: 123,
         status: "running",
         sdkVersion: "13.5.2",
@@ -137,12 +251,25 @@ test("ps projection never exposes the token-bearing dashboard URL", () => {
         selected: true,
     });
     assert.doesNotMatch(JSON.stringify(publicRecord), /dashboard|secret|private|repo/i);
+    const [treeNode] = buildGlobalTree({ runningHosts: records, models: new Map() });
+    assert.ok(treeNode.actions.includes("dashboard"));
+    assert.doesNotMatch(JSON.stringify(treeNode), /login\?t=secret/);
 
     const withoutStatus = normalizePsPayload([{
-        appHostPath: "C:\\repo\\Other.AppHost\\Other.AppHost.csproj",
+        appHostPath: repoPath("Other.AppHost", "Other.AppHost.csproj"),
         appHostPid: 456,
     }]);
     assert.equal(withoutStatus[0].status, "running");
+
+    const [invalidDashboard] = normalizePsPayload([{
+        appHostPath: repoPath("Invalid.AppHost", "Invalid.AppHost.csproj"),
+        dashboardUrl: "file:///private/dashboard",
+    }]);
+    const [invalidTreeNode] = buildGlobalTree({
+        runningHosts: [invalidDashboard],
+        models: new Map(),
+    });
+    assert.equal(invalidTreeNode.actions.includes("dashboard"), false);
 });
 
 test("command argument validation enforces declared types and choices", () => {
@@ -341,8 +468,8 @@ test("workspace fallback discovers file-based TypeScript AppHosts with mts exten
 
 test("normalizeLsPayload preserves buildability without exposing candidate paths publicly", () => {
     const candidates = normalizeLsPayload([
-        { path: "C:\\repo\\First.AppHost\\First.AppHost.csproj", language: "csharp", status: "buildable" },
-        { path: "C:\\repo\\apphost.ts", language: "typescript/nodejs", status: "possibly-unbuildable" },
+        { path: repoPath("First.AppHost", "First.AppHost.csproj"), language: "csharp", status: "buildable" },
+        { path: repoPath("apphost.ts"), language: "typescript/nodejs", status: "possibly-unbuildable" },
     ]);
 
     assert.equal(candidates[0].displayName, "First");
@@ -361,6 +488,10 @@ test("buildResourceTree follows VS Code child ordering and command visibility", 
                 resourceType: "Container",
                 state: "Running",
                 healthStatus: "Healthy",
+                properties: {
+                    "terminal.enabled": "true",
+                    "terminal.replicaIndex": "3",
+                },
                 urls: [
                     { name: "tcp", displayName: "TCP", url: "tcp://localhost:5432", isInternal: false },
                     { name: "postgres", displayName: "Postgres", url: "postgres://admin:secret@localhost:5432/app", isInternal: false },
@@ -385,7 +516,10 @@ test("buildResourceTree follows VS Code child ordering and command visibility", 
 
     const [postgres] = buildResourceTree(resources, "host");
     assert.equal(postgres.label, "postgres");
-    assert.equal(postgres.statusLabel, "Healthy");
+    assert.equal(postgres.statusLabel, "Running");
+    assert.equal(postgres.healthLabel, "Healthy");
+    assert.equal(postgres.terminalEnabled, true);
+    assert.equal(postgres.terminalReplicaIndex, "3");
     assert.deepEqual(postgres.children.map((child) => child.kind), [
         "resource",
         "endpoint",
@@ -404,8 +538,8 @@ test("buildResourceTree follows VS Code child ordering and command visibility", 
 
 test("buildWorkspaceTree flattens one running host and minimizes mixed grouping", () => {
     const [candidateA, candidateB] = normalizeLsPayload([
-        { path: "C:\\repo\\A.AppHost\\A.AppHost.csproj", language: "csharp", status: "buildable" },
-        { path: "C:\\repo\\B.AppHost\\B.AppHost.csproj", language: "csharp", status: "buildable" },
+        { path: repoPath("A.AppHost", "A.AppHost.csproj"), language: "csharp", status: "buildable" },
+        { path: repoPath("B.AppHost", "B.AppHost.csproj"), language: "csharp", status: "buildable" },
     ]);
     const runningA = { ...candidateA, status: "running", runtimeId: candidateA.id };
     const models = new Map([[candidateA.id, {
@@ -433,7 +567,7 @@ test("buildWorkspaceTree flattens one running host and minimizes mixed grouping"
 
 test("unbuildable Workspace AppHosts retain source and explain disabled operations", () => {
     const [candidate] = normalizeLsPayload([{
-        path: "C:\\repo\\Broken.AppHost\\Broken.AppHost.csproj",
+        path: repoPath("Broken.AppHost", "Broken.AppHost.csproj"),
         language: "csharp",
         status: "possibly-unbuildable",
     }]);
@@ -452,7 +586,7 @@ test("unbuildable Workspace AppHosts retain source and explain disabled operatio
 
 test("combineWorkspaceAppHosts excludes stopped ps records from the running tree", () => {
     const [candidate] = normalizeLsPayload([
-        { path: "C:\\repo\\A.AppHost\\A.AppHost.csproj", language: "csharp", status: "buildable" },
+        { path: repoPath("A.AppHost", "A.AppHost.csproj"), language: "csharp", status: "buildable" },
     ]);
     const [stopped] = normalizePsPayload([
         { appHostPath: candidate.appHostPath, appHostPid: 123, status: "stopped" },
@@ -464,8 +598,8 @@ test("combineWorkspaceAppHosts excludes stopped ps records from the running tree
 
 test("buildGlobalTree retains a healthy host beside a failed host", () => {
     const hosts = normalizePsPayload([
-        { appHostPath: "C:\\apps\\A.AppHost\\A.AppHost.csproj", appHostPid: 1, status: "running" },
-        { appHostPath: "C:\\apps\\B.AppHost\\B.AppHost.csproj", appHostPid: 2, status: "running" },
+        { appHostPath: appsPath("A.AppHost", "A.AppHost.csproj"), appHostPid: 1, status: "running" },
+        { appHostPath: appsPath("B.AppHost", "B.AppHost.csproj"), appHostPid: 2, status: "running" },
     ]);
     const models = new Map([
         [hosts[0].id, {
@@ -648,16 +782,16 @@ test("KeyedTaskQueue applies same-command work in issue order", async () => {
 
 test("AppHost operation identity is stable across source and project paths", () => {
     assert.equal(
-        appHostOperationKey("C:\\repo\\Sample.AppHost\\Sample.AppHost.csproj"),
-        appHostOperationKey("C:\\repo\\Sample.AppHost\\AppHost.cs"),
+        appHostOperationKey(repoPath("Sample.AppHost", "Sample.AppHost.csproj")),
+        appHostOperationKey(repoPath("Sample.AppHost", "AppHost.cs")),
     );
     assert.equal(
-        appHostOperationKey("C:\\repo\\Sample.AppHost"),
-        appHostOperationKey("C:\\repo\\Sample.AppHost\\Sample.AppHost.csproj"),
+        appHostOperationKey(repoPath("Sample.AppHost")),
+        appHostOperationKey(repoPath("Sample.AppHost", "Sample.AppHost.csproj")),
     );
     assert.notEqual(
-        appHostOperationKey("C:\\repo\\Sample.AppHost"),
-        appHostOperationKey("C:\\repo\\Other.AppHost"),
+        appHostOperationKey(repoPath("Sample.AppHost")),
+        appHostOperationKey(repoPath("Other.AppHost")),
     );
 });
 
@@ -682,18 +816,26 @@ test("directory AppHost inputs resolve to a concrete project", async () => {
 
 test("canvas source carries the confirmed direction and protected data routes", async () => {
     const root = new URL("../extensions/aspire-app-model/", import.meta.url);
-    const [html, client, provider] = await Promise.all([
+    const [html, client, styles, provider] = await Promise.all([
         import("node:fs/promises").then(({ readFile }) => readFile(new URL("ui/index.html", root), "utf8")),
         import("node:fs/promises").then(({ readFile }) => readFile(new URL("ui/app.js", root), "utf8")),
+        import("node:fs/promises").then(({ readFile }) => readFile(new URL("ui/styles.css", root), "utf8")),
         import("node:fs/promises").then(({ readFile }) => readFile(new URL("extension.mjs", root), "utf8")),
     ]);
 
-    assert.match(html, /THESIS: The tree preserves Aspire's ownership model/);
+    assert.match(html, /THESIS: Aspire's operational model becomes a canvas-native workspace/);
     assert.match(html, />Aspire AppHosts</);
-    assert.match(html, /role="tree"/);
-    assert.match(client, /\/api\/ask-copilot/);
+    assert.match(html, /class="model-view"/);
+    assert.match(client, /\/api\/copilot-context/);
+    assert.match(client, /\/api\/open-dashboard/);
+    assert.match(client, /\/api\/open-dashboard-view/);
+    assert.match(client, /\/api\/open-endpoint/);
+    assert.match(client, /\/api\/open-terminal/);
     assert.match(client, /\/api\/command/);
-    assert.match(client, /apphost-action-tray/);
+    assert.match(client, /host-action-bar/);
+    assert.match(client, /Add to Copilot chat/);
+    assert.match(client, /resource-board/);
+    assert.match(client, /role: "tablist"/);
     assert.match(client, /shortLabel/);
     assert.match(client, /CONFIRMATIONS/);
     assert.match(client, /unavailableActionReason/);
@@ -702,23 +844,66 @@ test("canvas source carries the confirmed direction and protected data routes", 
     assert.match(client, /input\.value/);
     assert.match(client, /pruneCommandDraft/);
     assert.match(client, /dynamicLoadGenerations/);
+    assert.match(client, /focusCommandPanel/);
+    assert.match(client, /confirmationCancel/);
+    assert.match(client, /document\.startViewTransition/);
+    assert.match(client, /is-mode-switching/);
+    assert.match(client, /class: "resource-card-identity"/);
+    assert.doesNotMatch(client, /class: "resource-card-main"/);
+    assert.match(client, /navigator\.clipboard\?\.writeText/);
+    assert.match(client, /class: "resource-name-copy"/);
+    assert.match(client, /Console logs/);
+    assert.match(client, /Structured logs/);
+    assert.match(client, /Traces/);
+    assert.match(client, /Metrics/);
+    assert.match(styles, /--border-strong:/);
+    assert.match(styles, /view-transition-name: app-model-surface/);
+    assert.doesNotMatch(styles, /\.resource-card:hover/);
     assert.match(provider, /CommandInputMetadataStore/);
+    assert.match(provider, /sendAttachmentsToMessage/);
+    assert.match(provider, /type: "extension_context"/);
+    assert.match(provider, /canvasId: "browser"/);
+    assert.match(provider, /canvasId: "terminal"/);
+    assert.match(provider, /buildDashboardViewUrl/);
+    assert.match(provider, /buildTerminalAttachCommand/);
+    assert.match(provider, /privateDashboardUrl/);
     assert.match(provider, /KeyedTaskQueue/);
     assert.match(provider, /submittedSecretValues/);
     assert.match(provider, /optionalFlagFallbackUsed/);
     assert.match(provider, /status: hasRoots \? "stale" : "error"/);
     assert.match(provider, /Content-Security-Policy/);
+    assert.match(provider, /error\?\.status === 413 \? 413 : 400/);
+    assert.equal(client.includes('querySelector("[data-apphost-primary]")'), false);
+    assert.equal(client.includes('querySelector("[data-apphost-primary]:not([disabled])")'), true);
+
+    const copyHandler = client.slice(
+        client.indexOf("async function copyResourceName"),
+        client.indexOf("function setModeButtons"),
+    );
+    const nodeActionHandler = client.slice(
+        client.indexOf("async function executeNodeAction"),
+        client.indexOf("async function choosePipelineStep"),
+    );
+    assert.doesNotMatch(copyHandler, /DASHBOARD_VIEW_ACTIONS|\/api\/open-dashboard-view/);
+    assert.match(nodeActionHandler, /DASHBOARD_VIEW_ACTIONS/);
+    assert.match(nodeActionHandler, /\/api\/open-dashboard-view/);
 });
 
-test("canvas uses the Aspire VS Code Workspace and Global tree instead of graph tabs", async () => {
-    const html = await import("node:fs/promises")
-        .then(({ readFile }) => readFile(
+test("canvas uses a focused Workspace and Global resource board instead of an explorer tree", async () => {
+    const [html, client] = await Promise.all([
+        import("node:fs/promises").then(({ readFile }) => readFile(
             new URL("../extensions/aspire-app-model/ui/index.html", import.meta.url),
             "utf8",
-        ));
+        )),
+        import("node:fs/promises").then(({ readFile }) => readFile(
+            new URL("../extensions/aspire-app-model/ui/app.js", import.meta.url),
+            "utf8",
+        )),
+    ]);
 
     assert.match(html, />Workspace</);
     assert.match(html, />Global</);
-    assert.match(html, /role="tree"/);
-    assert.doesNotMatch(html, /role="tablist"|>Graph</);
+    assert.match(client, /apphost-switcher/);
+    assert.match(client, /resource-board/);
+    assert.doesNotMatch(html, /role="tree"|>Graph</);
 });

@@ -1,6 +1,6 @@
 // Extension: aspire-app-model
 //
-// Aspire VS Code-inspired AppHost tree for GitHub Copilot.
+// Canvas-native Aspire AppHost workbench for GitHub Copilot.
 
 import { createServer } from "node:http";
 import { randomBytes, timingSafeEqual } from "node:crypto";
@@ -14,9 +14,11 @@ import {
     KeyedTaskQueue,
     SnapshotGeneration,
     appHostOperationKey,
+    buildDashboardViewUrl,
     buildGlobalTree,
     buildCommandArgumentTokens,
     buildResourceCommandArgs,
+    buildTerminalAttachCommand,
     buildWorkspaceTree,
     combineWorkspaceAppHosts,
     createAspireCliRunner,
@@ -36,6 +38,7 @@ import {
     resolveRequestedAppHostPath,
     runWithOptionalFlagFallback,
     sanitizeCommandArgumentInputs,
+    stableId,
     validateCommandArguments,
 } from "./lib/app-model.mjs";
 
@@ -147,17 +150,26 @@ function authorizeRequest(entry, req, url) {
 function readJsonBody(req) {
     return new Promise((resolveBody, reject) => {
         let size = 0;
+        let tooLarge = false;
         const chunks = [];
         req.on("data", (chunk) => {
             size += chunk.length;
             if (size > MAX_BODY_BYTES) {
-                reject(new Error("Request body is too large."));
-                req.destroy();
+                tooLarge = true;
+                chunks.length = 0;
                 return;
             }
-            chunks.push(chunk);
+            if (!tooLarge) {
+                chunks.push(chunk);
+            }
         });
         req.once("end", () => {
+            if (tooLarge) {
+                const error = new Error("Request body is too large.");
+                error.status = 413;
+                reject(error);
+                return;
+            }
             try {
                 resolveBody(chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {});
             } catch {
@@ -663,31 +675,23 @@ function nodeContext(node) {
     return context;
 }
 
-function buildCopilotPrompt(context) {
-    return [
-        `The user selected '${context.label}' in the Aspire AppHost tree canvas.`,
-        "",
-        "Sanitized selected context:",
-        "```json",
-        JSON.stringify(context, null, 2),
-        "```",
-        "",
-        "Explain what this item means in the current Aspire application. Ground the response in this " +
-            "sanitized context and the workspace. Use the installed Aspire skills for any operation, " +
-            "prefer resource-scoped actions, and never expose or infer secrets.",
-    ].join("\n");
-}
-
-async function askCopilot(entry, nodeId) {
+async function attachCopilotContext(entry, nodeId) {
     const node = entry.nodeIndex.get(String(nodeId ?? ""));
     if (!node) {
-        return { ok: false, error: "The selected tree item is no longer available." };
+        return { ok: false, error: "The selected canvas item is no longer available." };
     }
-    if (typeof sessionRef?.send !== "function") {
-        return { ok: false, error: "The Copilot session is not available." };
+    if (typeof sessionRef?.rpc?.extensions?.sendAttachmentsToMessage !== "function") {
+        return { ok: false, error: "The Copilot composer is not available." };
     }
-    await sessionRef.send({ prompt: buildCopilotPrompt(nodeContext(node)) });
-    return { ok: true };
+    await sessionRef.rpc.extensions.sendAttachmentsToMessage({
+        instanceId: entry.instanceId,
+        attachments: [{
+            type: "extension_context",
+            title: `Aspire: ${node.label}`,
+            payload: nodeContext(node),
+        }],
+    });
+    return { ok: true, title: node.label };
 }
 
 async function runResourceCommand(entry, request) {
@@ -1025,6 +1029,132 @@ async function openAppHostSource(entry, appHostId) {
     return { ok: true };
 }
 
+function privateDashboardUrl(entry, record) {
+    const model = modelForRecord(entry, record);
+    const candidate = record.dashboardUrl
+        || model?.resources?.find((resource) => resource.dashboardUrl)?.dashboardUrl;
+    return buildDashboardViewUrl(candidate);
+}
+
+async function openBrowserCanvas({ instanceId, url, title }) {
+    if (typeof sessionRef?.rpc?.canvas?.open !== "function") {
+        return { ok: false, error: "The integrated browser canvas is unavailable." };
+    }
+    await sessionRef.rpc.canvas.open({
+        canvasId: "browser",
+        instanceId,
+        input: {
+            url,
+            title,
+            placement: { surface: "side", focus: true },
+        },
+    });
+    return { ok: true };
+}
+
+async function openAppHostDashboard(entry, appHostId) {
+    const record = getHostRecord(entry, appHostId);
+    const dashboardUrl = record ? privateDashboardUrl(entry, record) : undefined;
+    if (!record || !dashboardUrl) {
+        return { ok: false, error: "The dashboard URL is not available." };
+    }
+    return await openBrowserCanvas({
+        instanceId: `aspire-dashboard-${record.id}`,
+        url: dashboardUrl,
+        title: `${record.displayName} dashboard`,
+    });
+}
+
+function currentResource(entry, nodeId) {
+    const node = entry.nodeIndex.get(String(nodeId ?? ""));
+    if (node?.kind !== "resource") {
+        return {};
+    }
+    const { record, resource } = getResource(entry, node.appHostId, node.resourceName);
+    return { node, record, resource };
+}
+
+const DASHBOARD_VIEW_TITLES = {
+    details: "details",
+    "console-logs": "console logs",
+    "structured-logs": "structured logs",
+    traces: "traces",
+    metrics: "metrics",
+};
+
+async function openResourceDashboardView(entry, nodeId, view) {
+    const { node, record, resource } = currentResource(entry, nodeId);
+    if (!node || !record || !resource) {
+        return { ok: false, error: "The resource is no longer available." };
+    }
+    const dashboardUrl = privateDashboardUrl(entry, record);
+    const viewLabel = DASHBOARD_VIEW_TITLES[view];
+    const url = dashboardUrl
+        ? buildDashboardViewUrl(dashboardUrl, view, resource.displayName ?? resource.name)
+        : undefined;
+    if (!viewLabel || !url) {
+        return { ok: false, error: "This Dashboard view is not available." };
+    }
+    return await openBrowserCanvas({
+        instanceId: `aspire-dashboard-${record.id}`,
+        url,
+        title: `${record.displayName} ${viewLabel} (${node.label})`,
+    });
+}
+
+async function openResourceEndpoint(entry, nodeId) {
+    const node = entry.nodeIndex.get(String(nodeId ?? ""));
+    const record = node?.appHostId ? getHostRecord(entry, node.appHostId) : undefined;
+    if (node?.kind !== "endpoint" || !node.href || !record) {
+        return { ok: false, error: "The endpoint is no longer available." };
+    }
+    let url;
+    try {
+        url = new URL(node.href);
+    } catch {
+        return { ok: false, error: "The endpoint URL is invalid." };
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+        return { ok: false, error: "Only HTTP and HTTPS endpoints can open in the integrated browser." };
+    }
+    return await openBrowserCanvas({
+        instanceId: `aspire-endpoint-${stableId(node.id)}`,
+        url: url.toString(),
+        title: `${record.displayName}: ${node.label}`,
+    });
+}
+
+async function openResourceTerminal(entry, nodeId) {
+    const { node, record, resource } = currentResource(entry, nodeId);
+    if (!node || !record || !resource) {
+        return { ok: false, error: "The resource is no longer available." };
+    }
+    if (!node.terminalEnabled) {
+        return { ok: false, error: "This resource does not expose an interactive terminal." };
+    }
+    const command = buildTerminalAttachCommand({
+        resourceName: resource.name,
+        appHostPath: record.appHostPath,
+        replicaIndex: node.terminalReplicaIndex,
+    });
+    if (!command) {
+        return { ok: false, error: "The terminal command could not be created." };
+    }
+    if (typeof sessionRef?.rpc?.canvas?.open !== "function") {
+        return { ok: false, error: "The terminal canvas is unavailable." };
+    }
+    await sessionRef.rpc.canvas.open({
+        canvasId: "terminal",
+        instanceId: `aspire-terminal-${stableId(`${record.id}:${resource.name}`)}`,
+        input: {
+            command,
+            title: `${node.label} terminal`,
+            placement: { surface: "side", focus: true },
+        },
+    });
+    return { ok: true };
+}
+
 async function handleRequest(entry, req, res) {
     const url = new URL(req.url, entry.origin);
     const authorizationError = authorizeRequest(entry, req, url);
@@ -1066,7 +1196,7 @@ async function handleRequest(entry, req, res) {
     try {
         body = await readJsonBody(req);
     } catch (error) {
-        return sendJson(res, 400, { ok: false, error: error.message });
+        return sendJson(res, error?.status === 413 ? 413 : 400, { ok: false, error: error.message });
     }
 
     if (url.pathname === "/api/refresh") {
@@ -1098,18 +1228,50 @@ async function handleRequest(entry, req, res) {
     if (url.pathname === "/api/selection") {
         const nodeId = String(body?.nodeId ?? "");
         if (!entry.nodeIndex.has(nodeId)) {
-            return sendJson(res, 404, { ok: false, error: "The selected tree item is no longer available." });
+            return sendJson(res, 404, { ok: false, error: "The selected canvas item is no longer available." });
         }
         entry.selectionId = nodeId;
         return sendJson(res, 200, { ok: true });
     }
-    if (url.pathname === "/api/ask-copilot") {
-        const result = await askCopilot(entry, body?.nodeId);
+    if (url.pathname === "/api/copilot-context") {
+        const result = await attachCopilotContext(entry, body?.nodeId);
         return sendJson(res, result.ok ? 202 : 400, result);
     }
     if (url.pathname === "/api/open-source") {
         try {
             const result = await openAppHostSource(entry, body?.appHostId);
+            return sendJson(res, result.ok ? 200 : 400, result);
+        } catch (error) {
+            return sendJson(res, 500, { ok: false, error: clampText(error?.message || error, 1000) });
+        }
+    }
+    if (url.pathname === "/api/open-dashboard") {
+        try {
+            const result = await openAppHostDashboard(entry, body?.appHostId);
+            return sendJson(res, result.ok ? 200 : 400, result);
+        } catch (error) {
+            return sendJson(res, 500, { ok: false, error: clampText(error?.message || error, 1000) });
+        }
+    }
+    if (url.pathname === "/api/open-dashboard-view") {
+        try {
+            const result = await openResourceDashboardView(entry, body?.nodeId, body?.view);
+            return sendJson(res, result.ok ? 200 : 400, result);
+        } catch (error) {
+            return sendJson(res, 500, { ok: false, error: clampText(error?.message || error, 1000) });
+        }
+    }
+    if (url.pathname === "/api/open-endpoint") {
+        try {
+            const result = await openResourceEndpoint(entry, body?.nodeId);
+            return sendJson(res, result.ok ? 200 : 400, result);
+        } catch (error) {
+            return sendJson(res, 500, { ok: false, error: clampText(error?.message || error, 1000) });
+        }
+    }
+    if (url.pathname === "/api/open-terminal") {
+        try {
+            const result = await openResourceTerminal(entry, body?.nodeId);
             return sendJson(res, result.ok ? 200 : 400, result);
         } catch (error) {
             return sendJson(res, 500, { ok: false, error: clampText(error?.message || error, 1000) });
@@ -1254,7 +1416,7 @@ const appModelCanvas = createCanvas({
     id: CANVAS_ID,
     displayName: "Aspire App Model",
     description:
-        "Shows Aspire AppHosts and resources in a VS Code-inspired Workspace or Global tree with endpoints, health, and commands.",
+        "Shows Aspire AppHosts in a canvas-native Workspace or Global resource board with endpoints, health, and commands.",
     inputSchema: {
         type: "object",
         additionalProperties: false,
@@ -1277,7 +1439,7 @@ const appModelCanvas = createCanvas({
     actions: [
         {
             name: "refresh_model",
-            description: "Refresh AppHost discovery and all visible resource trees.",
+            description: "Refresh AppHost discovery and the visible resource workspace.",
             inputSchema: { type: "object", additionalProperties: false, properties: {} },
             handler: async (ctx) => {
                 const entry = instances.get(ctx.instanceId);
@@ -1317,7 +1479,7 @@ const appModelCanvas = createCanvas({
         },
         {
             name: "get_selected_context",
-            description: "Return sanitized context for the selected AppHost tree item.",
+            description: "Return sanitized context for the selected AppHost or resource item.",
             inputSchema: { type: "object", additionalProperties: false, properties: {} },
             handler: (ctx) => {
                 const entry = instances.get(ctx.instanceId);
@@ -1326,7 +1488,7 @@ const appModelCanvas = createCanvas({
                 }
                 const node = entry.nodeIndex.get(entry.selectionId);
                 if (!node) {
-                    throw new CanvasError("selection_missing", "No current tree selection is available.");
+                    throw new CanvasError("selection_missing", "No current canvas selection is available.");
                 }
                 return nodeContext(node);
             },
@@ -1350,7 +1512,7 @@ const appModelCanvas = createCanvas({
                 });
             }
         }
-        return { title: "Aspire App Model", status: "AppHost tree", url: entry.url };
+        return { title: "Aspire App Model", status: "AppHost workbench", url: entry.url };
     },
     onClose: async (ctx) => {
         const entry = instances.get(ctx.instanceId);
@@ -1365,7 +1527,7 @@ const appModelCanvas = createCanvas({
 const openTool = {
     name: "open_aspire_app_model",
     description:
-        "Open or focus the Aspire App Model tree for the current workspace, optionally targeting an AppHost or Global mode.",
+        "Open or focus the Aspire App Model workbench, optionally targeting an AppHost or Global mode.",
     parameters: {
         type: "object",
         additionalProperties: false,
@@ -1416,8 +1578,8 @@ function onSessionStart(input) {
     return {
         additionalContext:
             "An 'Aspire App Model' canvas is available through 'open_aspire_app_model'. Open it when " +
-            "the user wants to inspect or operate Aspire AppHosts and resources. It follows the Aspire VS Code " +
-            "Workspace/Global tree model, keeps private AppHost data provider-side, and never starts an AppHost implicitly.",
+            "the user wants to inspect or operate Aspire AppHosts and resources. It preserves Workspace/Global " +
+            "operational behavior in a canvas-native workbench, keeps private AppHost data provider-side, and never starts an AppHost implicitly.",
     };
 }
 

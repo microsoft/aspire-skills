@@ -8,6 +8,13 @@ const DEFAULT_MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
 const ALLOWED_STATE_STYLES = new Set(["success", "warning", "error", "info"]);
 const ALLOWED_RELATIONSHIP_TYPES = new Set(["Reference", "WaitFor", "Parent"]);
 const ALLOWED_URL_PROTOCOLS = new Set(["http:", "https:"]);
+const DASHBOARD_RESOURCE_VIEWS = new Set([
+    "details",
+    "console-logs",
+    "structured-logs",
+    "traces",
+    "metrics",
+]);
 const DISPLAY_ONLY_URL_PROTOCOLS = new Set([
     "amqp:",
     "amqps:",
@@ -36,6 +43,102 @@ function clampText(value, max = 500) {
 function optionalText(value, max) {
     const text = clampText(value, max);
     return text || undefined;
+}
+
+function dashboardResourcePath(view, resourceName) {
+    const encodedName = encodeURIComponent(resourceName);
+    switch (view) {
+        case "details":
+            return `/?resource=${encodedName}`;
+        case "console-logs":
+            return `/consolelogs/resource/${encodedName}`;
+        case "structured-logs":
+            return `/structuredlogs/resource/${encodedName}`;
+        case "traces":
+            return `/traces/resource/${encodedName}`;
+        case "metrics":
+            return `/metrics/resource/${encodedName}`;
+        default:
+            return undefined;
+    }
+}
+
+function dashboardBasePath(url) {
+    let pathname = url.pathname.replace(/\/+$/, "");
+    if (pathname.toLowerCase().endsWith("/login")) {
+        pathname = pathname.slice(0, -"/login".length);
+    }
+    return pathname === "/" ? "" : pathname;
+}
+
+export function buildDashboardViewUrl(value, view = "dashboard", resourceName) {
+    const text = optionalText(value, 2000);
+    if (!text) {
+        return undefined;
+    }
+    try {
+        const source = new URL(text);
+        if (!ALLOWED_URL_PROTOCOLS.has(source.protocol)) {
+            return undefined;
+        }
+        source.username = "";
+        source.password = "";
+        source.hash = "";
+        if (view === "dashboard") {
+            return source.toString();
+        }
+        const name = optionalText(resourceName, 240);
+        if (!name || !DASHBOARD_RESOURCE_VIEWS.has(view)) {
+            return undefined;
+        }
+        const resourcePath = dashboardResourcePath(view, name);
+        const basePath = dashboardBasePath(source);
+        const returnUrl = `${basePath}${resourcePath}`;
+        const token = source.searchParams.get("t");
+        if (token) {
+            const login = new URL(source.origin);
+            login.pathname = `${basePath}/login`;
+            login.searchParams.set("returnUrl", returnUrl);
+            login.searchParams.set("t", token);
+            return login.toString();
+        }
+        return new URL(returnUrl, source.origin).toString();
+    } catch {
+        return undefined;
+    }
+}
+
+function quoteShellArgument(value, platform) {
+    const text = String(value ?? "");
+    return platform === "win32"
+        ? `'${text.replaceAll("'", "''")}'`
+        : `'${text.replaceAll("'", "'\\''")}'`;
+}
+
+export function buildTerminalAttachCommand({
+    resourceName,
+    appHostPath,
+    replicaIndex,
+    platform = process.platform,
+}) {
+    const resource = optionalText(resourceName, 240);
+    const appHost = optionalText(appHostPath, 4000);
+    if (!resource || !appHost) {
+        return undefined;
+    }
+    const tokens = [
+        "aspire",
+        "terminal",
+        "attach",
+        quoteShellArgument(resource, platform),
+        "--apphost",
+        quoteShellArgument(appHost, platform),
+    ];
+    const replica = optionalText(replicaIndex, 80);
+    if (replica) {
+        tokens.push("--replica", quoteShellArgument(replica, platform));
+    }
+    return tokens.join(" ");
 }
 
 function normalizePathKey(value) {
@@ -302,9 +405,17 @@ function sanitizeHealthReports(raw) {
             if (!isRecord(report)) {
                 return undefined;
             }
+            const statusText = optionalText(report.status, 80) ?? "Unknown";
+            const status = statusText.toLowerCase() === "healthy"
+                ? "Healthy"
+                : statusText.toLowerCase() === "degraded"
+                    ? "Degraded"
+                    : statusText.toLowerCase() === "unhealthy"
+                        ? "Unhealthy"
+                        : statusText;
             return {
                 name: clampText(name, 160),
-                status: optionalText(report.status, 80) ?? "Unknown",
+                status,
             };
         })
         .filter(Boolean);
@@ -319,6 +430,8 @@ export function sanitizeResource(raw) {
         return undefined;
     }
     const commandEntries = isRecord(raw.commands) ? Object.entries(raw.commands) : [];
+    const properties = isRecord(raw.properties) ? raw.properties : {};
+    const terminalEnabled = optionalText(properties["terminal.enabled"], 16)?.toLowerCase() === "true";
     const stateStyleText = optionalText(raw.stateStyle, 40)?.toLowerCase();
     const exitCode = Number(raw.exitCode);
     return {
@@ -333,6 +446,10 @@ export function sanitizeResource(raw) {
         startTimestamp: optionalText(raw.startTimestamp, 80),
         stopTimestamp: optionalText(raw.stopTimestamp, 80),
         dashboardUrl: sanitizeDashboardUrl(raw.dashboardUrl),
+        terminalEnabled,
+        terminalReplicaIndex: terminalEnabled
+            ? optionalText(properties["terminal.replicaIndex"], 80)
+            : undefined,
         relationships: Array.isArray(raw.relationships)
             ? raw.relationships.map(sanitizeRelationship).filter(Boolean)
             : [],
@@ -351,13 +468,29 @@ export function sanitizeResource(raw) {
 function classifyResource(resource) {
     const state = resource.state.toLowerCase();
     const health = resource.healthStatus?.toLowerCase();
-    if (resource.stateStyle === "error" || health === "unhealthy" || state === "failedtostart" || state === "runtimeunhealthy") {
+    const reportStatuses = resource.healthReports.map((report) => report.status.toLowerCase());
+    const hasUnhealthyReport = reportStatuses.some((status) =>
+        status !== "healthy" && status !== "degraded");
+    const hasDegradedReport = reportStatuses.includes("degraded");
+    if (
+        resource.stateStyle === "error"
+        || state === "failedtostart"
+        || state === "runtimeunhealthy"
+        || (resource.exitCode !== undefined && resource.exitCode !== 0)
+    ) {
+        return "error";
+    }
+    if (["exited", "stopped", "notstarted", "finished"].includes(state)) {
+        return state === "finished" && resource.stateStyle === "success" ? "healthy" : "inactive";
+    }
+    if (health === "unhealthy" || hasUnhealthyReport) {
         return "error";
     }
 
     if (
         resource.stateStyle === "warning"
         || health === "degraded"
+        || hasDegradedReport
         || state === "starting"
         || state === "waiting"
         || state === "stopping"
@@ -495,6 +628,7 @@ export function normalizePsPayload(payload) {
                 status: optionalText(raw.status, 40)?.toLowerCase() === "stopped" ? "stopped" : "running",
                 sdkVersion: optionalText(raw.sdkVersion, 120),
                 appHostPid: Number.isInteger(appHostPid) ? appHostPid : undefined,
+                dashboardUrl: optionalText(raw.dashboardUrl, 2000),
             };
         })
         .filter(Boolean);
@@ -555,13 +689,71 @@ function resourceDescription(resource) {
 }
 
 function resourceStatusLabel(resource) {
+    return resource.exitCode !== undefined && resource.exitCode !== 0
+        ? `${resource.state} · ${resource.exitCode}`
+        : resource.state || undefined;
+}
+
+function resourceLifecycleTone(resource) {
+    const state = resource.state.toLowerCase();
+    if (
+        resource.stateStyle === "error"
+        || state === "failedtostart"
+        || state === "runtimeunhealthy"
+        || (resource.exitCode !== undefined && resource.exitCode !== 0)
+    ) {
+        return "error";
+    }
+    if (["starting", "waiting", "stopping", "building"].includes(state)) {
+        return "warning";
+    }
+    if (state === "running" || (state === "finished" && resource.stateStyle === "success")) {
+        return "healthy";
+    }
+    return "inactive";
+}
+
+function healthTone(status) {
+    const normalized = status.toLowerCase();
+    return normalized === "healthy" ? "healthy" : normalized === "degraded" ? "warning" : "error";
+}
+
+function resourceHealthSummary(resource) {
+    const state = resource.state.toLowerCase();
+    const inactive = ["exited", "stopped", "notstarted", "finished"].includes(state);
     if (resource.healthReports.length > 0) {
         const healthy = resource.healthReports.filter((report) => report.status === "Healthy").length;
-        return healthy === resource.healthReports.length
+        const degraded = resource.healthReports.some((report) => report.status === "Degraded");
+        const unhealthy = resource.healthReports.some((report) =>
+            report.status !== "Healthy" && report.status !== "Degraded");
+        const label = healthy === resource.healthReports.length
             ? "Healthy"
             : `${healthy}/${resource.healthReports.length} healthy`;
+        return inactive
+            ? {
+                label: unhealthy
+                    ? "Last known unhealthy"
+                    : degraded
+                        ? "Last known degraded"
+                        : "Last known healthy",
+                tone: unhealthy ? "error" : degraded ? "warning" : "inactive",
+            }
+            : {
+                label,
+                tone: unhealthy ? "error" : degraded ? "warning" : "healthy",
+            };
     }
-    return resource.healthStatus || resource.state || undefined;
+    if (resource.healthStatus) {
+        return {
+            label: inactive
+                ? `Last known ${resource.healthStatus.toLowerCase()}`
+                : resource.healthStatus,
+            tone: inactive && resource.healthStatus === "Healthy"
+                ? "inactive"
+                : healthTone(resource.healthStatus),
+        };
+    }
+    return undefined;
 }
 
 function resourceStateIcon(resource) {
@@ -601,6 +793,7 @@ function endpointNode(appHostId, resource, endpoint, index) {
 
 function healthGroupNode(appHostId, resource) {
     const healthy = resource.healthReports.filter((report) => report.status === "Healthy").length;
+    const inactive = ["exited", "stopped", "notstarted", "finished"].includes(resource.state.toLowerCase());
     return {
         id: `apphost:${appHostId}:resource:${resource.name}:health`,
         kind: "health-group",
@@ -616,9 +809,9 @@ function healthGroupNode(appHostId, resource) {
                 id: `apphost:${appHostId}:resource:${resource.name}:health:${stableId(report.name)}`,
                 kind: "health-check",
                 label: report.name,
-                statusLabel: report.status,
+                statusLabel: inactive ? `Last ${report.status.toLowerCase()}` : report.status,
                 icon: report.status === "Healthy" ? "pass" : report.status === "Degraded" ? "warning" : "error",
-                tone: report.status === "Healthy" ? "healthy" : report.status === "Degraded" ? "warning" : "error",
+                tone: inactive && report.status === "Healthy" ? "inactive" : healthTone(report.status),
                 appHostId,
                 resourceName: resource.name,
                 healthCheckName: report.name,
@@ -694,6 +887,7 @@ export function buildResourceTree(resources, appHostId) {
             .filter((endpoint) => !endpoint.isInternal)
             .map((endpoint, index) => endpointNode(appHostId, resource, endpoint, index));
         const visibleCommands = resource.commands.filter(commandIsRenderable);
+        const healthSummary = resourceHealthSummary(resource);
         const trailingChildren = [
             ...endpoints,
             ...(resource.healthReports.length > 0 ? [healthGroupNode(appHostId, resource)] : []),
@@ -705,10 +899,15 @@ export function buildResourceTree(resources, appHostId) {
             label: resource.displayName,
             description: resourceDescription(resource),
             statusLabel: resourceStatusLabel(resource),
+            lifecycleTone: resourceLifecycleTone(resource),
+            healthLabel: healthSummary?.label,
+            healthTone: healthSummary?.tone,
             icon: resourceStateIcon(resource),
             tone: classifyResource(resource),
             appHostId,
             resourceName: resource.name,
+            terminalEnabled: resource.terminalEnabled,
+            terminalReplicaIndex: resource.terminalReplicaIndex,
             resource,
             defaultExpanded: childResources.length > 0,
             children: [...childResources, ...trailingChildren],
@@ -788,40 +987,19 @@ function rootDescription(record, model, operation) {
     return `Running · ${model?.resources?.length ?? 0} resources`;
 }
 
-function baseDashboardUrl(resources) {
-    const value = resources.find((resource) => resource.dashboardUrl)?.dashboardUrl;
-    if (!value) {
-        return undefined;
-    }
-    try {
-        const url = new URL(value);
-        url.searchParams.delete("resource");
-        return url.toString();
-    } catch {
-        return undefined;
-    }
-}
-
 export function buildAppHostTreeNode(record, model, {
     nestedResources = false,
     operation,
 } = {}) {
     const resources = model?.resources ?? [];
     const resourceNodes = buildResourceTree(resources, record.id);
-    const dashboardUrl = baseDashboardUrl(resources);
+    const hasDashboard = Boolean(
+        buildDashboardViewUrl(record.dashboardUrl)
+        || resources.some((resource) => buildDashboardViewUrl(resource.dashboardUrl)),
+    );
     const actions = appHostActions(record, operation)
-        .filter((action) => action !== "dashboard" || dashboardUrl);
+        .filter((action) => action !== "dashboard" || hasDashboard);
     const appHostChildren = [
-        ...(dashboardUrl ? [{
-            id: `apphost:${record.id}:dashboard`,
-            kind: "endpoint",
-            label: "Dashboard",
-            description: dashboardUrl,
-            icon: "dashboard",
-            href: dashboardUrl,
-            appHostId: record.id,
-            children: [],
-        }] : []),
         ...(nestedResources && resourceNodes.length > 0 ? [{
             id: `apphost:${record.id}:resources`,
             kind: "resources-group",

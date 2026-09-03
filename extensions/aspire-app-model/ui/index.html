@@ -8,11 +8,11 @@
     </head>
     <body class="is-loading">
         <!--
-        THESIS: The tree preserves Aspire's ownership model without borrowing VS Code's explorer aesthetic; each AppHost is a composed control surface.
-        OWN-WORLD: A violet AppHost mark, cool canvas wash, bright operational shells, health-aware capsules, and quiet connector rails.
-        STORY: A developer chooses scope, scans distinct AppHost surfaces, reads live state, and expands only the endpoint, health, or command needed.
-        FIRST VIEWPORT: A branded control bar floats above one centered AppHost shell whose hierarchy reads as an instrument panel rather than a file tree.
-        FORM: The AppHost Control Room, with VS Code behavior translated into a distinct Copilot-native visual system.
+        THESIS: Aspire's operational model becomes a canvas-native workspace, not a transplanted explorer tree.
+        OWN-WORLD: A compact AppHost switcher, one focused work surface, and a responsive resource board with direct operational details.
+        STORY: A developer chooses scope and AppHost once, then scans resources, endpoints, health, and commands without tunneling through nested disclosure.
+        FIRST VIEWPORT: The selected AppHost and its highest-value actions lead directly into a flat resource board.
+        FORM: The AppHost Workbench, preserving VS Code capability while replacing its stacked tree presentation.
         -->
         <header class="toolbar">
             <div class="title-row">
@@ -73,12 +73,14 @@
             <button class="button button-secondary button-small" id="status-action" type="button">Try again</button>
         </div>
 
-        <main class="tree-surface">
+        <main class="canvas-surface">
             <section class="loading-tree" id="loading-tree" aria-label="Loading AppHosts">
-                <div class="skeleton-row"><span class="skeleton disclosure-skeleton"></span><span class="skeleton icon-skeleton"></span><span class="skeleton text-skeleton wide"></span></div>
-                <div class="skeleton-row depth-one"><span class="skeleton disclosure-skeleton"></span><span class="skeleton icon-skeleton"></span><span class="skeleton text-skeleton"></span></div>
-                <div class="skeleton-row depth-two"><span class="skeleton disclosure-skeleton"></span><span class="skeleton icon-skeleton"></span><span class="skeleton text-skeleton short"></span></div>
-                <div class="skeleton-row depth-one"><span class="skeleton disclosure-skeleton"></span><span class="skeleton icon-skeleton"></span><span class="skeleton text-skeleton wide"></span></div>
+                <div class="skeleton skeleton-host"></div>
+                <div class="skeleton-board">
+                    <div class="skeleton skeleton-card"></div>
+                    <div class="skeleton skeleton-card"></div>
+                    <div class="skeleton skeleton-card"></div>
+                </div>
             </section>
 
             <section class="empty-state" id="empty-state" hidden>
@@ -95,7 +97,7 @@
                 <button class="button button-secondary" id="empty-action" type="button">Refresh</button>
             </section>
 
-            <div class="tree" id="apphost-tree" role="tree" aria-label="Aspire AppHosts" hidden></div>
+            <section class="model-view" id="model-view" aria-label="Aspire AppHosts" hidden></section>
         </main>
 
         <div class="action-menu" id="action-menu" role="menu" hidden></div>

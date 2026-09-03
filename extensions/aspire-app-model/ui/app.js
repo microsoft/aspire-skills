@@ -1,8 +1,10 @@
 const AUTH_HEADER = "x-aspire-app-model-token";
 const apiToken = new URLSearchParams(window.location.search).get("token") || "";
+const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)") ?? { matches: false };
 
 const els = {
     body: document.body,
+    surface: document.querySelector(".canvas-surface"),
     subtitle: document.getElementById("app-subtitle"),
     connectionDot: document.getElementById("connection-dot"),
     connectionStatus: document.getElementById("connection-status"),
@@ -21,7 +23,7 @@ const els = {
     emptyTitle: document.getElementById("empty-title"),
     emptyMessage: document.getElementById("empty-message"),
     emptyAction: document.getElementById("empty-action"),
-    tree: document.getElementById("apphost-tree"),
+    tree: document.getElementById("model-view"),
     actionMenu: document.getElementById("action-menu"),
     toastRegion: document.getElementById("toast-region"),
     pipelineDialog: document.getElementById("pipeline-dialog"),
@@ -59,17 +61,34 @@ const ICONS = {
     steps: "M2.75 1.5a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5ZM2.75 6.75A1.25 1.25 0 1 0 2.75 9.25 1.25 1.25 0 0 0 2.75 6.75ZM1.5 13.25a1.25 1.25 0 1 1 2.5 0 1.25 1.25 0 0 1-2.5 0ZM6 2.75A.75.75 0 0 1 6.75 2h7.5a.75.75 0 0 1 0 1.5h-7.5A.75.75 0 0 1 6 2.75ZM6 8a.75.75 0 0 1 .75-.75h7.5a.75.75 0 0 1 0 1.5h-7.5A.75.75 0 0 1 6 8Zm0 5.25a.75.75 0 0 1 .75-.75h7.5a.75.75 0 0 1 0 1.5h-7.5a.75.75 0 0 1-.75-.75Z",
     ask: "M8 0a8 8 0 0 0-6.74 12.32L.22 15.03a.75.75 0 0 0 .97.97l2.71-1.04A8 8 0 1 0 8 0Zm-2.25 7.25a.75.75 0 0 1 .75-.75h3a.75.75 0 0 1 0 1.5h-3a.75.75 0 0 1-.75-.75Zm0-2.5A.75.75 0 0 1 6.5 4h3a.75.75 0 0 1 0 1.5h-3a.75.75 0 0 1-.75-.75Zm0 5a.75.75 0 0 1 .75-.75h1.25a.75.75 0 0 1 0 1.5H6.5a.75.75 0 0 1-.75-.75Z",
     more: "M3 8a1.25 1.25 0 1 1-2.5 0A1.25 1.25 0 0 1 3 8Zm6.25 0a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0Zm6.25 0A1.25 1.25 0 1 1 13 8a1.25 1.25 0 0 1 2.5 0Z",
+    copy: "M0 6.75C0 5.784.784 5 1.75 5h6.5C9.216 5 10 5.784 10 6.75v7.5A1.75 1.75 0 0 1 8.25 16h-6.5A1.75 1.75 0 0 1 0 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h6.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25ZM6 1.75C6 .784 6.784 0 7.75 0h6.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11H12.5V9.5h1.75a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25h-6.5a.25.25 0 0 0-.25.25V3.5H6Z",
+    info: "M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z",
+    pulse: "M6 2a.75.75 0 0 1 .696.471l3.804 9.51 1.804-4.51A.75.75 0 0 1 13 7h2.25a.75.75 0 0 1 0 1.5h-1.742l-2.312 5.779a.75.75 0 0 1-1.392 0L6 4.77 4.196 9.279A.75.75 0 0 1 3.5 9.75H.75a.75.75 0 0 1 0-1.5h2.242l2.312-5.779A.75.75 0 0 1 6 2Z",
 };
 
 const ACTIONS = {
     source: { label: "Open AppHost source", shortLabel: "Source", icon: "source" },
-    dashboard: { label: "Open dashboard", shortLabel: "Dashboard", icon: "dashboard" },
+    dashboard: { label: "View dashboard", shortLabel: "View dashboard", icon: "dashboard" },
     run: { label: "Run AppHost", shortLabel: "Run", icon: "play" },
     stop: { label: "Stop AppHost", shortLabel: "Stop", icon: "stop" },
     deploy: { label: "Deploy AppHost", shortLabel: "Deploy", icon: "deploy" },
     publish: { label: "Publish AppHost", shortLabel: "Publish", icon: "package" },
     "pipeline-step": { label: "Run pipeline step", shortLabel: "Pipeline step", icon: "steps" },
-    ask: { label: "Ask Copilot about this item", shortLabel: "Ask Copilot", icon: "ask" },
+    details: { label: "View details", shortLabel: "Details", icon: "info" },
+    "console-logs": { label: "Console logs", shortLabel: "Console logs", icon: "terminal" },
+    "structured-logs": { label: "Structured logs", shortLabel: "Structured logs", icon: "source" },
+    traces: { label: "Traces", shortLabel: "Traces", icon: "steps" },
+    metrics: { label: "Metrics", shortLabel: "Metrics", icon: "pulse" },
+    terminal: { label: "Open terminal", shortLabel: "Terminal", icon: "terminal" },
+    ask: { label: "Add to Copilot chat", shortLabel: "Add to chat", icon: "ask" },
+};
+
+const DASHBOARD_VIEW_ACTIONS = {
+    details: "details",
+    "console-logs": "console-logs",
+    "structured-logs": "structured-logs",
+    traces: "traces",
+    metrics: "metrics",
 };
 
 const APPHOST_ACTION_ORDER = {
@@ -107,8 +126,9 @@ let secretWarningAccepted = false;
 let pendingConfirmation = null;
 let confirmationNeedsFocus = false;
 let renderedViewMode = null;
-const expandedIds = new Set();
-const initializedIds = new Set();
+let activeAppHostId = null;
+let pendingViewMode = null;
+let activeModeTransition = null;
 const commandDrafts = new Map();
 const commandInputs = new Map();
 const commandResults = new Map();
@@ -116,8 +136,6 @@ const commandValidationErrors = new Map();
 const dynamicLoadTimers = new Map();
 const dynamicLoadGenerations = new Map();
 const dynamicLoadingIds = new Set();
-let renderedRowIndex = 0;
-let renderedSelectionVisible = false;
 
 function element(tag, properties = {}, children = []) {
     const node = document.createElement(tag);
@@ -148,6 +166,24 @@ function element(tag, properties = {}, children = []) {
         node.appendChild(typeof child === "string" ? document.createTextNode(child) : child);
     }
     return node;
+}
+
+async function copyEndpointUrl(endpoint) {
+    const url = String(endpoint.href || endpoint.description || "").trim();
+    if (!url) {
+        showToast("This endpoint does not expose a copyable URL.", true);
+        return;
+    }
+    if (typeof navigator.clipboard?.writeText !== "function") {
+        showToast("Clipboard access is unavailable in this canvas.", true);
+        return;
+    }
+    try {
+        await navigator.clipboard.writeText(url);
+        showToast(`Copied ${endpoint.label} URL.`);
+    } catch {
+        showToast(`Couldn't copy ${endpoint.label} URL.`, true);
+    }
 }
 
 function svgIcon(name, size = 16) {
@@ -222,12 +258,71 @@ function showToast(message, error = false) {
     setTimeout(() => toast.remove(), 4_500);
 }
 
+async function copyResourceName(resource) {
+    const name = String(resource.label || resource.resourceName || "").trim();
+    if (!name) {
+        showToast("This resource does not expose a copyable name.", true);
+        return;
+    }
+    if (typeof navigator.clipboard?.writeText !== "function") {
+        showToast("Clipboard access is unavailable in this canvas.", true);
+        return;
+    }
+    try {
+        await navigator.clipboard.writeText(name);
+        showToast(`Copied resource name “${name}”.`);
+    } catch {
+        showToast(`Couldn't copy resource name “${name}”.`, true);
+    }
+}
+
 function setModeButtons() {
-    const workspace = modelState?.viewMode !== "global";
+    const viewMode = pendingViewMode ?? modelState?.viewMode ?? "workspace";
+    const workspace = viewMode !== "global";
+    const switching = pendingViewMode !== null;
     els.workspaceMode.classList.toggle("is-active", workspace);
     els.workspaceMode.setAttribute("aria-pressed", String(workspace));
+    els.workspaceMode.disabled = switching;
     els.globalMode.classList.toggle("is-active", !workspace);
     els.globalMode.setAttribute("aria-pressed", String(!workspace));
+    els.globalMode.disabled = switching;
+}
+
+function beginModeSwitch(viewMode) {
+    pendingViewMode = viewMode;
+    els.body.classList.add("is-mode-switching");
+    els.surface.setAttribute("aria-busy", "true");
+    els.surface.inert = true;
+    document.documentElement.dataset.modeDirection = viewMode === "global" ? "forward" : "back";
+    setModeButtons();
+}
+
+function finishModeSwitch() {
+    pendingViewMode = null;
+    els.body.classList.remove("is-mode-switching");
+    els.surface.removeAttribute("aria-busy");
+    els.surface.inert = false;
+    setModeButtons();
+}
+
+function withModeTransition(viewMode, mutate) {
+    document.documentElement.dataset.modeDirection = viewMode === "global" ? "forward" : "back";
+    if (
+        reduceMotion.matches
+        || typeof document.startViewTransition !== "function"
+        || activeModeTransition
+    ) {
+        mutate();
+        delete document.documentElement.dataset.modeDirection;
+        return;
+    }
+    activeModeTransition = document.startViewTransition(mutate);
+    void activeModeTransition.finished
+        .catch(() => {})
+        .finally(() => {
+            activeModeTransition = null;
+            delete document.documentElement.dataset.modeDirection;
+        });
 }
 
 function nodeMatchesFilter(node, query) {
@@ -248,10 +343,12 @@ function filterMatchCount(nodes, query) {
 
 function updateHeader() {
     const summary = modelState?.summary;
-    const mode = modelState?.viewMode === "global" ? "Global" : "Workspace";
+    const mode = (pendingViewMode ?? modelState?.viewMode) === "global" ? "Global" : "Workspace";
     const parts = [mode];
     const query = filterText.trim().toLowerCase();
-    if (query) {
+    if (pendingViewMode) {
+        parts.push("Updating…");
+    } else if (query) {
         const count = filterMatchCount(modelState?.roots ?? [], query);
         parts.push(`${count} match${count === 1 ? "" : "es"}`);
     } else {
@@ -332,21 +429,12 @@ function filteredTree(nodes, query) {
         .map((node) => {
             const children = filteredTree(node.children ?? [], normalized);
             const matches = nodeMatchesFilter(node, normalized);
-            return matches || children.length > 0
-                ? { ...node, filterExpanded: children.length > 0, children }
-                : null;
+            if (matches) {
+                return { ...node, filterMatch: true };
+            }
+            return children.length > 0 ? { ...node, children } : null;
         })
         .filter(Boolean);
-}
-
-function initializeExpansion(node) {
-    if (initializedIds.has(node.id)) {
-        return;
-    }
-    initializedIds.add(node.id);
-    if (node.defaultExpanded) {
-        expandedIds.add(node.id);
-    }
 }
 
 function findNode(nodeId, nodes = modelState?.roots ?? []) {
@@ -362,33 +450,31 @@ function findNode(nodeId, nodes = modelState?.roots ?? []) {
     return null;
 }
 
-function setSelected(node) {
+function recordSelection(node) {
     if (pendingConfirmation?.nodeId !== node.id) {
         pendingConfirmation = null;
     }
+    if (isAppHostNode(node)) {
+        activeAppHostId = node.id;
+    }
     selectedNodeId = node.id;
     void api("/api/selection", { method: "POST", body: { nodeId: node.id } }).catch(() => {});
-    renderTree();
-    requestAnimationFrame(() => focusTreeRow(
-        els.tree.querySelector(`[data-node-id="${CSS.escape(node.id)}"]`),
-    ));
 }
 
-function toggleExpanded(node) {
-    if (!node.children?.length) {
-        return;
-    }
-    if (expandedIds.has(node.id)) {
-        expandedIds.delete(node.id);
-    } else {
-        expandedIds.add(node.id);
-    }
+function focusNodeControl(nodeId) {
+    const control = els.tree.querySelector(`[data-node-id="${CSS.escape(nodeId)}"]`);
+    control?.focus();
+}
+
+function setSelected(node) {
+    recordSelection(node);
     renderTree();
+    requestAnimationFrame(() => focusNodeControl(node.id));
 }
 
 function actionButton(label, iconName, handler) {
     return element("button", {
-        class: "row-action",
+        class: "resource-menu-trigger",
         type: "button",
         title: label,
         "aria-label": label,
@@ -405,40 +491,6 @@ function isAppHostNode(node) {
     return node.kind === "apphost-running" || node.kind === "apphost-idle";
 }
 
-function rowActions(node, level, selected) {
-    const actions = [];
-    if (node.kind === "endpoint" && node.href) {
-        actions.push(actionButton("Open endpoint", "link", () => {
-            window.open(node.href, "_blank", "noopener,noreferrer");
-        }));
-    }
-    if (isAppHostNode(node)) {
-        const trayVisible = selected || (level === 1 && (modelState?.roots?.length ?? 0) === 1);
-        if (!node.operation && (modelState?.roots?.length ?? 0) > 1) {
-            actions.push(element("button", {
-                class: "row-action row-action-label",
-                type: "button",
-                text: "Actions",
-                title: `${trayVisible ? "Showing" : "Show"} actions for ${node.label}`,
-                "aria-label": `${trayVisible ? "Showing" : "Show"} actions for ${node.label}`,
-                "aria-expanded": trayVisible,
-                on: {
-                    click: (event) => {
-                        event.stopPropagation();
-                        setSelected(node);
-                    },
-                },
-            }));
-        }
-        return element("span", { class: "row-actions" }, actions);
-    }
-    const hasMenu = ["resource", "health-check", "command"].includes(node.kind);
-    if (hasMenu) {
-        actions.push(actionButton("More actions", "more", (event) => openActionMenu(node, event.currentTarget)));
-    }
-    return element("span", { class: "row-actions" }, actions);
-}
-
 function requestNodeAction(action, node) {
     if (CONFIRMATIONS[action]) {
         pendingConfirmation = { nodeId: node.id, action };
@@ -451,11 +503,12 @@ function requestNodeAction(action, node) {
 
 function trayAction(action, node) {
     const definition = ACTIONS[action];
+    const targetLabel = node.presentationLabel || node.label;
     const enabled = action === "ask" || node.actions?.includes(action);
     const unavailableReason = node.unavailableActionReason || "This action is not available in the current context.";
     const accessibleLabel = enabled
-        ? `${definition.label} for ${node.label}`
-        : `${definition.label} for ${node.label}. Unavailable: ${unavailableReason}`;
+        ? `${definition.label} for ${targetLabel}`
+        : `${definition.label} for ${targetLabel}. Unavailable: ${unavailableReason}`;
     const primary = action === "run" || action === "dashboard";
     const danger = action === "stop";
     const copilot = action === "ask";
@@ -466,9 +519,40 @@ function trayAction(action, node) {
         title: accessibleLabel,
         "aria-label": accessibleLabel,
         disabled: !enabled,
+        ...(primary ? { dataset: { apphostPrimary: "true" } } : {}),
         on: { click: () => requestNodeAction(action, node) },
     }, [
         svgIcon(definition.icon, 14),
+        element("span", { text: definition.shortLabel }),
+    ]);
+}
+
+function endpointChip(endpoint) {
+    if (!endpoint.href) {
+        return detailChip(endpoint);
+    }
+    return element("span", { class: "endpoint-actions" }, [
+        detailChip(endpoint, { open: true }),
+        element("button", {
+            class: "endpoint-copy",
+            type: "button",
+            title: `Copy ${endpoint.label} URL`,
+            "aria-label": `Copy ${endpoint.label} URL`,
+            on: { click: () => void copyEndpointUrl(endpoint) },
+        }, [svgIcon("copy", 12)]),
+    ]);
+}
+
+function dashboardActionChip(resource, action) {
+    const definition = ACTIONS[action];
+    return element("button", {
+        class: "detail-chip is-dashboard",
+        type: "button",
+        title: `${definition.label} for ${resource.label}`,
+        "aria-label": `${definition.label} for ${resource.label}`,
+        on: { click: () => void executeNodeAction(action, resource) },
+    }, [
+        svgIcon(definition.icon, 13),
         element("span", { text: definition.shortLabel }),
     ]);
 }
@@ -487,22 +571,26 @@ function actionGroup(label, actions, node) {
 function cancelConfirmation(node) {
     pendingConfirmation = null;
     renderTree();
-    requestAnimationFrame(() => focusTreeRow(
-        els.tree.querySelector(`[data-node-id="${CSS.escape(node.id)}"]`),
-    ));
+    requestAnimationFrame(() => {
+        const target = els.tree.querySelector("[data-apphost-primary]:not([disabled])")
+            || els.tree.querySelector(".host-action-bar .tray-action:not([disabled])")
+            || els.tree.querySelector('[role="tab"][aria-selected="true"]');
+        target?.focus();
+    });
 }
 
 function renderAppHostConfirmation(node, action) {
     const confirmation = CONFIRMATIONS[action];
     const danger = action === "stop";
+    const targetLabel = node.presentationLabel || node.label;
     return element("div", {
         class: `apphost-confirmation${danger ? " is-danger" : ""}`,
         role: "group",
-        "aria-label": confirmation.title(node.label),
+        "aria-label": confirmation.title(targetLabel),
     }, [
         element("span", { class: "confirmation-icon" }, [svgIcon(danger ? "warning" : ACTIONS[action].icon, 15)]),
         element("span", { class: "confirmation-copy" }, [
-            element("strong", { text: confirmation.title(node.label) }),
+            element("strong", { text: confirmation.title(targetLabel) }),
             element("span", { text: confirmation.detail }),
         ]),
         element("span", { class: "confirmation-actions" }, [
@@ -510,6 +598,7 @@ function renderAppHostConfirmation(node, action) {
                 class: "button button-secondary button-small",
                 type: "button",
                 text: "Cancel",
+                dataset: { confirmationCancel: action },
                 on: { click: () => cancelConfirmation(node) },
             }),
             element("button", {
@@ -528,22 +617,15 @@ function renderAppHostConfirmation(node, action) {
     ]);
 }
 
-function renderAppHostActionTray(node, level, selected) {
-    if (!isAppHostNode(node)) {
-        return null;
-    }
-    const visible = selected || (level === 1 && (modelState?.roots?.length ?? 0) === 1);
-    if (!visible && !node.operation) {
-        return null;
-    }
+function renderAppHostActionTray(node) {
     if (node.operation) {
-        return element("div", { class: "apphost-action-tray is-busy" }, [
+        return element("div", { class: "host-action-bar is-busy" }, [
             element("span", { class: "tray-busy-icon" }, [svgIcon("loading", 14)]),
             element("span", { text: node.operation.label }),
         ]);
     }
     if (pendingConfirmation?.nodeId === node.id) {
-        return element("div", { class: "apphost-action-tray is-confirming" }, [
+        return element("div", { class: "host-action-bar is-confirming" }, [
             renderAppHostConfirmation(node, pendingConfirmation.action),
         ]);
     }
@@ -552,7 +634,7 @@ function renderAppHostActionTray(node, level, selected) {
     const primaryActions = ordered.filter((action) => ["run", "dashboard", "source"].includes(action));
     const operationalActions = ordered.filter((action) => !primaryActions.includes(action));
     return element("div", {
-        class: "apphost-action-tray",
+        class: "host-action-bar",
         "aria-label": `${node.label} actions`,
     }, [
         ...(node.unavailableActionReason ? [element("p", {
@@ -561,115 +643,365 @@ function renderAppHostActionTray(node, level, selected) {
         })] : []),
         actionGroup("Open and run", primaryActions, node),
         actionGroup("Lifecycle and deployment", operationalActions, node),
-        actionGroup("Copilot", ["ask"], node),
     ]);
 }
 
 function rowIcon(node) {
     const icon = node.operation ? "restart" : node.icon || "resource";
     return element("span", {
-        class: `tree-icon icon-${node.icon || "resource"}${node.tone ? ` tone-${node.tone}` : ""}${node.operation || node.icon === "loading" ? " is-spinning" : ""}`,
+        class: `state-icon icon-${node.icon || "resource"}${node.tone ? ` tone-${node.tone}` : ""}${node.operation || node.icon === "loading" ? " is-spinning" : ""}`,
     }, [svgIcon(icon, 15)]);
 }
 
-function renderNode(node, level) {
-    initializeExpansion(node);
-    const hasChildren = (node.children?.length ?? 0) > 0;
-    const expanded = hasChildren && (node.filterExpanded || expandedIds.has(node.id));
-    const selected = node.id === selectedNodeId;
-    const childGroupId = `tree-children-${node.id.replace(/[^A-Za-z0-9_-]/g, "-")}`;
-    const tabbable = selected || (!renderedSelectionVisible && renderedRowIndex === 0);
-    renderedRowIndex++;
-    const row = element("div", {
-        class: `tree-row${selected ? " is-selected" : ""}${node.operation ? " is-busy" : ""}`,
-        role: "treeitem",
-        tabIndex: tabbable ? 0 : -1,
-        "aria-level": level,
-        "aria-selected": selected,
-        ...(hasChildren ? { "aria-expanded": expanded } : {}),
-        ...(expanded ? { "aria-owns": childGroupId } : {}),
-        dataset: { nodeId: node.id },
-        on: {
-            click: (event) => {
-                if (event.target.closest("button, a, input, select")) {
-                    return;
-                }
-                setSelected(node);
-            },
-            keydown: (event) => handleTreeKey(event, node),
-        },
-    }, [
-        hasChildren
-            ? element("button", {
-                class: "disclosure",
-                type: "button",
-                tabIndex: -1,
-                "aria-label": expanded ? `Collapse ${node.label}` : `Expand ${node.label}`,
-                on: {
-                    click: (event) => {
-                        event.stopPropagation();
-                        toggleExpanded(node);
-                        requestAnimationFrame(() => focusTreeRow(
-                            els.tree.querySelector(`[data-node-id="${CSS.escape(node.id)}"]`),
-                        ));
-                    },
-                },
-            }, [svgIcon("chevron", 12)])
-            : element("span", { class: "disclosure-placeholder" }),
-        element("button", {
-            class: "tree-row-main is-clickable",
+function appHostResources(appHost) {
+    const group = appHost.children?.find((child) => child.kind === "resources-group");
+    return (group?.children ?? appHost.children ?? []).filter((child) => child.kind === "resource");
+}
+
+function flattenResources(resources, parentLabel = null, depth = 0, result = []) {
+    for (const resource of resources) {
+        result.push({ resource, parentLabel, depth });
+        flattenResources(
+            (resource.children ?? []).filter((child) => child.kind === "resource"),
+            resource.label,
+            depth + 1,
+            result,
+        );
+    }
+    return result;
+}
+
+function childrenOfKind(node, kind) {
+    return (node.children ?? []).filter((child) => child.kind === kind);
+}
+
+function firstChildOfKind(node, kind) {
+    return (node.children ?? []).find((child) => child.kind === kind);
+}
+
+function detailChip(node, { open = false, command = false } = {}) {
+    const unavailable = command && node.disabled;
+    const interactive = open || (command && !unavailable);
+    const selected = command && selectedNodeId === node.id;
+    const label = node.statusLabel
+        ? `${node.label}: ${node.statusLabel}`
+        : node.description
+            ? `${node.label}: ${node.description}`
+            : node.label;
+    const properties = {
+        class:
+            `detail-chip${interactive && selected ? " is-selected" : ""}${unavailable ? " is-unavailable" : ""}`
+            + `${node.tone ? ` tone-${node.tone}` : ""}${open ? " is-link" : ""}${command ? " is-command" : ""}`,
+        title: label,
+        "aria-label": label,
+        ...(unavailable ? { "aria-disabled": "true" } : {}),
+        ...(interactive ? {
             type: "button",
-            tabIndex: -1,
+            ...(command ? { "aria-pressed": selected } : {}),
+            dataset: { nodeId: node.id },
             on: {
-                click: (event) => {
-                    event.stopPropagation();
-                    setSelected(node);
-                    if (node.kind === "command" && !node.disabled) {
-                        toggleCommandPanel(node);
-                    } else if (node.kind === "endpoint" && node.href) {
-                        window.open(node.href, "_blank", "noopener,noreferrer");
+                click: () => {
+                    if (open) {
+                        void executeNodeAction("endpoint", node);
+                        return;
                     }
+                    recordSelection(node);
+                    if (command) {
+                        toggleCommandPanel(node, { focusPanel: true });
+                        return;
+                    }
+                    renderTree();
+                    requestAnimationFrame(() => focusNodeControl(node.id));
                 },
             },
-        }, [
-            rowIcon(node),
-            element("span", { class: "tree-label", text: node.label, title: node.label }),
-            ...(node.description ? [element("span", {
-                class: "tree-description",
-                text: node.description,
-                title: node.description,
-            })] : []),
-            ...(node.statusLabel ? [element("span", {
-                class: `tree-status${node.tone ? ` tone-${node.tone}` : ""}`,
-                text: node.statusLabel,
-                title: node.statusLabel,
-            })] : []),
-        ]),
-        rowActions(node, level, selected),
+        } : {}),
+    };
+    return element(interactive ? "button" : "span", properties, [
+        svgIcon(command ? node.icon || "run" : open ? "link" : node.icon || "record", 13),
+        element("span", { text: node.label }),
+        ...(node.statusLabel ? [element("span", { class: "chip-status", text: node.statusLabel })] : []),
     ]);
-    const children = expanded
-        ? element("ul", { class: "tree-group", role: "group", id: childGroupId },
-            node.children.map((child) => renderNode(child, level + 1)))
-        : null;
-    const inline = node.kind === "command" && activeCommandId === node.id
-        ? renderCommandPanel(node)
-        : null;
-    const appHostActions = renderAppHostActionTray(node, level, selected);
-    return element("li", {
-        class: `tree-item${expanded ? " is-expanded" : ""}`,
-        role: "none",
-        dataset: { kind: node.kind },
-    }, [row, appHostActions, inline, children]);
+}
+
+function renderDetailGroup(label, iconName, items) {
+    if (items.length === 0) {
+        return null;
+    }
+    return element("section", { class: "resource-detail-group" }, [
+        element("h4", {}, [svgIcon(iconName, 13), label]),
+        element("div", { class: "detail-chip-list" }, items),
+    ]);
+}
+
+function aggregateHealthChip(resource) {
+    return element("span", {
+        class: `detail-chip${resource.healthTone ? ` tone-${resource.healthTone}` : ""}`,
+        title: `Health: ${resource.healthLabel}`,
+        "aria-label": `Health for ${resource.label}: ${resource.healthLabel}`,
+    }, [
+        svgIcon("heart", 13),
+        element("span", { text: resource.healthLabel }),
+    ]);
+}
+
+function resourceMenuActions(resource, dashboardAvailable) {
+    const actions = dashboardAvailable
+        ? ["details", "console-logs", "structured-logs", "traces", "metrics"]
+        : [];
+    if (resource.terminalEnabled) {
+        actions.push("terminal");
+    }
+    if (actions.length > 0) {
+        actions.push("separator");
+    }
+    actions.push("ask");
+    return actions;
+}
+
+function renderResourceCard({ resource, parentLabel, dashboardAvailable }) {
+    const endpoints = childrenOfKind(resource, "endpoint");
+    const healthGroup = firstChildOfKind(resource, "health-group");
+    const healthItems = healthGroup?.children?.length
+        ? healthGroup.children.map((health) => detailChip(health))
+        : resource.healthLabel
+            ? [aggregateHealthChip(resource)]
+            : [];
+    const commandsGroup = firstChildOfKind(resource, "commands-group");
+    const commands = commandsGroup?.children ?? [];
+    const activeCommand = commands.find((command) => command.id === activeCommandId);
+    return element("article", {
+        class:
+            `resource-card${activeCommand ? " has-command-panel" : ""}`
+            + `${resource.tone ? ` tone-${resource.tone}` : ""}`,
+        role: "listitem",
+        dataset: { resourceId: resource.id },
+    }, [
+        element("header", { class: "resource-card-header" }, [
+            element("div", {
+                class: "resource-card-identity",
+            }, [
+                rowIcon(resource),
+                element("span", { class: "resource-identity" }, [
+                    element("button", {
+                        class: "resource-name-copy",
+                        type: "button",
+                        title: `Copy resource name: ${resource.label || resource.resourceName}`,
+                        "aria-label": `Copy resource name ${resource.label || resource.resourceName}`,
+                        on: { click: () => void copyResourceName(resource) },
+                    }, [
+                        element("strong", { text: resource.label }),
+                        svgIcon("copy", 12),
+                    ]),
+                    element("span", { text: resource.description, title: resource.description }),
+                ]),
+                ...(resource.statusLabel ? [element("span", {
+                    class: `resource-status${resource.lifecycleTone ? ` tone-${resource.lifecycleTone}` : ""}`,
+                    text: resource.statusLabel,
+                })] : []),
+            ]),
+            actionButton(`More actions for ${resource.label}`, "more", (event) =>
+                openActionMenu(resource, event.currentTarget, resourceMenuActions(resource, dashboardAvailable))),
+        ]),
+        ...(parentLabel ? [element("p", {
+            class: "resource-parent",
+            text: `Part of ${parentLabel}`,
+        })] : []),
+        element("div", { class: "resource-card-details" }, [
+            renderDetailGroup(
+                "Endpoints",
+                "link",
+                endpoints.map(endpointChip),
+            ),
+            renderDetailGroup(
+                "Health",
+                "heart",
+                healthItems,
+            ),
+            ...(dashboardAvailable ? [renderDetailGroup(
+                "Diagnostics",
+                "pulse",
+                [dashboardActionChip(resource, "console-logs")],
+            )] : []),
+            renderDetailGroup(
+                "Commands",
+                "terminal",
+                commands.map((command) => detailChip(command, { command: true })),
+            ),
+        ]),
+        ...(activeCommand ? [renderCommandPanel(activeCommand)] : []),
+    ]);
+}
+
+function hostStatus(appHost) {
+    if (appHost.kind === "apphost-running") {
+        return { label: "Running", tone: appHost.tone || "healthy" };
+    }
+    if (appHost.unavailableActionReason) {
+        return { label: "Needs attention", tone: "warning" };
+    }
+    return { label: "Ready to run", tone: "inactive" };
+}
+
+function duplicateHostLabel(appHost, hosts) {
+    const matches = hosts.filter((host) => host.label === appHost.label);
+    if (matches.length < 2) {
+        return appHost.label;
+    }
+    return `${appHost.label} ${matches.indexOf(appHost) + 1}`;
+}
+
+function appHostTabId(appHost) {
+    return `apphost-tab-${appHost.id.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+}
+
+function selectAppHost(appHost) {
+    clearActiveCommand();
+    activeAppHostId = appHost.id;
+    setSelected(appHost);
+}
+
+function handleAppHostTabKey(event, hosts, index) {
+    let nextIndex;
+    if (event.key === "ArrowRight") {
+        nextIndex = (index + 1) % hosts.length;
+    } else if (event.key === "ArrowLeft") {
+        nextIndex = (index - 1 + hosts.length) % hosts.length;
+    } else if (event.key === "Home") {
+        nextIndex = 0;
+    } else if (event.key === "End") {
+        nextIndex = hosts.length - 1;
+    } else {
+        return;
+    }
+    event.preventDefault();
+    selectAppHost(hosts[nextIndex]);
+}
+
+function renderAppHostSwitcher(hosts, activeHost) {
+    if (hosts.length < 2) {
+        return null;
+    }
+    return element("nav", { class: "apphost-switcher", "aria-label": "Choose an AppHost" }, [
+        element("div", { class: "apphost-tabs", role: "tablist", "aria-label": "AppHosts" },
+            hosts.map((host, index) => {
+                const active = host.id === activeHost.id;
+                const status = hostStatus(host);
+                return element("button", {
+                    class: `apphost-tab${active ? " is-active" : ""}`,
+                    type: "button",
+                    role: "tab",
+                    id: appHostTabId(host),
+                    tabIndex: active ? 0 : -1,
+                    "aria-selected": active,
+                    "aria-controls": "active-apphost",
+                    "aria-label":
+                        `${duplicateHostLabel(host, hosts)}, ${status.label}, ${index + 1} of ${hosts.length}`,
+                    dataset: { nodeId: host.id },
+                    on: {
+                        click: () => selectAppHost(host),
+                        keydown: (event) => handleAppHostTabKey(event, hosts, index),
+                    },
+                }, [
+                    rowIcon(host),
+                    element("span", { class: "apphost-tab-copy" }, [
+                        element("strong", { text: duplicateHostLabel(host, hosts) }),
+                        element("span", { text: status.label }),
+                    ]),
+                ]);
+            })),
+    ]);
+}
+
+function renderHostNotice(node) {
+    return element("div", {
+        class: `host-notice${node.tone ? ` tone-${node.tone}` : ""}`,
+        role: node.tone === "error" ? "alert" : "status",
+    }, [
+        rowIcon(node),
+        element("span", {}, [
+            element("strong", { text: node.label }),
+            element("span", { text: node.description }),
+        ]),
+    ]);
+}
+
+function renderHostStage(appHost, hosts) {
+    const presentationHost = {
+        ...appHost,
+        presentationLabel: duplicateHostLabel(appHost, hosts),
+    };
+    const resources = flattenResources(appHostResources(appHost));
+    const status = hostStatus(appHost);
+    const notices = (appHost.children ?? [])
+        .filter((child) => child.kind === "error" || child.kind === "warning");
+    const healthy = resources.filter(({ resource }) => resource.tone === "healthy").length;
+    const attention = resources.filter(({ resource }) =>
+        resource.tone === "error" || resource.tone === "warning").length;
+    const dashboardAvailable = appHost.actions?.includes("dashboard") === true;
+    return element("article", {
+        class: "active-apphost",
+        id: "active-apphost",
+        role: hosts.length > 1 ? "tabpanel" : undefined,
+        "aria-labelledby": hosts.length > 1 ? appHostTabId(appHost) : undefined,
+    }, [
+        element("header", { class: "apphost-overview" }, [
+            element("div", { class: "apphost-heading" }, [
+                element("span", { class: "apphost-mark" }, [svgIcon(appHost.icon || "apphost-running", 20)]),
+                element("span", { class: "apphost-heading-copy" }, [
+                    element("span", { class: "apphost-title-line" }, [
+                        element("h2", { text: presentationHost.presentationLabel, title: appHost.label }),
+                        actionButton(`More actions for ${presentationHost.presentationLabel}`, "more", (event) =>
+                            openActionMenu(presentationHost, event.currentTarget, ["ask"])),
+                    ]),
+                    element("p", { text: appHost.description }),
+                ]),
+            ]),
+            element("div", { class: "apphost-facts", "aria-label": "AppHost summary" }, [
+                element("span", { class: `summary-chip tone-${status.tone}`, text: status.label }),
+                element("span", { class: "summary-chip", text: `${resources.length} resource${resources.length === 1 ? "" : "s"}` }),
+                ...(healthy ? [element("span", { class: "summary-chip tone-healthy", text: `${healthy} healthy` })] : []),
+                ...(attention ? [element("span", { class: "summary-chip tone-warning", text: `${attention} need attention` })] : []),
+            ]),
+        ]),
+        renderAppHostActionTray(presentationHost),
+        ...notices.map(renderHostNotice),
+        element("section", { class: "resource-workspace", "aria-labelledby": "resources-heading" }, [
+            element("header", { class: "section-heading" }, [
+                element("span", {}, [
+                    element("h3", { id: "resources-heading", text: "Resources" }),
+                    element("p", {
+                        text: resources.length
+                            ? "Endpoints, health, and commands are grouped with the resource that owns them."
+                            : "Start this AppHost to load its evaluated resource model.",
+                    }),
+                ]),
+            ]),
+            resources.length
+                ? element("div", {
+                    class: `resource-board${activeCommandId ? " has-open-command" : ""}`,
+                    role: "list",
+                },
+                    resources.map((resource) => renderResourceCard({ ...resource, dashboardAvailable })))
+                : element("div", { class: "resource-board-empty" }, [
+                    rowIcon(appHost),
+                    element("strong", { text: "No live resources yet" }),
+                    element("span", {
+                        text: appHost.unavailableActionReason
+                            || "Use the AppHost actions above when you're ready to run it.",
+                    }),
+                ]),
+        ]),
+    ]);
 }
 
 function renderTree() {
     const source = filteredTree(modelState?.roots ?? [], filterText);
+    const hosts = source.filter(isAppHostNode);
     if (activeCommandId && !treeContains(source, activeCommandId)) {
         clearActiveCommand();
     }
-    if (source.length === 0 && filterText) {
+    if (hosts.length === 0 && filterText) {
         els.tree.setAttribute("role", "status");
-        els.tree.removeAttribute("aria-label");
         els.tree.replaceChildren(element("div", { class: "filter-empty" }, [
             element("p", {
                 text: "No AppHosts, resources, endpoints, health checks, or commands match this filter.",
@@ -691,28 +1023,28 @@ function renderTree() {
         ]));
         return;
     }
-    els.tree.setAttribute("role", "tree");
-    els.tree.setAttribute("aria-label", "Aspire AppHosts");
-    const focusState = captureCommandFocus();
-    renderedRowIndex = 0;
-    renderedSelectionVisible = treeContains(source, selectedNodeId);
-    els.tree.replaceChildren(element("ul", { class: "tree-group tree-root", role: "group" },
-        source.map((node) => renderNode(node, 1))));
-    if (activeCommandId && !els.tree.querySelector(`[data-node-id="${CSS.escape(activeCommandId)}"]`)) {
-        clearActiveCommand();
-        renderTree();
+    els.tree.setAttribute("role", "region");
+    const selectedHost = hosts.find((host) => host.id === activeAppHostId)
+        || hosts.find((host) => host.appHostId === findNode(selectedNodeId)?.appHostId)
+        || hosts[0];
+    if (!selectedHost) {
+        els.tree.replaceChildren();
         return;
     }
-    if (!els.tree.querySelector('.tree-row[role="treeitem"][tabindex="0"]')) {
-        const firstRow = els.tree.querySelector('.tree-row[role="treeitem"]');
-        if (firstRow) {
-            firstRow.tabIndex = 0;
-        }
+    activeAppHostId = selectedHost.id;
+    const currentSelection = findNode(selectedNodeId);
+    if (!currentSelection || currentSelection.appHostId !== selectedHost.appHostId) {
+        recordSelection(selectedHost);
     }
+    const focusState = captureCommandFocus();
+    els.tree.replaceChildren(...[
+        renderAppHostSwitcher(hosts, selectedHost),
+        renderHostStage(selectedHost, hosts),
+    ].filter(Boolean));
     restoreCommandFocus(focusState);
     if (confirmationNeedsFocus) {
         confirmationNeedsFocus = false;
-        requestAnimationFrame(() => els.tree.querySelector("[data-confirm-action]")?.focus());
+        requestAnimationFrame(() => els.tree.querySelector("[data-confirmation-cancel]")?.focus());
     }
 }
 
@@ -739,81 +1071,13 @@ function restoreCommandFocus(focusState) {
     if (!focusState || !activeCommandId) {
         return;
     }
-    const row = els.tree.querySelector(`[data-node-id="${CSS.escape(activeCommandId)}"]`);
-    const control = row?.closest(".tree-item")?.querySelector(`[name="${CSS.escape(focusState.name)}"]`);
+    const control = els.tree.querySelector(`.command-form [name="${CSS.escape(focusState.name)}"]`);
     if (!control) {
         return;
     }
     control.focus();
     if (focusState.selectionStart !== null && typeof control.setSelectionRange === "function") {
         control.setSelectionRange(focusState.selectionStart, focusState.selectionEnd);
-    }
-}
-
-function visibleTreeRows() {
-    return [...els.tree.querySelectorAll('.tree-row[role="treeitem"]')];
-}
-
-function focusTreeRow(row) {
-    if (!row) {
-        return;
-    }
-    for (const candidate of visibleTreeRows()) {
-        candidate.tabIndex = candidate === row ? 0 : -1;
-    }
-    row.focus();
-}
-
-function handleTreeKey(event, node) {
-    const rows = visibleTreeRows();
-    const currentIndex = rows.indexOf(event.currentTarget);
-    if (event.key === "ArrowDown") {
-        event.preventDefault();
-        focusTreeRow(rows[currentIndex + 1] ?? rows[0]);
-        return;
-    }
-    if (event.key === "ArrowUp") {
-        event.preventDefault();
-        focusTreeRow(rows[currentIndex - 1] ?? rows.at(-1));
-        return;
-    }
-    if (event.key === "ArrowRight") {
-        if (node.children?.length && !expandedIds.has(node.id)) {
-            event.preventDefault();
-            expandedIds.add(node.id);
-            renderTree();
-            requestAnimationFrame(() => focusTreeRow(
-                els.tree.querySelector(`[data-node-id="${CSS.escape(node.id)}"]`),
-            ));
-        }
-        return;
-    }
-    if (event.key === "ArrowLeft") {
-        if (expandedIds.has(node.id)) {
-            event.preventDefault();
-            expandedIds.delete(node.id);
-            renderTree();
-            requestAnimationFrame(() => focusTreeRow(
-                els.tree.querySelector(`[data-node-id="${CSS.escape(node.id)}"]`),
-            ));
-            return;
-        }
-        const parentItem = event.currentTarget.closest(".tree-group")?.closest(".tree-item");
-        const parentRow = parentItem?.querySelector(":scope > .tree-row");
-        if (parentRow) {
-            event.preventDefault();
-            focusTreeRow(parentRow);
-        }
-        return;
-    }
-    if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        setSelected(node);
-        if (node.kind === "command" && !node.disabled) {
-            toggleCommandPanel(node);
-        } else if (node.children?.length) {
-            toggleExpanded(node);
-        }
     }
 }
 
@@ -825,6 +1089,9 @@ function hideActionMenu() {
 
 function menuAction(action, node) {
     const definition = ACTIONS[action];
+    const label = action === "ask"
+        ? `Add ${node.presentationLabel || node.label} to chat`
+        : definition.label;
     return element("button", {
         class: "menu-action",
         type: "button",
@@ -835,23 +1102,29 @@ function menuAction(action, node) {
                 void executeNodeAction(action, node);
             },
         },
-    }, [svgIcon(definition.icon, 14), definition.label]);
+    }, [svgIcon(definition.icon, 14), label]);
 }
 
-function openActionMenu(node, anchor) {
+function openActionMenu(node, anchor, actions) {
     if (actionMenuNodeId === node.id && !els.actionMenu.hidden) {
         hideActionMenu();
         return;
     }
     actionMenuNodeId = node.id;
-    const actionNames = [...(node.actions ?? []), "ask"];
-    els.actionMenu.replaceChildren(...actionNames.map((action) => menuAction(action, node)));
+    const actionNames = actions ?? [...(node.actions ?? []), "ask"];
+    els.actionMenu.replaceChildren(...actionNames.map((action) =>
+        action === "separator"
+            ? element("div", { class: "menu-separator", role: "separator" })
+            : menuAction(action, node)));
     els.actionMenu.hidden = false;
     const bounds = anchor.getBoundingClientRect();
-    const menuWidth = 210;
+    const menuWidth = 228;
     const left = Math.max(8, Math.min(window.innerWidth - menuWidth - 8, bounds.right - menuWidth));
     els.actionMenu.style.left = `${left}px`;
-    els.actionMenu.style.top = `${Math.min(window.innerHeight - els.actionMenu.offsetHeight - 8, bounds.bottom + 3)}px`;
+    els.actionMenu.style.top = `${Math.max(
+        8,
+        Math.min(window.innerHeight - els.actionMenu.offsetHeight - 8, bounds.bottom + 3),
+    )}px`;
     els.actionMenu.querySelector("button")?.focus();
 }
 
@@ -859,8 +1132,11 @@ async function executeNodeAction(action, node) {
     pendingConfirmation = null;
     if (action === "ask") {
         try {
-            const result = await api("/api/ask-copilot", { method: "POST", body: { nodeId: node.id } });
-            showToast(result.ok ? "Sent the selected tree item to Copilot." : result.error, !result.ok);
+            const result = await api("/api/copilot-context", { method: "POST", body: { nodeId: node.id } });
+            showToast(
+                result.ok ? `Added ${node.label} to chat. Finish your question in the composer.` : result.error,
+                !result.ok,
+            );
         } catch (error) {
             showToast(error.message, true);
         }
@@ -876,11 +1152,53 @@ async function executeNodeAction(action, node) {
         return;
     }
     if (action === "dashboard") {
-        const dashboard = node.children?.find((child) => child.kind === "endpoint" && child.label === "Dashboard");
-        if (dashboard?.href) {
-            window.open(dashboard.href, "_blank", "noopener,noreferrer");
-        } else {
-            showToast("The dashboard URL is not available.", true);
+        try {
+            const result = await api("/api/open-dashboard", {
+                method: "POST",
+                body: { appHostId: node.appHostId },
+            });
+            showToast(result.ok ? "Opened the dashboard in the integrated browser." : result.error, !result.ok);
+        } catch (error) {
+            showToast(error.message, true);
+        }
+        return;
+    }
+    if (DASHBOARD_VIEW_ACTIONS[action]) {
+        try {
+            const result = await api("/api/open-dashboard-view", {
+                method: "POST",
+                body: { nodeId: node.id, view: DASHBOARD_VIEW_ACTIONS[action] },
+            });
+            showToast(
+                result.ok ? `Opened ${ACTIONS[action].label.toLowerCase()} in the Dashboard.` : result.error,
+                !result.ok,
+            );
+        } catch (error) {
+            showToast(error.message, true);
+        }
+        return;
+    }
+    if (action === "endpoint") {
+        try {
+            const result = await api("/api/open-endpoint", {
+                method: "POST",
+                body: { nodeId: node.id },
+            });
+            showToast(result.ok ? `Opened ${node.label} in the integrated browser.` : result.error, !result.ok);
+        } catch (error) {
+            showToast(error.message, true);
+        }
+        return;
+    }
+    if (action === "terminal") {
+        try {
+            const result = await api("/api/open-terminal", {
+                method: "POST",
+                body: { nodeId: node.id },
+            });
+            showToast(result.ok ? `Opened a terminal for ${node.label}.` : result.error, !result.ok);
+        } catch (error) {
+            showToast(error.message, true);
         }
         return;
     }
@@ -962,9 +1280,14 @@ function pruneCommandDraft(nodeId, inputs) {
     }
 }
 
-function toggleCommandPanel(node) {
+function focusCommandPanel(nodeId) {
+    const panel = els.tree.querySelector(`[data-command-panel="${CSS.escape(nodeId)}"]`);
+    panel?.querySelector("input:not([disabled]), select:not([disabled]), button:not([disabled])")?.focus();
+}
+
+function toggleCommandPanel(node, { focusPanel = false } = {}) {
     if (activeCommandId === node.id) {
-        closeCommandPanel(node);
+        closeCommandPanel(node, { restoreFocus: true });
         return;
     } else {
         if (activeCommandId) {
@@ -977,6 +1300,9 @@ function toggleCommandPanel(node) {
         }
     }
     renderTree();
+    if (focusPanel) {
+        requestAnimationFrame(() => focusCommandPanel(node.id));
+    }
 }
 
 function discardSensitiveCommandDraft(node, nodeId = node?.id) {
@@ -1005,13 +1331,16 @@ function clearActiveCommand() {
     activeCommandId = null;
 }
 
-function closeCommandPanel(node) {
+function closeCommandPanel(node, { restoreFocus = true } = {}) {
     if (activeCommandId === node.id) {
         clearActiveCommand();
     } else {
         discardSensitiveCommandDraft(node);
     }
     renderTree();
+    if (restoreFocus) {
+        requestAnimationFrame(() => focusNodeControl(node.id));
+    }
 }
 
 function commandField(node, input) {
@@ -1146,7 +1475,7 @@ function renderCommandPanel(node) {
     const hasSecret = inputs.some((input) =>
         !input.disabled && input.inputType.toLowerCase().includes("secret"));
     if (hasSecret && !secretWarningAccepted) {
-        return element("div", { class: "inline-panel" }, [
+        return element("div", { class: "inline-panel", dataset: { commandPanel: node.id } }, [
             element("p", {
                 class: "secret-warning",
                 text: "Secret values are sent to the AppHost command through the Aspire CLI. The canvas redacts them from results and does not log or persist them.",
@@ -1162,7 +1491,13 @@ function renderCommandPanel(node) {
                     class: "button button-primary button-small",
                     type: "button",
                     text: "Continue",
-                    on: { click: () => { secretWarningAccepted = true; renderTree(); } },
+                    on: {
+                        click: () => {
+                            secretWarningAccepted = true;
+                            renderTree();
+                            requestAnimationFrame(() => focusCommandPanel(node.id));
+                        },
+                    },
                 }),
             ]),
         ]);
@@ -1199,7 +1534,7 @@ function renderCommandPanel(node) {
             text: result.output || result.message || result.error || "Command completed.",
         })] : []),
     ]);
-    return element("div", { class: "inline-panel" }, [form]);
+    return element("div", { class: "inline-panel", dataset: { commandPanel: node.id } }, [form]);
 }
 
 async function submitResourceCommand(node, form) {
@@ -1246,24 +1581,53 @@ async function submitResourceCommand(node, form) {
 }
 
 function render() {
-    if (renderedViewMode && modelState?.viewMode !== renderedViewMode) {
-        clearActiveCommand();
+    const nextViewMode = modelState?.viewMode ?? null;
+    const viewModeChanged = Boolean(renderedViewMode && nextViewMode !== renderedViewMode);
+    if (viewModeChanged && modelState?.status === "loading" && modelState.refreshing) {
+        if (pendingViewMode !== nextViewMode) {
+            beginModeSwitch(nextViewMode);
+        }
+        updateHeader();
+        updateStatus();
+        updateBusy();
+        return;
     }
-    renderedViewMode = modelState?.viewMode ?? null;
-    if (selectedNodeId && !findNode(selectedNodeId)) {
-        selectedNodeId = null;
+
+    const draw = () => {
+        if (viewModeChanged) {
+            clearActiveCommand();
+            selectedNodeId = null;
+            activeAppHostId = null;
+        }
+        renderedViewMode = nextViewMode;
+        if (selectedNodeId && !findNode(selectedNodeId)) {
+            selectedNodeId = null;
+        }
+        if (pendingConfirmation && !findNode(pendingConfirmation.nodeId)) {
+            pendingConfirmation = null;
+        }
+        if (activeCommandId && !findNode(activeCommandId)) {
+            clearActiveCommand();
+        }
+        if (
+            pendingViewMode
+            && modelState?.viewMode === pendingViewMode
+            && modelState?.status !== "loading"
+        ) {
+            finishModeSwitch();
+        }
+        updateHeader();
+        updateStatus();
+        updateEmptyAndLoading();
+        renderTree();
+        updateBusy();
+    };
+
+    if (viewModeChanged) {
+        withModeTransition(nextViewMode, draw);
+    } else {
+        draw();
     }
-    if (pendingConfirmation && !findNode(pendingConfirmation.nodeId)) {
-        pendingConfirmation = null;
-    }
-    if (activeCommandId && !findNode(activeCommandId)) {
-        clearActiveCommand();
-    }
-    updateHeader();
-    updateStatus();
-    updateEmptyAndLoading();
-    renderTree();
-    updateBusy();
 }
 
 async function refresh() {
@@ -1277,18 +1641,23 @@ async function refresh() {
 }
 
 async function setViewMode(viewMode) {
-    if (modelState?.viewMode === viewMode) {
+    if (modelState?.viewMode === viewMode || pendingViewMode) {
         return;
     }
     hideActionMenu();
     selectedNodeId = null;
+    activeAppHostId = null;
     clearActiveCommand();
     pendingConfirmation = null;
+    beginModeSwitch(viewMode);
+    updateHeader();
     try {
         const result = await api("/api/mode", { method: "POST", body: { viewMode } });
         modelState = result.state;
         render();
     } catch (error) {
+        finishModeSwitch();
+        updateHeader();
         showToast(error.message, true);
     }
 }
@@ -1385,13 +1754,21 @@ els.hiddenCheckbox.addEventListener("change", async () => {
 });
 
 document.addEventListener("pointerdown", (event) => {
-    if (!els.actionMenu.hidden && !event.target.closest("#action-menu, .row-action")) {
+    if (!els.actionMenu.hidden && !event.target.closest("#action-menu, .resource-menu-trigger")) {
         hideActionMenu();
     }
 });
 document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
-        hideActionMenu();
+        if (!els.actionMenu.hidden) {
+            hideActionMenu();
+        } else if (activeCommandId) {
+            const command = findNode(activeCommandId);
+            if (command) {
+                event.preventDefault();
+                closeCommandPanel(command, { restoreFocus: true });
+            }
+        }
     }
 });
 document.addEventListener("scroll", hideActionMenu, true);
