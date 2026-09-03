@@ -11,6 +11,14 @@
         <header class="toolbar">
             <div class="tb-row">
                 <div class="tb-title">
+                    <span class="brand-mark" aria-hidden="true">
+                        <svg width="18" height="18" viewBox="0 0 16 16">
+                            <path
+                                fill="currentColor"
+                                d="M6 2c.306 0 .582.187.696.471L10 10.708l1.304-3.26A.75.75 0 0 1 12 7h3.25a.75.75 0 0 1 0 1.5h-2.742l-1.812 4.529A.75.75 0 0 1 10 13a.75.75 0 0 1-.696-.471L6 4.292l-1.304 3.26A.75.75 0 0 1 4 8H.75a.75.75 0 0 1 0-1.5h2.742l1.812-4.529A.75.75 0 0 1 6 2Z"
+                            />
+                        </svg>
+                    </span>
                     <div>
                         <h1 class="tb-heading" id="page-title">Aspire Doctor</h1>
                         <div class="tb-sub muted" id="tb-sub" role="status" aria-live="polite" aria-atomic="true">
@@ -34,38 +42,40 @@
             </div>
             <!-- Worded status pills on their own row so they never crowd the
                  title/re-run row in a narrow side panel. -->
-            <div class="tb-summary" id="summary-pills" hidden>
-                <span class="pill ok" id="pill-ok" title="Passed">
-                    <span class="pill-dot"></span><span class="pill-num" id="count-ok">0</span
-                    ><span class="pill-lbl">passed</span>
-                </span>
-                <span class="pill warn" id="pill-warn" title="Warnings">
-                    <span class="pill-dot"></span><span class="pill-num" id="count-warn">0</span
-                    ><span class="pill-lbl" id="lbl-warn">warnings</span>
-                </span>
-                <span class="pill req" id="pill-req" title="Failed">
-                    <span class="pill-dot"></span><span class="pill-num" id="count-req">0</span
-                    ><span class="pill-lbl">failed</span>
-                </span>
-            </div>
-            <div class="tb-controls" id="view-controls" hidden>
-                <button
-                    class="btn btn-quiet btn-sm"
-                    id="toggle-passed"
-                    type="button"
-                    aria-controls="diagnostics"
-                    aria-pressed="false"
-                >
-                    <span class="btn-label">Hide passed</span>
-                </button>
-                <button
-                    class="btn btn-quiet btn-sm"
-                    id="toggle-details"
-                    type="button"
-                    aria-controls="diagnostics"
-                >
-                    <span class="btn-label">Collapse details</span>
-                </button>
+            <div class="tb-secondary">
+                <div class="tb-summary" id="summary-pills" hidden>
+                    <span class="pill ok" id="pill-ok" title="Passed">
+                        <span class="pill-dot"></span><span class="pill-num" id="count-ok">0</span
+                        ><span class="pill-lbl">passed</span>
+                    </span>
+                    <span class="pill warn" id="pill-warn" title="Warnings">
+                        <span class="pill-dot"></span><span class="pill-num" id="count-warn">0</span
+                        ><span class="pill-lbl" id="lbl-warn">warnings</span>
+                    </span>
+                    <span class="pill req" id="pill-req" title="Failed">
+                        <span class="pill-dot"></span><span class="pill-num" id="count-req">0</span
+                        ><span class="pill-lbl">failed</span>
+                    </span>
+                </div>
+                <div class="tb-controls" id="view-controls" hidden>
+                    <button
+                        class="btn btn-quiet btn-sm"
+                        id="toggle-passed"
+                        type="button"
+                        aria-controls="diagnostics"
+                        aria-pressed="false"
+                    >
+                        <span class="btn-label">Hide passed</span>
+                    </button>
+                    <button
+                        class="btn btn-quiet btn-sm"
+                        id="toggle-details"
+                        type="button"
+                        aria-controls="diagnostics"
+                    >
+                        <span class="btn-label">Collapse details</span>
+                    </button>
+                </div>
             </div>
             <div class="progress" id="progress" aria-hidden="true"><span></span></div>
         </header>

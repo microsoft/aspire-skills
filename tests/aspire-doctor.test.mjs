@@ -12,7 +12,8 @@ import {
   listenOnLoopback,
   readJsonBody,
   requestErrorStatus,
-  runLatestDiagnostics
+  runLatestDiagnostics,
+  windowsExplorerInvocation
 } from "../extensions/aspire-doctor/provider-helpers.mjs";
 import {
   normalizeDoctorData,
@@ -119,6 +120,19 @@ test("JSON request bodies have deterministic validation errors", async () => {
   });
 });
 
+test("Windows Explorer receives an exact verbatim select argument", () => {
+  const path = "C:\\Program Files\\Aspire\\aspire.exe";
+
+  assert.deepEqual(windowsExplorerInvocation(path, true), {
+    args: [`/select,"${path}"`],
+    windowsVerbatimArguments: true
+  });
+  assert.deepEqual(windowsExplorerInvocation("C:\\Program Files\\Aspire", false), {
+    args: ["C:\\Program Files\\Aspire"],
+    windowsVerbatimArguments: false
+  });
+});
+
 test("loopback startup removes temporary error listeners", async () => {
   class TestServer extends EventEmitter {
     constructor(error = null) {
@@ -170,10 +184,33 @@ test("renderer exposes responsive and accessible review controls", async () => {
   assert.match(html, /id="error"[^>]+role="alert"/);
   assert.match(html, /id="toggle-passed"/);
   assert.match(html, /id="toggle-details"/);
+  assert.match(html, /class="brand-mark"/);
+  assert.match(html, /class="btn btn-outline btn-sm" id="rerun"/);
   assert.match(app, /devtools: "Developer tools"/);
   assert.match(app, /latestVersionChannel: "Latest channel"/);
   assert.match(app, /Copy command/);
   assert.match(app, /"aria-description": value/);
+  assert.match(app, /class: "fix-send fix-primary"/);
+  assert.match(app, /class: "diag-sec-count"/);
+  assert.match(app, /class: "diag-metadata-heading"/);
+  assert.match(app, /class: "tag install-meta"/);
+  assert.match(styles, /--brand: var\(--fgColor-done/);
+  assert.match(styles, /--ok: var\(--fgColor-success/);
+  assert.match(styles, /--warn: var\(--fgColor-attention/);
+  assert.match(styles, /--req: var\(--fgColor-danger/);
+  assert.match(styles, /\.pill[\s\S]+background: var\(--surface-raised\)/);
+  assert.match(styles, /\.pill\[data-zero="true"\][\s\S]+background: var\(--surface-inset\)/);
+  assert.match(styles, /\.diag-ico\.warn[\s\S]+var\(--warn\) 13%/);
+  assert.match(styles, /\.diag-detail[\s\S]+border-top: 1px solid var\(--border-soft\)/);
+  assert.match(styles, /\.diag-fix[\s\S]+border-bottom: 1px solid var\(--border-soft\)/);
+  assert.match(styles, /--card: color-mix/);
+  assert.match(styles, /\.diag-sec-count[\s\S]+border-radius: 999px/);
+  assert.match(styles, /\.diag-item[\s\S]+background: var\(--card\)/);
+  assert.match(styles, /\.diag-metadata-heading[\s\S]+text-transform: uppercase/);
+  assert.doesNotMatch(app, /el\("details", \{ class: "diag-metadata"/);
+  assert.match(styles, /\.install-path[\s\S]+text-decoration: none/);
+  assert.match(styles, /\.install-meta \+ \.install-meta::before/);
+  assert.match(styles, /grid-template-columns: minmax\(120px, 160px\) minmax\(0, 1fr\)/);
   assert.match(styles, /@media \(max-width: 640px\)[\s\S]+\.diag-fix[\s\S]+flex-direction: column/);
   assert.match(styles, /@media \(max-width: 430px\)[\s\S]+\.diag-fix-actions[\s\S]+grid-template-columns/);
   assert.match(styles, /@media \(pointer: coarse\)/);

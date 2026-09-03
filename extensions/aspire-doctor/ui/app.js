@@ -383,12 +383,16 @@ async function openPath(path, btn) {
         stateClasses: ["is-error", "is-opened"],
         resetDelay: 1800,
         action: () => postJson("/api/open-path", { path }),
-        onSuccess: () => {
+        onSuccess: (data) => {
+            const statusLabel = data.mode === "file-manager" ? "Sent to file manager" : "Opened";
             btn.classList.add("is-opened");
-            announce("Path opened.");
+            btn.dataset.statusLabel = statusLabel;
+            btn.title = data.mode === "file-manager" ? "Sent to file manager" : "Path opened";
+            announce(`${statusLabel}.`);
         },
         onFailure: (data) => {
             btn.classList.add("is-error");
+            btn.dataset.statusLabel = "Couldn't open";
             btn.title = data.error || "Couldn't open this path";
             announce(data.error || "Couldn't open this path.");
         },
@@ -480,7 +484,7 @@ function renderFixBlock(check) {
     actions.push(terminalBtn);
 
     const askBtn = el("button", {
-        class: "fix-send",
+        class: "fix-send fix-primary",
         type: "button",
         title: "Ask Copilot about this check in the current session",
         dataset: { restingLabel: "Ask Copilot" },
@@ -658,7 +662,7 @@ function toggleAllDetails() {
 
 function renderCheck(check) {
     const cls = STATUS_CLASS[check.status] ?? "info";
-    const itemClass = cls === "warn" || cls === "req" ? `diag-item is-${cls}` : "diag-item";
+    const itemClass = cls === "info" ? "diag-item" : `diag-item is-${cls}`;
     const hasFix = typeof check.fix === "string" && check.fix.trim().length > 0;
     const needsAttention = check.status === "warning" || check.status === "fail";
     const hasMeta = check.metadata && Object.keys(check.metadata).length > 0;
@@ -696,9 +700,16 @@ function renderCheck(check) {
         detail.appendChild(renderFixBlock(check));
     }
     if (hasMeta) {
+        const metadataEntries = Object.keys(check.metadata).length;
         detail.appendChild(
-            el("div", { class: "diag-block" }, [
-                el("div", { class: "diag-block-h", text: "Details" }),
+            el("section", { class: "diag-metadata" }, [
+                el("div", { class: "diag-metadata-heading" }, [
+                    el("span", { text: "Technical details" }),
+                    el("span", {
+                        class: "diag-metadata-count",
+                        text: `${metadataEntries} field${metadataEntries === 1 ? "" : "s"}`,
+                    }),
+                ]),
                 renderMetadata(check.metadata),
             ]),
         );
@@ -744,6 +755,10 @@ function renderDiagnostics(data) {
 
         const head = el("div", { class: "diag-sec-head" }, [
             el("h2", { class: "diag-sec-title", text: CATEGORY_LABEL[category] ?? category }),
+            el("span", {
+                class: "diag-sec-count",
+                text: `${items.length} check${items.length === 1 ? "" : "s"}`,
+            }),
         ]);
         const list = el("div", { class: "diag-list" }, items.map(renderCheck));
         frag.appendChild(el("section", {
@@ -755,7 +770,11 @@ function renderDiagnostics(data) {
     const installs = Array.isArray(data.installations) ? data.installations : [];
     if (installs.length > 0) {
         const head = el("div", { class: "diag-sec-head" }, [
-            el("h2", { class: "diag-sec-title", text: `Detected installations (${installs.length})` }),
+            el("h2", { class: "diag-sec-title", text: "Detected installations" }),
+            el("span", {
+                class: "diag-sec-count",
+                text: `${installs.length} installation${installs.length === 1 ? "" : "s"}`,
+            }),
         ]);
         const list = el(
             "div",
@@ -794,15 +813,18 @@ function renderInstallation(inst) {
     ]);
 
     const tags = el("div", { class: "install-tags" });
-    tags.appendChild(el("span", { class: `tag ${active ? "active" : "shadowed"}`, text: inst.pathStatus || "unknown" }));
+    tags.appendChild(el("span", {
+        class: `tag install-state ${active ? "active" : "shadowed"}`,
+        text: inst.pathStatus || "unknown",
+    }));
     if (inst.version) {
-        tags.appendChild(el("span", { class: "tag", text: `v${String(inst.version).split("+")[0]}` }));
+        tags.appendChild(el("span", { class: "tag install-meta", text: `v${String(inst.version).split("+")[0]}` }));
     }
     if (inst.channel) {
-        tags.appendChild(el("span", { class: "tag", text: inst.channel }));
+        tags.appendChild(el("span", { class: "tag install-meta", text: inst.channel }));
     }
     if (inst.route) {
-        tags.appendChild(el("span", { class: "tag", text: inst.route }));
+        tags.appendChild(el("span", { class: "tag install-meta", text: inst.route }));
     }
     body.appendChild(tags);
 

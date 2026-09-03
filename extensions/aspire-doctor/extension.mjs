@@ -14,6 +14,7 @@ import {
     readJsonBody,
     requestErrorStatus,
     runLatestDiagnostics,
+    windowsExplorerInvocation,
 } from "./provider-helpers.mjs";
 import { normalizeDoctorData } from "./ui/model.mjs";
 
@@ -416,10 +417,13 @@ function shouldOpenInEditor(absolutePath, stats) {
 async function revealInFileManager(absolutePath, stats) {
     let command;
     let args;
+    let windowsVerbatimArguments = false;
 
     if (process.platform === "win32") {
         command = "explorer.exe";
-        args = stats.isFile() ? [`/select,${absolutePath}`] : [absolutePath];
+        const invocation = windowsExplorerInvocation(absolutePath, stats.isFile());
+        args = invocation.args;
+        windowsVerbatimArguments = invocation.windowsVerbatimArguments;
     } else if (process.platform === "darwin") {
         command = "open";
         args = stats.isFile() ? ["-R", absolutePath] : [absolutePath];
@@ -429,7 +433,11 @@ async function revealInFileManager(absolutePath, stats) {
     }
 
     await new Promise((resolve, reject) => {
-        const child = spawn(command, args, { detached: true, stdio: "ignore" });
+        const child = spawn(command, args, {
+            detached: true,
+            stdio: "ignore",
+            windowsVerbatimArguments,
+        });
         child.once("error", reject);
         child.once("spawn", () => {
             child.unref();

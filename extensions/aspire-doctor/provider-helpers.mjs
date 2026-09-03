@@ -12,6 +12,18 @@ export function requestErrorStatus(error) {
     return error instanceof RequestBodyError ? error.statusCode : 400;
 }
 
+export function windowsExplorerInvocation(absolutePath, isFile) {
+    return isFile
+        ? {
+            args: [`/select,"${absolutePath}"`],
+            windowsVerbatimArguments: true,
+        }
+        : {
+            args: [absolutePath],
+            windowsVerbatimArguments: false,
+        };
+}
+
 export function readJsonBody(req, maxBytes = MAX_BODY_BYTES) {
     return new Promise((resolve, reject) => {
         let size = 0;
