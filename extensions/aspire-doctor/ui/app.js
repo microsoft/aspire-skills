@@ -433,7 +433,7 @@ function renderFixBlock(check) {
     const copyableFix = getCopyableFix(check);
     if (copyableFix) {
         const copyBtn = el("button", {
-            class: "fix-send",
+            class: "fix-send fix-primary",
             type: "button",
             title: `${copyableFix.label} to the clipboard`,
             dataset: { restingLabel: copyableFix.label },
@@ -484,7 +484,7 @@ function renderFixBlock(check) {
     actions.push(terminalBtn);
 
     const askBtn = el("button", {
-        class: "fix-send fix-primary",
+        class: copyableFix ? "fix-send" : "fix-send fix-primary",
         type: "button",
         title: "Ask Copilot about this check in the current session",
         dataset: { restingLabel: "Ask Copilot" },
@@ -497,7 +497,11 @@ function renderFixBlock(check) {
         e.stopPropagation();
         sendFixToAgent(check, askBtn);
     });
-    actions.unshift(askBtn);
+    if (copyableFix) {
+        actions.splice(1, 0, askBtn);
+    } else {
+        actions.unshift(askBtn);
+    }
 
     const bodyChildren = [el("div", { class: "diag-block-h", text: check.fix ? "Suggested fix" : "Actions" })];
     bodyChildren.push(el("div", {
@@ -621,7 +625,14 @@ function updateViewControls() {
 
     for (const section of els.diagnostics.querySelectorAll(".diag-section[data-check-section]")) {
         const items = [...section.querySelectorAll(".diag-item[data-status]")];
-        section.hidden = items.length > 0 && items.every((item) => item.hidden);
+        const visibleItems = items.filter((item) => !item.hidden);
+        section.hidden = items.length > 0 && visibleItems.length === 0;
+        const count = section.querySelector(".diag-sec-count");
+        if (count) {
+            count.textContent = visibleItems.length === items.length
+                ? `${items.length} check${items.length === 1 ? "" : "s"}`
+                : `${visibleItems.length} of ${items.length}`;
+        }
     }
 
     const passedItems = checkItems.filter((item) => item.dataset.status === "pass");
@@ -824,7 +835,11 @@ function renderInstallation(inst) {
         tags.appendChild(el("span", { class: "tag install-meta", text: inst.channel }));
     }
     if (inst.route) {
-        tags.appendChild(el("span", { class: "tag install-meta", text: inst.route }));
+        const route = String(inst.route).replace(/[_-]+/g, " ");
+        tags.appendChild(el("span", {
+            class: "tag install-meta",
+            text: route === "script" ? "Install script" : route[0].toUpperCase() + route.slice(1),
+        }));
     }
     body.appendChild(tags);
 
@@ -833,7 +848,7 @@ function renderInstallation(inst) {
     }
 
     return el("div", { class: "install" }, [
-        el("span", { class: `install-ico ${active ? "active" : ""}` }, [icon(active ? "ok" : "dot", { size: 14 })]),
+        el("span", { class: `install-ico ${active ? "active" : ""}` }, [icon("terminal", { size: 14 })]),
         body,
     ]);
 }

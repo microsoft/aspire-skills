@@ -191,6 +191,7 @@ test("renderer exposes responsive and accessible review controls", async () => {
   assert.match(app, /Copy command/);
   assert.match(app, /"aria-description": value/);
   assert.match(app, /class: "fix-send fix-primary"/);
+  assert.match(app, /class: copyableFix \? "fix-send" : "fix-send fix-primary"/);
   assert.match(app, /class: "diag-sec-count"/);
   assert.match(app, /class: "diag-metadata-heading"/);
   assert.match(app, /class: "tag install-meta"/);
@@ -204,15 +205,19 @@ test("renderer exposes responsive and accessible review controls", async () => {
   assert.match(styles, /\.diag-detail[\s\S]+border-top: 1px solid var\(--border-soft\)/);
   assert.match(styles, /\.diag-fix[\s\S]+border-bottom: 1px solid var\(--border-soft\)/);
   assert.match(styles, /--card: color-mix/);
+  assert.match(styles, /color-mix\(in srgb, var\(--pill-tone\), var\(--fg\) 25%\)/);
+  assert.match(styles, /color-mix\(in srgb, var\(--status-tone\), var\(--fg\) 25%\)/);
   assert.match(styles, /\.diag-sec-count[\s\S]+border-radius: 999px/);
   assert.match(styles, /\.diag-item[\s\S]+background: var\(--card\)/);
   assert.match(styles, /\.diag-metadata-heading[\s\S]+text-transform: uppercase/);
   assert.doesNotMatch(app, /el\("details", \{ class: "diag-metadata"/);
   assert.match(styles, /\.install-path[\s\S]+text-decoration: none/);
+  assert.match(styles, /\.install-path > span[\s\S]+text-overflow: ellipsis/);
   assert.match(styles, /\.install-meta \+ \.install-meta::before/);
   assert.match(styles, /grid-template-columns: minmax\(120px, 160px\) minmax\(0, 1fr\)/);
   assert.match(styles, /@media \(max-width: 640px\)[\s\S]+\.diag-fix[\s\S]+flex-direction: column/);
   assert.match(styles, /@media \(max-width: 430px\)[\s\S]+\.diag-fix-actions[\s\S]+grid-template-columns/);
+  assert.match(styles, /@media \(max-width: 360px\)[\s\S]+\.tb-sub[\s\S]+display: none/);
   assert.match(styles, /@media \(pointer: coarse\)/);
 });
 
