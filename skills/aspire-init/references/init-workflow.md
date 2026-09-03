@@ -58,6 +58,12 @@ to the solution instead of creating a single-file AppHost.
 - **`.aspire/modules/`** generated folder (do not edit by hand — regenerate with `aspire add`).
 - **`aspire.config.json`** at repo root.
 
+`aspire.config.json` is the authoritative metadata for the authoring target. Resolve its
+`appHost.path` relative to the configuration file; do not assume it is at the repository
+root. `apphost.run.json` can coexist as legacy or single-file launch-profile metadata.
+Recognize it during discovery, but do not use it as the file to author or as a replacement
+for `appHost.path`.
+
 ### `aspireify` Skill
 
 - A Markdown skill file is installed into the AI agent's skill directory — the same
@@ -125,6 +131,56 @@ The same precedence applies to a legacy `.agents/skills/aspire-init/SKILL.md` fr
 | `apphost.cs` references a missing `#:package` | Channel mismatch or transient feed issue | Re-run with `--channel stable` (or `daily` for pre-release) |
 | `aspire start` after wiring fails immediately | Wiring incomplete or wrong AppHost path | Re-invoke `aspireify`; confirm `aspire.config.json` `appHost.path` is correct |
 | Existing TypeScript AppHost uses `apphost.ts` | Legacy entry point and package graph | Hand off to `aspire-orchestration`, which owns approval and `aspire update --migrate --yes --non-interactive`; return to aspireify only for later source authoring |
+
+### pnpm build-policy recovery after partial TypeScript init
+
+Before `aspire init --language typescript`, inspect the applicable
+`pnpm-workspace.yaml` files for build-script policy. In pnpm 11+, an
+`allowBuilds` entry such as `esbuild: false` denies the binary's build script. In older
+pnpm versions, an `onlyBuiltDependencies` allow-list that omits `esbuild` has the same
+effect.
+
+If `aspire init` exits nonzero but has already created `aspire.config.json`, the configured
+AppHost entry point, and its package manifest, treat this as **partial initialization**:
+
+1. Read `aspire.config.json` first and confirm that its resolved `appHost.path` exists.
+   Do not rerun `aspire init`, delete the generated files, or create a second AppHost.
+2. Preserve the root `pnpm-workspace.yaml` exactly. Its build policy is a repository
+   security boundary, not an Aspire setting to relax.
+3. If the generated AppHost is the nested brownfield `aspire-apphost/` package, add a
+   scoped `aspire-apphost/pnpm-workspace.yaml` after confirming the selected pnpm version:
+
+   ```yaml
+   # pnpm 11+
+   packages:
+     - "."
+   allowBuilds:
+     esbuild: true
+   ```
+
+   For a pnpm version that still uses the older allow-list, scope the equivalent to the
+   nested AppHost only:
+
+   ```yaml
+   onlyBuiltDependencies:
+     - esbuild
+   ```
+
+   Include `packages: ["."]` in either nested workspace form so it is an
+   independent workspace containing the generated AppHost.
+
+   Do not add unrelated build approvals. This nested workspace policy permits only the
+   AppHost toolchain to build `esbuild`; it does not change application-package policy.
+4. From that nested AppHost directory, repair its dependencies with
+   `pnpm --config.workspaceDir="$PWD" install`, then use `aspire restore` if generated
+   modules are absent. `--ignore-workspace` is not safe here: it ignores the nested
+   `pnpm-workspace.yaml`, so pnpm still suppresses the `esbuild` postinstall. On
+   PowerShell, use `pnpm --config.workspaceDir="$PWD" install`; on shells where `$PWD`
+   is not the string path, substitute the nested AppHost's absolute path. Resume normal
+   execution with `aspire start --non-interactive`.
+5. Confirm the project-local `aspireify` skill exists. If the failed init did not install
+   it, run `aspire agent init --skills aspireify`, then hand the recovered, still-unwired
+   AppHost to `aspireify`. Do not perform resource wiring in the init workflow.
 
 ## Don't Do This
 

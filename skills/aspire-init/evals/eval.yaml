@@ -167,16 +167,27 @@ stimuli:
           substring: dotnet workload install aspire
   - name: init-typescript-brownfield-135-001
     prompt: >
-      My existing Node repository already has a root package.json and no Aspire AppHost.
+      Use the aspire-init skill before answering. My existing Node repository already has a
+      root package.json and no Aspire AppHost.
       Explain the TypeScript `aspire init` command and the files/layout Aspire 13.5 will
-      create. Do not run the command.
+      create. State the generated entry-point filename and whether it is nested. Do not run
+      the command.
     tags:
       priority: p1
       area:
         - core-flow
         - aspire-13-5
         - typescript
+    rubric:
+      - The assistant uses aspire init --language typescript for this existing Node repository without running it.
+      - The assistant explains that Aspire 13.5 creates a nested aspire-apphost package with apphost.mts and records that location in the root aspire.config.json.
+      - The assistant does not describe apphost.ts as the generated TypeScript AppHost entry point.
     graders:
+      - type: skill-invocation
+        name: invokes_aspire_init
+        config:
+          required:
+            - aspire-init
       - type: output-contains
         name: uses_typescript_init
         config:
@@ -193,6 +204,63 @@ stimuli:
         name: does_not_claim_current_apphost_ts
         config:
           substring: creates apphost.ts
+  - name: init-pnpm-policy-partial-recovery-135-001
+    prompt: >
+      Use the aspire-init skill before answering. `aspire init --language typescript` exited
+      nonzero after creating the shown
+      aspire.config.json, nested AppHost file, and package.json. The root pnpm
+      workspace denies esbuild builds. Do not run commands. Explain the safe recovery with
+      the exact policy-file path and pnpm command, then state the next handoff.
+    tags:
+      priority: p1
+      area:
+        - core-flow
+        - aspire-13-5
+        - pnpm
+        - recovery
+    environment:
+      files:
+        - src: ../../../evals/ts-apphost-pnpm-policy/aspire.config.json
+          dest: partial-init/aspire.config.json
+        - src: ../../../evals/ts-apphost-pnpm-policy/pnpm-workspace.yaml
+          dest: partial-init/pnpm-workspace.yaml
+        - src: ../../../evals/ts-apphost-pnpm-policy/aspire-apphost/apphost.mts
+          dest: partial-init/aspire-apphost/apphost.mts
+        - src: ../../../evals/ts-apphost-pnpm-policy/aspire-apphost/package.json
+          dest: partial-init/aspire-apphost/package.json
+        - src: ../../../evals/ts-apphost-pnpm-policy/aspire-apphost/pnpm-workspace.yaml
+          dest: partial-init/aspire-apphost/pnpm-workspace.yaml
+    rubric:
+      - The assistant detects partial initialization from the metadata-selected nested AppHost and does not advise rerunning init or deleting generated files.
+      - The assistant preserves the root pnpm-workspace.yaml and puts a minimal esbuild approval in aspire-apphost/pnpm-workspace.yaml.
+      - The assistant creates a self-contained nested workspace and runs pnpm with its workspaceDir set to that AppHost, then ensures aspireify is installed or runs aspire agent init --skills aspireify before handing off resource wiring.
+    graders:
+      - type: skill-invocation
+        name: invokes_aspire_init
+        config:
+          required:
+            - aspire-init
+      - type: output-contains
+        name: preserves_root_policy_with_nested_recovery
+        config:
+          substring: aspire-apphost/pnpm-workspace.yaml
+      - type: output-contains
+        name: repairs_nested_apphost_dependencies
+        config:
+          substring: pnpm --config.workspaceDir
+      - type: prompt
+        name: retains_root_security_boundary
+        config:
+          prompt: >
+            Does the assistant's response preserve the root pnpm policy while allowing only
+            esbuild in the nested AppHost policy? Answer based on intent.
+      - type: prompt
+        name: does_not_rerun_partial_init
+        config:
+          prompt: >
+            Does the assistant avoid recommending another aspire init invocation or deleting
+            the generated partial-initialization artifacts? It may explicitly say "do not
+            rerun aspire init" as correct recovery guidance. Answer based on intent.
   - name: init-new-001
     prompt: I'm starting a brand-new distributed app from scratch. Scaffold an Aspire starter project
       for me.

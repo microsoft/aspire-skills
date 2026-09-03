@@ -611,7 +611,6 @@ stimuli:
         - typescript
     constraints:
       max_agent_duration: 5m
-      expect_skills: [aspireify]
     environment:
       files:
         - src: ../../../evals/ts-apphost/apphost.mts
@@ -619,6 +618,11 @@ stimuli:
         - src: ../../../evals/ts-apphost/aspire.config.json
           dest: ts-apphost/aspire.config.json
     graders:
+      - type: skill-invocation
+        name: invokes_aspireify
+        config:
+          required:
+            - aspireify
       - type: prompt
         name: resolves_interaction_service
         config:
@@ -982,3 +986,88 @@ stimuli:
         config:
           required:
             - aspireify
+  - name: aspireify-valkey-135-001
+    prompt: >
+      Use the aspireify skill before answering. Add the first-party Valkey integration
+      to this TypeScript AppHost and wire it as the API cache. Do not run commands.
+    tags:
+      priority: p1
+      area:
+        - typescript
+        - integration
+        - aspire-13-5
+    environment:
+      files:
+        - src: ../../../evals/ts-apphost-valkey/aspire.config.json
+          dest: valkey-apphost/aspire.config.json
+        - src: ../../../evals/ts-apphost-valkey/apphost.mts
+          dest: valkey-apphost/apphost.mts
+    rubric:
+      - The assistant retains Valkey terminology and uses the first-party Aspire.Hosting.Valkey integration with addValkey, not the Redis integration.
+    graders:
+      - type: output-contains
+        name: names_first_party_valkey_package
+        config:
+          substring: Aspire.Hosting.Valkey
+      - type: output-contains
+        name: uses_typescript_valkey_api
+        config:
+          substring: addValkey
+      - type: prompt
+        name: preserves_valkey_terminology
+        config:
+          prompt: >
+            Does the assistant's response retain Valkey terminology and identify
+            Aspire.Hosting.Valkey with addValkey as the first-party integration,
+            rather than substituting Redis? Answer based on intent.
+  - name: aspireify-compose-authority-dedup-135-001
+    prompt: >
+      Use the aspireify skill before answering. Wire this monorepo into Aspire based on
+      its Compose files and package manifests. Do not edit files. State what must be
+      decided before a proposal and which discovered services should be excluded by
+      default.
+    tags:
+      priority: p1
+      area:
+        - discovery
+        - compose
+        - monorepo
+        - aspire-13-5
+    environment:
+      files:
+        - src: ../../../evals/compose-monorepo/compose.yaml
+          dest: compose-monorepo/compose.yaml
+        - src: ../../../evals/compose-monorepo/compose.local.yaml
+          dest: compose-monorepo/compose.local.yaml
+        - src: ../../../evals/compose-monorepo/docker-compose.e2e.yaml
+          dest: compose-monorepo/docker-compose.e2e.yaml
+        - src: ../../../evals/compose-monorepo/package.json
+          dest: compose-monorepo/package.json
+        - src: ../../../evals/compose-monorepo/apps/api/package.json
+          dest: compose-monorepo/apps/api/package.json
+        - src: ../../../evals/compose-monorepo/docs/package.json
+          dest: compose-monorepo/docs/package.json
+    rubric:
+      - The assistant requires the user to choose the authoritative Compose file/profile or package-script launch mode before proposing resources.
+      - The assistant accounts for profiles and Compose extends, deduplicates the Compose API service and apps/api package by runtime identity, and does not blindly create two resources.
+      - The assistant excludes the E2E helper and docs preview unless the user selects the relevant mode.
+    graders:
+      - type: prompt
+        name: requires_authoritative_launch_mode
+        config:
+          prompt: >
+            Does the assistant's response require an explicit authority decision among
+            Compose file/profile and package-script launch modes before creating a proposal?
+            Answer based on intent.
+      - type: prompt
+        name: handles_profiles_extends_and_deduplication
+        config:
+          prompt: >
+            Does the assistant's response account for Compose profiles and extends, and
+            deduplicate services and package manifests by runtime identity? Answer based on intent.
+      - type: prompt
+        name: excludes_non_runtime_helpers
+        config:
+          prompt: >
+            Does the assistant's response exclude docs preview and E2E/test helpers unless
+            chosen as part of the authoritative launch mode? Answer based on intent.

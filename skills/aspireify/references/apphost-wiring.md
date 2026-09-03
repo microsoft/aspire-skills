@@ -20,6 +20,7 @@ Packages named `Aspire.Hosting.*` — maintained by the Aspire team and ship wit
 | `Aspire.Hosting.JavaScript` | `AddJavaScriptApp()`, `AddNodeApp()`, `AddViteApp()`, `.WithYarn()`, `.WithPnpm()` |
 | `Aspire.Hosting.PostgreSQL` | `AddPostgres()`, `AddDatabase()` |
 | `Aspire.Hosting.Redis` | `AddRedis()` |
+| `Aspire.Hosting.Valkey` | `AddValkey()` |
 
 #### Tier 2: Community Toolkit packages (use when no first-party exists)
 
@@ -42,11 +43,14 @@ These provide typed APIs with proper endpoint handling, health checks, and dashb
 ```bash
 # Search for documentation on a topic
 aspire docs search "redis"
+aspire docs search "valkey"
 aspire docs search "golang"
 aspire docs search "python uvicorn"
 
 # Get a specific doc page by slug (returned from search results)
 aspire docs get "redis-integration"
+aspire docs api search "AddValkey" --language csharp
+aspire docs api search "addValkey" --language typescript
 aspire docs get "go-integration"
 
 # Find the exact C# / TypeScript API reference entry for a builder method
@@ -104,6 +108,7 @@ Common auto-managed values (do NOT model these manually):
 | `AddPostgres()` | Password, host, port, connection string |
 | `AddSqlServer()` | SA password, host, port, connection string |
 | `AddRedis()` | Connection string, port |
+| `AddValkey()` | Connection string, port |
 | `AddMySql()` | Root password, host, port, connection string |
 | `AddRabbitMQ()` | Username, password, host, port, connection string |
 | `AddMongoDB()` | Connection string, port |
@@ -113,6 +118,7 @@ To add an integration package (which unlocks typed builder methods):
 ```bash
 # First-party
 aspire add redis
+aspire add valkey
 aspire add python
 aspire add nodejs
 
