@@ -882,6 +882,18 @@ button.overview-node:hover {
     text-align: right;
 }
 
+.connection-counts {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.connection-count {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
 .overview-edited {
     color: var(--accent);
     font-weight: var(--font-weight-semibold, 600);
@@ -1208,6 +1220,32 @@ select.inline-resource-input {
 .resource-fact-value {
     max-width: 100%;
     overflow-wrap: anywhere;
+}
+
+.resource-fact-path dd {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.resource-fact-path .resource-fact-value {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.copy-path-button {
+    flex: 0 0 auto;
+}
+
+.copy-path-button.is-copy-confirmed {
+    border-color: color-mix(in srgb, var(--ok) 45%, var(--border-color-default, #d1d9e0));
+    color: var(--ok);
+}
+
+.copy-path-button.is-copy-failed {
+    border-color: color-mix(in srgb, var(--danger) 45%, var(--border-color-default, #d1d9e0));
+    color: var(--danger);
 }
 
 .compact-connections {

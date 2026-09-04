@@ -686,13 +686,9 @@ function renderOverviewNode(resource, edges, issues, confirmed) {
             }),
         );
     }
-    const relationshipCount = relationshipsFor(resource, edges).length;
+    const relationships = relationshipsFor(resource, edges);
     const meta = createElement("span", { className: "overview-node-meta" });
-    meta.append(
-        createElement("span", {
-            text: `${relationshipCount} connection${relationshipCount === 1 ? "" : "s"}`,
-        }),
-    );
+    meta.append(renderConnectionCounts(relationships));
     if (drafts.length) {
         meta.append(
             createElement("span", {
@@ -716,6 +712,41 @@ function renderOverviewNode(resource, edges, issues, confirmed) {
 
 function overviewNodeId(resourceId) {
     return `overview-node-${String(resourceId).replace(/[^A-Za-z0-9_-]/g, "-")}`;
+}
+
+function renderConnectionCounts(relationships) {
+    const wrap = createElement("span", { className: "connection-counts" });
+    const outgoing = relationships.filter((relationship) => relationship.direction === "outgoing").length;
+    const incoming = relationships.filter((relationship) => relationship.direction === "incoming").length;
+    if (!outgoing && !incoming) {
+        wrap.append(createElement("span", { text: "No connections" }));
+        return wrap;
+    }
+    if (outgoing) {
+        wrap.append(
+            createElement("span", {
+                className: "connection-count connection-count-out",
+                text: `${outgoing} \u2192`,
+                title: `${outgoing} outgoing connection${outgoing === 1 ? "" : "s"}`,
+                attrs: {
+                    "aria-label": `${outgoing} outgoing connection${outgoing === 1 ? "" : "s"}`,
+                },
+            }),
+        );
+    }
+    if (incoming) {
+        wrap.append(
+            createElement("span", {
+                className: "connection-count connection-count-in",
+                text: `${incoming} \u2190`,
+                title: `${incoming} incoming connection${incoming === 1 ? "" : "s"}`,
+                attrs: {
+                    "aria-label": `${incoming} incoming connection${incoming === 1 ? "" : "s"}`,
+                },
+            }),
+        );
+    }
+    return wrap;
 }
 
 function handleOverviewKeydown(event) {
@@ -1015,7 +1046,7 @@ function renderResourceFacts(resource, service) {
     }
     const path = servicePathForDisplay(service?.path);
     if (path) {
-        appendFact(facts, "Path", path, true);
+        appendPathFact(facts, resource, path);
     }
     appendEditableDetailFact(facts, resource);
 
@@ -1427,6 +1458,46 @@ function appendFact(list, label, value, code = false) {
     );
     row.append(createElement("dt", { text: label }), valueElement);
     list.append(row);
+}
+
+function appendPathFact(list, resource, path) {
+    const row = createElement("div", { className: "resource-fact is-code resource-fact-path" });
+    const valueElement = createElement("dd", { title: path });
+    valueElement.append(
+        createElement("code", { className: "resource-fact-value", text: path }),
+        createCopyPathButton(resource, path),
+    );
+    row.append(createElement("dt", { text: "Path" }), valueElement);
+    list.append(row);
+}
+
+function createCopyPathButton(resource, path) {
+    const defaultLabel = "Copy path";
+    const button = createElement("button", {
+        className: "btn btn-quiet btn-sm copy-path-button",
+        text: defaultLabel,
+        title: `Copy the file path for ${resource.name} so you can open it in your editor`,
+        attrs: { type: "button" },
+    });
+    let resetTimer;
+    button.addEventListener("click", async () => {
+        window.clearTimeout(resetTimer);
+        try {
+            await navigator.clipboard.writeText(path);
+            button.textContent = "Copied";
+            button.classList.remove("is-copy-failed");
+            button.classList.add("is-copy-confirmed");
+        } catch {
+            button.textContent = "Copy failed";
+            button.classList.remove("is-copy-confirmed");
+            button.classList.add("is-copy-failed");
+        }
+        resetTimer = window.setTimeout(() => {
+            button.textContent = defaultLabel;
+            button.classList.remove("is-copy-confirmed", "is-copy-failed");
+        }, 1600);
+    });
+    return button;
 }
 
 function renderCompactConnections(resource, edges) {

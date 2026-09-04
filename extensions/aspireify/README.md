@@ -53,3 +53,34 @@ as explicit user requests.
 
 It intentionally has no repository detector, scanner, proposal generator,
 AppHost editor, deployment controls, initialization flow, or validation workflow.
+
+## Troubleshooting
+
+- **The canvas never opens.** Some clients cannot host the canvas surface. The
+  skill falls back to presenting and confirming the same proposal in chat, so
+  continue there instead of waiting on a panel.
+- **The panel shows "Proposal unavailable" with a "Try again" button.** The
+  initial snapshot request failed (for example, a dropped connection to the
+  extension's local server). Select **Try again**, or ask the agent to reopen
+  the canvas if it keeps failing.
+- **"Proposal generation failed" with a "Retry proposal" button.** The skill's
+  most recent proposal regeneration errored. Select **Retry proposal**; if it
+  keeps failing, describe the problem in chat so the skill can adjust the
+  proposal before retrying.
+- **A stale or duplicate canvas tab shows "Missing or invalid Aspireify
+  token" or won't load at all.** The canvas backend issues a fresh token each
+  time it starts, so a bookmarked or reopened old tab stops matching it. Close
+  the stale tab and reopen the canvas from the agent instead of reusing a
+  saved URL.
+- **Edits fail with "The confirmed resource plan is read-only."** The proposal
+  was already confirmed, so the canvas is displaying the immutable submitted
+  snapshot. If more changes are needed, ask the agent for a new proposal.
+- **Undo or redo reports "Undo and redo are unavailable while the proposal is
+  changing."** A new proposal snapshot is still arriving. Wait for it to
+  finish loading, then retry.
+- **A resource card is stuck on "Needs attention" and won't save.** The
+  resource name violates an Aspire naming rule; the card explains which rule
+  and blocks the save until the name is fixed (see point 8 above).
+- **Copying a resource's path doesn't populate the clipboard.** Some hosts
+  restrict clipboard access. Select the path text shown next to **Copy path**
+  and copy it manually instead.
