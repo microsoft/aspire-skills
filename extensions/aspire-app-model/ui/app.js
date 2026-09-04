@@ -368,7 +368,7 @@ function updateHeader() {
     setModeButtons();
 
     els.connectionDot.className = "connection-dot";
-    if (modelState?.status === "ready") {
+    if (modelState?.status === "ready" || modelState?.status === "empty") {
         els.connectionDot.classList.add("is-live");
         els.connectionStatus.textContent = "AppHost data is live";
     } else if (modelState?.stale) {

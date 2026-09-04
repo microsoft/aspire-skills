@@ -859,6 +859,16 @@ test("canvas source carries the confirmed direction and protected data routes", 
     assert.match(styles, /--border-strong:/);
     assert.match(styles, /view-transition-name: app-model-surface/);
     assert.doesNotMatch(styles, /\.resource-card:hover/);
+    const resourceBoardStyles = styles.slice(
+        styles.indexOf(".resource-board {"),
+        styles.indexOf(".resource-card {"),
+    );
+    const resourceCardStyles = styles.slice(
+        styles.indexOf(".resource-card {"),
+        styles.indexOf(".resource-card.has-command-panel"),
+    );
+    assert.doesNotMatch(resourceBoardStyles, /grid-auto-rows:\s*1fr/);
+    assert.doesNotMatch(resourceCardStyles, /height:\s*100%/);
     assert.match(provider, /CommandInputMetadataStore/);
     assert.match(provider, /sendAttachmentsToMessage/);
     assert.match(provider, /type: "extension_context"/);
@@ -873,6 +883,8 @@ test("canvas source carries the confirmed direction and protected data routes", 
     assert.match(provider, /status: hasRoots \? "stale" : "error"/);
     assert.match(provider, /Content-Security-Policy/);
     assert.match(provider, /error\?\.status === 413 \? 413 : 400/);
+    assert.match(provider, /const showProgress = force \|\| entry\.state\.status === "loading"/);
+    assert.doesNotMatch(provider, /showProgress = force \|\| entry\.state\.roots\.length === 0/);
     assert.equal(client.includes('querySelector("[data-apphost-primary]")'), false);
     assert.equal(client.includes('querySelector("[data-apphost-primary]:not([disabled])")'), true);
 

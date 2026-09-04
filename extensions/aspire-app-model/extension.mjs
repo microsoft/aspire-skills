@@ -487,7 +487,6 @@ async function performRefresh(entry, generation, showProgress) {
     const viewMode = entry.viewMode;
     if (showProgress) {
         publishState(entry, {
-            status: entry.state.roots.length > 0 ? entry.state.status : "loading",
             refreshing: true,
             error: null,
         });
@@ -585,7 +584,7 @@ async function requestRefresh(entry, { force = false } = {}) {
     }
 
     const generation = entry.generation.next();
-    const showProgress = force || entry.state.roots.length === 0;
+    const showProgress = force || entry.state.status === "loading";
     const refreshPromise = performRefresh(entry, generation, showProgress);
     entry.refreshPromise = refreshPromise;
     try {

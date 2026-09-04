@@ -48,6 +48,8 @@ bounded request bodies.
   switcher and a bounded describe fanout of four.
 - A responsive resource board that removes explorer-style nesting while
   preserving parent ownership.
+- Resource rows size to their content while keeping cards aligned within each
+  row, so sparse boards do not stretch cards into unused canvas space.
 - Endpoint links, health checks, diagnostics, and commands grouped directly
   with the resource that owns them.
 - Endpoint links open in GitHub Copilot's integrated browser and expose a
@@ -70,6 +72,8 @@ bounded request bodies.
 - **View dashboard** opens the authenticated Aspire Dashboard in GitHub
   Copilot's integrated browser.
 - Loading, empty, stale, partial-AppHost-failure, and error states.
+- Background and explicit refreshes preserve the last complete board or empty
+  state; the full skeleton appears only before the first complete snapshot.
 - Optional hidden-resource inclusion.
 - AppHost directory inputs resolve to one concrete project or source file before
   discovery, source opening, and operation locking.
