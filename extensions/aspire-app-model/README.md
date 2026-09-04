@@ -3,7 +3,7 @@
 A GitHub Copilot App canvas extension that brings Aspire AppHosts into a
 canvas-native workbench: Workspace and Global discovery, a focused AppHost
 switcher, live resource state, parented resources, endpoints, health checks,
-commands, and Dashboard-backed diagnostics.
+commands, Dashboard-backed diagnostics, and a read-only relationship graph.
 
 ## Data contract
 
@@ -48,15 +48,21 @@ bounded request bodies.
   switcher and a bounded describe fanout of four.
 - A responsive resource board that removes explorer-style nesting while
   preserving parent ownership.
+- A second **Graph** tab visualizes Parent, Reference, and WaitFor relationships
+  from dependencies and parents toward the resources that use them. Graph nodes
+  are deliberately read-only; all operations remain in the default Resources
+  card view. Multiple semantics between the same pair collapse into one labeled
+  connector, and long edges route through column gutters rather than through
+  intermediate resources.
 - Resource rows size to their content while keeping cards aligned within each
   row, so sparse boards do not stretch cards into unused canvas space.
 - Endpoint links, health checks, diagnostics, and commands grouped directly
   with the resource that owns them.
 - Endpoint links open in GitHub Copilot's integrated browser and expose a
   separate copy-URL control.
-- A visible **Console logs** action opens the authenticated Dashboard filtered
-  to the resource. Details, structured logs, traces, and metrics remain
-  available from the resource overflow menu.
+- Resource overflow opens authenticated Dashboard details, console logs,
+  structured logs, traces, and metrics without adding a separate diagnostics
+  row to every card.
 - Resources that explicitly advertise terminal support can open an attached
   terminal canvas.
 - Sanitized AppHost or resource context can be added to the Copilot composer as
@@ -79,6 +85,3 @@ bounded request bodies.
   discovery, source opening, and operation locking.
 - Older CLI compatibility retries only when the optional disabled-command flag
   is actually unsupported and marks the resulting model accordingly.
-
-Explicit Reference and WaitFor visualization is intentionally deferred in this
-iteration.

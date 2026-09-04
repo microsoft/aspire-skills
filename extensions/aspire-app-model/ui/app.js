@@ -121,6 +121,7 @@ let activeCommandId = null;
 let requestCount = 0;
 let commandRunning = false;
 let actionMenuNodeId = null;
+let actionMenuTrigger = null;
 let pipelineAppHostId = null;
 let secretWarningAccepted = false;
 let pendingConfirmation = null;
@@ -129,6 +130,10 @@ let renderedViewMode = null;
 let activeAppHostId = null;
 let pendingViewMode = null;
 let activeModeTransition = null;
+let appModelView = "resources";
+let activeGraphModel = null;
+let graphDrawFrame = null;
+let renderedAppHostId = null;
 const commandDrafts = new Map();
 const commandInputs = new Map();
 const commandResults = new Map();
@@ -136,6 +141,10 @@ const commandValidationErrors = new Map();
 const dynamicLoadTimers = new Map();
 const dynamicLoadGenerations = new Map();
 const dynamicLoadingIds = new Set();
+const appModelViewStateByAppHost = new Map();
+const graphResizeObserver = typeof ResizeObserver === "function"
+    ? new ResizeObserver(() => scheduleResourceGraphDraw())
+    : null;
 
 function element(tag, properties = {}, children = []) {
     const node = document.createElement(tag);
@@ -198,6 +207,15 @@ function svgIcon(name, size = 16) {
     path.setAttribute("d", ICONS[name] || ICONS.resource);
     svg.appendChild(path);
     return svg;
+}
+
+function svgElement(tag, attributes = {}) {
+    const namespace = "http://www.w3.org/2000/svg";
+    const node = document.createElementNS(namespace, tag);
+    for (const [name, value] of Object.entries(attributes)) {
+        node.setAttribute(name, String(value));
+    }
+    return node;
 }
 
 async function api(path, { method = "GET", body } = {}) {
@@ -543,20 +561,6 @@ function endpointChip(endpoint) {
     ]);
 }
 
-function dashboardActionChip(resource, action) {
-    const definition = ACTIONS[action];
-    return element("button", {
-        class: "detail-chip is-dashboard",
-        type: "button",
-        title: `${definition.label} for ${resource.label}`,
-        "aria-label": `${definition.label} for ${resource.label}`,
-        on: { click: () => void executeNodeAction(action, resource) },
-    }, [
-        svgIcon(definition.icon, 13),
-        element("span", { text: definition.shortLabel }),
-    ]);
-}
-
 function actionGroup(label, actions, node) {
     if (actions.length === 0) {
         return null;
@@ -817,11 +821,6 @@ function renderResourceCard({ resource, parentLabel, dashboardAvailable }) {
                 "heart",
                 healthItems,
             ),
-            ...(dashboardAvailable ? [renderDetailGroup(
-                "Diagnostics",
-                "pulse",
-                [dashboardActionChip(resource, "console-logs")],
-            )] : []),
             renderDetailGroup(
                 "Commands",
                 "terminal",
@@ -830,6 +829,474 @@ function renderResourceCard({ resource, parentLabel, dashboardAvailable }) {
         ]),
         ...(activeCommand ? [renderCommandPanel(activeCommand)] : []),
     ]);
+}
+
+function visibleResourceGraph(appHost, resources) {
+    const visibleNames = new Set(resources.map(({ resource }) => resource.resourceName));
+    const source = appHost.graph ?? { nodes: [], edges: [] };
+    const nodes = source.nodes.filter((node) => visibleNames.has(node.resourceName));
+    const nodeNames = new Set(nodes.map((node) => node.resourceName));
+    const edges = source.edges.filter((edge) => nodeNames.has(edge.from) && nodeNames.has(edge.to));
+    const sourceLayers = [...new Set(nodes.map((node) => node.layer))].sort((left, right) => left - right);
+    const normalizedLayers = new Map(sourceLayers.map((layer, index) => [layer, index]));
+    return {
+        nodes: nodes.map((node) => ({ ...node, layer: normalizedLayers.get(node.layer) ?? 0 })),
+        edges,
+    };
+}
+
+function setAppModelView(view) {
+    if (view !== "resources" && view !== "graph" || appModelView === view) {
+        return;
+    }
+    appModelView = view;
+    hideActionMenu();
+    renderTree();
+    requestAnimationFrame(() => {
+        els.tree.querySelector(`#${view}-view-tab`)?.focus();
+    });
+}
+
+function handleAppModelTabKey(event, view) {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+        return;
+    }
+    event.preventDefault();
+    const nextView = event.key === "ArrowLeft" || event.key === "Home"
+        ? "resources"
+        : event.key === "ArrowRight" || event.key === "End"
+            ? "graph"
+            : view;
+    setAppModelView(nextView);
+}
+
+function renderAppModelTabs(resourceCount, relationshipCount) {
+    const definitions = [
+        { id: "resources", label: "Resources", icon: "layers", count: resourceCount },
+        { id: "graph", label: "Graph", icon: "steps", count: relationshipCount },
+    ];
+    return element("div", {
+        class: "app-model-tabs",
+        role: "tablist",
+        "aria-label": "App model view",
+    }, definitions.map((definition) => {
+        const active = appModelView === definition.id;
+        return element("button", {
+            class: `app-model-tab${active ? " is-active" : ""}`,
+            id: `${definition.id}-view-tab`,
+            type: "button",
+            role: "tab",
+            tabIndex: active ? 0 : -1,
+            "aria-selected": active,
+            "aria-controls": `${definition.id}-view-panel`,
+            "aria-label": `${definition.label}, ${definition.count}`,
+            on: {
+                click: () => setAppModelView(definition.id),
+                keydown: (event) => handleAppModelTabKey(event, definition.id),
+            },
+        }, [
+            svgIcon(definition.icon, 14),
+            element("span", { text: definition.label }),
+            element("span", {
+                class: "app-model-tab-count",
+                text: String(definition.count),
+                "aria-hidden": "true",
+            }),
+        ]);
+    }));
+}
+
+const GRAPH_RELATIONSHIPS = {
+    Parent: { label: "Ownership", className: "is-parent" },
+    Reference: { label: "Reference", className: "is-reference" },
+    WaitFor: { label: "WaitFor", className: "is-wait-for" },
+};
+
+function graphEdgePresentation(edge) {
+    if (edge.types.length === 1) {
+        const type = edge.types[0];
+        return {
+            id: type.toLowerCase(),
+            ...GRAPH_RELATIONSHIPS[type],
+        };
+    }
+    const typeKey = edge.types.map((type) => type.toLowerCase()).join("-");
+    return {
+        id: `combined-${typeKey}`,
+        label: edge.types.map((type) => GRAPH_RELATIONSHIPS[type].label).join(" + "),
+        className: `is-combined is-combined-${typeKey}`,
+    };
+}
+
+function renderGraphLegend(graph) {
+    const presentations = new Map();
+    for (const edge of graph.edges) {
+        const presentation = graphEdgePresentation(edge);
+        presentations.set(presentation.id, presentation);
+    }
+    if (presentations.size === 0) {
+        return null;
+    }
+    return element("div", { class: "graph-legend", "aria-label": "Relationship legend" },
+        [...presentations.values()].map((presentation) =>
+            element("span", { class: "graph-legend-item" }, [
+                element("span", {
+                    class: `graph-legend-line ${presentation.className}`,
+                    "aria-hidden": "true",
+                }),
+                element("span", { text: presentation.label }),
+            ])));
+}
+
+function renderGraphNode(node) {
+    return element("article", {
+        class: `graph-node${node.tone ? ` tone-${node.tone}` : ""}`,
+        role: "listitem",
+        dataset: { graphNodeId: node.resourceName },
+    }, [
+        element("header", { class: "graph-node-header" }, [
+            rowIcon(node),
+            element("span", { class: "graph-node-identity" }, [
+                element("strong", { text: node.label, title: node.label }),
+                element("span", { text: node.resourceType, title: node.resourceType }),
+            ]),
+            ...(node.statusLabel ? [element("span", {
+                class: `resource-status${node.lifecycleTone ? ` tone-${node.lifecycleTone}` : ""}`,
+                text: node.statusLabel,
+            })] : []),
+        ]),
+        ...(node.healthLabel ? [element("div", {
+            class: `graph-node-health${node.healthTone ? ` tone-${node.healthTone}` : ""}`,
+        }, [
+            svgIcon("heart", 12),
+            element("span", { text: node.healthLabel }),
+        ])] : []),
+    ]);
+}
+
+function graphRelationshipSentence(edge, type, nodeByName) {
+    const from = nodeByName.get(edge.from)?.label ?? edge.from;
+    const to = nodeByName.get(edge.to)?.label ?? edge.to;
+    if (type === "Parent") {
+        return `${to} is part of ${from}.`;
+    }
+    if (type === "WaitFor") {
+        return `${to} waits for ${from}.`;
+    }
+    return `${to} references ${from}.`;
+}
+
+function renderResourceGraphPanel(graph, active) {
+    if (active) {
+        activeGraphModel = graph;
+    }
+    const nodeByName = new Map(graph.nodes.map((node) => [node.resourceName, node]));
+    if (graph.nodes.length === 0) {
+        return element("div", {
+            class: "app-model-panel",
+            id: "graph-view-panel",
+            role: "tabpanel",
+            "aria-labelledby": "graph-view-tab",
+            hidden: !active,
+        }, [
+            element("div", { class: "resource-board-empty" }, [
+                svgIcon("steps", 18),
+                element("strong", { text: "No resource graph yet" }),
+                element("span", { text: "Start this AppHost to load its evaluated relationships." }),
+            ]),
+        ]);
+    }
+
+    const maxLayer = Math.max(...graph.nodes.map((node) => node.layer), 0);
+    const columns = Array.from({ length: maxLayer + 1 }, (_, layer) =>
+        graph.nodes.filter((node) => node.layer === layer));
+    const edgeLayer = svgElement("svg", {
+        class: "graph-edge-layer",
+        "aria-hidden": "true",
+    });
+    const canvas = element("div", { class: "resource-graph-canvas" }, [
+        edgeLayer,
+        element("div", {
+            class: "graph-columns",
+            role: "list",
+            "aria-label": "Resources by dependency layer",
+        }, columns.map((nodes, layer) =>
+            element("div", {
+                class: "graph-column",
+                dataset: { graphLayer: String(layer) },
+            }, nodes.map(renderGraphNode)))),
+    ]);
+    canvas.style.setProperty("--graph-columns", String(columns.length));
+    canvas.style.setProperty(
+        "--graph-min-width",
+        `${columns.length * 220 + Math.max(0, columns.length - 1) * 56 + 40}px`,
+    );
+
+    const relationshipItems = graph.edges.flatMap((edge) =>
+        edge.types.map((type) =>
+            element("li", { text: graphRelationshipSentence(edge, type, nodeByName) })));
+    return element("div", {
+        class: "app-model-panel",
+        id: "graph-view-panel",
+        role: "tabpanel",
+        "aria-labelledby": "graph-view-tab",
+        hidden: !active,
+    }, [
+        element("header", { class: "graph-heading" }, [
+            element("p", {
+                text: graph.edges.length
+                    ? "Arrows flow from dependencies and parents toward the resources that use them."
+                    : "This AppHost has no declared resource relationships.",
+            }),
+            renderGraphLegend(graph),
+        ]),
+        element("div", {
+            class: "resource-graph-viewport",
+            role: "region",
+            tabIndex: 0,
+            "aria-label": "Scrollable AppHost resource graph",
+        }, [canvas]),
+        element("ul", {
+            class: "sr-only",
+            "aria-label": "Resource relationships",
+        }, relationshipItems),
+    ]);
+}
+
+function renderResourceBoardPanel(appHost, resources, dashboardAvailable, active) {
+    return element("div", {
+        class: "app-model-panel",
+        id: "resources-view-panel",
+        role: "tabpanel",
+        "aria-labelledby": "resources-view-tab",
+        hidden: !active,
+    }, [
+        element("p", {
+            class: "app-model-view-description",
+            text: resources.length
+                ? "Endpoints, health, and commands stay with the resource that owns them."
+                : "Start this AppHost to load its evaluated resource model.",
+        }),
+        resources.length
+            ? element("div", {
+                class: `resource-board${activeCommandId ? " has-open-command" : ""}`,
+                role: "list",
+            },
+                resources.map((resource) => renderResourceCard({ ...resource, dashboardAvailable })))
+            : element("div", { class: "resource-board-empty" }, [
+                rowIcon(appHost),
+                element("strong", { text: "No live resources yet" }),
+                element("span", {
+                    text: appHost.unavailableActionReason
+                        || "Use the AppHost actions above when you're ready to run it.",
+                }),
+            ]),
+    ]);
+}
+
+function graphMarker(presentation) {
+    const marker = svgElement("marker", {
+        id: `graph-arrow-${presentation.id}`,
+        viewBox: "0 0 8 8",
+        refX: "7",
+        refY: "4",
+        markerWidth: "6",
+        markerHeight: "6",
+        orient: "auto",
+    });
+    marker.appendChild(svgElement("path", {
+        class: `graph-arrow ${presentation.className}`,
+        d: "M0 0 L8 4 L0 8 Z",
+    }));
+    return marker;
+}
+
+function graphEdgePath(from, to, canvas, selfEdge, fromLayer, toLayer, reciprocalSide) {
+    const fromCenterX = from.left + from.width / 2 - canvas.left;
+    const fromCenterY = from.top + from.height / 2 - canvas.top;
+    const toCenterX = to.left + to.width / 2 - canvas.left;
+    const toCenterY = to.top + to.height / 2 - canvas.top;
+
+    if (selfEdge) {
+        const startX = from.right - canvas.left;
+        const startY = fromCenterY;
+        const endX = fromCenterX;
+        const endY = from.top - canvas.top;
+        const outerX = startX + 30;
+        const outerY = Math.max(8, endY - 24);
+        return `M ${startX} ${startY} C ${outerX} ${startY}, ${outerX} ${outerY}, ${endX} ${outerY} S ${endX} ${outerY}, ${endX} ${endY}`;
+    }
+
+    if (to.left > from.right + 8) {
+        const startX = from.right - canvas.left;
+        const startY = fromCenterY;
+        const endX = to.left - canvas.left;
+        const endY = toCenterY;
+        if (toLayer - fromLayer > 1) {
+            const firstGutterX = startX + 28;
+            const lastGutterX = endX - 28;
+            const corridorY = 8;
+            return `M ${startX} ${startY} C ${firstGutterX} ${startY}, ${firstGutterX} ${corridorY}, ${firstGutterX} ${corridorY} L ${lastGutterX} ${corridorY} C ${lastGutterX} ${corridorY}, ${lastGutterX} ${endY}, ${endX} ${endY}`;
+        }
+        const bend = Math.max(28, (endX - startX) * 0.44);
+        return `M ${startX} ${startY} C ${startX + bend} ${startY}, ${endX - bend} ${endY}, ${endX} ${endY}`;
+    }
+
+    if (fromLayer === toLayer) {
+        const useRightGutter = reciprocalSide === "right";
+        const startX = (useRightGutter ? from.right : from.left) - canvas.left;
+        const startY = fromCenterY;
+        const endX = (useRightGutter ? to.right : to.left) - canvas.left;
+        const endY = toCenterY;
+        const gutterX = useRightGutter
+            ? Math.min(canvas.width - 6, Math.max(startX, endX) + 16)
+            : Math.max(6, Math.min(startX, endX) - 16);
+        return `M ${startX} ${startY} C ${gutterX} ${startY}, ${gutterX} ${endY}, ${endX} ${endY}`;
+    }
+
+    if (from.left > to.right + 8) {
+        const startX = from.left - canvas.left;
+        const startY = fromCenterY;
+        const endX = to.right - canvas.left;
+        const endY = toCenterY;
+        const outerY = Math.max(8, Math.min(from.top, to.top) - canvas.top - 24);
+        return `M ${startX} ${startY} C ${startX - 32} ${outerY}, ${endX + 32} ${outerY}, ${endX} ${endY}`;
+    }
+
+    const downward = toCenterY >= fromCenterY;
+    const startX = fromCenterX;
+    const endX = toCenterX;
+    const startY = (downward ? from.bottom : from.top) - canvas.top;
+    const endY = (downward ? to.top : to.bottom) - canvas.top;
+    const middleY = (startY + endY) / 2;
+    return `M ${startX} ${startY} C ${startX} ${middleY}, ${endX} ${middleY}, ${endX} ${endY}`;
+}
+
+function drawResourceGraphEdges() {
+    graphDrawFrame = null;
+    const canvas = els.tree.querySelector(".resource-graph-canvas");
+    const svg = canvas?.querySelector(".graph-edge-layer");
+    if (!canvas || !svg || !activeGraphModel) {
+        return;
+    }
+
+    const canvasBounds = canvas.getBoundingClientRect();
+    const nodeElements = new Map([...canvas.querySelectorAll("[data-graph-node-id]")]
+        .map((node) => [node.dataset.graphNodeId, node]));
+    svg.setAttribute("viewBox", `0 0 ${canvasBounds.width} ${canvasBounds.height}`);
+    svg.setAttribute("width", String(canvasBounds.width));
+    svg.setAttribute("height", String(canvasBounds.height));
+
+    const definitions = svgElement("defs");
+    const presentations = new Map();
+    for (const edge of activeGraphModel.edges) {
+        const presentation = graphEdgePresentation(edge);
+        presentations.set(presentation.id, presentation);
+    }
+    for (const presentation of presentations.values()) {
+        definitions.appendChild(graphMarker(presentation));
+    }
+    const paths = [];
+    const nodeByName = new Map(activeGraphModel.nodes.map((node) => [node.resourceName, node]));
+    const edgeKeys = new Set(activeGraphModel.edges.map((edge) => `${edge.from}\u0000${edge.to}`));
+    for (const edge of activeGraphModel.edges) {
+        const fromElement = nodeElements.get(edge.from);
+        const toElement = nodeElements.get(edge.to);
+        if (!fromElement || !toElement) {
+            continue;
+        }
+        const fromBounds = fromElement.getBoundingClientRect();
+        const toBounds = toElement.getBoundingClientRect();
+        const presentation = graphEdgePresentation(edge);
+        const fromNode = nodeByName.get(edge.from);
+        const toNode = nodeByName.get(edge.to);
+        const reciprocalSide = edge.from !== edge.to
+            && edgeKeys.has(`${edge.to}\u0000${edge.from}`)
+            ? edge.from.localeCompare(edge.to) < 0 ? "left" : "right"
+            : undefined;
+        const path = svgElement("path", {
+            class: `graph-edge ${presentation.className}`,
+            d: graphEdgePath(
+                fromBounds,
+                toBounds,
+                canvasBounds,
+                edge.from === edge.to,
+                fromNode?.layer ?? 0,
+                toNode?.layer ?? 0,
+                reciprocalSide,
+            ),
+            "marker-end": `url(#graph-arrow-${presentation.id})`,
+        });
+        const title = svgElement("title");
+        title.textContent = edge.types
+            .map((type) => graphRelationshipSentence(edge, type, nodeByName))
+            .join(" ");
+        path.appendChild(title);
+        paths.push(path);
+    }
+    svg.replaceChildren(definitions, ...paths);
+}
+
+function scheduleResourceGraphDraw() {
+    if (graphDrawFrame !== null) {
+        cancelAnimationFrame(graphDrawFrame);
+    }
+    graphDrawFrame = requestAnimationFrame(drawResourceGraphEdges);
+}
+
+function clearResourceGraphDrawing() {
+    activeGraphModel = null;
+    graphResizeObserver?.disconnect();
+    if (graphDrawFrame !== null) {
+        cancelAnimationFrame(graphDrawFrame);
+        graphDrawFrame = null;
+    }
+}
+
+function mountResourceGraph() {
+    const canvas = els.tree.querySelector(".resource-graph-canvas");
+    if (!canvas || !activeGraphModel) {
+        return;
+    }
+    graphResizeObserver?.observe(canvas);
+    scheduleResourceGraphDraw();
+}
+
+function rememberAppModelViewState() {
+    if (!renderedAppHostId) {
+        return;
+    }
+    const viewport = els.tree.querySelector(".resource-graph-viewport");
+    const graphPanel = els.tree.querySelector("#graph-view-panel");
+    const graphVisible = Boolean(viewport && graphPanel && !graphPanel.hidden);
+    const existing = appModelViewStateByAppHost.get(renderedAppHostId);
+    const active = document.activeElement;
+    const focusId = active?.id === "resources-view-tab" || active?.id === "graph-view-tab"
+        ? active.id
+        : null;
+    appModelViewStateByAppHost.set(renderedAppHostId, {
+        scrollLeft: graphVisible ? viewport.scrollLeft : existing?.scrollLeft ?? 0,
+        scrollTop: graphVisible ? viewport.scrollTop : existing?.scrollTop ?? 0,
+        focusId,
+        viewportFocused: graphVisible && active === viewport,
+    });
+}
+
+function restoreAppModelViewState(hostId) {
+    const state = appModelViewStateByAppHost.get(hostId);
+    if (!state) {
+        return;
+    }
+    const viewport = els.tree.querySelector(".resource-graph-viewport");
+    if (viewport) {
+        viewport.scrollLeft = state.scrollLeft;
+        viewport.scrollTop = state.scrollTop;
+    }
+    if (state.focusId) {
+        els.tree.querySelector(`#${state.focusId}`)?.focus();
+    } else if (state.viewportFocused && appModelView === "graph") {
+        viewport?.focus();
+    }
 }
 
 function hostStatus(appHost) {
@@ -938,6 +1405,7 @@ function renderHostStage(appHost, hosts) {
     const attention = resources.filter(({ resource }) =>
         resource.tone === "error" || resource.tone === "warning").length;
     const dashboardAvailable = appHost.actions?.includes("dashboard") === true;
+    const graph = visibleResourceGraph(appHost, resources);
     return element("article", {
         class: "active-apphost",
         id: "active-apphost",
@@ -965,42 +1433,29 @@ function renderHostStage(appHost, hosts) {
         ]),
         renderAppHostActionTray(presentationHost),
         ...notices.map(renderHostNotice),
-        element("section", { class: "resource-workspace", "aria-labelledby": "resources-heading" }, [
-            element("header", { class: "section-heading" }, [
-                element("span", {}, [
-                    element("h3", { id: "resources-heading", text: "Resources" }),
-                    element("p", {
-                        text: resources.length
-                            ? "Endpoints, health, and commands are grouped with the resource that owns them."
-                            : "Start this AppHost to load its evaluated resource model.",
-                    }),
-                ]),
-            ]),
-            resources.length
-                ? element("div", {
-                    class: `resource-board${activeCommandId ? " has-open-command" : ""}`,
-                    role: "list",
-                },
-                    resources.map((resource) => renderResourceCard({ ...resource, dashboardAvailable })))
-                : element("div", { class: "resource-board-empty" }, [
-                    rowIcon(appHost),
-                    element("strong", { text: "No live resources yet" }),
-                    element("span", {
-                        text: appHost.unavailableActionReason
-                            || "Use the AppHost actions above when you're ready to run it.",
-                    }),
-                ]),
+        element("section", { class: "resource-workspace", "aria-label": "App model" }, [
+            renderAppModelTabs(resources.length, graph.edges.length),
+            renderResourceBoardPanel(
+                appHost,
+                resources,
+                dashboardAvailable,
+                appModelView === "resources",
+            ),
+            renderResourceGraphPanel(graph, appModelView === "graph"),
         ]),
     ]);
 }
 
 function renderTree() {
+    rememberAppModelViewState();
+    clearResourceGraphDrawing();
     const source = filteredTree(modelState?.roots ?? [], filterText);
     const hosts = source.filter(isAppHostNode);
     if (activeCommandId && !treeContains(source, activeCommandId)) {
         clearActiveCommand();
     }
     if (hosts.length === 0 && filterText) {
+        renderedAppHostId = null;
         els.tree.setAttribute("role", "status");
         els.tree.replaceChildren(element("div", { class: "filter-empty" }, [
             element("p", {
@@ -1028,6 +1483,7 @@ function renderTree() {
         || hosts.find((host) => host.appHostId === findNode(selectedNodeId)?.appHostId)
         || hosts[0];
     if (!selectedHost) {
+        renderedAppHostId = null;
         els.tree.replaceChildren();
         return;
     }
@@ -1041,6 +1497,9 @@ function renderTree() {
         renderAppHostSwitcher(hosts, selectedHost),
         renderHostStage(selectedHost, hosts),
     ].filter(Boolean));
+    renderedAppHostId = selectedHost.id;
+    mountResourceGraph();
+    restoreAppModelViewState(selectedHost.id);
     restoreCommandFocus(focusState);
     if (confirmationNeedsFocus) {
         confirmationNeedsFocus = false;
@@ -1081,10 +1540,15 @@ function restoreCommandFocus(focusState) {
     }
 }
 
-function hideActionMenu() {
+function hideActionMenu({ restoreFocus = false } = {}) {
+    const trigger = actionMenuTrigger;
     actionMenuNodeId = null;
+    actionMenuTrigger = null;
     els.actionMenu.hidden = true;
     els.actionMenu.replaceChildren();
+    if (restoreFocus && trigger?.isConnected) {
+        trigger.focus();
+    }
 }
 
 function menuAction(action, node) {
@@ -1098,7 +1562,7 @@ function menuAction(action, node) {
         role: "menuitem",
         on: {
             click: () => {
-                hideActionMenu();
+                hideActionMenu({ restoreFocus: true });
                 void executeNodeAction(action, node);
             },
         },
@@ -1111,6 +1575,7 @@ function openActionMenu(node, anchor, actions) {
         return;
     }
     actionMenuNodeId = node.id;
+    actionMenuTrigger = anchor;
     const actionNames = actions ?? [...(node.actions ?? []), "ask"];
     els.actionMenu.replaceChildren(...actionNames.map((action) =>
         action === "separator"
@@ -1761,7 +2226,8 @@ document.addEventListener("pointerdown", (event) => {
 document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
         if (!els.actionMenu.hidden) {
-            hideActionMenu();
+            event.preventDefault();
+            hideActionMenu({ restoreFocus: true });
         } else if (activeCommandId) {
             const command = findNode(activeCommandId);
             if (command) {

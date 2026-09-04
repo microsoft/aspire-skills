@@ -12,6 +12,7 @@ import {
     buildCommandArgumentTokens,
     buildDashboardViewUrl,
     buildGlobalTree,
+    buildResourceGraph,
     buildResourceTree,
     buildResourceCommandArgs,
     buildTerminalAttachCommand,
@@ -230,6 +231,119 @@ test("resource status prefers lifecycle and current health checks over stale agg
         error: 1,
         inactive: 1,
     });
+});
+
+test("resource graph layers dependencies before dependents and preserves relationship semantics", () => {
+    const resources = projectDescribePayload({
+        resources: [
+            { name: "cache", resourceType: "Container", state: "Running" },
+            { name: "postgres", resourceType: "Container", state: "Running" },
+            {
+                name: "catalog",
+                resourceType: "PostgresDatabaseResource",
+                state: "Running",
+                relationships: [{ type: "Parent", resourceName: "postgres" }],
+            },
+            {
+                name: "api",
+                resourceType: "Project",
+                state: "Running",
+                relationships: [
+                    { type: "Reference", resourceName: "cache" },
+                    { type: "Reference", resourceName: "catalog" },
+                    { type: "WaitFor", resourceName: "cache" },
+                ],
+                waitingFor: ["cache", "catalog"],
+            },
+            {
+                name: "web",
+                resourceType: "Project",
+                state: "Running",
+                relationships: [{ type: "Reference", resourceName: "api" }],
+                waitingFor: ["api"],
+            },
+            { name: "worker", resourceType: "Project", state: "Running" },
+        ],
+    }).resources;
+
+    const graph = buildResourceGraph(resources);
+    const nodeByName = new Map(graph.nodes.map((node) => [node.resourceName, node]));
+    const edgeByPair = new Map(graph.edges.map((edge) => [`${edge.from}->${edge.to}`, edge]));
+
+    assert.equal(nodeByName.get("cache").layer, 0);
+    assert.equal(nodeByName.get("postgres").layer, 0);
+    assert.equal(nodeByName.get("worker").layer, 0);
+    assert.equal(nodeByName.get("catalog").layer, 1);
+    assert.equal(nodeByName.get("api").layer, 2);
+    assert.equal(nodeByName.get("web").layer, 3);
+    assert.deepEqual(edgeByPair.get("cache->api").types, ["Reference", "WaitFor"]);
+    assert.deepEqual(edgeByPair.get("catalog->api").types, ["Reference", "WaitFor"]);
+    assert.deepEqual(edgeByPair.get("postgres->catalog").types, ["Parent"]);
+    assert.deepEqual(edgeByPair.get("api->web").types, ["Reference", "WaitFor"]);
+    assert.equal(graph.edges.length, 4);
+});
+
+test("resource graph keeps cycles stable without inventing dependency depth", () => {
+    const resources = projectDescribePayload({
+        resources: [
+            { name: "x", resourceType: "Project", state: "Running" },
+            {
+                name: "a",
+                resourceType: "Project",
+                state: "Running",
+                relationships: [
+                    { type: "Reference", resourceName: "x" },
+                    { type: "Reference", resourceName: "b" },
+                ],
+            },
+            {
+                name: "b",
+                resourceType: "Project",
+                state: "Running",
+                relationships: [{ type: "Reference", resourceName: "a" }],
+            },
+            {
+                name: "c",
+                resourceType: "Project",
+                state: "Running",
+                relationships: [{ type: "Reference", resourceName: "b" }],
+            },
+        ],
+    }).resources;
+
+    const graph = buildResourceGraph(resources);
+    assert.deepEqual(graph.nodes.map((node) => [node.resourceName, node.layer]), [
+        ["x", 0],
+        ["a", 1],
+        ["b", 1],
+        ["c", 2],
+    ]);
+    assert.equal(graph.edges.length, 4);
+});
+
+test("resource graph resolves unique waitingFor display names without guessing ambiguous names", () => {
+    const graph = buildResourceGraph(projectDescribePayload({
+        resources: [
+            { name: "messaging-abcxyz", displayName: "messaging", resourceType: "Container", state: "Running" },
+            { name: "api", resourceType: "Project", state: "Running", waitingFor: ["messaging"] },
+        ],
+    }).resources);
+    assert.deepEqual(graph.edges.map((edge) => [edge.from, edge.to, edge.types]), [
+        ["messaging-abcxyz", "api", ["WaitFor"]],
+    ]);
+
+    const ambiguous = buildResourceGraph(projectDescribePayload({
+        resources: [
+            { name: "worker-one", displayName: "worker", resourceType: "Project", state: "Running" },
+            { name: "worker-two", displayName: "worker", resourceType: "Project", state: "Running" },
+            { name: "api", resourceType: "Project", state: "Running", waitingFor: ["worker"] },
+        ],
+    }).resources);
+    assert.equal(ambiguous.edges.length, 0);
+    assert.deepEqual(
+        ambiguous.nodes.filter((node) => node.resourceName.startsWith("worker-")).map((node) => node.label),
+        ["worker-one", "worker-two"],
+    );
 });
 
 test("ps projection never exposes the token-bearing dashboard URL", () => {
@@ -816,11 +930,12 @@ test("directory AppHost inputs resolve to a concrete project", async () => {
 
 test("canvas source carries the confirmed direction and protected data routes", async () => {
     const root = new URL("../extensions/aspire-app-model/", import.meta.url);
-    const [html, client, styles, provider] = await Promise.all([
+    const [html, client, styles, provider, model] = await Promise.all([
         import("node:fs/promises").then(({ readFile }) => readFile(new URL("ui/index.html", root), "utf8")),
         import("node:fs/promises").then(({ readFile }) => readFile(new URL("ui/app.js", root), "utf8")),
         import("node:fs/promises").then(({ readFile }) => readFile(new URL("ui/styles.css", root), "utf8")),
         import("node:fs/promises").then(({ readFile }) => readFile(new URL("extension.mjs", root), "utf8")),
+        import("node:fs/promises").then(({ readFile }) => readFile(new URL("lib/app-model.mjs", root), "utf8")),
     ]);
 
     assert.match(html, /THESIS: Aspire's operational model becomes a canvas-native workspace/);
@@ -835,6 +950,18 @@ test("canvas source carries the confirmed direction and protected data routes", 
     assert.match(client, /host-action-bar/);
     assert.match(client, /Add to Copilot chat/);
     assert.match(client, /resource-board/);
+    assert.match(client, /app-model-tabs/);
+    assert.match(client, /resource-graph/);
+    assert.match(client, /drawResourceGraphEdges/);
+    assert.match(client, /graphEdgePresentation/);
+    assert.match(client, /is-combined/);
+    assert.match(client, /rememberAppModelViewState/);
+    assert.match(client, /restoreAppModelViewState/);
+    assert.match(client, /renderedAppHostId/);
+    assert.match(client, /actionMenuTrigger/);
+    assert.match(client, /hideActionMenu\(\{ restoreFocus: true \}\)/);
+    assert.doesNotMatch(client, /dashboardActionChip/);
+    assert.doesNotMatch(client, /"Diagnostics"/);
     assert.match(client, /role: "tablist"/);
     assert.match(client, /shortLabel/);
     assert.match(client, /CONFIRMATIONS/);
@@ -875,6 +1002,7 @@ test("canvas source carries the confirmed direction and protected data routes", 
     assert.match(provider, /canvasId: "browser"/);
     assert.match(provider, /canvasId: "terminal"/);
     assert.match(provider, /buildDashboardViewUrl/);
+    assert.match(model, /graph: buildResourceGraph\(resources\)/);
     assert.match(provider, /buildTerminalAttachCommand/);
     assert.match(provider, /privateDashboardUrl/);
     assert.match(provider, /KeyedTaskQueue/);

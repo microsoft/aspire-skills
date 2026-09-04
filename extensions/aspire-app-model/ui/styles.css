@@ -845,6 +845,72 @@ body.is-mode-switching .empty-state {
     padding-top: 22px;
 }
 
+.app-model-tabs {
+    display: inline-flex;
+    gap: 2px;
+    margin-bottom: 12px;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
+}
+
+.app-model-tab {
+    display: inline-flex;
+    min-height: 32px;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: var(--radius-inline);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: var(--font-weight-semibold, 600);
+    transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+}
+
+.app-model-tab:hover {
+    color: var(--text);
+}
+
+.app-model-tab.is-active {
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.app-model-tab-count {
+    display: inline-flex;
+    min-width: 19px;
+    min-height: 19px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--surface-muted);
+    color: var(--muted);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+}
+
+.app-model-tab.is-active .app-model-tab-count {
+    background: var(--brand-soft);
+    color: var(--brand);
+}
+
+.app-model-panel {
+    min-width: 0;
+}
+
+.app-model-view-description {
+    max-width: 68ch;
+    margin: 0 0 12px;
+    color: var(--muted);
+    font-size: 11.5px;
+}
+
 .section-heading {
     display: flex;
     align-items: flex-end;
@@ -870,6 +936,258 @@ body.is-mode-switching .empty-state {
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr));
     align-items: stretch;
     gap: 10px;
+}
+
+.graph-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.graph-heading > p {
+    max-width: 68ch;
+    color: var(--muted);
+    font-size: 11.5px;
+}
+
+.graph-legend {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px 12px;
+}
+
+.graph-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 10.5px;
+    white-space: nowrap;
+}
+
+.graph-legend-line {
+    width: 22px;
+    height: 0;
+    border-top: 2px solid var(--accent);
+}
+
+.graph-legend-line.is-parent {
+    border-top-color: var(--brand);
+    border-top-style: dotted;
+}
+
+.graph-legend-line.is-wait-for {
+    border-top-color: var(--warning);
+    border-top-style: dashed;
+}
+
+.graph-legend-line.is-combined {
+    border-top-color: var(--brand);
+}
+
+.graph-legend-line.is-combined-reference-waitfor {
+    border-top-style: double;
+}
+
+.graph-legend-line.is-combined-parent-reference {
+    border-top-style: dotted;
+}
+
+.graph-legend-line.is-combined-parent-waitfor {
+    border-top-style: dashed;
+}
+
+.graph-legend-line.is-combined-parent-reference-waitfor {
+    border-top-style: double;
+}
+
+.resource-graph-viewport {
+    min-width: 0;
+    overflow: auto;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-panel);
+    background: var(--surface);
+    scrollbar-width: thin;
+}
+
+.resource-graph-canvas {
+    position: relative;
+    min-width: max(100%, var(--graph-min-width));
+    min-height: 140px;
+    padding: 20px;
+    isolation: isolate;
+}
+
+.graph-columns {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: repeat(var(--graph-columns), minmax(210px, 220px));
+    align-items: start;
+    justify-content: center;
+    gap: 56px;
+}
+
+.graph-column {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.graph-node {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-control);
+    background: var(--surface);
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.graph-node.tone-warning {
+    border-color: color-mix(in srgb, var(--warning) 52%, var(--border));
+}
+
+.graph-node.tone-error {
+    border-color: color-mix(in srgb, var(--failure) 56%, var(--border));
+}
+
+.graph-node-header {
+    display: flex;
+    min-width: 0;
+    min-height: 54px;
+    align-items: center;
+    gap: 8px;
+    padding: 9px;
+}
+
+.graph-node-identity {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+}
+
+.graph-node-identity strong,
+.graph-node-identity span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.graph-node-identity strong {
+    font-size: 12.5px;
+    font-weight: var(--font-weight-semibold, 600);
+}
+
+.graph-node-identity span {
+    color: var(--muted);
+    font-size: 10.5px;
+}
+
+.graph-node .resource-status {
+    max-width: 88px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.graph-node-health {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 9px;
+    border-top: 1px solid var(--border-soft);
+    color: var(--muted);
+    font-size: 10.5px;
+}
+
+.graph-node-health span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.graph-node-health.tone-healthy {
+    color: var(--healthy);
+}
+
+.graph-node-health.tone-warning {
+    color: var(--warning);
+}
+
+.graph-node-health.tone-error {
+    color: var(--failure);
+}
+
+.graph-edge-layer {
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    overflow: visible;
+    pointer-events: none;
+}
+
+.graph-edge {
+    fill: none;
+    stroke-width: 1.7;
+    vector-effect: non-scaling-stroke;
+}
+
+.graph-edge.is-reference {
+    stroke: var(--accent);
+}
+
+.graph-edge.is-parent {
+    stroke: var(--brand);
+    stroke-dasharray: 2 4;
+}
+
+.graph-edge.is-wait-for {
+    stroke: var(--warning);
+    stroke-dasharray: 7 5;
+}
+
+.graph-edge.is-combined {
+    stroke: var(--brand);
+    stroke-width: 2;
+}
+
+.graph-edge.is-combined-reference-waitfor {
+    stroke-dasharray: 10 3 2 3;
+}
+
+.graph-edge.is-combined-parent-reference {
+    stroke-dasharray: 2 3;
+}
+
+.graph-edge.is-combined-parent-waitfor {
+    stroke-dasharray: 7 4;
+}
+
+.graph-edge.is-combined-parent-reference-waitfor {
+    stroke-dasharray: 8 3 2 3;
+}
+
+.graph-arrow.is-reference {
+    fill: var(--accent);
+}
+
+.graph-arrow.is-parent {
+    fill: var(--brand);
+}
+
+.graph-arrow.is-wait-for {
+    fill: var(--warning);
+}
+
+.graph-arrow.is-combined {
+    fill: var(--brand);
 }
 
 .resource-card {
@@ -1040,14 +1358,12 @@ body.is-mode-switching .empty-state {
 }
 
 .detail-chip.is-link,
-.detail-chip.is-command:not(.is-unavailable),
-.detail-chip.is-dashboard {
+.detail-chip.is-command:not(.is-unavailable) {
     cursor: pointer;
 }
 
 .detail-chip.is-link:hover,
-.detail-chip.is-command:not(.is-unavailable):hover,
-.detail-chip.is-dashboard:hover {
+.detail-chip.is-command:not(.is-unavailable):hover {
     border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
     background: color-mix(in srgb, var(--accent) 7%, var(--surface));
 }
@@ -1059,10 +1375,6 @@ body.is-mode-switching .empty-state {
 }
 
 .detail-chip.is-link {
-    color: var(--accent);
-}
-
-.detail-chip.is-dashboard {
     color: var(--accent);
 }
 
@@ -1626,6 +1938,25 @@ body.is-mode-switching .empty-state {
         grid-template-columns: 1fr;
     }
 
+    .app-model-tabs {
+        display: flex;
+        width: 100%;
+    }
+
+    .app-model-tab {
+        flex: 1;
+        justify-content: center;
+    }
+
+    .graph-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .graph-legend {
+        justify-content: flex-start;
+    }
+
     .section-heading p {
         display: none;
     }
@@ -1661,6 +1992,7 @@ body.is-mode-switching .empty-state {
 
 @media (pointer: coarse) {
     .mode-button,
+    .app-model-tab,
     .icon-button,
     .search-field,
     .hidden-toggle,
@@ -1681,6 +2013,7 @@ body.is-mode-switching .empty-state {
 @media (prefers-reduced-motion: reduce) {
     .button,
     .tray-action,
+    .app-model-tab,
     .model-view,
     .empty-state,
     .resource-name-copy svg {
