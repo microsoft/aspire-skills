@@ -1,0 +1,1 @@
+../../../../../../extensions/aspire-app-model/ui/app.js
