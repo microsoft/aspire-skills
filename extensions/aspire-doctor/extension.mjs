@@ -604,7 +604,7 @@ const doctorCanvas = createCanvas({
     id: CANVAS_ID,
     displayName: "Aspire Doctor",
     description:
-        "Runs 'aspire doctor' and renders environment checks (pass/warning/fail) with actionable fixes and detected CLI installations.",
+        "Runs aspire doctor and presents environment checks, suggested fixes, a summary, and detected CLI installations.",
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
     actions: [
         {

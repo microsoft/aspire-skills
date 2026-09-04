@@ -45,6 +45,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ### Added
 - Added the `aspire-doctor` GitHub App canvas extension for viewing `aspire doctor`
   results as a live checklist in a side panel.
+- Added the `aspireify` GitHub App canvas extension for reviewing and confirming
+  the proposed AppHost resource plan before AppHost wiring begins, including
+  generated-value reset and bounded undo/redo for saved proposal edits.
 - Added a release bundle generator and `publish.yml` workflow for the verified
   `aspire-skills-v<version>.tgz` and `aspire-extensions-v<version>.tgz` GitHub
   release assets consumed by `aspire agent init`.

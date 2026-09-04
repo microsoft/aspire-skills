@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Aspireify</title>
+        <link rel="icon" href="data:," />
+        <link rel="stylesheet" href="/styles.css" />
+    </head>
+    <body class="is-loading">
+        <header class="toolbar">
+            <div class="tb-row">
+                <div class="tb-title">
+                    <div>
+                        <div class="tb-heading">Aspireify</div>
+                        <div
+                            class="tb-sub muted"
+                            id="status-line"
+                            role="status"
+                            aria-live="polite"
+                            aria-atomic="true"
+                        >
+                            Receiving AppHost proposal snapshot…
+                        </div>
+                    </div>
+                </div>
+                <div class="tb-actions">
+                    <div class="apphost-select" id="apphost-control" hidden>
+                        <span class="apphost-label">AppHost</span>
+                        <code class="apphost-path" id="apphost-path"></code>
+                        <span class="apphost-separator" aria-hidden="true">·</span>
+                        <span class="apphost-value" id="apphost-value">C# SDK</span>
+                    </div>
+                </div>
+            </div>
+            <div class="progress" id="progress" aria-hidden="true"><span></span></div>
+        </header>
+
+        <main class="content">
+            <section id="skeleton" class="review-groups" aria-label="Loading AppHost proposal">
+                <div class="review-section">
+                    <div class="review-section-heading">
+                        <span class="skeleton sk-line" style="width: 156px; height: 13px"></span>
+                    </div>
+                    <div class="review-list">
+                        <div class="review-item skeleton-card">
+                            <div class="review-row">
+                                <span
+                                    class="skeleton"
+                                    style="width: 16px; height: 16px; border-radius: 999px"
+                                ></span>
+                                <div class="skeleton-copy">
+                                    <span
+                                        class="skeleton sk-line"
+                                        style="width: min(72%, 280px)"
+                                    ></span>
+                                    <span
+                                        class="skeleton sk-line"
+                                        style="width: min(48%, 190px)"
+                                    ></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="review-item skeleton-card">
+                            <div class="review-row">
+                                <span
+                                    class="skeleton"
+                                    style="width: 16px; height: 16px; border-radius: 999px"
+                                ></span>
+                                <div class="skeleton-copy">
+                                    <span
+                                        class="skeleton sk-line"
+                                        style="width: min(64%, 240px)"
+                                    ></span>
+                                    <span
+                                        class="skeleton sk-line"
+                                        style="width: min(42%, 170px)"
+                                    ></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="snapshot" class="plan" hidden>
+                <div id="plan-content" hidden>
+                    <div id="plan-workspace" class="plan-workspace">
+                        <section class="proposal-state" id="proposal-state">
+                            <div class="proposal-state-main">
+                                <strong id="proposal-state-copy">AppHost proposal awaiting confirmation</strong>
+                                <div class="muted" id="proposal-generated-at"></div>
+                            </div>
+                            <details class="proposal-diagnostics">
+                                <summary>Proposal details</summary>
+                                <div class="proposal-identity">
+                                    <span>Generation <code id="proposal-generation"></code></span>
+                                    <span>Hash <code id="proposal-hash"></code></span>
+                                </div>
+                            </details>
+                        </section>
+                        <section class="resource-plan" id="resource-plan-panel" hidden>
+                            <div class="resource-plan-heading">
+                                <div>
+                                    <h1>Proposed AppHost</h1>
+                                    <p class="muted">
+                                        Source services mapped to the exact Aspire resources in this
+                                        snapshot.
+                                    </p>
+                                </div>
+                                <button
+                                    class="btn btn-outline btn-sm"
+                                    id="compact-add-resource"
+                                    type="button"
+                                    title="Add resource"
+                                    hidden
+                                >
+                                    Add resource
+                                </button>
+                            </div>
+                            <div class="compact-resources" id="compact-resources" hidden></div>
+                            <div class="relationship-workspace" id="relationship-workspace" hidden>
+                                <nav
+                                    class="plan-overview"
+                                    id="plan-overview"
+                                    aria-label="Proposed AppHost resources"
+                                ></nav>
+                                <section
+                                    class="plan-inspector"
+                                    id="plan-inspector"
+                                    aria-label="Selected resource"
+                                    aria-live="polite"
+                                ></section>
+                            </div>
+                            <details
+                                class="relationship-list-disclosure"
+                                id="relationship-list-disclosure"
+                                open
+                                hidden
+                            >
+                                <summary id="relationship-list-summary">All relationships</summary>
+                                <p class="relationship-help muted">
+                                    References pass connection information. Wait-for connections
+                                    control startup order. Parent relationships model resource
+                                    ownership.
+                                </p>
+                                <div class="relationship-list" id="relationship-list"></div>
+                            </details>
+                        </section>
+                    </div>
+                </div>
+            </section>
+
+            <section id="error" class="state-card error-card" hidden>
+                <div class="state-icon" aria-hidden="true">!</div>
+                <strong>Couldn’t load the AppHost proposal</strong>
+                <p class="muted" id="error-message"></p>
+                <button class="btn btn-outline btn-sm" id="retry" type="button">Try again</button>
+            </section>
+        </main>
+
+        <footer class="action-footer" id="action-footer" hidden>
+            <div class="action-footer-inner">
+                <div class="history-actions" aria-label="Proposal history">
+                    <button class="btn btn-outline btn-sm" id="undo" type="button" disabled>
+                        Undo
+                    </button>
+                    <button class="btn btn-outline btn-sm" id="redo" type="button" disabled>
+                        Redo
+                    </button>
+                </div>
+                <span class="confirm-summary muted" id="confirm-summary"></span>
+                <span
+                    class="footer-note"
+                    id="footer-note"
+                    role="alert"
+                    aria-live="assertive"
+                    aria-atomic="true"
+                    hidden
+                ></span>
+                <span class="sr-only" id="history-announcement" aria-live="polite"></span>
+                <button id="confirm" class="btn btn-primary" type="button" disabled>
+                    Confirm
+                </button>
+            </div>
+        </footer>
+
+        <dialog id="add-resource-dialog" aria-labelledby="add-resource-dialog-title">
+            <form method="dialog" id="add-resource-form" novalidate>
+                <div class="dialog-head">
+                    <div>
+                        <h2 id="add-resource-dialog-title">Add resource</h2>
+                        <p class="muted" id="add-resource-dialog-detail"></p>
+                    </div>
+                    <button
+                        class="btn btn-quiet btn-icon dialog-close"
+                        type="button"
+                        data-close-dialog
+                        aria-label="Close"
+                    ></button>
+                </div>
+                <input id="add-resource-group" name="resourceGroup" type="hidden" />
+                <label class="field">
+                    <span>Resource name</span>
+                    <input
+                        id="add-resource-name"
+                        name="resourceName"
+                        required
+                        spellcheck="false"
+                        aria-describedby="add-resource-dialog-error"
+                    />
+                </label>
+                <label class="field">
+                    <span>Resource type</span>
+                    <select id="add-resource-type" name="resourceType" required>
+                        <option value="" disabled>Select a resource type</option>
+                        <option value=".NET project" data-group="applications">.NET project</option>
+                        <option value="Next.js" data-group="applications">Next.js</option>
+                        <option value="Vite" data-group="applications">Vite</option>
+                        <option value="Node.js" data-group="applications">Node.js</option>
+                        <option value="Python" data-group="applications">Python</option>
+                        <option value="Executable" data-group="applications">Executable</option>
+                        <option value="Postgres" data-group="data">Postgres</option>
+                        <option value="Valkey" data-group="data">Valkey</option>
+                        <option value="Redis" data-group="data">Redis</option>
+                        <option value="RabbitMQ" data-group="data">RabbitMQ</option>
+                        <option value="MongoDB" data-group="data">MongoDB</option>
+                        <option value="SQL Server" data-group="data">SQL Server</option>
+                        <option value="MySQL" data-group="data">MySQL</option>
+                        <option value="Azure Cosmos DB" data-group="data">Azure Cosmos DB</option>
+                        <option value="Azure Service Bus" data-group="data">Azure Service Bus</option>
+                        <option value="Container" data-group="infrastructure">Container</option>
+                        <option value="External service" data-group="external">External service</option>
+                    </select>
+                </label>
+                <label class="field">
+                    <span>Details <small class="muted">(optional)</small></span>
+                    <input id="add-resource-detail" name="resourceDetail" />
+                </label>
+                <label class="check-field" id="add-defaults-field" hidden>
+                    <input
+                        id="add-resource-defaults"
+                        name="serviceDefaults"
+                        type="checkbox"
+                    />
+                    <span>
+                        <strong>Service Defaults</strong>
+                        <small class="muted">Telemetry, health checks, discovery, and HTTP resilience</small>
+                    </span>
+                </label>
+                <section class="dialog-section">
+                    <div class="dialog-section-heading">
+                        <div>
+                            <strong>Connections</strong>
+                            <small class="muted">Optional</small>
+                        </div>
+                        <button
+                            class="btn btn-outline btn-icon add-icon-button dialog-add-connection"
+                            id="add-resource-connection-row"
+                            type="button"
+                            aria-label="Add connection"
+                            title="Add connection"
+                        ></button>
+                    </div>
+                    <div
+                        class="add-resource-connections"
+                        id="add-resource-connections"
+                    ></div>
+                </section>
+                <p
+                    class="dialog-error"
+                    id="add-resource-dialog-error"
+                    role="alert"
+                    tabindex="-1"
+                    hidden
+                ></p>
+                <div class="dialog-actions">
+                    <span class="dialog-spacer"></span>
+                    <button class="btn btn-outline" type="button" data-close-dialog>Cancel</button>
+                    <button class="btn btn-primary" id="save-resource-addition" value="default">Add resource</button>
+                </div>
+            </form>
+        </dialog>
+
+        <dialog id="connection-dialog" aria-labelledby="connection-dialog-title">
+            <form method="dialog" id="connection-form">
+                <div class="dialog-head">
+                    <div>
+                        <h2 id="connection-dialog-title">Add connection</h2>
+                        <p class="muted">Describe how two AppHost resources relate.</p>
+                    </div>
+                    <button
+                        class="btn btn-quiet btn-icon dialog-close"
+                        type="button"
+                        data-close-dialog
+                        aria-label="Close"
+                    ></button>
+                </div>
+                <input id="connection-id" name="connectionId" type="hidden" />
+                <label class="field">
+                    <span>From</span>
+                    <select id="connection-from" name="connectionFrom"></select>
+                </label>
+                <label class="field">
+                    <span>Relationship</span>
+                    <select id="connection-kind" name="connectionKind">
+                        <option value="reference">references</option>
+                        <option value="waitFor">waits for</option>
+                        <option value="parent">child of</option>
+                    </select>
+                </label>
+                <label class="field">
+                    <span>To</span>
+                    <select id="connection-to" name="connectionTo"></select>
+                </label>
+                <p
+                    class="dialog-error"
+                    id="connection-dialog-error"
+                    role="alert"
+                    tabindex="-1"
+                    hidden
+                ></p>
+                <div class="dialog-actions">
+                    <div class="dialog-secondary-actions">
+                        <button class="btn btn-outline" id="reset-connection" type="button" hidden>
+                            Reset
+                        </button>
+                        <button class="btn btn-danger" id="delete-connection" type="button" hidden>
+                            Remove
+                        </button>
+                    </div>
+                    <span class="dialog-spacer"></span>
+                    <button class="btn btn-outline" type="button" data-close-dialog>Cancel</button>
+                    <button class="btn btn-primary" id="save-connection" value="default">Save</button>
+                </div>
+            </form>
+        </dialog>
+
+        <dialog
+            id="remove-dialog"
+            aria-labelledby="remove-dialog-title"
+            aria-describedby="remove-dialog-detail remove-dialog-error"
+        >
+            <form method="dialog" id="remove-form">
+                <div class="dialog-head">
+                    <div>
+                        <h2 id="remove-dialog-title">Remove item</h2>
+                        <p class="muted" id="remove-dialog-detail"></p>
+                    </div>
+                    <button
+                        class="btn btn-quiet btn-icon dialog-close"
+                        type="button"
+                        data-close-dialog
+                        aria-label="Close"
+                    ></button>
+                </div>
+                <p
+                    class="dialog-error"
+                    id="remove-dialog-error"
+                    role="alert"
+                    tabindex="-1"
+                    hidden
+                ></p>
+                <div class="dialog-actions">
+                    <span class="dialog-spacer"></span>
+                    <button class="btn btn-outline" type="button" data-close-dialog>Cancel</button>
+                    <button class="btn btn-danger-primary" id="confirm-remove" value="default">
+                        Remove
+                    </button>
+                </div>
+            </form>
+        </dialog>
+
+        <script type="module" src="/app.js"></script>
+    </body>
+</html>
