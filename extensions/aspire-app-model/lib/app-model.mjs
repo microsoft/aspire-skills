@@ -960,11 +960,18 @@ export function buildResourceGraph(resources) {
 }
 
 function endpointNode(appHostId, resource, endpoint, index) {
+    let address;
+    try {
+        address = new URL(endpoint.url).host || undefined;
+    } catch {
+        address = undefined;
+    }
     return {
         id: `apphost:${appHostId}:resource:${resource.name}:endpoint:${index}`,
         kind: "endpoint",
         label: endpoint.displayName || endpoint.name || endpoint.url,
         description: endpoint.url,
+        statusLabel: address,
         icon: endpoint.isLinkable ? "link" : "endpoint",
         href: endpoint.isLinkable ? endpoint.url : undefined,
         appHostId,

@@ -54,11 +54,11 @@ bounded request bodies.
   card view. Multiple semantics between the same pair collapse into one labeled
   connector, and long edges route through column gutters rather than through
   intermediate resources.
-- Resource rows size to their content while keeping cards aligned within each
-  row, so sparse boards do not stretch cards into unused canvas space.
+- Resource cards keep natural content-driven heights instead of stretching to
+  match neighboring cards.
 - Team App-style resource cards with compact labeled Endpoints and Health rows,
-  semantic health pills, and an unlabeled command footer inside the resource
-  that owns them.
+  endpoint name plus sanitized host/port, natural-width semantic health pills, and
+  a distinct unlabeled command footer inside the resource that owns them.
 - Endpoint links open in GitHub Copilot's integrated browser and expose a
   separate copy-URL control.
 - Resource overflow opens authenticated Dashboard details, console logs,

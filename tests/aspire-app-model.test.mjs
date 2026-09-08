@@ -649,7 +649,9 @@ test("buildResourceTree follows VS Code child ordering and command visibility", 
         "commands-group",
     ]);
     assert.equal(postgres.children[1].href, undefined);
+    assert.equal(postgres.children[1].statusLabel, "localhost:5432");
     assert.equal(postgres.children[2].href, undefined);
+    assert.equal(postgres.children[2].statusLabel, "localhost:5432");
     assert.doesNotMatch(postgres.children[2].description, /admin|secret/);
     assert.equal(postgres.children.some((child) => child.label === "Unsafe"), false);
     const commands = postgres.children.at(-1).children;
@@ -1002,6 +1004,7 @@ test("canvas source carries the confirmed direction and protected data routes", 
         styles.indexOf(".resource-card.has-command-panel"),
     );
     assert.doesNotMatch(resourceBoardStyles, /grid-auto-rows:\s*1fr/);
+    assert.match(resourceBoardStyles, /align-items:\s*start/);
     assert.doesNotMatch(resourceCardStyles, /height:\s*100%/);
     assert.match(resourceCardStyles, /min-height:\s*0/);
     assert.match(resourceCardStyles, /border-radius:\s*var\(--radius-card\)/);
@@ -1009,6 +1012,7 @@ test("canvas source carries the confirmed direction and protected data routes", 
     assert.match(client, /class: "resource-attributes"/);
     assert.match(client, /class: "resource-attribute-label"/);
     assert.match(client, /class: "resource-attribute-values"/);
+    assert.match(client, /class: `resource-attribute-group is-\$\{variant\}`/);
     assert.match(client, /class: "resource-card-actions"/);
     assert.doesNotMatch(client, /renderDetailGroup/);
     const resourceAttributeStyles = styles.slice(
@@ -1017,9 +1021,18 @@ test("canvas source carries the confirmed direction and protected data routes", 
     );
     assert.match(resourceAttributeStyles, /display:\s*flex/);
     assert.match(resourceAttributeStyles, /flex-wrap:\s*wrap/);
+    assert.match(styles, /\.resource-attribute-values > \.detail-chip[\s\S]*flex:\s*0 1 auto/);
     assert.match(styles, /\.resource-attribute-values > \.detail-chip[\s\S]*border-radius:\s*999px/);
+    assert.match(styles, /\.resource-card-actions[\s\S]*border-top:\s*1px solid var\(--border-soft\)/);
+    assert.match(styles, /\.resource-card-actions > \.detail-chip > span:not\(\.chip-status\)[\s\S]*white-space:\s*normal/);
+    assert.match(styles, /\.resource-attribute-group\.is-endpoints \.resource-attribute-values[\s\S]*flex-direction:\s*column/);
+    assert.match(styles, /\.endpoint-actions[\s\S]*flex:\s*0 1 auto/);
+    assert.match(styles, /\.endpoint-actions \.chip-status[\s\S]*color:\s*var\(--muted\)/);
+    assert.match(styles, /@container \(max-width:\s*340px\)[\s\S]*flex-direction:\s*column/);
     assert.match(styles, /\.detail-chip > span:not\(\.chip-status\)[\s\S]*text-overflow:\s*ellipsis/);
-    assert.match(client, /graph\.edges\.reduce\(\(total, edge\) => total \+ edge\.types\.length, 0\)/);
+    assert.match(model, /statusLabel:\s*address/);
+    assert.match(client, /\{ id: "graph", label: "Graph", icon: "steps" \}/);
+    assert.doesNotMatch(client, /graph\.edges\.reduce\(\(total, edge\) => total \+ edge\.types\.length, 0\)/);
     assert.match(client, /class: `graph-edge \$\{presentation\.className\}`/);
     assert.match(styles, /\.graph-legend-swatch[\s\S]*width:\s*24px/);
     assert.match(provider, /CommandInputMetadataStore/);

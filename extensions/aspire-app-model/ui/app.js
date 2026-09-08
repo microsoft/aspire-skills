@@ -546,18 +546,20 @@ function trayAction(action, node) {
 }
 
 function endpointChip(endpoint) {
-    if (!endpoint.href) {
-        return detailChip(endpoint);
-    }
-    return element("span", { class: "endpoint-actions" }, [
-        detailChip(endpoint, { open: true }),
-        element("button", {
+    const copyLabel = endpoint.statusLabel
+        ? `Copy ${endpoint.label} endpoint at ${endpoint.statusLabel}`
+        : `Copy ${endpoint.label} endpoint`;
+    return element("span", {
+        class: `endpoint-actions${endpoint.href ? " has-copy" : ""}`,
+    }, [
+        detailChip(endpoint, { open: Boolean(endpoint.href) }),
+        ...(endpoint.href ? [element("button", {
             class: "endpoint-copy",
             type: "button",
-            title: `Copy ${endpoint.label} URL`,
-            "aria-label": `Copy ${endpoint.label} URL`,
+            title: copyLabel,
+            "aria-label": copyLabel,
             on: { click: () => void copyEndpointUrl(endpoint) },
-        }, [svgIcon("copy", 12)]),
+        }, [svgIcon("copy", 12)])] : []),
     ]);
 }
 
@@ -727,12 +729,12 @@ function detailChip(node, { open = false, command = false } = {}) {
     ]);
 }
 
-function renderResourceAttributeGroup(label, iconName, items) {
+function renderResourceAttributeGroup(label, iconName, items, variant) {
     if (items.length === 0) {
         return null;
     }
     return element("div", {
-        class: "resource-attribute-group",
+        class: `resource-attribute-group is-${variant}`,
         role: "group",
         "aria-label": label,
     }, [
@@ -751,8 +753,8 @@ function renderResourceAttributes(endpoints, healthItems) {
     return element("div", {
         class: "resource-attributes",
     }, [
-        renderResourceAttributeGroup("Endpoints", "link", endpoints.map(endpointChip)),
-        renderResourceAttributeGroup("Health", "heart", healthItems),
+        renderResourceAttributeGroup("Endpoints", "link", endpoints.map(endpointChip), "endpoints"),
+        renderResourceAttributeGroup("Health", "heart", healthItems, "health"),
     ]);
 }
 
@@ -887,10 +889,10 @@ function handleAppModelTabKey(event, view) {
     setAppModelView(nextView);
 }
 
-function renderAppModelTabs(resourceCount, relationshipCount) {
+function renderAppModelTabs(resourceCount) {
     const definitions = [
         { id: "resources", label: "Resources", icon: "layers", count: resourceCount },
-        { id: "graph", label: "Graph", icon: "steps", count: relationshipCount },
+        { id: "graph", label: "Graph", icon: "steps" },
     ];
     return element("div", {
         class: "app-model-tabs",
@@ -906,7 +908,9 @@ function renderAppModelTabs(resourceCount, relationshipCount) {
             tabIndex: active ? 0 : -1,
             "aria-selected": active,
             "aria-controls": `${definition.id}-view-panel`,
-            "aria-label": `${definition.label}, ${definition.count}`,
+            "aria-label": definition.count === undefined
+                ? definition.label
+                : `${definition.label}, ${definition.count}`,
             on: {
                 click: () => setAppModelView(definition.id),
                 keydown: (event) => handleAppModelTabKey(event, definition.id),
@@ -914,11 +918,11 @@ function renderAppModelTabs(resourceCount, relationshipCount) {
         }, [
             svgIcon(definition.icon, 14),
             element("span", { text: definition.label }),
-            element("span", {
+            ...(definition.count === undefined ? [] : [element("span", {
                 class: "app-model-tab-count",
                 text: String(definition.count),
                 "aria-hidden": "true",
-            }),
+            })]),
         ]);
     }));
 }
@@ -1102,7 +1106,7 @@ function renderResourceBoardPanel(appHost, resources, dashboardAvailable, active
         element("p", {
             class: "app-model-view-description",
             text: resources.length
-                ? "Endpoints, health, and commands stay with the resource that owns them."
+                ? "Endpoint addresses, health, and commands stay with the resource that owns them."
                 : "Start this AppHost to load its evaluated resource model.",
         }),
         resources.length
@@ -1462,10 +1466,7 @@ function renderHostStage(appHost, hosts) {
         renderAppHostActionTray(presentationHost),
         ...notices.map(renderHostNotice),
         element("section", { class: "resource-workspace", "aria-label": "App model" }, [
-            renderAppModelTabs(
-                resources.length,
-                graph.edges.reduce((total, edge) => total + edge.types.length, 0),
-            ),
+            renderAppModelTabs(resources.length),
             renderResourceBoardPanel(
                 appHost,
                 resources,

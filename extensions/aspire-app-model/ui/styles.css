@@ -938,7 +938,7 @@ body.is-mode-switching .empty-state {
 .resource-board {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr));
-    align-items: stretch;
+    align-items: start;
     gap: 12px;
 }
 
@@ -1168,6 +1168,7 @@ body.is-mode-switching .empty-state {
     min-width: 0;
     min-height: 0;
     overflow: hidden;
+    align-self: start;
     border: 1px solid var(--border);
     border-radius: var(--radius-card);
     background: var(--card-surface);
@@ -1297,7 +1298,7 @@ body.is-mode-switching .empty-state {
 .resource-card-details {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
     padding: 0 14px 12px;
 }
 
@@ -1354,9 +1355,16 @@ body.is-mode-switching .empty-state {
     gap: 5px;
 }
 
+.resource-attribute-group.is-endpoints .resource-attribute-values {
+    align-items: flex-start;
+    flex-direction: column;
+}
+
 .resource-card-actions {
+    align-items: stretch;
     gap: 6px;
-    margin-top: 2px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-soft);
 }
 
 .detail-chip {
@@ -1394,15 +1402,37 @@ body.is-mode-switching .empty-state {
 
 .resource-attribute-values > .detail-chip {
     --pill-tone: var(--muted);
-    min-height: 20px;
-    padding: 0 8px;
+    min-height: 24px;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 3px 8px;
+    overflow: visible;
     border-color: color-mix(in srgb, var(--pill-tone) 28%, transparent);
     border-radius: 999px;
     background: color-mix(in srgb, var(--pill-tone) 11%, transparent);
     color: color-mix(in srgb, var(--pill-tone), var(--text) 25%);
     font-size: 11px;
     font-weight: 500;
-    line-height: 1;
+    line-height: 1.35;
+}
+
+.resource-attribute-values > .detail-chip > span:not(.chip-status),
+.resource-attribute-values > .detail-chip > .chip-status {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.resource-attribute-values > .detail-chip > span:not(.chip-status) {
+    flex: 1 1 auto;
+}
+
+.resource-attribute-values > .detail-chip > .chip-status {
+    flex: none;
+    margin-left: auto;
+    white-space: nowrap;
 }
 
 .resource-attribute-values > .detail-chip.tone-healthy {
@@ -1419,6 +1449,20 @@ body.is-mode-switching .empty-state {
 
 .resource-attribute-values > .detail-chip.tone-inactive {
     --pill-tone: var(--muted);
+}
+
+.resource-card-actions > .detail-chip {
+    min-height: 30px;
+    height: auto;
+    flex: 0 1 auto;
+    overflow: visible;
+}
+
+.resource-card-actions > .detail-chip > span:not(.chip-status) {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 .detail-chip.is-link,
@@ -1444,22 +1488,46 @@ body.is-mode-switching .empty-state {
 
 .endpoint-actions {
     display: inline-flex;
+    width: auto;
     min-width: 0;
     max-width: 100%;
-    overflow: hidden;
+    flex: 0 1 auto;
     align-items: stretch;
 }
 
 .endpoint-actions > .detail-chip {
     flex: 1 1 auto;
+    min-height: 30px;
+    height: auto;
+    flex-wrap: wrap;
+    overflow: visible;
+}
+
+.endpoint-actions.has-copy > .detail-chip {
     border-top-right-radius: 0;
     border-bottom-right-radius: 0;
+}
+
+.endpoint-actions .detail-chip > span:not(.chip-status),
+.endpoint-actions .detail-chip > .chip-status {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.endpoint-actions .chip-status {
+    min-width: 0;
+    flex: 0 1 auto;
+    color: var(--muted);
+    font-weight: 400;
+    opacity: 1;
 }
 
 .endpoint-copy {
     display: inline-flex;
     width: 27px;
-    min-height: 28px;
+    min-height: 30px;
     flex: none;
     align-items: center;
     justify-content: center;
@@ -1495,6 +1563,25 @@ body.is-mode-switching .empty-state {
     content: "·";
     margin-right: 5px;
     opacity: 0.72;
+}
+
+@container (max-width: 340px) {
+    .resource-attribute-group {
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .resource-attribute-label {
+        width: auto;
+        min-height: 18px;
+        flex-basis: auto;
+        padding-top: 0;
+    }
+
+    .resource-attribute-values {
+        width: 100%;
+        flex-basis: auto;
+    }
 }
 
 .resource-board-empty {
