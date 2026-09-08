@@ -104,12 +104,29 @@ export function completeDiagnosticsRun(entry, revision, result) {
     };
 }
 
+export function selectDiagnosticsResult(entry, completion) {
+    const latestResult = entry.latestResult;
+    return latestResult?.revision > completion.result.revision
+        ? latestResult
+        : completion.result;
+}
+
+export function replayLatestDiagnostics(entry, publish) {
+    if (!entry.latestResult) {
+        return false;
+    }
+
+    publish(entry.latestResult);
+    return true;
+}
+
 export async function runLatestDiagnostics(entry, runDiagnostics, publishCurrent) {
     const revision = beginDiagnosticsRun(entry);
     const rawResult = await runDiagnostics();
     const completion = completeDiagnosticsRun(entry, revision, rawResult);
 
     if (completion.isCurrent) {
+        entry.latestResult = completion.result;
         publishCurrent?.(completion.result);
     }
 

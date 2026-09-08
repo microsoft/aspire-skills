@@ -104,9 +104,6 @@ export function getResultRevision(result) {
 }
 
 export function shouldApplyResult(latestRevision, result) {
-    if (result?.superseded) {
-        return false;
-    }
     const revision = getResultRevision(result);
     return revision == null || revision > latestRevision;
 }

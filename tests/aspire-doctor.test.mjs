@@ -11,8 +11,10 @@ import {
   completeDiagnosticsRun,
   listenOnLoopback,
   readJsonBody,
+  replayLatestDiagnostics,
   requestErrorStatus,
   runLatestDiagnostics,
+  selectDiagnosticsResult,
   windowsExplorerInvocation
 } from "../extensions/aspire-doctor/provider-helpers.mjs";
 import {
@@ -59,7 +61,7 @@ test("older diagnostics revisions cannot replace newer results", () => {
   assert.equal(shouldApplyResult(4, { revision: 3 }), false);
   assert.equal(shouldApplyResult(4, { revision: 4 }), false);
   assert.equal(shouldApplyResult(4, { revision: 5 }), true);
-  assert.equal(shouldApplyResult(4, { revision: 5, superseded: true }), false);
+  assert.equal(shouldApplyResult(4, { revision: 5, superseded: true }), true);
   assert.equal(shouldApplyResult(4, {}), true);
 });
 
@@ -98,6 +100,22 @@ test("only the newest overlapping diagnostics run is published", async () => {
     revision: 2,
     superseded: false
   }]);
+  assert.deepEqual(entry.latestResult, published[0]);
+  assert.deepEqual(selectDiagnosticsResult(entry, await firstCompletion), published[0]);
+});
+
+test("late diagnostics subscribers receive the latest current result", async () => {
+  const entry = {};
+  await runLatestDiagnostics(entry, async () => ({
+    ok: true,
+    data: { value: "latest" }
+  }));
+
+  const replayed = [];
+  assert.equal(replayLatestDiagnostics(entry, (result) => replayed.push(result)), true);
+  assert.deepEqual(replayed, [entry.latestResult]);
+
+  assert.equal(replayLatestDiagnostics({}, () => assert.fail("unexpected replay")), false);
 });
 
 test("JSON request bodies have deterministic validation errors", async () => {
@@ -217,7 +235,8 @@ test("renderer exposes responsive and accessible review controls", async () => {
   assert.match(styles, /grid-template-columns: minmax\(120px, 160px\) minmax\(0, 1fr\)/);
   assert.match(styles, /@media \(max-width: 640px\)[\s\S]+\.diag-fix[\s\S]+flex-direction: column/);
   assert.match(styles, /@media \(max-width: 430px\)[\s\S]+\.diag-fix-actions[\s\S]+grid-template-columns/);
-  assert.match(styles, /@media \(max-width: 360px\)[\s\S]+\.tb-sub[\s\S]+display: none/);
+  assert.doesNotMatch(styles, /@media \(max-width: 360px\)[\s\S]{0,300}\.tb-sub\s*\{[\s\S]{0,200}display:\s*none/);
+  assert.match(styles, /@media \(max-width: 360px\)[\s\S]+\.tb-sub[\s\S]+clip: rect\(0, 0, 0, 0\)/);
   assert.match(styles, /@media \(pointer: coarse\)/);
 });
 

@@ -39,7 +39,7 @@ port) that serves the static UI from `ui/` and a JSON API:
 | `POST /api/ask-copilot` | Send a check to the current Copilot session |
 | `POST /api/open-terminal` | Open a terminal canvas for a check |
 | `POST /api/open-path` | Open a detected path |
-| `GET /events` | Server-Sent Events used to push diagnostics after agent-driven re-runs |
+| `GET /events` | Server-Sent Events used to push diagnostics after agent-driven re-runs and replay the latest result to late subscribers |
 
 Diagnostics are produced by shelling out to
 `aspire doctor --format Json --non-interactive --nologo` and parsing the JSON.

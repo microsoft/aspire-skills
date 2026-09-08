@@ -12,8 +12,10 @@ import { joinSession, createCanvas, CanvasError } from "@github/copilot-sdk/exte
 import {
     listenOnLoopback,
     readJsonBody,
+    replayLatestDiagnostics,
     requestErrorStatus,
     runLatestDiagnostics,
+    selectDiagnosticsResult,
     windowsExplorerInvocation,
 } from "./provider-helpers.mjs";
 import { normalizeDoctorData } from "./ui/model.mjs";
@@ -162,14 +164,20 @@ function addSseClient(entry, req, res) {
     });
     res.write(": connected\n\n");
     entry.clients.add(res);
+    replayLatestDiagnostics(entry, (result) => {
+        writeSseFrame(res, { type: "diagnostics", result });
+    });
     req.on("close", () => entry.clients.delete(res));
 }
 
+function writeSseFrame(client, payload) {
+    client.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
 function broadcast(entry, payload) {
-    const frame = `data: ${JSON.stringify(payload)}\n\n`;
     for (const client of entry.clients) {
         try {
-            client.write(frame);
+            writeSseFrame(client, payload);
         } catch {
             entry.clients.delete(client);
         }
@@ -505,8 +513,8 @@ async function handleRequest(entry, req, res) {
         return addSseClient(entry, req, res);
     }
     if (req.method === "GET" && path === "/api/diagnostics") {
-        const { result } = await runDiagnosticsForEntry(entry, { broadcastResult: true });
-        return sendJson(res, 200, result);
+        const completion = await runDiagnosticsForEntry(entry, { broadcastResult: true });
+        return sendJson(res, 200, selectDiagnosticsResult(entry, completion));
     }
     if (req.method === "POST" && path === "/api/ask-copilot") {
         let body;
