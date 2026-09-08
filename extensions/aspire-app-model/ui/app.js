@@ -727,14 +727,44 @@ function detailChip(node, { open = false, command = false } = {}) {
     ]);
 }
 
-function renderDetailGroup(label, iconName, items) {
+function renderResourceAttributeGroup(label, iconName, items) {
     if (items.length === 0) {
         return null;
     }
-    return element("section", { class: "resource-detail-group" }, [
-        element("h4", {}, [svgIcon(iconName, 13), label]),
-        element("div", { class: "detail-chip-list" }, items),
+    return element("div", {
+        class: "resource-attribute-group",
+        role: "group",
+        "aria-label": label,
+    }, [
+        element("span", { class: "resource-attribute-label" }, [
+            svgIcon(iconName, 12),
+            element("span", { text: label }),
+        ]),
+        element("div", { class: "resource-attribute-values" }, items),
     ]);
+}
+
+function renderResourceAttributes(endpoints, healthItems) {
+    if (endpoints.length === 0 && healthItems.length === 0) {
+        return null;
+    }
+    return element("div", {
+        class: "resource-attributes",
+    }, [
+        renderResourceAttributeGroup("Endpoints", "link", endpoints.map(endpointChip)),
+        renderResourceAttributeGroup("Health", "heart", healthItems),
+    ]);
+}
+
+function renderResourceActions(commands) {
+    if (commands.length === 0) {
+        return null;
+    }
+    return element("div", {
+        class: "resource-card-actions",
+        role: "group",
+        "aria-label": "Resource commands",
+    }, commands.map((command) => detailChip(command, { command: true })));
 }
 
 function aggregateHealthChip(resource) {
@@ -811,21 +841,8 @@ function renderResourceCard({ resource, parentLabel, dashboardAvailable }) {
             text: `Part of ${parentLabel}`,
         })] : []),
         element("div", { class: "resource-card-details" }, [
-            renderDetailGroup(
-                "Endpoints",
-                "link",
-                endpoints.map(endpointChip),
-            ),
-            renderDetailGroup(
-                "Health",
-                "heart",
-                healthItems,
-            ),
-            renderDetailGroup(
-                "Commands",
-                "terminal",
-                commands.map((command) => detailChip(command, { command: true })),
-            ),
+            renderResourceAttributes(endpoints, healthItems),
+            renderResourceActions(commands),
         ]),
         ...(activeCommand ? [renderCommandPanel(activeCommand)] : []),
     ]);
@@ -938,14 +955,25 @@ function renderGraphLegend(graph) {
         return null;
     }
     return element("div", { class: "graph-legend", "aria-label": "Relationship legend" },
-        [...presentations.values()].map((presentation) =>
+        [...presentations.values()].map((presentation) => {
+            const swatch = svgElement("svg", {
+                class: "graph-legend-swatch",
+                viewBox: "0 0 24 8",
+                "aria-hidden": "true",
+            });
+            swatch.appendChild(svgElement("line", {
+                class: `graph-edge ${presentation.className}`,
+                x1: "1",
+                y1: "4",
+                x2: "23",
+                y2: "4",
+            }));
+            return (
             element("span", { class: "graph-legend-item" }, [
-                element("span", {
-                    class: `graph-legend-line ${presentation.className}`,
-                    "aria-hidden": "true",
-                }),
+                swatch,
                 element("span", { text: presentation.label }),
-            ])));
+            ]));
+        }));
 }
 
 function renderGraphNode(node) {
@@ -1434,7 +1462,10 @@ function renderHostStage(appHost, hosts) {
         renderAppHostActionTray(presentationHost),
         ...notices.map(renderHostNotice),
         element("section", { class: "resource-workspace", "aria-label": "App model" }, [
-            renderAppModelTabs(resources.length, graph.edges.length),
+            renderAppModelTabs(
+                resources.length,
+                graph.edges.reduce((total, edge) => total + edge.types.length, 0),
+            ),
             renderResourceBoardPanel(
                 appHost,
                 resources,

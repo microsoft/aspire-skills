@@ -1003,6 +1003,25 @@ test("canvas source carries the confirmed direction and protected data routes", 
     );
     assert.doesNotMatch(resourceBoardStyles, /grid-auto-rows:\s*1fr/);
     assert.doesNotMatch(resourceCardStyles, /height:\s*100%/);
+    assert.match(resourceCardStyles, /min-height:\s*0/);
+    assert.match(resourceCardStyles, /border-radius:\s*var\(--radius-card\)/);
+    assert.match(resourceCardStyles, /background:\s*var\(--card-surface\)/);
+    assert.match(client, /class: "resource-attributes"/);
+    assert.match(client, /class: "resource-attribute-label"/);
+    assert.match(client, /class: "resource-attribute-values"/);
+    assert.match(client, /class: "resource-card-actions"/);
+    assert.doesNotMatch(client, /renderDetailGroup/);
+    const resourceAttributeStyles = styles.slice(
+        styles.indexOf(".resource-attributes {"),
+        styles.indexOf(".detail-chip {"),
+    );
+    assert.match(resourceAttributeStyles, /display:\s*flex/);
+    assert.match(resourceAttributeStyles, /flex-wrap:\s*wrap/);
+    assert.match(styles, /\.resource-attribute-values > \.detail-chip[\s\S]*border-radius:\s*999px/);
+    assert.match(styles, /\.detail-chip > span:not\(\.chip-status\)[\s\S]*text-overflow:\s*ellipsis/);
+    assert.match(client, /graph\.edges\.reduce\(\(total, edge\) => total \+ edge\.types\.length, 0\)/);
+    assert.match(client, /class: `graph-edge \$\{presentation\.className\}`/);
+    assert.match(styles, /\.graph-legend-swatch[\s\S]*width:\s*24px/);
     assert.match(provider, /CommandInputMetadataStore/);
     assert.match(provider, /sendAttachmentsToMessage/);
     assert.match(provider, /type: "extension_context"/);
