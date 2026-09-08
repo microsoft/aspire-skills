@@ -150,33 +150,48 @@ function authorizeRequest(entry, req, url) {
 function readJsonBody(req) {
     return new Promise((resolveBody, reject) => {
         let size = 0;
-        let tooLarge = false;
+        let settled = false;
         const chunks = [];
-        req.on("data", (chunk) => {
-            size += chunk.length;
-            if (size > MAX_BODY_BYTES) {
-                tooLarge = true;
-                chunks.length = 0;
+        const fail = (error) => {
+            if (settled) {
                 return;
             }
-            if (!tooLarge) {
-                chunks.push(chunk);
+            settled = true;
+            reject(error);
+        };
+        req.on("data", (chunk) => {
+            if (settled) {
+                return;
             }
-        });
-        req.once("end", () => {
-            if (tooLarge) {
+            size += chunk.length;
+            if (size > MAX_BODY_BYTES) {
+                chunks.length = 0;
                 const error = new Error("Request body is too large.");
                 error.status = 413;
-                reject(error);
+                error.closeRequest = true;
+                fail(error);
+                req.pause();
+                return;
+            }
+            chunks.push(chunk);
+        });
+        req.once("end", () => {
+            if (settled) {
                 return;
             }
             try {
-                resolveBody(chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {});
+                const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {};
+                settled = true;
+                resolveBody(body);
             } catch {
-                reject(new Error("Request body is not valid JSON."));
+                fail(new Error("Request body is not valid JSON."));
             }
         });
-        req.once("error", reject);
+        req.once("error", (error) => {
+            if (!settled) {
+                fail(error);
+            }
+        });
     });
 }
 
@@ -457,9 +472,10 @@ function countResources(models) {
 }
 
 function buildRoots(entry, candidates, runningHosts, models) {
-    const records = entry.viewMode === "workspace"
-        ? [...combineWorkspaceAppHosts(candidates, runningHosts).running, ...combineWorkspaceAppHosts(candidates, runningHosts).idle]
-        : runningHosts;
+    const combined = entry.viewMode === "workspace"
+        ? combineWorkspaceAppHosts(candidates, runningHosts)
+        : undefined;
+    const records = combined ? [...combined.running, ...combined.idle] : runningHosts;
     const operations = operationMap(entry, records);
     return entry.viewMode === "workspace"
         ? buildWorkspaceTree({ candidates, runningHosts, models, operations })
@@ -1195,7 +1211,16 @@ async function handleRequest(entry, req, res) {
     try {
         body = await readJsonBody(req);
     } catch (error) {
-        return sendJson(res, error?.status === 413 ? 413 : 400, { ok: false, error: error.message });
+        const status = error?.status === 413 ? 413 : 400;
+        if (error?.closeRequest) {
+            res.setHeader("Connection", "close");
+            res.once("finish", () => {
+                req.socket.end();
+                const destroyTimer = setTimeout(() => req.destroy(), 100);
+                destroyTimer.unref?.();
+            });
+        }
+        return sendJson(res, status, { ok: false, error: error.message });
     }
 
     if (url.pathname === "/api/refresh") {

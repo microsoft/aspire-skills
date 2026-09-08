@@ -240,8 +240,10 @@ function sanitizeDashboardUrl(value) {
         if (!ALLOWED_URL_PROTOCOLS.has(url.protocol)) {
             return undefined;
         }
-        if (url.pathname.toLowerCase().includes("/login")) {
-            url.pathname = "/";
+        const pathname = url.pathname.replace(/\/+$/, "");
+        if (pathname.toLowerCase().endsWith("/login")) {
+            const basePath = dashboardBasePath(url);
+            url.pathname = basePath ? `${basePath}/` : "/";
         }
         url.username = "";
         url.password = "";

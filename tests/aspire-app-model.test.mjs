@@ -161,6 +161,13 @@ test("sanitizeResource exposes only the app-model allow-list", () => {
     assert.equal("environment" in resource, false);
     assert.equal("properties" in resource, false);
     assert.equal("volumes" in resource, false);
+    const nestedDashboard = sanitizeResource({
+        name: "api",
+        resourceType: "Project",
+        state: "Running",
+        dashboardUrl: "https://localhost:18888/dashboard/login?t=private-token&resource=api",
+    });
+    assert.equal(nestedDashboard.dashboardUrl, "https://localhost:18888/dashboard/?resource=api");
     assert.doesNotMatch(JSON.stringify(resource), /super-secret|secret-value|Password=secret/);
 });
 
@@ -1011,10 +1018,21 @@ test("canvas source carries the confirmed direction and protected data routes", 
     assert.match(provider, /status: hasRoots \? "stale" : "error"/);
     assert.match(provider, /Content-Security-Policy/);
     assert.match(provider, /error\?\.status === 413 \? 413 : 400/);
+    assert.match(provider, /error\.closeRequest = true/);
+    assert.match(provider, /req\.pause\(\)/);
+    assert.match(provider, /res\.setHeader\("Connection", "close"\)/);
+    assert.match(provider, /req\.socket\.end\(\)/);
+    assert.match(provider, /setTimeout\(\(\) => req\.destroy\(\), 100\)/);
     assert.match(provider, /const showProgress = force \|\| entry\.state\.status === "loading"/);
     assert.doesNotMatch(provider, /showProgress = force \|\| entry\.state\.roots\.length === 0/);
     assert.equal(client.includes('querySelector("[data-apphost-primary]")'), false);
     assert.equal(client.includes('querySelector("[data-apphost-primary]:not([disabled])")'), true);
+
+    const buildRootsSource = provider.slice(
+        provider.indexOf("function buildRoots"),
+        provider.indexOf("function setHostRecords"),
+    );
+    assert.equal((buildRootsSource.match(/combineWorkspaceAppHosts/g) ?? []).length, 1);
 
     const copyHandler = client.slice(
         client.indexOf("async function copyResourceName"),
