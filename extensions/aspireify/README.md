@@ -34,8 +34,16 @@ The canvas only:
 
 After confirmation, the canvas becomes read-only and `get_confirmation` returns
 the immutable submitted snapshot even if a stale client attempts a later mutation.
+Before confirmation, `get_confirmation` fails without exposing an executable plan.
+Proposal and confirmation state are stored with the Copilot session so reconnecting
+or reloading the provider preserves the Step 3 decision.
 The confirmed surface states that implementation continues in chat; it never
 becomes a startup, editing, validation, or execution tracker.
+
+To review a different proposal for the same AppHost after confirmation, begin a
+new Aspireify run and call `load_discovery` with `startNewRun: true`. This
+explicitly replaces the prior read-only snapshot; ordinary discovery or proposal
+updates remain rejected while the confirmed review is active.
 
 Connections are directed: `from` references, waits for, or is a child of `to`.
 Each selected resource shows both outgoing and incoming relationships, while an
@@ -74,7 +82,14 @@ AppHost editor, deployment controls, initialization flow, or validation workflow
   saved URL.
 - **Edits fail with "The confirmed resource plan is read-only."** The proposal
   was already confirmed, so the canvas is displaying the immutable submitted
-  snapshot. If more changes are needed, ask the agent for a new proposal.
+  snapshot. If more changes are needed, ask the agent for a new Aspireify run;
+  the agent must explicitly start it before loading fresh discovery.
+- **`get_confirmation` says the proposal is not confirmed.** Review and confirm
+  the proposal in the canvas first. The action intentionally withholds the plan
+  until that confirmation boundary has been crossed.
+- **The confirmed footer says chat still needs to be notified.** The decision
+  is already saved and read-only. Select **Notify chat** to retry the handoff;
+  no proposal data is changed or reconfirmed.
 - **Undo or redo reports "Undo and redo are unavailable while the proposal is
   changing."** A new proposal snapshot is still arriving. Wait for it to
   finish loading, then retry.

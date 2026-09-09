@@ -6,6 +6,7 @@
   "scripts": {
     "bundle": "node scripts/build-aspire-bundles.mjs",
     "bundle:skills": "node scripts/build-aspire-bundles.mjs --bundle skills",
-    "bundle:extensions": "node scripts/build-aspire-bundles.mjs --bundle extensions"
+    "bundle:extensions": "node scripts/build-aspire-bundles.mjs --bundle extensions",
+    "test": "node --test tests/aspireify/provider-state.test.mjs tests/aspireify/interaction-model.test.mjs tests/aspireify/static-assets.test.mjs"
   }
 }

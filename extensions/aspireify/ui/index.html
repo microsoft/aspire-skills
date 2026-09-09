@@ -131,12 +131,12 @@
                     <div id="plan-workspace" class="plan-workspace">
                         <section class="proposal-state" id="proposal-state">
                             <div class="proposal-state-main">
-                                <strong id="proposal-state-copy">AppHost proposal awaiting confirmation</strong>
-                                <div class="muted" id="proposal-generated-at"></div>
+                                <strong id="proposal-state-copy">Proposal ready for review</strong>
                             </div>
                             <details class="proposal-diagnostics">
-                                <summary>Proposal details</summary>
+                                <summary>Snapshot details</summary>
                                 <div class="proposal-identity">
+                                    <span id="proposal-generated-at"></span>
                                     <span>Generation <code id="proposal-generation"></code></span>
                                     <span>Hash <code id="proposal-hash"></code></span>
                                 </div>
@@ -150,6 +150,11 @@
                                         Source services mapped to the exact Aspire resources in this
                                         snapshot.
                                     </p>
+                                    <p class="editing-guidance muted">
+                                        Generated values are editable. Changes are marked
+                                        <strong>Edited</strong>; Reset restores generated values,
+                                        and Undo or Redo steps through saved changes.
+                                    </p>
                                 </div>
                                 <button
                                     class="btn btn-outline btn-sm"
@@ -162,6 +167,14 @@
                                 </button>
                             </div>
                             <div class="compact-resources" id="compact-resources" hidden></div>
+                            <div class="relationship-guide" id="relationship-guide" hidden>
+                                <strong>Reading connections</strong>
+                                <span>
+                                    → is outgoing; ← is incoming. References share connection
+                                    information, waits-for controls startup order, and child-of
+                                    models ownership.
+                                </span>
+                            </div>
                             <div class="relationship-workspace" id="relationship-workspace" hidden>
                                 <nav
                                     class="plan-overview"

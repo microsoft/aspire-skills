@@ -587,6 +587,21 @@ body.is-loading .progress > span {
     text-wrap: pretty;
 }
 
+.resource-plan-heading .editing-guidance {
+    max-width: 76ch;
+    margin-top: 7px;
+    font-size: var(--text-meta);
+    line-height: var(--leading-meta);
+}
+
+.editing-guidance strong {
+    color: var(--text-color-default, #1f2328);
+}
+
+.is-confirmed .editing-guidance {
+    display: none;
+}
+
 .proposal-state {
     display: flex;
     align-items: flex-start;
@@ -619,6 +634,17 @@ body.is-loading .progress > span {
     text-wrap: pretty;
 }
 
+.proposal-diagnostics {
+    flex: 0 0 auto;
+    color: var(--text-color-muted, #59636e);
+    font-size: var(--text-meta);
+}
+
+.proposal-diagnostics > summary {
+    min-height: 24px;
+    cursor: pointer;
+}
+
 .proposal-identity {
     display: flex;
     flex: 0 0 auto;
@@ -629,6 +655,10 @@ body.is-loading .progress > span {
     font-size: var(--text-meta);
     line-height: var(--leading-meta);
     font-variant-numeric: tabular-nums;
+}
+
+.proposal-diagnostics[open] .proposal-identity {
+    margin-top: 6px;
 }
 
 .proposal-identity code {
@@ -775,6 +805,25 @@ body.is-loading .progress > span {
     grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.45fr);
     gap: 16px;
     align-items: start;
+}
+
+.relationship-guide {
+    display: flex;
+    align-items: baseline;
+    gap: 6px 10px;
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    background: var(--surface-inset);
+    color: var(--text-color-muted, #59636e);
+    font-size: var(--text-meta);
+    line-height: var(--leading-meta);
+}
+
+.relationship-guide strong {
+    flex: 0 0 auto;
+    color: var(--text-color-default, #1f2328);
 }
 
 .relationship-workspace.is-confirmed {
@@ -952,6 +1001,11 @@ button.overview-node:hover {
     border: 1px solid var(--border-color-default, #d1d9e0);
     border-radius: var(--radius-lg);
     background: var(--surface-raised);
+}
+
+.inspector-back {
+    display: none;
+    align-self: flex-start;
 }
 
 .inspector-header {
@@ -1797,18 +1851,50 @@ dialog form {
         position: static;
     }
 
+    .inspector-back {
+        display: inline-flex;
+        min-height: 44px;
+        margin: -6px 0 -4px;
+    }
+
+    .relationship-guide {
+        align-items: flex-start;
+        flex-direction: column;
+        margin-bottom: 12px;
+    }
+
+    .btn,
     .btn-icon,
     .connection-add:not(.connection-add-labeled),
     .dialog-add-connection,
     .add-connection-remove {
-        width: 40px;
-        height: 40px;
+        min-height: 44px;
+    }
+
+    .btn-icon,
+    .connection-add:not(.connection-add-labeled),
+    .dialog-add-connection,
+    .add-connection-remove {
+        width: 44px;
+        height: 44px;
     }
 
     .btn-sm,
     input,
     select {
-        min-height: 40px;
+        min-height: 44px;
+    }
+
+    .resource-field-reset {
+        display: inline-flex;
+        min-height: 44px;
+        align-items: center;
+    }
+
+    .connection-chip,
+    button.relationship-row,
+    .proposal-diagnostics > summary {
+        min-height: 44px;
     }
 
     .relationship-list-disclosure {

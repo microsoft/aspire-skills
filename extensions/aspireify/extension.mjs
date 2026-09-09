@@ -18,6 +18,15 @@ import {
     presentationMode,
     stableProposalHash,
 } from "./proposal-model.mjs";
+import {
+    appHostIdentity,
+    assignNonConflictingGeneratedEdgeIds,
+    confirmedSnapshotForReadback,
+    DurableSnapshotStore,
+    persistSnapshotBeforeCommit,
+    resolveAppHostIdentity,
+    scanTimeoutDelay,
+} from "./provider-state.mjs";
 
 const CANVAS_ID = "aspireify-graph";
 const DEFAULT_INSTANCE_ID = "aspireify-main";
@@ -42,8 +51,11 @@ const snapshots = new Map();
 const scanTimers = new Map();
 const confirmationRequests = new Map();
 const editHistories = new Map();
+const snapshotLoads = new Map();
+const domainOperations = new Map();
 let sessionRef;
 let ownExtensionId = "";
+let snapshotStore;
 
 function emptySnapshot(appHostPath = "") {
     return {
@@ -69,17 +81,25 @@ function emptySnapshot(appHostPath = "") {
         proposalGeneration: 0,
         confirmed: false,
         confirmation: null,
+        confirmationDelivered: false,
         revision: 0,
         updatedAt: Date.now(),
     };
 }
 
 function domainIdFrom(input) {
-    return String(input?.appHostPath ?? "").trim() || "default";
+    return appHostIdentity(input?.appHostPath).domainId;
 }
 
-function domainIdForContext(context) {
-    return instances.get(context.instanceId)?.domainId ?? domainIdFrom(context.input);
+async function domainIdentityForContext(context) {
+    const instanceDomainId = instances.get(context.instanceId)?.domainId;
+    if (instanceDomainId) {
+        return {
+            domainId: instanceDomainId,
+            appHostPath: getSnapshot(instanceDomainId).appHostPath,
+        };
+    }
+    return await resolveAppHostIdentity(context.input?.appHostPath);
 }
 
 function getSnapshot(domainId) {
@@ -87,6 +107,98 @@ function getSnapshot(domainId) {
         snapshots.set(domainId, emptySnapshot(domainId === "default" ? "" : domainId));
     }
     return snapshots.get(domainId);
+}
+
+async function ensureSnapshot(identity) {
+    if (snapshots.has(identity.domainId)) {
+        return snapshots.get(identity.domainId);
+    }
+    let load = snapshotLoads.get(identity.domainId);
+    if (!load) {
+        load = (async () => {
+            const persisted = await snapshotStore?.load(identity.domainId);
+            const snapshot = persisted
+                ? rehydrateSnapshot(persisted, identity.appHostPath)
+                : emptySnapshot(identity.appHostPath);
+            snapshots.set(identity.domainId, snapshot);
+            const timeoutDelay = scanTimeoutDelay(snapshot, SCAN_TIMEOUT_MS);
+            if (timeoutDelay !== null) {
+                scheduleScanTimeout(
+                    identity.domainId,
+                    snapshot.scanGeneration,
+                    timeoutDelay,
+                );
+            }
+            return snapshot;
+        })();
+        snapshotLoads.set(identity.domainId, load);
+    }
+    try {
+        return await load;
+    } finally {
+        if (snapshotLoads.get(identity.domainId) === load) {
+            snapshotLoads.delete(identity.domainId);
+        }
+    }
+}
+
+function rehydrateSnapshot(persisted, appHostPath) {
+    if (
+        !Array.isArray(persisted.services) ||
+        !Array.isArray(persisted.proposal?.resources) ||
+        !Array.isArray(persisted.proposal?.edges)
+    ) {
+        throw new Error("The persisted Aspireify proposal snapshot is incomplete.");
+    }
+    const snapshot = {
+        ...emptySnapshot(appHostPath),
+        ...structuredClone(persisted),
+        appHostPath: appHostPath || String(persisted.appHostPath ?? ""),
+    };
+    snapshot.confirmation = persisted.confirmation
+        ? freezeSnapshot(persisted.confirmation)
+        : null;
+    snapshot.confirmed = Boolean(snapshot.confirmation);
+    snapshot.confirmationDelivered = snapshot.confirmation
+        ? persisted.confirmationDelivered !== false
+        : false;
+    snapshot.revision = Number.isInteger(persisted.revision) ? persisted.revision : 0;
+    snapshot.updatedAt = Number.isFinite(persisted.updatedAt)
+        ? persisted.updatedAt
+        : Date.now();
+    return snapshot;
+}
+
+function runDomainOperation(domainId, operation) {
+    const previous = domainOperations.get(domainId) ?? Promise.resolve();
+    const current = previous.catch(() => {}).then(operation);
+    domainOperations.set(domainId, current);
+    const release = () => {
+        if (domainOperations.get(domainId) === current) {
+            domainOperations.delete(domainId);
+        }
+    };
+    void current.then(release, release);
+    return current;
+}
+
+async function waitForDomainOperation(domainId) {
+    await domainOperations.get(domainId)?.catch(() => {});
+}
+
+function captureHistory(domainId) {
+    return editHistories.has(domainId)
+        ? structuredClone(editHistories.get(domainId))
+        : null;
+}
+
+function restoreSnapshotAndHistory(domainId, snapshot, history) {
+    snapshots.set(domainId, snapshot);
+    if (history) {
+        editHistories.set(domainId, history);
+    } else {
+        editHistories.delete(domainId);
+    }
 }
 
 function resourceNameFrom(value, index) {
@@ -881,6 +993,7 @@ function snapshotForClient(snapshot) {
         proposalHash: snapshot.confirmation?.proposalHash ?? proposalHash(snapshot),
         confirmedGeneration: snapshot.confirmation?.proposalGeneration ?? null,
         confirmedAt: snapshot.confirmation?.confirmedAt ?? "",
+        confirmationDelivered: snapshot.confirmationDelivered === true,
         revision: snapshot.revision,
         updatedAt: snapshot.updatedAt,
         presentationMode: presentationMode(snapshot.proposal),
@@ -915,13 +1028,22 @@ function broadcast(domainId) {
     }
 }
 
-function updateSnapshot(domainId, update) {
+async function updateSnapshot(domainId, update) {
     const snapshot = getSnapshot(domainId);
-    update(snapshot);
-    snapshot.revision += 1;
-    snapshot.updatedAt = Date.now();
-    broadcast(domainId);
-    return snapshot;
+    const before = structuredClone(snapshot);
+    const historyBefore = captureHistory(domainId);
+    try {
+        update(snapshot);
+        snapshot.revision += 1;
+        snapshot.updatedAt = Date.now();
+        await persistSnapshotBeforeCommit(snapshotStore, domainId, snapshot, () =>
+            broadcast(domainId),
+        );
+        return snapshot;
+    } catch (error) {
+        restoreSnapshotAndHistory(domainId, before, historyBefore);
+        throw error;
+    }
 }
 
 function historyFor(domainId) {
@@ -966,6 +1088,7 @@ function restoreEditableState(snapshot, saved) {
     snapshot.proposalStale = state.proposalStale;
     snapshot.confirmed = false;
     snapshot.confirmation = null;
+    snapshot.confirmationDelivered = false;
 }
 
 function pushHistoryEntry(entries, entry) {
@@ -975,25 +1098,29 @@ function pushHistoryEntry(entries, entry) {
     }
 }
 
-function updateEditableSnapshot(domainId, label, update) {
+async function updateEditableSnapshot(domainId, label, update) {
     const snapshot = getSnapshot(domainId);
-    const before = captureEditableState(snapshot);
+    const before = structuredClone(snapshot);
+    const editableBefore = captureEditableState(snapshot);
+    const historyBefore = captureHistory(domainId);
     try {
         update(snapshot);
         const history = historyFor(domainId);
-        pushHistoryEntry(history.undo, { label, state: before });
+        pushHistoryEntry(history.undo, { label, state: editableBefore });
         history.redo = [];
         snapshot.revision += 1;
         snapshot.updatedAt = Date.now();
-        broadcast(domainId);
+        await persistSnapshotBeforeCommit(snapshotStore, domainId, snapshot, () =>
+            broadcast(domainId),
+        );
         return snapshot;
     } catch (error) {
-        restoreEditableState(snapshot, before);
+        restoreSnapshotAndHistory(domainId, before, historyBefore);
         throw error;
     }
 }
 
-function applyHistory(domainId, direction) {
+async function applyHistory(domainId, direction) {
     const history = historyFor(domainId);
     const source = direction === "undo" ? history.undo : history.redo;
     const target = direction === "undo" ? history.redo : history.undo;
@@ -1003,12 +1130,15 @@ function applyHistory(domainId, direction) {
     }
     const current = captureEditableState(getSnapshot(domainId));
     try {
-        updateSnapshot(domainId, (state) => {
+        await updateSnapshot(domainId, (state) => {
             restoreEditableState(state, entry.state);
             pushHistoryEntry(target, { label: entry.label, state: current });
         });
     } catch (error) {
-        source.push(entry);
+        const restoredHistory = historyFor(domainId);
+        const restoredSource =
+            direction === "undo" ? restoredHistory.undo : restoredHistory.redo;
+        restoredSource.push(entry);
         throw error;
     }
     return entry.label;
@@ -1022,25 +1152,37 @@ function clearScanTimer(domainId) {
     }
 }
 
-function scheduleScanTimeout(domainId, scanGeneration) {
+function scheduleScanTimeout(domainId, scanGeneration, delayMs = SCAN_TIMEOUT_MS) {
     clearScanTimer(domainId);
     const timer = setTimeout(() => {
-        if (scanTimers.get(domainId) !== timer) {
-            return;
-        }
-        scanTimers.delete(domainId);
-        const snapshot = getSnapshot(domainId);
-        if (
-            snapshot.scanStatus !== "scanning" ||
-            snapshot.scanGeneration !== scanGeneration
-        ) {
-            return;
-        }
-        updateSnapshot(domainId, (state) => {
-            state.scanStatus = "complete";
-            state.scanError = "The scan did not report results within two minutes. Try again.";
+        void runDomainOperation(domainId, async () => {
+            if (scanTimers.get(domainId) !== timer) {
+                return;
+            }
+            const snapshot = getSnapshot(domainId);
+            if (
+                snapshot.scanStatus !== "scanning" ||
+                snapshot.scanGeneration !== scanGeneration
+            ) {
+                scanTimers.delete(domainId);
+                return;
+            }
+            await updateSnapshot(domainId, (state) => {
+                state.scanStatus = "complete";
+                state.scanError =
+                    "The scan did not report results within two minutes. Try again.";
+            });
+            if (scanTimers.get(domainId) === timer) {
+                scanTimers.delete(domainId);
+            }
+        }).catch((error) => {
+            if (scanTimers.get(domainId) === timer) {
+                scanTimers.delete(domainId);
+                scheduleScanTimeout(domainId, scanGeneration);
+            }
+            log(`Could not persist the scan timeout state: ${error?.message ?? error}`, "error");
         });
-    }, SCAN_TIMEOUT_MS);
+    }, delayMs);
     timer.unref();
     scanTimers.set(domainId, timer);
 }
@@ -1064,15 +1206,16 @@ function serializeUntrustedData(value) {
 }
 
 function confirmationMessage(snapshot) {
+    const confirmation = snapshot.confirmation ?? confirmationResult(snapshot, true);
     const payload = {
-        proposalGeneration: snapshot.proposalGeneration,
-        proposalHash: proposalHash(snapshot),
-        apphostStyle: snapshot.apphostStyle,
-        included: includedMappedServices(snapshot)
+        proposalGeneration: confirmation.proposalGeneration,
+        proposalHash: confirmation.proposalHash,
+        apphostStyle: confirmation.apphostStyle,
+        included: confirmation.included
             .map((service) => ({ name: service.name, resourceName: service.resourceName })),
-        excluded: excludedMappedServices(snapshot)
+        excluded: confirmation.excluded
             .map((service) => service.name),
-        proposal: confirmedProposal(snapshot.proposal),
+        proposal: confirmation.proposal,
     };
     return [
         "[aspireify canvas: findings confirmed]",
@@ -1083,6 +1226,24 @@ function confirmationMessage(snapshot) {
         "Call get_confirmation on the Aspireify canvas and use that result as the source of truth before editing the AppHost.",
     ]
         .join("\n");
+}
+
+async function deliverConfirmation(domainId) {
+    const snapshot = getSnapshot(domainId);
+    if (snapshot.confirmationDelivered) {
+        return { delivered: true, error: "" };
+    }
+    try {
+        await sendCanvasMessage(confirmationMessage(snapshot));
+        await updateSnapshot(domainId, (state) => {
+            state.confirmationDelivered = true;
+        });
+        return { delivered: true, error: "" };
+    } catch (error) {
+        const message = error?.message ?? String(error);
+        log(`Could not notify chat about the confirmed proposal: ${message}`, "error");
+        return { delivered: false, error: message };
+    }
 }
 
 function proposalRequestMessage(snapshot) {
@@ -1256,7 +1417,7 @@ async function handlePost(entry, path, body, response) {
             });
         }
         const direction = path.endsWith("/undo") ? "undo" : "redo";
-        const label = applyHistory(domainId, direction);
+        const label = await applyHistory(domainId, direction);
         if (!label) {
             return sendJson(response, 409, {
                 ok: false,
@@ -1267,7 +1428,7 @@ async function handlePost(entry, path, body, response) {
     }
 
     if (path === "/api/service/include" && service) {
-        updateEditableSnapshot(
+        await updateEditableSnapshot(
             domainId,
             `${body.value ? "Include" : "Exclude"} ${service.name}`,
             (state) => {
@@ -1300,7 +1461,7 @@ async function handlePost(entry, path, body, response) {
                 error: `Resource "${name || service.name}": ${nameIssues.join(" ")}`,
             });
         }
-        updateEditableSnapshot(domainId, `Rename ${service.resourceName} to ${name}`, (state) => {
+        await updateEditableSnapshot(domainId, `Rename ${service.resourceName} to ${name}`, (state) => {
             service.resourceName = name;
             state.confirmed = false;
             syncServiceResource(state, service, { rename: true });
@@ -1309,7 +1470,7 @@ async function handlePost(entry, path, body, response) {
     }
 
     if (path === "/api/service/type" && service) {
-        updateEditableSnapshot(domainId, `Change ${service.name} type`, (state) => {
+        await updateEditableSnapshot(domainId, `Change ${service.name} type`, (state) => {
             service.type = exactType(body.value, service.type);
             service.kind = classifyServiceKind(service.type);
             service.serviceDefaults = service.include && isDotNetType(service.type);
@@ -1325,7 +1486,7 @@ async function handlePost(entry, path, body, response) {
         service.include &&
         isDotNetType(service.type)
     ) {
-        updateEditableSnapshot(domainId, `Change ${service.name} Service Defaults`, (state) => {
+        await updateEditableSnapshot(domainId, `Change ${service.name} Service Defaults`, (state) => {
             service.serviceDefaults = Boolean(body.value);
             syncServiceResource(state, service);
             state.confirmed = false;
@@ -1359,7 +1520,7 @@ async function handlePost(entry, path, body, response) {
             proposalStale: snapshot.proposalStale,
             confirmed: snapshot.confirmed,
         };
-        const proposalSnapshot = updateSnapshot(domainId, (state) => {
+        const proposalSnapshot = await updateSnapshot(domainId, (state) => {
             state.proposalLoaded = false;
             state.proposalStale = true;
             state.proposalError = "";
@@ -1373,7 +1534,7 @@ async function handlePost(entry, path, body, response) {
             await sendCanvasMessage(proposalRequestMessage(proposalSnapshot));
         } catch (error) {
             if (getSnapshot(domainId).proposalGeneration === proposalGeneration) {
-                updateSnapshot(domainId, (state) => {
+                await updateSnapshot(domainId, (state) => {
                     if (state.revision === proposalRevision) {
                         Object.assign(state, previousProposalState);
                     }
@@ -1450,7 +1611,7 @@ async function handlePost(entry, path, body, response) {
                     : typeof body.serviceDefaults === "boolean"
                       ? `Change ${proposalResource.name} Service Defaults`
                       : `Edit ${proposalResource.name}`;
-        updateEditableSnapshot(domainId, historyLabel, (state) => {
+        await updateEditableSnapshot(domainId, historyLabel, (state) => {
             const previousName = proposalResource.name;
             if (typeof body.name === "string") {
                 proposalResource.name = nextName;
@@ -1518,7 +1679,7 @@ async function handlePost(entry, path, body, response) {
         if (!resourceDiffersFromGenerated(proposalResource)) {
             return sendJson(response, 200, { ok: true, changed: false });
         }
-        updateEditableSnapshot(domainId, `Reset ${proposalResource.name} fields`, (state) => {
+        await updateEditableSnapshot(domainId, `Reset ${proposalResource.name} fields`, (state) => {
             const previousName = proposalResource.name;
             proposalResource.name = generated.name;
             proposalResource.type = generated.type;
@@ -1627,7 +1788,7 @@ async function handlePost(entry, path, body, response) {
             edgeKeys.add(key);
             connections.push(edge);
         }
-        updateEditableSnapshot(domainId, `Add ${name}`, (state) => {
+        await updateEditableSnapshot(domainId, `Add ${name}`, (state) => {
             const resource = normalizeProposalResource(
                 {
                     id: newResourceId,
@@ -1656,7 +1817,7 @@ async function handlePost(entry, path, body, response) {
     }
 
     if (path === "/api/proposal/resource/delete" && proposalResource) {
-        updateEditableSnapshot(domainId, `Remove ${proposalResource.name}`, (state) => {
+        await updateEditableSnapshot(domainId, `Remove ${proposalResource.name}`, (state) => {
             const linkedService = state.services.find(
                 (candidate) => candidate.id === proposalResource.serviceId,
             );
@@ -1737,7 +1898,7 @@ async function handlePost(entry, path, body, response) {
                 error: `A ${nextKind} connection from "${nextFrom}" to "${nextTo}" already exists.`,
             });
         }
-        updateEditableSnapshot(
+        await updateEditableSnapshot(
             domainId,
             `Edit ${proposalEdge.from} to ${proposalEdge.to} connection`,
             (state) => {
@@ -1779,7 +1940,7 @@ async function handlePost(entry, path, body, response) {
         if (!edgeDiffersFromGenerated(proposalEdge)) {
             return sendJson(response, 200, { ok: true, changed: false });
         }
-        updateEditableSnapshot(
+        await updateEditableSnapshot(
             domainId,
             `Reset ${proposalEdge.from} to ${proposalEdge.to} connection`,
             (state) => {
@@ -1797,7 +1958,7 @@ async function handlePost(entry, path, body, response) {
     }
 
     if (path === "/api/proposal/edge/delete" && proposalEdge) {
-        updateEditableSnapshot(
+        await updateEditableSnapshot(
             domainId,
             `Remove ${proposalEdge.kind} connection from ${proposalEdge.from} to ${proposalEdge.to}`,
             (state) => {
@@ -1861,7 +2022,7 @@ async function handlePost(entry, path, body, response) {
                 error: `A ${kind} connection from "${from}" to "${to}" already exists.`,
             });
         }
-        updateEditableSnapshot(
+        await updateEditableSnapshot(
             domainId,
             `Add ${kind} connection from ${from} to ${to}`,
             (state) => {
@@ -1877,7 +2038,7 @@ async function handlePost(entry, path, body, response) {
         if (snapshot.scanStatus === "scanning") {
             return sendJson(response, 409, { ok: false, error: "A scan is already in progress." });
         }
-        const scanningSnapshot = updateSnapshot(domainId, (state) => {
+        const scanningSnapshot = await updateSnapshot(domainId, (state) => {
             state.scanStatus = "scanning";
             state.scanError = "";
             state.proposalStale =
@@ -1898,10 +2059,10 @@ async function handlePost(entry, path, body, response) {
             );
         } catch (error) {
             if (getSnapshot(domainId).scanGeneration === scanGeneration) {
-                clearScanTimer(domainId);
-                updateSnapshot(domainId, (state) => {
+                await updateSnapshot(domainId, (state) => {
                     state.scanStatus = "complete";
                 });
+                clearScanTimer(domainId);
             }
             throw error;
         }
@@ -1928,23 +2089,39 @@ async function handlePost(entry, path, body, response) {
             return sendJson(response, 400, { ok: false, error: proposalIssues.join(" ") });
         }
         if (isConfirmed(snapshot)) {
-            return sendJson(response, 200, { ok: true, confirmed: true });
+            const delivery = await deliverConfirmation(domainId);
+            return sendJson(response, delivery.delivered ? 200 : 202, {
+                ok: true,
+                confirmed: true,
+                ...delivery,
+            });
         }
 
         let confirmationRequest = confirmationRequests.get(domainId);
         if (!confirmationRequest) {
             const revision = snapshot.revision;
-            const prompt = confirmationMessage(snapshot);
             confirmationRequest = (async () => {
-                await sendCanvasMessage(prompt);
                 if (getSnapshot(domainId).revision !== revision) {
                     return false;
                 }
-                updateSnapshot(domainId, (state) => {
-                    state.confirmed = true;
-                    state.confirmation = freezeSnapshot(confirmationResult(state, true));
-                    clearHistory(domainId);
-                });
+                const confirmedSnapshot = structuredClone(getSnapshot(domainId));
+                confirmedSnapshot.confirmed = true;
+                confirmedSnapshot.confirmationDelivered = false;
+                confirmedSnapshot.confirmation = freezeSnapshot(
+                    confirmationResult(confirmedSnapshot, true),
+                );
+                confirmedSnapshot.revision += 1;
+                confirmedSnapshot.updatedAt = Date.now();
+                await persistSnapshotBeforeCommit(
+                    snapshotStore,
+                    domainId,
+                    confirmedSnapshot,
+                    (persistedSnapshot) => {
+                        snapshots.set(domainId, persistedSnapshot);
+                        clearHistory(domainId);
+                        broadcast(domainId);
+                    },
+                );
                 return true;
             })().finally(() => confirmationRequests.delete(domainId));
             confirmationRequests.set(domainId, confirmationRequest);
@@ -1953,16 +2130,26 @@ async function handlePost(entry, path, body, response) {
         if (!(await confirmationRequest)) {
             return sendJson(response, 409, {
                 ok: false,
-                error: "The proposal changed while confirmation was being sent. Review and confirm it again.",
+                error: "The proposal changed while confirmation was being saved. Review and confirm it again.",
             });
         }
-        return sendJson(response, 200, { ok: true, confirmed: true });
+        const delivery = await deliverConfirmation(domainId);
+        return sendJson(response, delivery.delivered ? 200 : 202, {
+            ok: true,
+            confirmed: true,
+            ...delivery,
+        });
     }
 
     return sendJson(response, 404, { ok: false, error: "Unknown action." });
 }
 
 async function handleRequest(entry, request, response) {
+    await ensureSnapshot({
+        domainId: entry.domainId,
+        appHostPath: entry.appHostPath,
+    });
+    await waitForDomainOperation(entry.domainId);
     const url = new URL(request.url, "http://127.0.0.1");
     const authorizationError = authorizeRequest(entry, request, url, url.pathname);
     if (authorizationError) {
@@ -1973,7 +2160,9 @@ async function handleRequest(entry, request, response) {
     }
     if (
         request.method === "GET" &&
-        ["/app.js", "/styles.css", "/resource-types.js"].includes(url.pathname)
+        ["/app.js", "/styles.css", "/resource-types.js", "/interaction-model.js"].includes(
+            url.pathname,
+        )
     ) {
         return serveAsset(response, url.pathname.slice(1));
     }
@@ -1998,7 +2187,10 @@ async function handleRequest(entry, request, response) {
     }
     if (request.method === "POST") {
         try {
-            return await handlePost(entry, url.pathname, await readJsonBody(request), response);
+            const body = await readJsonBody(request);
+            return await runDomainOperation(entry.domainId, () =>
+                handlePost(entry, url.pathname, body, response),
+            );
         } catch (error) {
             log(`Aspireify canvas request failed: ${error?.message ?? error}`, "error");
             return sendJson(response, 500, { ok: false, error: error?.message ?? String(error) });
@@ -2008,10 +2200,11 @@ async function handleRequest(entry, request, response) {
     response.end("Not found");
 }
 
-async function startServer(instanceId, domainId) {
+async function startServer(instanceId, identity) {
     const entry = {
         instanceId,
-        domainId,
+        domainId: identity.domainId,
+        appHostPath: identity.appHostPath,
         clients: new Set(),
         server: undefined,
         url: "",
@@ -2103,18 +2296,30 @@ const aspireifyCanvas = createCanvas({
                         description:
                             "Generation supplied by the latest re-scan callback. Omit only for the initial scan.",
                     },
+                    startNewRun: {
+                        type: "boolean",
+                        description:
+                            "Start a new Aspireify review for this AppHost, replacing a previously confirmed snapshot.",
+                    },
                     services: { type: "array", items: SERVICE_SCHEMA },
                 },
                 required: ["services", "apphostStyle"],
             },
-            handler: (context) => {
-                const domainId = domainIdForContext(context);
-                const current = getSnapshot(domainId);
-                if (isConfirmed(current) || confirmationRequests.has(domainId)) {
+            handler: async (context) => {
+                const identity = await domainIdentityForContext(context);
+                const domainId = identity.domainId;
+                return await runDomainOperation(domainId, async () => {
+                const current = await ensureSnapshot(identity);
+                const startNewRun = context.input.startNewRun === true;
+                if (
+                    confirmationRequests.has(domainId) ||
+                    (isConfirmed(current) && !startNewRun)
+                ) {
                     throw new Error("The confirmed resource plan is read-only.");
                 }
                 const scanGeneration = context.input.scanGeneration ?? 0;
-                if (scanGeneration !== current.scanGeneration) {
+                const expectedScanGeneration = startNewRun ? 0 : current.scanGeneration;
+                if (scanGeneration !== expectedScanGeneration) {
                     throw new Error(
                         "This scan result is stale. Re-run the latest scan request before loading discovery.",
                     );
@@ -2132,8 +2337,13 @@ const aspireifyCanvas = createCanvas({
                     }
                     serviceIds.add(service.id);
                 }
-                clearScanTimer(domainId);
-                const snapshot = updateSnapshot(domainId, (state) => {
+                const snapshot = await updateSnapshot(domainId, (state) => {
+                    if (startNewRun) {
+                        const replacement = emptySnapshot(identity.appHostPath);
+                        replacement.revision = state.revision;
+                        Object.assign(state, replacement);
+                        clearHistory(domainId);
+                    }
                     state.proposalGeneration += 1;
                     const previousServices = state.services;
                     const previousPathCounts = countServicePaths(previousServices);
@@ -2242,11 +2452,13 @@ const aspireifyCanvas = createCanvas({
                         state.proposalStale || state.proposal.resources.length > 0;
                     clearHistory(domainId);
                 });
+                clearScanTimer(domainId);
                 return {
                     ok: true,
                     serviceCount: snapshot.services.length,
                     proposalGeneration: snapshot.proposalGeneration,
                 };
+                });
             },
         },
         {
@@ -2339,9 +2551,11 @@ const aspireifyCanvas = createCanvas({
                 },
                 required: ["proposalGeneration"],
             },
-            handler: (context) => {
-                const domainId = domainIdForContext(context);
-                const current = getSnapshot(domainId);
+            handler: async (context) => {
+                const identity = await domainIdentityForContext(context);
+                const domainId = identity.domainId;
+                return await runDomainOperation(domainId, async () => {
+                const current = await ensureSnapshot(identity);
                 if (isConfirmed(current) || confirmationRequests.has(domainId)) {
                     throw new Error("The confirmed resource plan is read-only.");
                 }
@@ -2371,7 +2585,7 @@ const aspireifyCanvas = createCanvas({
                 if (resolvedIncomingEdges) {
                     validateSubmittedProposalEdges(resolvedIncomingEdges);
                 }
-                const snapshot = updateSnapshot(domainId, (state) => {
+                const snapshot = await updateSnapshot(domainId, (state) => {
                     const preservedResources = state.proposal.resources.filter(
                         (resource) => resource.userAdded,
                     );
@@ -2452,7 +2666,7 @@ const aspireifyCanvas = createCanvas({
                                 edgeEndpointsAvailable(edge, resourceIds, resourceNames),
                         )
                         .map((edge) => synchronizeEdgeNames(edge, resourcesById));
-                    const generatedEdges = resolvedIncomingEdges
+                    let generatedEdges = resolvedIncomingEdges
                         ? resolvedIncomingEdges
                               .map((edge, index) => {
                                   const fromId =
@@ -2503,6 +2717,17 @@ const aspireifyCanvas = createCanvas({
                                   edgeEndpointsAvailable(edge, resourceIds, resourceNames),
                               )
                               .map((edge) => synchronizeEdgeNames(edge, resourcesById));
+                    const preservedUserEdgeKeys = new Set(
+                        preservedEdges
+                            .filter((edge) => edge.userAdded)
+                            .map((edge) => proposalEdgeKey(edge)),
+                    );
+                    generatedEdges = assignNonConflictingGeneratedEdgeIds(
+                        generatedEdges.filter(
+                            (edge) => !preservedUserEdgeKeys.has(proposalEdgeKey(edge)),
+                        ),
+                        preservedEdges.filter((edge) => edge.userAdded),
+                    );
                     const unavailableEdges = generatedEdges.filter(
                         (edge) => !edgeEndpointsAvailable(edge, resourceIds, resourceNames),
                     );
@@ -2564,6 +2789,7 @@ const aspireifyCanvas = createCanvas({
                     edgeCount: snapshot.proposal.edges.length,
                     edgeCounts: countEdgesByKind(snapshot.proposal.edges),
                 };
+                });
             },
         },
         {
@@ -2575,29 +2801,42 @@ const aspireifyCanvas = createCanvas({
                 additionalProperties: false,
                 properties: APPHOST_PATH_SCHEMA,
             },
-            handler: (context) => {
-                const snapshot = getSnapshot(domainIdForContext(context));
-                return snapshot.confirmation
-                    ? JSON.parse(JSON.stringify(snapshot.confirmation))
-                    : confirmationResult(snapshot);
+            handler: async (context) => {
+                const identity = await domainIdentityForContext(context);
+                await waitForDomainOperation(identity.domainId);
+                const snapshot = await ensureSnapshot(identity);
+                const confirmation = confirmedSnapshotForReadback(snapshot);
+                if (!confirmation) {
+                    throw new CanvasError(
+                        "aspireify_not_confirmed",
+                        "The user has not confirmed this AppHost proposal yet.",
+                    );
+                }
+                return confirmation;
             },
         },
     ],
     open: async (context) => {
         ownExtensionId = context.extensionId || ownExtensionId;
-        const domainId = domainIdFrom(context.input);
+        const identity = await resolveAppHostIdentity(context.input?.appHostPath);
+        const domainId = identity.domainId;
+        await waitForDomainOperation(domainId);
+        await ensureSnapshot(identity);
         let entry = instances.get(context.instanceId);
         if (!entry) {
-            entry = await startServer(context.instanceId, domainId);
+            entry = await startServer(context.instanceId, identity);
         } else if (entry.domainId !== domainId) {
             entry.domainId = domainId;
+            entry.appHostPath = identity.appHostPath;
             broadcast(domainId);
         }
         const snapshot = getSnapshot(domainId);
         return {
             title: snapshot.repoName ? `Aspireify - ${snapshot.repoName}` : "Aspireify",
             status: isConfirmed(snapshot)
-                ? "Confirmed"
+                ? snapshot.confirmationDelivered
+                    ? "Confirmed"
+                    : "Confirmed - chat handoff pending"
                 : snapshot.proposalLoaded && !snapshot.proposalStale
                   ? `Proposal generation ${snapshot.proposalGeneration} awaiting confirmation`
                   : "Receiving proposal snapshot",
@@ -2717,7 +2956,10 @@ const openAspireifyTool = {
                 instanceId,
                 input: arguments_?.appHostPath ? { appHostPath: arguments_.appHostPath } : {},
             });
-            const snapshot = getSnapshot(domainIdFrom(arguments_));
+            const domainId =
+                instances.get(instanceId)?.domainId ??
+                (await resolveAppHostIdentity(arguments_?.appHostPath)).domainId;
+            const snapshot = getSnapshot(domainId);
             return `Opened Aspireify confirmation (instance '${instanceId}'). Current scanGeneration=${snapshot.scanGeneration}.`;
         } catch (error) {
             return {
@@ -2736,6 +2978,7 @@ const SESSION_GUIDANCE =
 const ASPIREFY_WORKFLOW_GUIDANCE =
     "This request is part of the aspireify workflow. Keep discovery questions and implementation tradeoffs in chat. " +
     "When the proposal is ready, call open_aspireify, then load_discovery with the AppHost style and every runnable service's stable unique id, name, type, framework, exposesHttp, and path. " +
+    "If the same AppHost already has a confirmed snapshot and the user starts a new Aspireify run, pass startNewRun=true to load_discovery. " +
     "Pass the proposalGeneration returned by load_discovery to set_proposal with the complete resource graph. Do not invent or add fields that the Aspireify skill did not discover or propose. Preserve exact proposal type labels when supplied. " +
     "Wait for the user to confirm in the canvas, then call get_confirmation before editing any files. Never make the canvas scan the repository, resolve tradeoffs, generate the proposal, edit the AppHost, start resources, or validate the application. " +
     "If the canvas host is unavailable, present and confirm the same proposal in chat.";
@@ -2787,7 +3030,8 @@ function onPostToolUse(input) {
     }
     if (
         toolName === "invoke_canvas_action" &&
-        String(toolArgs.actionName ?? "").toLowerCase() === "set_proposal"
+        String(toolArgs.actionName ?? "").toLowerCase() === "set_proposal" &&
+        instances.has(String(toolArgs.instanceId ?? ""))
     ) {
         return { additionalContext: AFTER_PROPOSAL_GUIDANCE };
     }
@@ -2806,3 +3050,4 @@ sessionRef = await joinSession({
         onPostToolUse,
     },
 });
+snapshotStore = new DurableSnapshotStore(sessionRef.workspacePath);

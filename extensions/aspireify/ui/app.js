@@ -7,6 +7,13 @@ import {
     isCompatibleAspireResourceType,
     isDotNetType,
 } from "./resource-types.js";
+import {
+    confirmationIsDisabled,
+    createFieldOperationCoordinator,
+    fieldOperationKey,
+    operationFailureChannel,
+    selectionFocusTarget,
+} from "./interaction-model.js";
 
 const apiToken = new URLSearchParams(window.location.search).get("token") || "";
 
@@ -64,6 +71,7 @@ const elements = {
     compactResources: document.getElementById("compact-resources"),
     compactAddResource: document.getElementById("compact-add-resource"),
     relationshipWorkspace: document.getElementById("relationship-workspace"),
+    relationshipGuide: document.getElementById("relationship-guide"),
     planOverview: document.getElementById("plan-overview"),
     planInspector: document.getElementById("plan-inspector"),
     relationshipListDisclosure: document.getElementById("relationship-list-disclosure"),
@@ -118,12 +126,15 @@ let snapshot;
 let firstRender = true;
 let pendingMutations = 0;
 let mutationError = "";
+let confirmationError = "";
+let handoffError = "";
 let connectionRowSequence = 0;
 let pendingRemoval;
 let eventsConnected = false;
 let activeViewTransition;
 let selectedResourceId = "";
 const fieldDrafts = new Map();
+const fieldOperations = createFieldOperationCoordinator();
 const detailTextareaWidths = new WeakMap();
 const detailResizeObserver =
     typeof ResizeObserver === "function"
@@ -315,7 +326,8 @@ async function waitForRevisionAfter(revision, timeoutMs) {
 }
 
 async function runBusy(control, action, onError) {
-    const blocksConfirmation = control !== elements.confirm;
+    const confirmationAction = control === elements.confirm;
+    const blocksConfirmation = !confirmationAction;
     if (blocksConfirmation) {
         pendingMutations += 1;
         if (snapshot?.proposal) {
@@ -330,20 +342,27 @@ async function runBusy(control, action, onError) {
     try {
         await action();
         succeeded = true;
-        mutationError = "";
+        if (confirmationAction) {
+            confirmationError = "";
+        } else {
+            mutationError = "";
+        }
     } catch (error) {
         onError?.(error);
-        showInlineError(error);
+        const failureChannel = operationFailureChannel({
+            confirmationAction,
+            confirmed: Boolean(snapshot?.confirmed),
+        });
+        if (failureChannel === "mutation") {
+            showInlineError(error);
+        } else {
+            showConfirmationError(error, failureChannel);
+        }
     } finally {
         elements.body.classList.remove("is-busy");
         if (control) {
             if (control === elements.confirm) {
-                control.disabled =
-                    !snapshot?.proposalLoaded ||
-                    snapshot?.proposalStale ||
-                    confirmationIssues().length > 0 ||
-                    snapshot?.confirmed ||
-                    pendingMutations > 0;
+                renderConfirmation();
             } else {
                 control.disabled = false;
             }
@@ -412,11 +431,20 @@ async function confirmSnapshot() {
     }
     const originalLabel = elements.confirm.textContent;
     await runBusy(elements.confirm, async () => {
-        elements.confirm.textContent = "Confirming…";
+        elements.confirm.textContent = snapshot.confirmed ? "Notifying…" : "Confirming…";
         try {
             const result = await post("/api/confirm", {});
             if (result.confirmed) {
-                snapshot = { ...snapshot, confirmed: true };
+                snapshot = {
+                    ...snapshot,
+                    confirmed: true,
+                    confirmationDelivered: Boolean(result.delivered),
+                };
+                handoffError = result.delivered
+                    ? ""
+                    : result.error || "Chat could not be notified yet.";
+                elements.actionFooter.hidden = snapshot.confirmationDelivered;
+                renderProposalIdentity();
                 renderStatus();
                 renderConfirmation();
             }
@@ -465,8 +493,14 @@ function render(nextSnapshot) {
         }
         unobserveDetailTextareas();
         mutationError = "";
+        confirmationError = "";
+        if (nextSnapshot?.confirmationDelivered) {
+            handoffError = "";
+        }
         if (domainChanged) {
+            handoffError = "";
             fieldDrafts.clear();
+            fieldOperations.clear();
             selectedResourceId = "";
             pendingRemoval = undefined;
             connectionRowSequence = 0;
@@ -498,7 +532,8 @@ function render(nextSnapshot) {
         elements.skeleton.hidden = true;
         elements.error.hidden = true;
         elements.snapshot.hidden = false;
-        elements.actionFooter.hidden = snapshot.confirmed;
+        elements.actionFooter.hidden =
+            snapshot.confirmed && snapshot.confirmationDelivered;
         elements.apphostControl.hidden = !snapshot.apphostStyle;
         elements.body.classList.toggle("is-confirmed", snapshot.confirmed);
         updateAppHostValue();
@@ -547,6 +582,7 @@ function renderResourcePlan() {
         "compact";
     elements.compactResources.hidden = !compact || snapshot.confirmed;
     elements.relationshipWorkspace.hidden = compact && !snapshot.confirmed;
+    elements.relationshipGuide.hidden = compact || snapshot.confirmed;
     elements.relationshipListDisclosure.hidden = compact && !snapshot.confirmed;
     elements.compactAddResource.hidden = snapshot.confirmed;
     if (snapshot.confirmed) {
@@ -735,7 +771,7 @@ function renderOverviewNode(resource, edges, issues, confirmed) {
     }
     node.append(marker, copy, meta);
     if (!confirmed) {
-        node.addEventListener("click", () => selectResource(resource.id, true));
+        node.addEventListener("click", () => selectResource(resource.id, "activate"));
         node.addEventListener("keydown", handleOverviewKeydown);
     }
     return node;
@@ -797,26 +833,34 @@ function handleOverviewKeydown(event) {
                 : (currentIndex - 1 + nodes.length) % nodes.length;
     const resourceId = nodes[nextIndex]?.dataset.resourceId;
     if (resourceId) {
-        selectResource(resourceId, true);
+        selectResource(resourceId, "navigate");
     }
 }
 
-function selectResource(resourceId, restoreNodeFocus = false) {
+function selectResource(resourceId, activation = "activate") {
     selectedResourceId = resourceId;
     renderResourcePlan();
-    if (restoreNodeFocus) {
-        requestAnimationFrame(() => {
-            document.getElementById(overviewNodeId(resourceId))?.focus();
-            if (window.matchMedia("(max-width: 719px)").matches) {
-                elements.planInspector.scrollIntoView({
-                    block: "start",
-                    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-                        ? "auto"
-                        : "smooth",
-                });
-            }
-        });
-    }
+    requestAnimationFrame(() => {
+        const narrow = window.matchMedia("(max-width: 719px)").matches;
+        const focusTarget = selectionFocusTarget({ narrow, activation });
+        if (focusTarget === "inspector") {
+            elements.planInspector.scrollIntoView({
+                block: "start",
+                behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+                    ? "auto"
+                    : "smooth",
+            });
+            elements.planInspector.querySelector(".inspector-back")?.focus({
+                preventScroll: true,
+            });
+            return;
+        }
+        const node = document.getElementById(overviewNodeId(resourceId));
+        node?.focus({ preventScroll: true });
+        if (narrow) {
+            node?.scrollIntoView({ block: "nearest" });
+        }
+    });
 }
 
 function renderInspector(resource, edges, resourceIssues) {
@@ -833,6 +877,28 @@ function renderInspector(resource, edges, resourceIssues) {
     const inspector = createElement("article", {
         className: `resource-inspector resource-${resourceKind(resource)}`,
     });
+    const back = createElement("button", {
+        className: "btn btn-quiet btn-sm inspector-back",
+        text: "← Back to resources",
+        attrs: {
+            type: "button",
+            "aria-controls": "plan-overview",
+        },
+    });
+    back.addEventListener("click", () => {
+        elements.planOverview.scrollIntoView({
+            block: "start",
+            behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+                ? "auto"
+                : "smooth",
+        });
+        requestAnimationFrame(() => {
+            document.getElementById(overviewNodeId(resource.id))?.focus({
+                preventScroll: true,
+            });
+        });
+    });
+    inspector.append(back);
     const header = createElement("div", { className: "inspector-header" });
     const identity = createElement("div", { className: "inspector-identity" });
     const title = createElement("h2");
@@ -989,6 +1055,16 @@ function createResourceActionButtons(resource) {
 }
 
 async function resetEntireResource(resource, control) {
+    const draftKeys = [...fieldDrafts.values()]
+        .filter((draft) => draft.resourceId === resource.id)
+        .map((draft) => fieldOperationKey(draft.resourceId, draft.field));
+    const operationKeys = [
+        ...new Set([...fieldOperations.keysForResource(resource.id), ...draftKeys]),
+    ];
+    for (const key of operationKeys) {
+        fieldOperations.invalidate(key);
+    }
+    await Promise.all(operationKeys.map((key) => fieldOperations.settle(key)));
     const reset = await runBusy(control, async () => {
         await post("/api/proposal/resource/reset", { id: resource.id });
     });
@@ -1397,6 +1473,7 @@ function updateFieldEditor(resource, field, editor) {
 }
 
 async function saveFieldDraft(resource, field, value, control, editor) {
+    const operationKey = fieldOperationKey(resource.id, field);
     if (valuesEqual(resource[field], value)) {
         clearFieldDraft(resource, field);
         updateFieldEditor(resource, field, editor);
@@ -1407,7 +1484,8 @@ async function saveFieldDraft(resource, field, value, control, editor) {
     updateFieldEditor(resource, field, editor);
     renderConfirmation();
     let failure;
-    const saved = await runBusy(
+    const operationVersion = fieldOperations.begin(operationKey);
+    const saveOperation = runBusy(
         control,
         async () => {
             await post("/api/proposal/resource", {
@@ -1419,6 +1497,11 @@ async function saveFieldDraft(resource, field, value, control, editor) {
             failure = error;
         },
     );
+    fieldOperations.track(operationKey, saveOperation);
+    const saved = await saveOperation;
+    if (!fieldOperations.isCurrent(operationKey, operationVersion)) {
+        return saved;
+    }
     if (saved) {
         clearFieldDraft(resource, field, savingDraft);
     } else if (fieldDraft(resource, field) === savingDraft) {
@@ -1439,6 +1522,8 @@ async function resetResourceField(resource, field, control, editor) {
     if (!resource.generated) {
         return;
     }
+    const operationKey = fieldOperationKey(resource.id, field);
+    const resetVersion = fieldOperations.invalidate(operationKey);
     const generatedValue = resource.generated[field];
     clearFieldDraft(resource, field);
     if (control instanceof HTMLInputElement && control.type === "checkbox") {
@@ -1455,8 +1540,35 @@ async function resetResourceField(resource, field, control, editor) {
     }
     updateFieldEditor(resource, field, editor);
     renderConfirmation();
-    if (!valuesEqual(resource[field], generatedValue)) {
-        await saveFieldDraft(resource, field, generatedValue, control, editor);
+    await fieldOperations.settle(operationKey);
+    if (!fieldOperations.isCurrent(operationKey, resetVersion)) {
+        return;
+    }
+    const currentResource = snapshot.proposal.resources.find(
+        (candidate) => candidate.id === resource.id,
+    );
+    if (!currentResource || valuesEqual(currentResource[field], generatedValue)) {
+        renderResourcePlan();
+        renderConfirmation();
+        return;
+    }
+    const resetOperation = runBusy(editor.reset, async () => {
+        await post("/api/proposal/resource", {
+            id: resource.id,
+            [field]: generatedValue,
+        });
+    });
+    fieldOperations.track(operationKey, resetOperation);
+    const reset = await resetOperation;
+    if (!reset) {
+        renderResourcePlan();
+        renderConfirmation();
+        return;
+    }
+    if (fieldOperations.isCurrent(operationKey, resetVersion)) {
+        clearFieldDraft(resource, field);
+        renderResourcePlan();
+        renderConfirmation();
     }
 }
 
@@ -1667,11 +1779,11 @@ function renderProposalIdentity() {
               timeStyle: "short",
           })}`;
     elements.proposalStateCopy.textContent = snapshot.confirmed
-        ? "AppHost proposal confirmed"
-        : "AppHost proposal awaiting confirmation";
-    elements.proposalGeneratedAt.textContent = snapshot.confirmed
-        ? `${generatedLabel} · Immutable snapshot. Implementation continues in chat.`
-        : `${generatedLabel} · AppHost wiring has not started.`;
+        ? snapshot.confirmationDelivered
+            ? "Proposal confirmed · Implementation continues in chat"
+            : "Proposal confirmed · Notify chat to continue"
+        : "Proposal ready for review";
+    elements.proposalGeneratedAt.textContent = generatedLabel;
     elements.proposalGeneration.textContent = String(
         snapshot.confirmedGeneration ?? snapshot.proposalGeneration,
     );
@@ -1693,13 +1805,17 @@ function renderStatus() {
     if (snapshot.proposalError) {
         setStatusLine(snapshot.proposalError);
     } else if (snapshot.confirmed) {
-        setStatusLine("Proposal confirmed");
+        setStatusLine(
+            snapshot.confirmationDelivered
+                ? "Proposal confirmed"
+                : "Proposal confirmed · Chat handoff pending",
+        );
     } else {
         setStatusLine(`${
             includedResources.length
         } resource${includedResources.length === 1 ? "" : "s"} · ${activeEdges} connection${
             activeEdges === 1 ? "" : "s"
-        } · Awaiting confirmation`);
+        }`);
     }
 }
 
@@ -1708,24 +1824,35 @@ function renderConfirmation() {
     const resourceIssueCount = Object.keys(proposalValidation().resourceIssues).length;
     const unresolvedDrafts = [...fieldDrafts.values()];
     const nonResourceIssues = issues.filter((issue) => !issue.startsWith('Resource "'));
-    elements.confirm.disabled =
-        !snapshot.proposalLoaded ||
-        snapshot.proposalStale ||
-        issues.length > 0 ||
-        snapshot.confirmed ||
-        pendingMutations > 0;
-    elements.confirm.textContent = snapshot.confirmed ? "Confirmed" : "Confirm";
+    elements.confirm.disabled = confirmationIsDisabled({
+        proposalLoaded: snapshot.proposalLoaded,
+        proposalStale: snapshot.proposalStale,
+        issueCount: issues.length,
+        confirmed: snapshot.confirmed,
+        confirmationDelivered: snapshot.confirmationDelivered,
+        pendingMutations,
+        mutationError,
+    });
+    const handoffPending = snapshot.confirmed && !snapshot.confirmationDelivered;
+    elements.confirm.textContent = handoffPending
+        ? "Notify chat"
+        : snapshot.confirmed
+          ? "Confirmed"
+          : "Confirm";
     const hasBlockingMessage = Boolean(mutationError || issues.length);
-    elements.confirmSummary.hidden = hasBlockingMessage || snapshot.confirmed;
-    elements.confirmSummary.textContent = hasBlockingMessage
+    const hasFooterMessage = hasBlockingMessage || Boolean(confirmationError) || handoffPending;
+    elements.confirmSummary.hidden = hasFooterMessage || snapshot.confirmed;
+    elements.confirmSummary.textContent = hasFooterMessage
         ? ""
         : confirmationSummaryText();
-    elements.footerNote.hidden = !hasBlockingMessage || snapshot.confirmed;
-    elements.footerNote.textContent = mutationError
+    elements.footerNote.hidden = !hasFooterMessage;
+    elements.footerNote.textContent = handoffPending
+        ? handoffError || "Confirmation is saved. Notify chat to continue."
+        : mutationError
         ? mutationError
-        : snapshot.confirmed
-          ? ""
-          : unresolvedDrafts.length
+        : confirmationError
+          ? confirmationError
+        : unresolvedDrafts.length
             ? `${unresolvedDrafts.length} edit${unresolvedDrafts.length === 1 ? "" : "s"} must be saved or reset before confirmation.`
           : resourceIssueCount
             ? `${resourceIssueCount} resource${resourceIssueCount === 1 ? "" : "s"} need attention before confirmation.${
@@ -2276,6 +2403,16 @@ function showInlineError(error) {
     mutationError = error?.message ?? String(error);
     elements.footerNote.hidden = false;
     elements.footerNote.textContent = mutationError;
+}
+
+function showConfirmationError(error, failureChannel) {
+    const message = error?.message ?? String(error);
+    if (failureChannel === "handoff") {
+        handoffError = message;
+    } else {
+        confirmationError = message;
+    }
+    renderConfirmation();
 }
 
 function clearDialogError(element) {
