@@ -268,17 +268,30 @@ function connectEvents() {
 }
 
 async function post(path, body) {
-    const previousRevision = snapshot?.revision ?? -1;
+    const requestSnapshot = snapshot;
+    const previousRevision = requestSnapshot?.revision ?? -1;
+    const requestBody = {
+        ...body,
+        expectedAppHostPath: String(requestSnapshot?.appHostPath ?? ""),
+        expectedRevision: requestSnapshot?.revision,
+    };
+    if (path === "/api/confirm") {
+        requestBody.expectedProposalGeneration = requestSnapshot?.proposalGeneration;
+        requestBody.expectedProposalHash = requestSnapshot?.proposalHash;
+    }
     const response = await fetch(path, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
             "X-Aspireify-Token": apiToken,
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(requestBody),
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
+        if (response.status === 409) {
+            await refreshSnapshot();
+        }
         throw new Error(payload.error ?? "The canvas action failed.");
     }
     if (
@@ -432,6 +445,7 @@ async function retryProposalOrSnapshot() {
 function snapshotRevisionIsStale(nextSnapshot) {
     return (
         !firstRender &&
+        nextSnapshot?.appHostPath === snapshot?.appHostPath &&
         Number.isInteger(nextSnapshot?.revision) &&
         Number.isInteger(snapshot?.revision) &&
         nextSnapshot.revision <= snapshot.revision
@@ -442,13 +456,30 @@ function render(nextSnapshot) {
     if (snapshotRevisionIsStale(nextSnapshot)) {
         return;
     }
-    const focusToken = captureFocusToken();
+    const domainChanged =
+        Boolean(snapshot) && nextSnapshot?.appHostPath !== snapshot?.appHostPath;
+    const focusToken = domainChanged ? null : captureFocusToken();
     const draw = () => {
         if (snapshotRevisionIsStale(nextSnapshot)) {
             return;
         }
         unobserveDetailTextareas();
         mutationError = "";
+        if (domainChanged) {
+            fieldDrafts.clear();
+            selectedResourceId = "";
+            pendingRemoval = undefined;
+            connectionRowSequence = 0;
+            for (const dialog of [
+                elements.addResourceDialog,
+                elements.connectionDialog,
+                elements.removeDialog,
+            ]) {
+                if (dialog.open) {
+                    dialog.close();
+                }
+            }
+        }
         snapshot = nextSnapshot;
         reconcileFieldDrafts();
         if (snapshot.proposalError) {
@@ -711,7 +742,7 @@ function renderOverviewNode(resource, edges, issues, confirmed) {
 }
 
 function overviewNodeId(resourceId) {
-    return `overview-node-${String(resourceId).replace(/[^A-Za-z0-9_-]/g, "-")}`;
+    return `overview-node-${domIdToken(resourceId)}`;
 }
 
 function renderConnectionCounts(relationships) {
@@ -962,8 +993,8 @@ async function resetEntireResource(resource, control) {
         await post("/api/proposal/resource/reset", { id: resource.id });
     });
     if (reset) {
-        for (const key of [...fieldDrafts.keys()]) {
-            if (key.startsWith(`${resource.id}:`)) {
+        for (const [key, draft] of fieldDrafts) {
+            if (draft.resourceId === resource.id) {
                 fieldDrafts.delete(key);
             }
         }
@@ -1264,7 +1295,7 @@ function appendEditableDefaultsFact(list, resource) {
 }
 
 function fieldDraftKey(resourceId, field) {
-    return `${resourceId}:${field}`;
+    return JSON.stringify([String(resourceId), String(field)]);
 }
 
 function fieldDraft(resource, field) {
@@ -1281,20 +1312,26 @@ function setFieldDraft(resource, field, value, status, message = "") {
     const key = fieldDraftKey(resource.id, field);
     if (valuesEqual(resource[field], value) && status !== "saving" && status !== "error") {
         fieldDrafts.delete(key);
-        return;
+        return undefined;
     }
-    fieldDrafts.set(key, {
+    const draft = {
         resourceId: resource.id,
         resourceName: resource.name,
         field,
         value,
         status,
         message,
-    });
+    };
+    fieldDrafts.set(key, draft);
+    return draft;
 }
 
-function clearFieldDraft(resource, field) {
-    fieldDrafts.delete(fieldDraftKey(resource.id, field));
+function clearFieldDraft(resource, field, expectedDraft) {
+    const key = fieldDraftKey(resource.id, field);
+    if (expectedDraft && fieldDrafts.get(key) !== expectedDraft) {
+        return false;
+    }
+    return fieldDrafts.delete(key);
 }
 
 function reconcileFieldDrafts() {
@@ -1366,7 +1403,7 @@ async function saveFieldDraft(resource, field, value, control, editor) {
         renderConfirmation();
         return true;
     }
-    setFieldDraft(resource, field, value, "saving");
+    const savingDraft = setFieldDraft(resource, field, value, "saving");
     updateFieldEditor(resource, field, editor);
     renderConfirmation();
     let failure;
@@ -1383,8 +1420,8 @@ async function saveFieldDraft(resource, field, value, control, editor) {
         },
     );
     if (saved) {
-        clearFieldDraft(resource, field);
-    } else {
+        clearFieldDraft(resource, field, savingDraft);
+    } else if (fieldDraft(resource, field) === savingDraft) {
         setFieldDraft(
             resource,
             field,
@@ -1441,8 +1478,13 @@ function appendControlFact(list, label, control, className = "", controlId = "")
 }
 
 function resourceControlId(resource, field) {
-    const resourceId = String(resource.id).replace(/[^A-Za-z0-9_-]/g, "-");
-    return `resource-${resourceId}-${field}`;
+    return `resource-${domIdToken(resource.id)}-${field}`;
+}
+
+function domIdToken(value) {
+    return Array.from(String(value), (character) =>
+        character.codePointAt(0).toString(16).padStart(6, "0"),
+    ).join("");
 }
 
 function appendFact(list, label, value, code = false) {

@@ -216,6 +216,9 @@ function resourceIdentitiesMatch(left, right) {
     if (left.serviceId && right.serviceId) {
         return left.serviceId === right.serviceId;
     }
+    if (left.id && right.id) {
+        return left.id === right.id;
+    }
     return Boolean(
         left.sourceName &&
             right.sourceName &&
@@ -232,10 +235,10 @@ function proposalEdgeKey(edge) {
 }
 
 function edgeIdentitiesMatch(left, right) {
-    if (left.sourceKey && right.sourceKey) {
-        return left.sourceKey === right.sourceKey;
+    if (left.sourceId && right.sourceId) {
+        return left.sourceId === right.sourceId;
     }
-    return Boolean(left.sourceId && right.sourceId && left.sourceId === right.sourceId);
+    return Boolean(left.sourceKey && right.sourceKey && left.sourceKey === right.sourceKey);
 }
 
 function rememberRemovedGeneratedEdge(state, edge) {
@@ -658,7 +661,6 @@ function resourceNameConflict(resources, name, excludedId = "") {
     return resources.find(
         (candidate) =>
             candidate.id !== excludedId &&
-            candidate.include &&
             candidate.name.toLowerCase() === key,
     );
 }
@@ -667,7 +669,7 @@ function validateProposalDetails(proposal) {
     const issues = [];
     const resourceIssues = {};
     const included = proposal.resources.filter((resource) => resource.include);
-    const duplicateGroups = duplicateNameGroups(included, (resource) => resource.name);
+    const duplicateGroups = duplicateNameGroups(proposal.resources, (resource) => resource.name);
     const names = new Set(included.map((resource) => resource.name.toLowerCase()));
     const allNames = new Set(proposal.resources.map((resource) => resource.name.toLowerCase()));
     for (const resource of included) {
@@ -722,13 +724,18 @@ function validateProposal(proposal) {
 
 function confirmedProposal(proposal) {
     const resources = proposal.resources.filter((resource) => resource.include);
+    const resourceIds = new Set(resources.map((resource) => resource.id));
     const names = new Set(resources.map((resource) => resource.name));
     return {
         resources: resources.map(
             ({ userAdded, userEdited, sourceName, generated, ...resource }) => resource,
         ),
         edges: proposal.edges
-            .filter((edge) => names.has(edge.from) && names.has(edge.to))
+            .filter(
+                (edge) =>
+                    (edge.fromId ? resourceIds.has(edge.fromId) : names.has(edge.from)) &&
+                    (edge.toId ? resourceIds.has(edge.toId) : names.has(edge.to)),
+            )
             .map(
                 ({
                     userAdded,
@@ -1181,6 +1188,25 @@ function authorizeRequest(entry, request, url, path) {
     return null;
 }
 
+function clientStateConflict(snapshot, body, requireProposalIdentity = false) {
+    if (
+        String(body.expectedAppHostPath ?? "") !== snapshot.appHostPath ||
+        !Number.isInteger(body.expectedRevision) ||
+        body.expectedRevision !== snapshot.revision
+    ) {
+        return "The proposal changed or this canvas now targets a different AppHost. Review the latest snapshot and try again.";
+    }
+    if (
+        requireProposalIdentity &&
+        (!Number.isInteger(body.expectedProposalGeneration) ||
+            body.expectedProposalGeneration !== snapshot.proposalGeneration ||
+            String(body.expectedProposalHash ?? "") !== proposalHash(snapshot))
+    ) {
+        return "The proposal changed since it was reviewed. Review the latest snapshot and confirm it again.";
+    }
+    return "";
+}
+
 async function serveAsset(response, assetName) {
     const assetPath = resolve(UI_DIRECTORY, assetName);
     if (!assetPath.startsWith(`${UI_DIRECTORY}${sep}`) && assetPath !== UI_DIRECTORY) {
@@ -1204,6 +1230,10 @@ async function serveAsset(response, assetName) {
 async function handlePost(entry, path, body, response) {
     const domainId = entry.domainId;
     const snapshot = getSnapshot(domainId);
+    const stateConflict = clientStateConflict(snapshot, body, path === "/api/confirm");
+    if (stateConflict) {
+        return sendJson(response, 409, { ok: false, error: stateConflict });
+    }
     const service = snapshot.services.find((candidate) => candidate.id === body.id);
     const proposalResource = snapshot.proposal.resources.find((candidate) => candidate.id === body.id);
     const proposalEdge = snapshot.proposal.edges.find((candidate) => candidate.id === body.id);
@@ -1636,6 +1666,7 @@ async function handlePost(entry, path, body, response) {
             }
             if (!proposalResource.userAdded) {
                 const removedResource = {
+                    id: proposalResource.id,
                     serviceId: proposalResource.serviceId,
                     servicePath: linkedService?.path ?? "",
                     sourceName: proposalResource.sourceName,
@@ -2560,6 +2591,7 @@ const aspireifyCanvas = createCanvas({
             entry = await startServer(context.instanceId, domainId);
         } else if (entry.domainId !== domainId) {
             entry.domainId = domainId;
+            broadcast(domainId);
         }
         const snapshot = getSnapshot(domainId);
         return {
