@@ -1417,22 +1417,12 @@ body.is-mode-switching .empty-state {
     line-height: 1.35;
 }
 
-.resource-attribute-values > .detail-chip > span:not(.chip-status),
-.resource-attribute-values > .detail-chip > .chip-status {
+.resource-attribute-values > .detail-chip > span:not(.chip-status) {
     overflow: visible;
     text-overflow: clip;
     white-space: normal;
     overflow-wrap: anywhere;
-}
-
-.resource-attribute-values > .detail-chip > span:not(.chip-status) {
     flex: 1 1 auto;
-}
-
-.resource-attribute-values > .detail-chip > .chip-status {
-    flex: none;
-    margin-left: auto;
-    white-space: nowrap;
 }
 
 .resource-attribute-values > .detail-chip.tone-healthy {

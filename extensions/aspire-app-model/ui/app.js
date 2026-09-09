@@ -685,7 +685,7 @@ function firstChildOfKind(node, kind) {
     return (node.children ?? []).find((child) => child.kind === kind);
 }
 
-function detailChip(node, { open = false, command = false } = {}) {
+function detailChip(node, { open = false, command = false, combineStatus = false } = {}) {
     const unavailable = command && node.disabled;
     const interactive = open || (command && !unavailable);
     const selected = command && selectedNodeId === node.id;
@@ -724,8 +724,14 @@ function detailChip(node, { open = false, command = false } = {}) {
     };
     return element(interactive ? "button" : "span", properties, [
         svgIcon(command ? node.icon || "run" : open ? "link" : node.icon || "record", 13),
-        element("span", { text: node.label }),
-        ...(node.statusLabel ? [element("span", { class: "chip-status", text: node.statusLabel })] : []),
+        element("span", {
+            text: combineStatus && node.statusLabel
+                ? `${node.label} · ${node.statusLabel}`
+                : node.label,
+        }),
+        ...(!combineStatus && node.statusLabel
+            ? [element("span", { class: "chip-status", text: node.statusLabel })]
+            : []),
     ]);
 }
 
@@ -798,7 +804,7 @@ function renderResourceCard({ resource, parentLabel, dashboardAvailable }) {
     const endpoints = childrenOfKind(resource, "endpoint");
     const healthGroup = firstChildOfKind(resource, "health-group");
     const healthItems = healthGroup?.children?.length
-        ? healthGroup.children.map((health) => detailChip(health))
+        ? healthGroup.children.map((health) => detailChip(health, { combineStatus: true }))
         : resource.healthLabel
             ? [aggregateHealthChip(resource)]
             : [];

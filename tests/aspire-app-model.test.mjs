@@ -1014,6 +1014,8 @@ test("canvas source carries the confirmed direction and protected data routes", 
     assert.match(client, /class: "resource-attribute-values"/);
     assert.match(client, /class: `resource-attribute-group is-\$\{variant\}`/);
     assert.match(client, /class: "resource-card-actions"/);
+    assert.match(client, /healthGroup\.children\.map\(\(health\) => detailChip\(health, \{ combineStatus: true \}\)\)/);
+    assert.match(client, /\`\$\{node\.label\} · \$\{node\.statusLabel\}\`/);
     assert.doesNotMatch(client, /renderDetailGroup/);
     const resourceAttributeStyles = styles.slice(
         styles.indexOf(".resource-attributes {"),
