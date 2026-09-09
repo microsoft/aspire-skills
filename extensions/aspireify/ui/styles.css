@@ -158,6 +158,7 @@ pre {
 }
 
 .btn:focus-visible,
+.aspire-brand:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
@@ -311,8 +312,39 @@ textarea:disabled {
 }
 
 .tb-title {
+    display: flex;
     min-width: 0;
     flex: 1 1 auto;
+    align-items: center;
+    gap: 9px;
+}
+
+.aspire-brand {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: var(--radius);
+    transition: background-color 0.12s ease;
+}
+
+.aspire-brand:hover {
+    background: var(--surface-muted);
+}
+
+.aspire-brand:active {
+    background: var(--surface-inset);
+}
+
+.aspire-brand svg {
+    display: block;
+    width: 22px;
+    height: 22px;
+}
+
+.tb-title-copy {
+    min-width: 0;
 }
 
 .tb-heading {
@@ -1752,6 +1784,11 @@ dialog form {
 }
 
 @media (max-width: 719px) {
+    .aspire-brand {
+        width: 40px;
+        height: 40px;
+    }
+
     .relationship-workspace {
         grid-template-columns: minmax(0, 1fr);
     }
