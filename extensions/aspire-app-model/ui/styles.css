@@ -106,6 +106,7 @@ button {
 }
 
 button:focus-visible,
+.brand-mark:focus-visible,
 input:focus-visible,
 select:focus-visible,
 [tabindex]:focus-visible {
@@ -158,15 +159,29 @@ p {
     flex: none;
     align-items: center;
     justify-content: center;
-    background: var(--brand);
-    color: var(--color-white, #ffffff);
 }
 
 .brand-mark {
     width: 34px;
     height: 34px;
-    border-radius: var(--radius-panel);
-    box-shadow: 0 5px 14px color-mix(in srgb, var(--brand) 22%, transparent);
+    border-radius: var(--radius-control);
+}
+
+.brand-mark:hover {
+    background: var(--surface-muted);
+}
+
+.brand-mark:active {
+    background: var(--surface-inset);
+}
+
+.brand-mark svg {
+    display: block;
+}
+
+.apphost-mark {
+    background: var(--brand);
+    color: var(--color-white, #ffffff);
 }
 
 .title-copy {
@@ -1971,6 +1986,11 @@ body.is-mode-switching .empty-state {
 }
 
 @media (max-width: 760px) {
+    .brand-mark {
+        width: 40px;
+        height: 40px;
+    }
+
     .toolbar {
         grid-template-columns: 1fr;
     }
@@ -2011,13 +2031,11 @@ body.is-mode-switching .empty-state {
 
     .title-row {
         display: grid;
-        grid-template-columns: 30px minmax(0, 1fr) 30px;
+        grid-template-columns: 40px minmax(0, 1fr) 30px;
         gap: 8px;
     }
 
     .brand-mark {
-        width: 30px;
-        height: 30px;
         grid-column: 1;
     }
 
@@ -2133,6 +2151,11 @@ body.is-mode-switching .empty-state {
 }
 
 @media (pointer: coarse) {
+    .brand-mark {
+        width: 40px;
+        height: 40px;
+    }
+
     .mode-button,
     .app-model-tab,
     .icon-button,

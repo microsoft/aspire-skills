@@ -1081,6 +1081,30 @@ test("canvas source carries the confirmed direction and protected data routes", 
     assert.match(nodeActionHandler, /\/api\/open-dashboard-view/);
 });
 
+test("canvas header links the compact Aspire mark with accessible interaction styles", async () => {
+    const root = new URL("../extensions/aspire-app-model/ui/", import.meta.url);
+    const { readFile } = await import("node:fs/promises");
+    const [html, styles] = await Promise.all([
+        readFile(new URL("index.html", root), "utf8"),
+        readFile(new URL("styles.css", root), "utf8"),
+    ]);
+    const brandLink = html.match(/<a\b[^>]*class="brand-mark"[^>]*>[\s\S]*?<\/a>/)?.[0];
+    assert.ok(brandLink, "The Aspire mark must be an actionable link.");
+    assert.match(brandLink, /href="https:\/\/aspire\.dev\/"/);
+    assert.match(brandLink, /target="_blank"/);
+    assert.match(brandLink, /rel="noopener noreferrer"/);
+    assert.match(brandLink, /aria-label="Visit Aspire\.dev \(opens in a new tab\)"/);
+    assert.match(brandLink, /<svg\s+width="22"\s+height="22"\s+viewBox="0 0 32 32"/);
+    assert.match(brandLink, /aria-hidden="true"\s+focusable="false"/);
+    assert.equal((brandLink.match(/<path\b/g) ?? []).length, 6);
+    assert.match(brandLink, /fill="#512BD4"/);
+    assert.match(styles, /\.brand-mark:focus-visible,[^{]+\{\s*outline: 2px solid var\(--accent\);\s*outline-offset: 2px;/);
+    assert.match(styles, /\.brand-mark:hover\s*\{\s*background: var\(--surface-muted\);/);
+    assert.match(styles, /\.brand-mark:active\s*\{\s*background: var\(--surface-inset\);/);
+    assert.match(styles, /@media \(max-width: 760px\)\s*\{\s*\.brand-mark\s*\{\s*width: 40px;\s*height: 40px;/);
+    assert.match(styles, /@media \(pointer: coarse\)\s*\{\s*\.brand-mark\s*\{\s*width: 40px;\s*height: 40px;/);
+});
+
 test("canvas uses a focused Workspace and Global resource board instead of an explorer tree", async () => {
     const [html, client] = await Promise.all([
         import("node:fs/promises").then(({ readFile }) => readFile(
