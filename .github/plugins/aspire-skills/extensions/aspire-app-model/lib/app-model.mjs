@@ -1,1 +1,0 @@
-../../../../../../extensions/aspire-app-model/lib/app-model.mjs

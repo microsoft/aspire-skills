@@ -36,7 +36,7 @@ import {
     sanitizeCommandArgumentInputs,
     sanitizeResource,
     validateCommandArguments,
-} from "../extensions/aspire-app-model/lib/app-model.mjs";
+} from "../extensions/aspire-apphosts/lib/app-model.mjs";
 
 const syntheticRepoRoot = join(tmpdir(), "repo");
 const syntheticAppsRoot = join(tmpdir(), "apps");
@@ -550,7 +550,7 @@ test("parseLegacyPipelineSteps supports Aspire 13.5 available-step output", () =
 });
 
 test("discoverConfiguredAppHosts resolves aspire.config.json without scanning private files", async () => {
-    const root = await mkdtemp(join(tmpdir(), "aspire-app-model-"));
+    const root = await mkdtemp(join(tmpdir(), "aspire-apphosts-"));
     try {
         const appHostDirectory = join(root, "Sample.AppHost");
         const nestedDirectory = join(root, "src", "Api");
@@ -938,7 +938,7 @@ test("directory AppHost inputs resolve to a concrete project", async () => {
 });
 
 test("canvas source carries the confirmed direction and protected data routes", async () => {
-    const root = new URL("../extensions/aspire-app-model/", import.meta.url);
+    const root = new URL("../extensions/aspire-apphosts/", import.meta.url);
     const [html, client, styles, provider, model] = await Promise.all([
         import("node:fs/promises").then(({ readFile }) => readFile(new URL("ui/index.html", root), "utf8")),
         import("node:fs/promises").then(({ readFile }) => readFile(new URL("ui/app.js", root), "utf8")),
@@ -949,6 +949,17 @@ test("canvas source carries the confirmed direction and protected data routes", 
 
     assert.match(html, /THESIS: Aspire's operational model becomes a canvas-native workspace/);
     assert.match(html, />Aspire AppHosts</);
+    assert.match(html, /<title>Aspire AppHosts<\/title>/);
+    assert.match(provider, /const CANVAS_ID = "aspire-apphosts";/);
+    assert.match(provider, /const DEFAULT_INSTANCE = "aspire-apphosts-main";/);
+    assert.match(provider, /displayName: "Aspire AppHosts"/);
+    assert.match(provider, /return \{ title: "Aspire AppHosts"/);
+    assert.match(provider, /name: "open_aspire_apphosts"/);
+    assert.match(provider, /canvasId: CANVAS_ID/);
+    assert.match(provider, /canvases: \[appHostsCanvas\]/);
+    assert.match(provider, /available through 'open_aspire_apphosts'/);
+    assert.match(provider, /const AUTH_HEADER = "x-aspire-apphosts-token";/);
+    assert.match(client, /const AUTH_HEADER = "x-aspire-apphosts-token";/);
     assert.match(html, /class="model-view"/);
     assert.match(client, /\/api\/copilot-context/);
     assert.match(client, /\/api\/open-dashboard/);
@@ -1082,7 +1093,7 @@ test("canvas source carries the confirmed direction and protected data routes", 
 });
 
 test("canvas header links the compact Aspire mark with accessible interaction styles", async () => {
-    const root = new URL("../extensions/aspire-app-model/ui/", import.meta.url);
+    const root = new URL("../extensions/aspire-apphosts/ui/", import.meta.url);
     const { readFile } = await import("node:fs/promises");
     const [html, styles] = await Promise.all([
         readFile(new URL("index.html", root), "utf8"),
@@ -1108,11 +1119,11 @@ test("canvas header links the compact Aspire mark with accessible interaction st
 test("canvas uses a focused Workspace and Global resource board instead of an explorer tree", async () => {
     const [html, client] = await Promise.all([
         import("node:fs/promises").then(({ readFile }) => readFile(
-            new URL("../extensions/aspire-app-model/ui/index.html", import.meta.url),
+            new URL("../extensions/aspire-apphosts/ui/index.html", import.meta.url),
             "utf8",
         )),
         import("node:fs/promises").then(({ readFile }) => readFile(
-            new URL("../extensions/aspire-app-model/ui/app.js", import.meta.url),
+            new URL("../extensions/aspire-apphosts/ui/app.js", import.meta.url),
             "utf8",
         )),
     ]);

@@ -1,9 +1,12 @@
-# Aspire App Model canvas
+# Aspire AppHosts canvas
 
 A GitHub Copilot App canvas extension that brings Aspire AppHosts into a
 canvas-native workbench: Workspace and Global discovery, a focused AppHost
 switcher, live resource state, parented resources, endpoints, health checks,
 commands, Dashboard-backed diagnostics, and a read-only relationship graph.
+
+Open the canvas with `open_aspire_apphosts`, or use canvas ID `aspire-apphosts`
+with `open_canvas`.
 
 ## Data contract
 

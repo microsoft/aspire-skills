@@ -1,4 +1,4 @@
-// Extension: aspire-app-model
+// Extension: aspire-apphosts
 //
 // Canvas-native Aspire AppHost workbench for GitHub Copilot.
 
@@ -42,8 +42,8 @@ import {
     validateCommandArguments,
 } from "./lib/app-model.mjs";
 
-const CANVAS_ID = "aspire-app-model";
-const DEFAULT_INSTANCE = "aspire-app-model-main";
+const CANVAS_ID = "aspire-apphosts";
+const DEFAULT_INSTANCE = "aspire-apphosts-main";
 const UI_DIR = new URL("./ui/", import.meta.url);
 const UI_ROOT = fileURLToPath(UI_DIR);
 const POLL_INTERVAL_MS = 3_000;
@@ -51,7 +51,7 @@ const CLI_TIMEOUT_MS = 30_000;
 const OPERATION_TIMEOUT_MS = 30 * 60_000;
 const GLOBAL_DESCRIBE_CONCURRENCY = 4;
 const TOKEN_BYTES = 32;
-const AUTH_HEADER = "x-aspire-app-model-token";
+const AUTH_HEADER = "x-aspire-apphosts-token";
 const MAX_BODY_BYTES = 128 * 1024;
 
 const CONTENT_TYPES = {
@@ -1397,7 +1397,7 @@ async function startServer(ctx) {
 
     const server = createServer((req, res) => {
         Promise.resolve(handleRequest(entry, req, res)).catch((error) => {
-            log(`Aspire App Model request failed: ${error?.message ?? error}`, "error");
+            log(`Aspire AppHosts request failed: ${error?.message ?? error}`, "error");
             if (!res.headersSent) {
                 sendJson(res, 500, { ok: false, error: "Internal canvas error." });
             } else {
@@ -1436,9 +1436,9 @@ async function closeEntry(entry) {
     await new Promise((resolveClose) => entry.server.close(() => resolveClose()));
 }
 
-const appModelCanvas = createCanvas({
+const appHostsCanvas = createCanvas({
     id: CANVAS_ID,
-    displayName: "Aspire App Model",
+    displayName: "Aspire AppHosts",
     description:
         "Shows Aspire AppHosts in a canvas-native Workspace or Global resource board with endpoints, health, and commands.",
     inputSchema: {
@@ -1468,7 +1468,7 @@ const appModelCanvas = createCanvas({
             handler: async (ctx) => {
                 const entry = instances.get(ctx.instanceId);
                 if (!entry) {
-                    throw new CanvasError("canvas_not_open", "The Aspire App Model canvas is not open.");
+                    throw new CanvasError("canvas_not_open", "The Aspire AppHosts canvas is not open.");
                 }
                 const state = await requestRefresh(entry, { force: true });
                 return { viewMode: state.viewMode, status: state.status, summary: state.summary, stale: state.stale };
@@ -1488,7 +1488,7 @@ const appModelCanvas = createCanvas({
             handler: async (ctx) => {
                 const entry = instances.get(ctx.instanceId);
                 if (!entry) {
-                    throw new CanvasError("canvas_not_open", "The Aspire App Model canvas is not open.");
+                    throw new CanvasError("canvas_not_open", "The Aspire AppHosts canvas is not open.");
                 }
                 const viewMode = ctx.input?.viewMode;
                 if (viewMode !== "workspace" && viewMode !== "global") {
@@ -1508,7 +1508,7 @@ const appModelCanvas = createCanvas({
             handler: (ctx) => {
                 const entry = instances.get(ctx.instanceId);
                 if (!entry) {
-                    throw new CanvasError("canvas_not_open", "The Aspire App Model canvas is not open.");
+                    throw new CanvasError("canvas_not_open", "The Aspire AppHosts canvas is not open.");
                 }
                 const node = entry.nodeIndex.get(entry.selectionId);
                 if (!node) {
@@ -1522,7 +1522,7 @@ const appModelCanvas = createCanvas({
         let entry = instances.get(ctx.instanceId);
         if (!entry) {
             entry = await startServer(ctx);
-            log(`Aspire App Model canvas opened (instance '${ctx.instanceId}').`);
+            log(`Aspire AppHosts canvas opened (instance '${ctx.instanceId}').`);
         } else {
             try {
                 await applyReopenInput(entry, ctx);
@@ -1536,7 +1536,7 @@ const appModelCanvas = createCanvas({
                 });
             }
         }
-        return { title: "Aspire App Model", status: "AppHost workbench", url: entry.url };
+        return { title: "Aspire AppHosts", status: "AppHost workbench", url: entry.url };
     },
     onClose: async (ctx) => {
         const entry = instances.get(ctx.instanceId);
@@ -1549,9 +1549,9 @@ const appModelCanvas = createCanvas({
 });
 
 const openTool = {
-    name: "open_aspire_app_model",
+    name: "open_aspire_apphosts",
     description:
-        "Open or focus the Aspire App Model workbench, optionally targeting an AppHost or Global mode.",
+        "Open or focus the Aspire AppHosts workbench, optionally targeting an AppHost or Global mode.",
     parameters: {
         type: "object",
         additionalProperties: false,
@@ -1566,7 +1566,7 @@ const openTool = {
         const instanceId = String(args?.instanceId ?? "").trim() || DEFAULT_INSTANCE;
         if (typeof sessionRef?.rpc?.canvas?.open !== "function") {
             return {
-                textResultForLlm: "Failed to open the Aspire App Model canvas: the canvas host is unavailable.",
+                textResultForLlm: "Failed to open the Aspire AppHosts canvas: the canvas host is unavailable.",
                 resultType: "failure",
             };
         }
@@ -1585,10 +1585,10 @@ const openTool = {
                 instanceId,
                 input,
             });
-            return `Opened the Aspire App Model canvas (instance '${instanceId}').`;
+            return `Opened the Aspire AppHosts canvas (instance '${instanceId}').`;
         } catch (error) {
             return {
-                textResultForLlm: `Failed to open the Aspire App Model canvas: ${error?.message ?? error}`,
+                textResultForLlm: `Failed to open the Aspire AppHosts canvas: ${error?.message ?? error}`,
                 resultType: "failure",
             };
         }
@@ -1601,14 +1601,14 @@ function onSessionStart(input) {
     }
     return {
         additionalContext:
-            "An 'Aspire App Model' canvas is available through 'open_aspire_app_model'. Open it when " +
+            "An 'Aspire AppHosts' canvas is available through 'open_aspire_apphosts'. Open it when " +
             "the user wants to inspect or operate Aspire AppHosts and resources. It preserves Workspace/Global " +
             "operational behavior in a canvas-native workbench, keeps private AppHost data provider-side, and never starts an AppHost implicitly.",
     };
 }
 
 sessionRef = await joinSession({
-    canvases: [appModelCanvas],
+    canvases: [appHostsCanvas],
     tools: [openTool],
     hooks: { onSessionStart },
 });

@@ -1,4 +1,4 @@
-const AUTH_HEADER = "x-aspire-app-model-token";
+const AUTH_HEADER = "x-aspire-apphosts-token";
 const apiToken = new URLSearchParams(window.location.search).get("token") || "";
 const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)") ?? { matches: false };
 

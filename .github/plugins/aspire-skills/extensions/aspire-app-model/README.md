@@ -1,1 +1,0 @@
-../../../../../extensions/aspire-app-model/README.md

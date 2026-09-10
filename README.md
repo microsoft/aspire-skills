@@ -23,7 +23,7 @@ It helps agents recognize Aspire workspaces, use the Aspire CLI correctly, route
 |-----------|---------|
 | `aspire-doctor` | Visualizes `aspire doctor` environment checks, suggested fixes, and detected CLI installations |
 | `aspireify` | Presents Aspireify findings and the proposed resource plan for confirmation before AppHost edits |
-| `aspire-app-model` | Workspace and Global AppHost workbench |
+| `aspire-apphosts` | Workspace and Global AppHost workbench |
 
 ## Install
 
