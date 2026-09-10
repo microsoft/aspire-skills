@@ -1,0 +1,7 @@
+{
+  "profiles": {
+    "orchestrator": {
+      "commandName": "Project"
+    }
+  }
+}

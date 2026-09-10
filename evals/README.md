@@ -35,6 +35,10 @@ Shared fixtures live at the **repo-root** `evals/` directory and are referenced 
 evals/
 ├── csharp-apphost/      # Wired C# AppHost (Aspire.AppHost.Sdk + Program.cs)
 ├── ts-apphost/          # TypeScript AppHost (apphost.mts + .aspire/modules/)
+├── ts-apphost-metadata/ # Metadata-selected nonstandard TypeScript AppHost path
+├── ts-apphost-pnpm-policy/ # Partial TypeScript init blocked by a root pnpm policy
+├── ts-apphost-valkey/   # TypeScript AppHost with Aspire.Hosting.Valkey
+├── compose-monorepo/    # Multiple Compose profiles and duplicate package discovery
 └── non-aspire/          # Non-Aspire .NET project (for "should not trigger" stimuli)
 ```
 
@@ -144,13 +148,13 @@ Use `--workers 4` to fan stimuli out and shave wall-clock time; expect higher co
 
 | Skill | Task stimuli | Routing stimuli | Focus |
 |-------|--------------|-----------------|-------|
-| `aspire` (router) | 7 | 16 | Routing precision to sub-skills |
-| `aspire-init` | 5 | 15 | Skeleton drop, `aspire new` / `aspire init` decision, aspireify handoff |
-| `aspireify` | 11 | 18 | AppHost wiring (C# / file-based C# / TS), package-manager resolution, validation, never edit `.aspire/modules/` |
+| `aspire` (router) | 8 | 16 | Routing precision to sub-skills, metadata-selected TypeScript AppHosts |
+| `aspire-init` | 6 | 15 | Skeleton drop, `aspire new` / `aspire init` decision, pnpm recovery, aspireify handoff |
+| `aspireify` | 13 | 18 | AppHost wiring (C# / file-based C# / TS), package-manager recovery, Valkey, Compose authority, validation, never edit `.aspire/modules/` |
 | `aspire-orchestration` | 28 | 24 | Lifecycle tools, file lock recovery, `--include-hidden`, `aspire update --self` |
 | `aspire-deployment` | 8 | 21 | Multi-target deploy, `aspire destroy`, JS publishing, pipeline previews |
 | `aspire-monitoring` | 11 | 19 | Diagnostics bridge, standalone dashboard, browser logs, `--include-hidden` |
-| **Total** | **70** | **113** | |
+| **Total** | **74** | **113** | |
 
 Run `vally lint --eval-spec skills/<skill>/evals/eval.yaml --verbose` to dump the per-spec stimulus list.
 

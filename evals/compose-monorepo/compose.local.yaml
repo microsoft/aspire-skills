@@ -1,0 +1,6 @@
+services:
+  api:
+    extends:
+      file: compose.yaml
+      service: api
+    profiles: [local]

@@ -1,0 +1,13 @@
+services:
+  api:
+    build:
+      context: ./apps/api
+    command: npm run dev
+    profiles: [dev]
+  cache:
+    image: valkey/valkey:8
+    profiles: [dev]
+  docs-preview:
+    build:
+      context: ./docs
+    profiles: [docs]

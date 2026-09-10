@@ -2,6 +2,26 @@
 
 Use this reference when the repo has a `docker-compose.yml` or `compose.yml` file. Docker Compose files are one of the most valuable discovery sources — they document the infrastructure the app actually needs to run locally.
 
+## Select an authoritative launch mode
+
+Inventory every Compose file, override, profile, `extends` relationship, and script that
+passes `docker compose -f` or `--profile`. When more than one file combination, profile set,
+or package-script launch mode can run services, **ask the user to choose the authoritative
+normal-development command before proposing a graph**. Do not combine modes because their
+filenames are similar.
+
+Resolve `extends` before inventorying services: it inherits configuration into its consuming
+service and is not a second service to model. Include unprofiled services in the selected
+mode and profile-bound services only for selected profiles. Keep test, E2E, docs, samples,
+Storybook, code generation, and tooling Compose helpers out of the proposal unless the user
+chooses that mode.
+
+When a source-backed Compose service has the same resolved build context and command as a
+package manifest, treat it as one runtime candidate with two discovery sources. Do not create
+one Aspire resource per manifest and another per Compose service. If the resolved command,
+build context, image, or selected profile differs, keep the candidates separate and explain
+the distinction.
+
 ## When to load this reference
 
 - A `docker-compose.yml`, `compose.yml`, or `docker-compose.override.yml` exists anywhere in the repo
@@ -52,6 +72,7 @@ Common mappings:
 | `mcr.microsoft.com/mssql/server:*` | `Aspire.Hosting.SqlServer` | `AddSqlServer()` |
 | `mysql:*` / `mariadb:*` | `Aspire.Hosting.MySql` | `AddMySql()` |
 | `redis:*` | `Aspire.Hosting.Redis` | `AddRedis()` |
+| `valkey:*` | `Aspire.Hosting.Valkey` | `AddValkey()` |
 | `rabbitmq:*` | `Aspire.Hosting.RabbitMQ` | `AddRabbitMQ()` |
 | `mongo:*` | `Aspire.Hosting.MongoDB` | `AddMongoDB()` |
 | `mcr.microsoft.com/azure-storage/azurite:*` | `Aspire.Hosting.Azure.Storage` | `AddAzureStorage().RunAsEmulator()` |

@@ -6,7 +6,7 @@ description: >-
   USE FOR: Aspire AppHost, Aspire CLI, distributed app, cloud-native .NET, aspire
   start/stop/resource/deploy/destroy/publish/init/new/add/wait/describe/ps/logs/otel,
   aspire agent init, WithBrowserLogs, WithTerminal, Interaction Service, apphost.mts,
-  TS package managers, Yarn Classic, custom resource commands, .aspire/modules recovery,
+  apphost.run.json, TS package managers, Yarn Classic, custom resource commands, .aspire/modules recovery,
   or Playwright URL discovery.
   DO NOT USE FOR: non-Aspire projects or ordinary build/test tasks.
   INVOKES: aspire-init, aspireify, aspire-orchestration, aspire-deployment, aspire-monitoring.
@@ -46,6 +46,8 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 
 | Signal | How to Detect | Confidence | Scope |
 |--------|---------------|------------|-------|
+| AppHost metadata | Read the nearest `aspire.config.json` first; resolve `appHost.path` relative to that file | ✅ Definitive | The resolved AppHost path is the target |
+| Legacy launch metadata | `apphost.run.json` beside a candidate AppHost | High | AppHost present; preserve it as launch metadata |
 | C# AppHost | `.csproj` containing `Aspire.AppHost.Sdk` | ✅ Definitive | AppHost present → orchestration / deployment / monitoring |
 | File-based C# AppHost | `apphost.cs` with `#:sdk Aspire.AppHost.Sdk` | ✅ Definitive | AppHost present → orchestration / deployment / monitoring |
 | TypeScript AppHost | Current `apphost.mts` or legacy `apphost.ts` file in project | ✅ Definitive | AppHost present → orchestration / deployment / monitoring |
@@ -55,6 +57,22 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 | Generated TS modules | `.aspire/modules/` directory present | High | AppHost present (TS) |
 | Service defaults | `Aspire.ServiceDefaults` in project references | Medium | AppHost present |
 | **No AppHost, no `aspire.config.json`** | None of the above and user asks to add Aspire | n/a | Bootstrap → `aspire-init` (skeleton drop) |
+
+### Metadata-first AppHost resolution
+
+Do not choose an AppHost by filename before inspecting its metadata:
+
+1. Find and read `aspire.config.json`. Its `appHost.path` is the authoritative authoring
+   target; resolve it relative to the configuration file and preserve the generated path,
+   including a nested `aspire-apphost/apphost.mts`.
+2. Recognize an adjacent `apphost.run.json` as legacy or single-file launch-profile metadata.
+   It is not an AppHost source file and must never replace a configured `appHost.path`.
+3. Only when no configuration names an AppHost, fall back to source discovery:
+   `apphost.mts`, legacy `apphost.ts`, file-based `apphost.cs`, then an
+   `Aspire.AppHost.Sdk` project.
+
+Do not rename, recreate, or redirect a configured AppHost simply because a conventional
+filename exists elsewhere in the repo.
 
 ## Default Workflow
 
@@ -107,7 +125,7 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 | Start, stop, wait, restart, rebuild | → [aspire-orchestration](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-orchestration/SKILL.md) |
 | Create a new Aspire project from a template (`aspire new`) | → [aspire-init](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-init/SKILL.md) (in-plugin) |
 | Add Aspire to an existing repo (`aspire init`, drop skeleton) | → [aspire-init](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-init/SKILL.md) (in-plugin) |
-| Wire AppHost / scaffold resource graph / add integrations after `aspire init` | → [aspireify](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md) (in-plugin) |
+| Wire AppHost / scaffold resource graph / add integrations after `aspire init` | → [aspireify](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md) (in-plugin; resolves AppHost metadata and discovery authority first) |
 | Migrate legacy TypeScript `apphost.ts` (`aspire update --migrate`) | → [aspire-orchestration](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-orchestration/SKILL.md); hand back to aspireify only if source authoring remains |
 | Deploy, publish, destroy, pipeline steps | → [aspire-deployment](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-deployment/SKILL.md) |
 | Logs, traces, metrics, dashboard, browser logs | → [aspire-monitoring](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/SKILL.md) |

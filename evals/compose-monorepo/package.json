@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "scripts": {
+    "dev:local": "docker compose -f compose.yaml -f compose.local.yaml --profile local up",
+    "test:e2e": "docker compose -f docker-compose.e2e.yaml --profile e2e up"
+  }
+}

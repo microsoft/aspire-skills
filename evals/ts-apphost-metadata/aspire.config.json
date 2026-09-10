@@ -1,0 +1,9 @@
+{
+  "appHost": {
+    "path": "infra/orchestrator.mts",
+    "language": "typescript/nodejs"
+  },
+  "packages": {
+    "Aspire.Hosting.JavaScript": "13.5.3"
+  }
+}
