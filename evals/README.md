@@ -34,7 +34,7 @@ Shared fixtures live at the **repo-root** `evals/` directory and are referenced 
 ```
 evals/
 ├── csharp-apphost/      # Wired C# AppHost (Aspire.AppHost.Sdk + Program.cs)
-├── ts-apphost/          # TypeScript AppHost (apphost.ts + .aspire/modules/)
+├── ts-apphost/          # TypeScript AppHost (apphost.mts + .aspire/modules/)
 └── non-aspire/          # Non-Aspire .NET project (for "should not trigger" stimuli)
 ```
 

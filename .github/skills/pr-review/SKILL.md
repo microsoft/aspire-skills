@@ -18,7 +18,7 @@ description: >-
 license: MIT
 metadata:
   author: Microsoft
-  version: "0.0.1"
+  version: "0.0.2"
   internal: true
   audience: repo-authors
 ---
@@ -148,7 +148,7 @@ specific** — adjust the focus column to what the file actually demands.
 
 | Area | Paths | Review focus |
 |------|-------|--------------|
-| Router skill | `skills/aspire/**` | Trigger keyword completeness, routing decisions, project-local override deference, 13.4 alignment |
+| Router skill | `skills/aspire/**` | Trigger keyword completeness, routing decisions, project-local override deference, 13.5.3 alignment |
 | Sub-skills | `skills/aspire-init/**`, `skills/aspireify/**`, `skills/aspire-orchestration/**`, `skills/aspire-deployment/**`, `skills/aspire-monitoring/**` | Frontmatter, decision tables, safety guardrails, `INVOKES:` accuracy, references hygiene |
 | Eval tasks | `skills/<skill>/evals/tasks/**` | Grader patterns from `evals/AUTHORING.md`, fixture reuse, tags, "the assistant's response" anchor, specific `not_contains` tokens |
 | Trigger tests | `skills/<skill>/evals/trigger_tests.yaml` | Cross-skill prompt collisions, `reason` agrees with bucket, realistic phrasing, calibrated `confidence` |
@@ -196,9 +196,9 @@ Only flag concrete, high-confidence problems. Categories:
    duplicate keys, off-by-one in tags / IDs, `id`/`name` confusion (`--task` filters by
    `id`).
 7. **CHANGELOG gap** — user-visible change with no entry.
-8. **13.4 staleness** — references to removed surfaces (`AddAndPublishPromptAgent`,
-   `NameOutput` instead of `NameOutputReference`, removed `dotnet new aspire-*`
-   templates, deprecated `withEnvironment*`).
+8. **13.5 staleness** — treating legacy `apphost.ts` as current, inspecting resources
+   through `aspire ps`, using obsolete `.ServiceProvider` / `PublishAsConnectionString`,
+   mixing 13.4/13.5 package families, or omitting experimental qualifications.
 9. **Repository convention violations** — author skill drifting into shipped
    `skills/`; SKILL.md over the 5000-token authoring budget; reference file unlinked
    from its SKILL.md; new fixture introduced when an existing one already covers the

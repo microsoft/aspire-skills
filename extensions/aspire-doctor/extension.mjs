@@ -9,6 +9,16 @@ import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { basename, dirname, extname, isAbsolute, normalize, relative, resolve, sep } from "node:path";
 import { joinSession, createCanvas, CanvasError } from "@github/copilot-sdk/extension";
+import {
+    listenOnLoopback,
+    readJsonBody,
+    replayLatestDiagnostics,
+    requestErrorStatus,
+    runLatestDiagnostics,
+    selectDiagnosticsResult,
+    windowsExplorerInvocation,
+} from "./provider-helpers.mjs";
+import { normalizeDoctorData } from "./ui/model.mjs";
 
 const CANVAS_ID = "aspire-doctor";
 const DEFAULT_INSTANCE = "doctor-main";
@@ -22,6 +32,7 @@ const CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
     ".css": "text/css; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
+    ".mjs": "text/javascript; charset=utf-8",
     ".json": "application/json; charset=utf-8",
     ".svg": "image/svg+xml",
     ".png": "image/png",
@@ -143,31 +154,6 @@ function authorizeRequest(entry, req, url, path) {
     return null;
 }
 
-const MAX_BODY_BYTES = 64 * 1024;
-function readJsonBody(req) {
-    return new Promise((resolve, reject) => {
-        let size = 0;
-        const chunks = [];
-        req.on("data", (chunk) => {
-            size += chunk.length;
-            if (size > MAX_BODY_BYTES) {
-                reject(new Error("Request body too large"));
-                req.destroy();
-                return;
-            }
-            chunks.push(chunk);
-        });
-        req.on("end", () => {
-            try {
-                resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {});
-            } catch (err) {
-                reject(err);
-            }
-        });
-        req.on("error", reject);
-    });
-}
-
 /* ---------------- server-sent events ---------------- */
 
 function addSseClient(entry, req, res) {
@@ -178,14 +164,20 @@ function addSseClient(entry, req, res) {
     });
     res.write(": connected\n\n");
     entry.clients.add(res);
+    replayLatestDiagnostics(entry, (result) => {
+        writeSseFrame(res, { type: "diagnostics", result });
+    });
     req.on("close", () => entry.clients.delete(res));
 }
 
+function writeSseFrame(client, payload) {
+    client.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
 function broadcast(entry, payload) {
-    const frame = `data: ${JSON.stringify(payload)}\n\n`;
     for (const client of entry.clients) {
         try {
-            client.write(frame);
+            writeSseFrame(client, payload);
         } catch {
             entry.clients.delete(client);
         }
@@ -297,6 +289,13 @@ async function runDoctor() {
     });
 }
 
+async function runDiagnosticsForEntry(entry, { broadcastResult = false } = {}) {
+    const publishCurrent = broadcastResult
+        ? (result) => broadcast(entry, { type: "diagnostics", result })
+        : undefined;
+    return await runLatestDiagnostics(entry, runDoctor, publishCurrent);
+}
+
 /* ---------------- Ask Copilot dispatch ---------------- */
 
 function clamp(value, max = 600) {
@@ -363,8 +362,7 @@ async function dispatchFixAndRefresh(entry, check) {
     void (async () => {
         try {
             await send.call(sessionRef, { prompt });
-            const result = await runDoctor();
-            broadcast(entry, { type: "diagnostics", result });
+            await runDiagnosticsForEntry(entry, { broadcastResult: true });
         } catch (err) {
             log(`Failed to refresh Aspire Doctor after Ask Copilot: ${err?.message ?? err}`, "warn");
         }
@@ -427,10 +425,13 @@ function shouldOpenInEditor(absolutePath, stats) {
 async function revealInFileManager(absolutePath, stats) {
     let command;
     let args;
+    let windowsVerbatimArguments = false;
 
     if (process.platform === "win32") {
         command = "explorer.exe";
-        args = stats.isFile() ? [`/select,${absolutePath}`] : [absolutePath];
+        const invocation = windowsExplorerInvocation(absolutePath, stats.isFile());
+        args = invocation.args;
+        windowsVerbatimArguments = invocation.windowsVerbatimArguments;
     } else if (process.platform === "darwin") {
         command = "open";
         args = stats.isFile() ? ["-R", absolutePath] : [absolutePath];
@@ -440,7 +441,11 @@ async function revealInFileManager(absolutePath, stats) {
     }
 
     await new Promise((resolve, reject) => {
-        const child = spawn(command, args, { detached: true, stdio: "ignore" });
+        const child = spawn(command, args, {
+            detached: true,
+            stdio: "ignore",
+            windowsVerbatimArguments,
+        });
         child.once("error", reject);
         child.once("spawn", () => {
             child.unref();
@@ -501,19 +506,22 @@ async function handleRequest(entry, req, res) {
     if (req.method === "GET" && path === "/app.js") {
         return serveAsset(res, "app.js");
     }
+    if (req.method === "GET" && path === "/model.mjs") {
+        return serveAsset(res, "model.mjs");
+    }
     if (req.method === "GET" && path === "/events") {
         return addSseClient(entry, req, res);
     }
     if (req.method === "GET" && path === "/api/diagnostics") {
-        const result = await runDoctor();
-        return sendJson(res, 200, result);
+        const completion = await runDiagnosticsForEntry(entry, { broadcastResult: true });
+        return sendJson(res, 200, selectDiagnosticsResult(entry, completion));
     }
     if (req.method === "POST" && path === "/api/ask-copilot") {
         let body;
         try {
             body = await readJsonBody(req);
         } catch (err) {
-            return sendJson(res, 400, { ok: false, error: `Invalid request: ${err.message}` });
+            return sendJson(res, requestErrorStatus(err), { ok: false, error: `Invalid request: ${err.message}` });
         }
         const check = body?.check ?? body;
         const hasCheckDetails = check && [check.name, check.status, check.category, check.message, check.fix]
@@ -534,7 +542,7 @@ async function handleRequest(entry, req, res) {
         try {
             body = await readJsonBody(req);
         } catch (err) {
-            return sendJson(res, 400, { ok: false, error: `Invalid request: ${err.message}` });
+            return sendJson(res, requestErrorStatus(err), { ok: false, error: `Invalid request: ${err.message}` });
         }
         try {
             return sendJson(res, 200, await openTerminalForCheck(body?.check));
@@ -547,7 +555,7 @@ async function handleRequest(entry, req, res) {
         try {
             body = await readJsonBody(req);
         } catch (err) {
-            return sendJson(res, 400, { ok: false, error: `Invalid request: ${err.message}` });
+            return sendJson(res, requestErrorStatus(err), { ok: false, error: `Invalid request: ${err.message}` });
         }
         try {
             return sendJson(res, 200, await openPath(body?.path));
@@ -569,6 +577,8 @@ async function startServer(instanceId) {
         host: "",
         token: createToken(),
         clients: new Set(),
+        nextRevision: 0,
+        latestRequestedRevision: 0,
     };
 
     const server = createServer((req, res) => {
@@ -586,9 +596,13 @@ async function startServer(instanceId) {
     });
 
     // Port 0 = OS-assigned ephemeral port; loopback-only so the host will embed it.
-    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    await listenOnLoopback(server);
     const address = server.address();
     const port = typeof address === "object" && address ? address.port : 0;
+    if (!port) {
+        await new Promise((resolve) => server.close(() => resolve()));
+        throw new Error("The loopback server did not receive a port.");
+    }
 
     entry.server = server;
     entry.origin = `http://127.0.0.1:${port}`;
@@ -604,7 +618,7 @@ const doctorCanvas = createCanvas({
     id: CANVAS_ID,
     displayName: "Aspire Doctor",
     description:
-        "Runs 'aspire doctor' and renders environment checks (pass/warning/fail) with actionable fixes and detected CLI installations.",
+        "Runs aspire doctor and presents environment checks, suggested fixes, a summary, and detected CLI installations.",
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
     actions: [
         {
@@ -616,19 +630,35 @@ const doctorCanvas = createCanvas({
                 if (!entry) {
                     throw new CanvasError("canvas_not_open", "The Aspire Doctor canvas is not open.");
                 }
-                const result = await runDoctor();
-                broadcast(entry, { type: "diagnostics", result });
+                const { result, isCurrent } = await runDiagnosticsForEntry(entry, { broadcastResult: true });
                 if (!result.ok) {
-                    return { ok: false, error: result.error };
+                    return {
+                        ok: false,
+                        error: result.error,
+                        revision: result.revision,
+                        superseded: !isCurrent,
+                    };
                 }
-                return { ok: true, summary: result.data.summary ?? null };
+                return {
+                    ok: true,
+                    summary: normalizeDoctorData(result.data ?? {}).summary,
+                    revision: result.revision,
+                    superseded: !isCurrent,
+                };
             },
         },
     ],
     open: async (ctx) => {
         let entry = instances.get(ctx.instanceId);
         if (!entry) {
-            entry = await startServer(ctx.instanceId);
+            try {
+                entry = await startServer(ctx.instanceId);
+            } catch (error) {
+                throw new CanvasError(
+                    "server_unavailable",
+                    `Could not start the Aspire Doctor canvas server: ${error?.message ?? error}`,
+                );
+            }
             log(`Aspire Doctor canvas opened (instance '${ctx.instanceId}').`);
         }
         return { title: "Aspire Doctor", url: entry.url };

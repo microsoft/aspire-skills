@@ -8,7 +8,6 @@ Use these commands when the first job is to inspect current resource state, find
 
 ```bash
 aspire describe
-aspire resources
 aspire describe --apphost <path>
 aspire describe --apphost <path> --format Json
 ```
@@ -16,6 +15,8 @@ aspire describe --apphost <path> --format Json
 Keep these points in mind:
 
 - Use `aspire describe` first when you need the current state of the running app before deciding what to do next.
+- `aspire resources` is a backward-compatible alias; prefer `aspire describe` in new
+  commands. `aspire ps` lists running AppHosts, not their resources.
 - Use `--apphost <path>` when the workspace has multiple AppHosts or discovery is ambiguous.
 - Prefer `--format Json` when another tool or script needs to consume the result, such as a Playwright handoff or endpoint extraction.
 
@@ -69,8 +70,8 @@ Keep these points in mind:
 - Correlate the child resource to its frontend through the parent relationship and its `Source`
   property.
 - `<frontend>-browser-logs` is not hidden by default. Start with normal `aspire describe` or
-  `aspire resources` output, not `aspire ps --include-hidden`; use `--include-hidden` only when
-  the expected resource is unavailable.
+  its `aspire resources` alias; use `aspire describe --include-hidden` only when the expected
+  resource is unavailable.
 - `aspire otel logs <frontend>` does **not** return browser diagnostics. Use
   `aspire logs <frontend>-browser-logs` instead.
 - Adding or configuring `WithBrowserLogs()` is AppHost authoring; route that work to `aspireify`.
@@ -136,6 +137,9 @@ Keep these points in mind:
 Commands like `aspire describe`, `aspire otel logs`, `aspire otel traces`, and `aspire otel spans` may include dashboard URLs in their JSON output. Only use URLs that are explicitly returned by these commands — do not construct dashboard URLs yourself.
 
 When a dashboard link is returned alongside a resource or telemetry entry, make the resource name, trace ID, or span ID a clickable markdown link using the returned URL.
+
+On Aspire 13.5.0-13.5.2, a healthy DevTunnel could omit its public URL. Upgrade to 13.5.3
+before treating a missing URL as an AppHost endpoint-modeling error.
 
 ## Displaying Resources
 
@@ -212,6 +216,17 @@ For dashboards configured with API-key authentication, pass `--api-key` alongsid
 aspire otel logs --dashboard-url https://my-dashboard.example.com --api-key "$DASHBOARD_API_KEY" --follow
 ```
 
+## Aspire 13.5 Dashboard Changes
+
+- Timestamp qualifiers and exact numeric `==` / `!=` operators narrow structured
+  telemetry without pausing live streams.
+- Console-log pages support text search.
+- `WithTerminal()` resources use the experimental interactive terminal view.
+- The dashboard AI Assistant was removed. Configure agents with `aspire agent init`.
+- The VS Code Aspire extension no longer auto-opens the dashboard; use its in-editor view
+  or opt in through `dashboardBrowser` / `launch.json`.
+- Aspire 13.5.3 fixes Graph view crashes for multi-path icons such as Azure Blob resources.
+
 ## Browser Logs
 
 `WithBrowserLogs()` creates a `<frontend>-browser-logs` child resource for the frontend. Its
@@ -222,7 +237,7 @@ then inspect `aspire logs <frontend>-browser-logs`.
 Use the child resource's parent relationship and `Source` property to verify which frontend it
 belongs to. Do not claim that `aspire otel logs <frontend>` returns this browser output. If an
 expected browser child resource is unavailable from normal `aspire describe` or `aspire resources`
-output, then retry discovery with `--include-hidden`.
+output, then retry discovery with `aspire describe --include-hidden`.
 
 Adding or configuring `WithBrowserLogs()` remains AppHost authoring and routes to `aspireify`.
 

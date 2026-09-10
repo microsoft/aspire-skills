@@ -39,11 +39,9 @@ stimuli:
       - type: prompt
         name: suggests_supported_install
         config:
-          prompt: Does the assistant's response suggest at least one of the two supported Aspire CLI install
-            paths in 13.3? (1) `dotnet tool install -g Aspire.Cli` — the NativeAOT .NET 10 global
-            tool, OR (2) `curl -sSL https://aspire.dev/install.sh | bash` — the curl installer.
-            Either is acceptable; ideally the response mentions both and notes that the global-tool
-            path requires .NET 10.
+          prompt: Does the assistant's response suggest a supported Aspire 13.5 CLI install path, such as
+            `npm install -g @microsoft/aspire-cli`, `dotnet tool install -g Aspire.Cli`, or the
+            official install script? It should not recommend the obsolete Aspire workload.
       - type: output-not-contains
         config:
           substring: dotnet workload install aspire
@@ -57,9 +55,6 @@ stimuli:
           prompt: After installing the CLI, does the assistant's response also tell the user how to verify the
             install (for example, `aspire doctor`, `aspire --version`, or re-running `aspire init`)?
             Light mention is acceptable.
-      - type: output-contains
-        config:
-          substring: Aspire.Cli
       - type: output-not-contains
         config:
           substring: dotnet workload install aspire
@@ -170,6 +165,34 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet workload install aspire
+  - name: init-typescript-brownfield-135-001
+    prompt: >
+      My existing Node repository already has a root package.json and no Aspire AppHost.
+      Explain the TypeScript `aspire init` command and the files/layout Aspire 13.5 will
+      create. Do not run the command.
+    tags:
+      priority: p1
+      area:
+        - core-flow
+        - aspire-13-5
+        - typescript
+    graders:
+      - type: output-contains
+        name: uses_typescript_init
+        config:
+          substring: aspire init --language typescript
+      - type: prompt
+        name: explains_nested_current_layout
+        config:
+          prompt: >
+            Does the assistant's response explain that, because the existing repository
+            already has a root package.json, Aspire 13.5 creates a nested aspire-apphost
+            package containing apphost.mts and points the root aspire.config.json at it?
+            Answer based on intent.
+      - type: output-not-contains
+        name: does_not_claim_current_apphost_ts
+        config:
+          substring: creates apphost.ts
   - name: init-new-001
     prompt: I'm starting a brand-new distributed app from scratch. Scaffold an Aspire starter project
       for me.

@@ -5,8 +5,9 @@ description: >-
   telemetry export, browser telemetry, and the standalone dashboard. Routes between local
   Aspire CLI, AKS workload diagnostics, and deployed Azure resource health.
   USE FOR: aspire logs, aspire otel logs, aspire otel traces, aspire otel spans, aspire
-  describe, aspire ps, aspire export, aspire dashboard run, --include-hidden, browser logs
-  in dashboard, WithBrowserLogs, App Insights query, AKS pod logs, container app logs.
+  describe, aspire ps, aspire export, aspire dashboard run, describe --include-hidden,
+  browser logs in dashboard, terminal view, DevTunnel URLs, WithBrowserLogs, App Insights
+  query, AKS pod logs, container app logs.
   DO NOT USE FOR: start/stop/wait (use aspire-orchestration), deploy/publish/destroy (use
   aspire-deployment), AppHost code edits like WithBrowserLogs() (use aspireify), Azure
   provisioning (use azure-prepare).
@@ -15,7 +16,7 @@ description: >-
 license: MIT
 metadata:
   author: Microsoft
-  version: "0.0.1"
+  version: "0.0.2"
 ---
 
 # Aspire Monitoring
@@ -30,6 +31,7 @@ metadata:
 | Structured logs | Local dev | Aspire CLI | `aspire otel logs [resource]` |
 | Distributed traces | Local dev | Aspire CLI | `aspire otel traces [resource]` |
 | Span detail | Local dev | Aspire CLI | `aspire otel spans [resource]` |
+| Running AppHosts | Local dev | Aspire CLI | `aspire ps` |
 | Resource state | Local dev | Aspire CLI | `aspire describe` (add `--include-hidden` if a resource is missing) |
 | Telemetry export | Local dev | Aspire CLI | `aspire export [resource]` |
 | Standalone dashboard | Any (no AppHost) | Aspire CLI | `aspire dashboard run` (foreground/blocking — see below) |
@@ -74,7 +76,7 @@ When something is wrong, investigate before editing code:
 | `aspire otel traces --dashboard-url` | Query a standalone dashboard | `aspire otel traces --dashboard-url "http://localhost:18888/login?t=TOKEN"` |
 | `aspire describe` | Resource state, endpoints, health | `aspire describe --format Json` |
 | `aspire describe --include-hidden` | Include proxies, helper containers, migrations | `aspire describe --include-hidden --format Json` |
-| `aspire resources` | Resource list with state | `aspire resources` |
+| `aspire resources` | Compatibility alias for resource state | Prefer `aspire describe` in new guidance |
 | `aspire export` | Portable telemetry bundle | `aspire export` |
 | `aspire dashboard run` | Standalone dashboard (foreground/blocking) | `aspire dashboard run` |
 
@@ -102,13 +104,13 @@ ENDPOINT=$(aspire describe apiservice --format Json | jq -r '.endpoints[0].url')
 aspire describe --apphost ./src/MyApp.AppHost/
 ```
 
-## Known Diagnostics Issues
+## Version-Specific Diagnostics
 
-| Issue | Symptom | Workaround |
-|-------|---------|-----------|
-| TS AppHost DNS failure ([#15782](https://github.com/microsoft/aspire/issues/15782)) | `aspire otel` "No such host" for `*.dev.localhost` | Use `--dashboard-url localhost:PORT` |
-| `--isolated` mode telemetry ([#16107](https://github.com/microsoft/aspire/issues/16107)) | OTEL port not randomized in isolated mode | Avoid `--isolated` if telemetry is needed |
-| Resource missing from `aspire resources` / `aspire describe` | Hidden-by-default resources such as proxies, helpers, or migrations | Re-run with `--include-hidden` |
+| Symptom | 13.5.3 guidance |
+|---------|-----------------|
+| Resource missing from `aspire describe` | Re-run `aspire describe --include-hidden`; do not use removed `aspire ps --include-hidden`. |
+| DevTunnel is healthy but has no public URL on 13.5.0-13.5.2 | Upgrade the CLI/SDK to 13.5.3 before changing endpoint configuration; 13.5.3 restores the URL. |
+| Dashboard Graph crashes for a resource such as Azure Blob | Upgrade to 13.5.3; multi-path resource icons are fixed there. |
 
 > **Resolved in 13.3**: The standalone-dashboard workaround for [#16236](https://github.com/microsoft/aspire/issues/16236) is obsolete — use `aspire dashboard run` (see below).
 
@@ -152,8 +154,8 @@ When a frontend has already opted into `WithBrowserLogs()`, Aspire creates a chi
 are sent to that child resource's console log stream, not to the frontend's OpenTelemetry logs.
 
 1. Begin with normal `aspire describe` or `aspire resources` output to find
-   `<frontend>-browser-logs`; do not begin with `aspire ps --include-hidden`. It is a normal child
-   resource, so retry with `--include-hidden` only if the expected resource is unavailable.
+   `<frontend>-browser-logs`; `aspire ps` no longer lists resources. It is a normal child
+   resource, so retry with `aspire describe --include-hidden` only if unavailable.
 2. Correlate it to the frontend through its parent relationship and `Source` property.
 3. Start a tracked browser session with:
 
@@ -184,6 +186,15 @@ Agents inspecting a running dashboard should know:
 - **Notification center** (bell icon, top-right) — surfaces results of resource commands and lifecycle events. Inline command responses appear here instead of being scraped from the logs panel.
 - **Rebuild command** — available on container and project resources; rebuilds the image and restarts the resource without restarting the whole AppHost. Result lands in the notification center.
 - **Structured command results** — custom resource commands return `ExecuteCommandResult` with a `Message` payload that the dashboard renders inline; HTTP commands set `HttpCommandResultMode.Auto | Json | Text | None` to control how the response body is shown.
+- **13.5 filtering** — filter telemetry by timestamp, use `==` / `!=` for exact numeric
+  values, and search console-log text while streams continue updating.
+- **Terminal view** — resources configured with experimental `WithTerminal()` open as
+  interactive sessions in the dashboard.
+- **No dashboard AI Assistant** — it was removed in 13.5. Use `aspire agent init` and the
+  AppHost/CLI agent integration instead.
+- **VS Code launch is opt-in** — the Aspire extension no longer opens the dashboard
+  automatically. Use its in-editor dashboard or configure `dashboardBrowser` /
+  `launch.json`.
 
 > Authoring custom commands or `WithBrowserLogs()` calls is AppHost work — route to **`aspireify`**. This skill is for *observing* what those features surface in the dashboard.
 

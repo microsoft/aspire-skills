@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-test("bundle manifests emit Aspire-compatible SHA-256 and SHA-512 file hashes", () => {
+test("bundle manifests emit Aspire 13.5 support metadata and compatible SHA-256/SHA-512 file hashes", () => {
   const outputRoot = mkdtempSync(join(tmpdir(), "aspire-bundle-manifest-"));
 
   try {
@@ -52,6 +52,10 @@ function assertManifestHashes({
   const manifest = JSON.parse(readFileSync(join(bundleRoot, manifestName), "utf8"));
   const entries = manifest[entriesProperty];
 
+  assert.deepEqual(manifest.supports, {
+    aspireCli: ">=13.5.0 <13.6.0",
+    aspireSdk: ">=13.5.0 <13.6.0"
+  });
   assert.ok(entries.length > 0, `${manifestName} must contain ${entriesProperty}.`);
 
   for (const entry of entries) {

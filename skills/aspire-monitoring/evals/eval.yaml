@@ -47,8 +47,9 @@ stimuli:
         name: discovers_browser_logs_child_resource
         config:
           prompt: Does the assistant's response direct the user to discover the `<frontend>-browser-logs`
-            child resource with normal `aspire describe` or `aspire resources` output, using
-            `--include-hidden` only if the expected resource is unavailable? Answer based on intent.
+            child resource with normal `aspire describe` output, using
+            `aspire describe --include-hidden` only if the expected resource is unavailable?
+            Answer based on intent.
       - type: prompt
         name: correlates_browser_logs_to_frontend
         config:
@@ -254,13 +255,14 @@ stimuli:
         config:
           substring: aspire export
   - name: mon-include-hidden-001
-    prompt: I expected to see a 'db-migrator' resource in `aspire ps` but it's not showing up. The
-      AppHost definitely registers it. What's going on?
+    prompt: >
+      `aspire ps` shows my running AppHost, but I need to inspect its hidden
+      'db-migrator' resource. Which Aspire 13.5 command should I use?
     tags:
       priority: p1
       area:
         - include-hidden
-        - 13-3
+        - 13-5
         - debugging
     environment:
       files:
@@ -274,15 +276,15 @@ stimuli:
       - type: prompt
         name: suggests_include_hidden
         config:
-          prompt: Does the assistant's response recommend re-running `aspire ps` (and/or `aspire describe`)
-            with `--include-hidden` to surface hidden-by-default resources such as proxies, helper
-            containers, and migrations? Answer based on intent.
+          prompt: Does the assistant's response recommend `aspire describe --include-hidden` to surface
+            hidden-by-default resources such as proxies, helper containers, and migrations?
+            Answer based on intent.
       - type: prompt
         name: explains_default_behavior
         config:
-          prompt: Does the assistant's response explain that Aspire 13.3 filters hidden resources by default
-            and that the filtered output is correct for normal app inspection — `--include-hidden`
-            is for debugging missing resources, proxies, helper containers, or migrations?
+          prompt: Does the assistant's response explain that Aspire 13.5 `aspire ps` lists AppHosts,
+            while `aspire describe` lists resources and accepts `--include-hidden` for resource
+            diagnostics?
       - type: output-not-contains
         config:
           substring: restart your app
@@ -394,36 +396,44 @@ stimuli:
       - type: output-contains
         config:
           substring: aspire otel traces
-  - name: mon-tsbug-001
-    prompt: |-
-      I'm running a TypeScript AppHost and when I try 'aspire otel traces' I get:
-      "No such host is known" for some *.dev.localhost URL
+  - name: mon-devtunnel-1353-001
+    prompt: >
+      My DevTunnel resource is Running and Healthy on Aspire 13.5.1, but its public URL
+      is missing from both the dashboard and the MCP resource snapshot. Should I rewrite
+      the AppHost endpoint configuration?
     tags:
       priority: p1
       area:
-        - known-bug
-        - issue-15782
+        - servicing
+        - aspire-13-5
+        - devtunnel
     environment:
       files:
-        - src: ../../../evals/ts-apphost/apphost.ts
-          dest: ts-apphost/apphost.ts
+        - src: ../../../evals/ts-apphost/apphost.mts
+          dest: ts-apphost/apphost.mts
         - src: ../../../evals/ts-apphost/package.json
           dest: ts-apphost/package.json
         - src: ../../../evals/ts-apphost/aspire.config.json
           dest: ts-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: knows_bug
+        name: knows_1353_fix
         config:
-          prompt: "The assistant's response should recognize this as a known issue with TypeScript AppHosts
-            (issue #15782) where *.dev.localhost URLs don't resolve. It should suggest using
-            --dashboard-url with localhost:PORT as a workaround."
+          prompt: >
+            Does the assistant's response recognize the missing DevTunnel public URL as a
+            regression fixed in Aspire 13.5.3 and recommend upgrading before rewriting
+            endpoint configuration? Answer based on intent.
       - type: prompt
-        name: suggests_workaround
+        name: avoids_unnecessary_rewiring
         config:
-          prompt: Does the assistant's response suggest using localhost with a specific port (e.g.
-            --dashboard-url localhost:PORT) as a workaround for the DNS resolution issue? Answer
-            based on the intent, not exact string matching.
+          prompt: >
+            Aspire 13.5.3 fixed the 13.5.0-13.5.2 regression where healthy DevTunnel
+            resources omitted public URLs from the dashboard and MCP snapshots. Does the
+            assistant's response avoid treating that missing URL on 13.5.1 as proof that
+            the AppHost endpoint model is wrong? Answer based on intent.
+      - type: output-contains
+        config:
+          substring: 13.5.3
   - name: should_trigger_01
     description: "Reason: aspire logs is monitoring"
     prompt: Show me the aspire logs for the API service
@@ -535,8 +545,8 @@ stimuli:
           required:
             - aspire-monitoring
   - name: should_trigger_10
-    description: "Reason: Hidden-by-default in 13.3; requires --include-hidden"
-    prompt: I can't find my proxy resource in aspire ps — try --include-hidden
+    description: "Reason: Aspire 13.5 hidden-resource inspection uses describe, not ps"
+    prompt: aspire ps shows my AppHost but not its hidden proxy resource
     tags:
       priority: p1
       area: routing

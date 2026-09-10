@@ -107,8 +107,8 @@ stimuli:
         - safety
     environment:
       files:
-        - src: ../../../evals/ts-apphost/apphost.ts
-          dest: ts-apphost/apphost.ts
+        - src: ../../../evals/ts-apphost/apphost.mts
+          dest: ts-apphost/apphost.mts
         - src: ../../../evals/ts-apphost/aspire.config.json
           dest: ts-apphost/aspire.config.json
     graders:
@@ -120,8 +120,8 @@ stimuli:
       - type: prompt
         name: redirects_to_apphost_ts
         config:
-          prompt: Does the assistant's response redirect the user's intended change to apphost.ts (the only
-            file the user should edit in a TS AppHost)?
+          prompt: Does the assistant's response redirect the user's intended change to apphost.mts (the current
+            file the user should edit in this TS AppHost)?
       - type: output-not-contains
         config:
           substring: edit .aspire/modules
@@ -134,7 +134,7 @@ stimuli:
           substring: open .aspire/modules/
       - type: output-contains
         config:
-          substring: apphost.ts
+          substring: apphost.mts
       - type: output-contains
         config:
           substring: .aspire/modules
@@ -236,8 +236,8 @@ stimuli:
           substring: modify .aspire/modules/
   - name: aspireify-unified-env-001
     prompt: |-
-      In my apphost.ts I want to inject three env vars into my API: an endpoint,
-      a parameter, and a connection string. Show me the right API to use in 13.3.
+      In my apphost.mts I want to inject three env vars into my API: an endpoint,
+      a parameter, and a connection string. Show me the current API to use.
     tags:
       priority: p0
       area:
@@ -245,8 +245,8 @@ stimuli:
         - 13-3
     environment:
       files:
-        - src: ../../../evals/ts-apphost/apphost.ts
-          dest: ts-apphost/apphost.ts
+        - src: ../../../evals/ts-apphost/apphost.mts
+          dest: ts-apphost/apphost.mts
         - src: ../../../evals/ts-apphost/aspire.config.json
           dest: ts-apphost/aspire.config.json
     graders:
@@ -484,7 +484,8 @@ stimuli:
         config:
           substring: modify .aspire/modules/
   - name: aspireify-ts-001
-    prompt: Use the aspireify skill before answering. Wire apphost.ts so my Node API gets the Redis endpoint as an environment variable. Do not run build, restore, or start commands.
+    prompt: Use the aspireify skill before answering. Wire apphost.mts so my Node API gets the
+      Redis endpoint as an environment variable. Do not run build, restore, or start commands.
     tags:
       priority: p0
       scenario: non-executing-guidance
@@ -495,8 +496,8 @@ stimuli:
       max_agent_duration: 5m
     environment:
       files:
-        - src: ../../../evals/ts-apphost/apphost.ts
-          dest: ts-apphost/apphost.ts
+        - src: ../../../evals/ts-apphost/apphost.mts
+          dest: ts-apphost/apphost.mts
         - src: ../../../evals/ts-apphost/aspire.config.json
           dest: ts-apphost/aspire.config.json
     graders:
@@ -527,9 +528,9 @@ stimuli:
         config:
           substring: modify .aspire/modules
       - type: prompt
-        name: edits_apphost_ts
+        name: edits_apphost_mts
         config:
-          prompt: Does the assistant's response edit apphost.ts (and explicitly avoid editing the generated
+          prompt: Does the assistant's response edit apphost.mts (and explicitly avoid editing the generated
             .aspire/modules/ directory)?
       - type: output-contains
         config:
@@ -557,6 +558,92 @@ stimuli:
       - type: output-not-contains
         config:
           substring: modify .aspire/modules/
+  - name: aspireify-command-arguments-135-001
+    prompt: >
+      Add a C# AppHost resource command named `echo` that requires a `message`
+      input from either the dashboard or `aspire resource api echo --message ...`.
+      Show the current Aspire 13.5 callback API.
+    tags:
+      priority: p1
+      area:
+        - authoring
+        - aspire-13-5
+        - interactions
+    environment:
+      files:
+        - src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs
+          dest: csharp-apphost/MyApp.AppHost/Program.cs
+        - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
+          dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
+    graders:
+      - type: prompt
+        name: declares_command_arguments
+        config:
+          prompt: >
+            Does the assistant's response define the required message input through
+            CommandOptions.Arguments with an InteractionInput, so the same input works
+            from the dashboard and CLI? Answer based on intent.
+      - type: prompt
+        name: reads_execute_context_arguments
+        config:
+          prompt: >
+            Does the assistant's response read the message from
+            ExecuteCommandContext.Arguments rather than prompting unconditionally?
+      - type: prompt
+        name: avoids_obsolete_service_provider
+        config:
+          prompt: >
+            Does the assistant's response avoid using obsolete
+            `context.ServiceProvider` as implementation code? It may mention the old
+            property only to explain migration to `context.Services`.
+  - name: aspireify-ts-interaction-service-135-001
+    prompt: >
+      Use the aspireify skill before answering. Show a TypeScript AppHost resource-command
+      callback that gets the Interaction Service and prompts only when a dashboard UI is
+      available. Do not run build, restore, or start commands.
+    tags:
+      priority: p1
+      scenario: non-executing-guidance
+      area:
+        - authoring
+        - aspire-13-5
+        - interactions
+        - typescript
+    constraints:
+      max_agent_duration: 5m
+      expect_skills: [aspireify]
+    environment:
+      files:
+        - src: ../../../evals/ts-apphost/apphost.mts
+          dest: ts-apphost/apphost.mts
+        - src: ../../../evals/ts-apphost/aspire.config.json
+          dest: ts-apphost/aspire.config.json
+    graders:
+      - type: prompt
+        name: resolves_interaction_service
+        config:
+          prompt: >
+            Does the assistant's response obtain the TypeScript Interaction Service with
+            `await context.services().getInteractionService()` (or an equivalent chained
+            services-accessor call), rather than treating `context.services()` itself as
+            the Interaction Service? Answer based on intent.
+      - type: prompt
+        name: checks_interaction_availability
+        config:
+          prompt: >
+            Does the assistant's response call and await `interaction.isAvailable()`
+            before prompting, and provide a noninteractive path when no UI is attached?
+            Answer based on intent.
+      - type: output-contains
+        config:
+          substring: getInteractionService
+      - type: output-contains
+        config:
+          substring: isAvailable
+      - type: skill-invocation
+        name: invokes_aspireify
+        config:
+          required: [aspireify]
   - name: should_trigger_01
     description: "Reason: Direct wiring request — aspireify owns AppHost wiring"
     prompt: Wire up my Aspire AppHost
@@ -634,7 +721,7 @@ stimuli:
             - aspireify
   - name: should_trigger_07
     description: "Reason: WithBrowserLogs is an AppHost authoring change"
-    prompt: Add WithBrowserLogs to my Vite app in apphost.ts
+    prompt: Add WithBrowserLogs to my Vite app in apphost.mts
     tags:
       priority: p1
       area: routing
@@ -646,7 +733,7 @@ stimuli:
             - aspireify
   - name: should_trigger_08
     description: "Reason: TS AppHost authoring is aspireify"
-    prompt: Help me use the unified withEnvironment API in apphost.ts
+    prompt: Help me use the unified withEnvironment API in apphost.mts
     tags:
       priority: p1
       area: routing
@@ -671,6 +758,18 @@ stimuli:
   - name: should_trigger_10
     description: "Reason: AddNextJsApp wiring is aspireify"
     prompt: Add AddNextJsApp to my AppHost for the web frontend
+    tags:
+      priority: p1
+      area: routing
+    graders:
+      - type: skill-invocation
+        name: invokes_aspireify
+        config:
+          required:
+            - aspireify
+  - name: should_trigger_11
+    description: "Reason: WithTerminal is experimental AppHost authoring owned by aspireify"
+    prompt: Add an interactive WithTerminal session to my Aspire container
     tags:
       priority: p1
       area: routing
@@ -833,8 +932,8 @@ stimuli:
         - package-manager
     environment:
       files:
-        - src: ../../../evals/ts-apphost/apphost.ts
-          dest: case-b/apphost/apphost.ts
+        - src: ../../../evals/ts-apphost/apphost.mts
+          dest: case-b/apphost/apphost.mts
         - src: ../../../evals/ts-apphost/package.json
           dest: case-b/apphost/package.json
         - src: ../../../evals/ts-apphost/aspire.config.json

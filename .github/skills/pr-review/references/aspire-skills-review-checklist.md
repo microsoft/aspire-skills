@@ -69,7 +69,7 @@ From `evals/AUTHORING.md`:
 - `not_contains` lists use full command tokens (e.g., `"azd up"`, `"azd deploy"`), never
   bare nouns (`"azd"`, `"docker"`, `"kubectl"`, `"helm"`) — bare nouns fire on legitimate
   "do not use X" guidance.
-- Aspire 13.4 facts the judge might not know are **stated in the grader prompt**.
+- Aspire 13.5.3 facts the judge might not know are **stated in the grader prompt**.
 
 **Severity:** `important` — these patterns are the difference between a useful eval and
 one that mis-judges correct responses.

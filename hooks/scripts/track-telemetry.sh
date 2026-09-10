@@ -94,6 +94,7 @@ aspire-orchestration/references/detection.md
 aspire-orchestration/references/resource-management.md
 aspire-orchestration/references/safety-guardrails.md
 aspire/references/aspire-13-3-breaking-changes.md
+aspire/references/aspire-13-5-breaking-changes.md
 aspireify/references/apphost-wiring.md
 aspireify/references/csharp-authoring.md
 aspireify/references/docker-compose.md

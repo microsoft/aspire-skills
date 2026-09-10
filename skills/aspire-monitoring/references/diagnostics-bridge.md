@@ -64,7 +64,7 @@ The Aspire CLI communicates with the running AppHost through a **backchannel soc
 | `aspire otel logs --dashboard-url` | Query a standalone or deployed dashboard | `aspire otel logs --dashboard-url "https://localhost:18888/login?t=TOKEN"` |
 | `aspire describe` | Resource state, endpoints, health (filtered) | `aspire describe --format Json` |
 | `aspire describe --include-hidden` | Include hidden resources (proxies, helpers, migrations) | `aspire describe --include-hidden --format Json` |
-| `aspire resources` | Resource list with state | `aspire resources` |
+| `aspire resources` | Compatibility alias for resource state | Prefer `aspire describe` |
 | `aspire export` | Export portable telemetry bundle | `aspire export` |
 | `aspire dashboard run` | Run the Aspire Dashboard standalone (foreground/blocking) | `aspire dashboard run` |
 
@@ -139,10 +139,11 @@ are written to this child's console log stream.
 | Check whether a frontend has it enabled | Look for `.WithBrowserLogs()` in the AppHost |
 | Add `WithBrowserLogs()` to a resource | → **`aspireify` skill** (AppHost authoring) |
 
-`<frontend>-browser-logs` is not hidden by default. Start with normal `aspire describe` or
-`aspire resources` output rather than `aspire ps --include-hidden`; retry with `--include-hidden`
-only when the expected resource is unavailable. Do **not** use `aspire otel logs <frontend>` for
-browser output; browser diagnostics are not returned there.
+`<frontend>-browser-logs` is not hidden by default. Start with normal `aspire describe`
+output; `aspire ps` is AppHost-level in 13.5. Retry with
+`aspire describe --include-hidden` only when the expected resource is unavailable. Do
+**not** use `aspire otel logs <frontend>` for browser output; browser diagnostics are not
+returned there.
 
 ---
 
@@ -194,13 +195,13 @@ Aspire auto-configures Application Insights when `AddAzureApplicationInsights()`
 
 No additional configuration is needed — Aspire wires the connection string during deployment.
 
-## Known Diagnostics Issues
+## Version-Specific Diagnostics
 
-| Issue | Symptom | Workaround |
-|-------|---------|-----------|
-| TS AppHost DNS failure ([#15782](https://github.com/microsoft/aspire/issues/15782)) | `aspire otel` returns "No such host" for `*.dev.localhost` | Use `--dashboard-url localhost:PORT` directly |
-| `--isolated` mode telemetry ([#16107](https://github.com/microsoft/aspire/issues/16107)) | OTEL port not randomized in isolated mode | Avoid `--isolated` if telemetry is needed |
-| Resource missing from `aspire resources` / `aspire describe` | Hidden-by-default resources such as proxies, helpers, or migrations | Re-run with `--include-hidden` |
+| Symptom | 13.5.3 guidance |
+|---------|-----------------|
+| Resource missing from `aspire describe` | Re-run `aspire describe --include-hidden`; do not use removed `aspire ps --include-hidden`. |
+| DevTunnel is healthy but has no public URL on 13.5.0-13.5.2 | Upgrade to 13.5.3 before changing endpoint configuration. |
+| Dashboard Graph crashes for an Azure Blob or another multi-path icon | Upgrade to 13.5.3; the graph icon parser is fixed. |
 
 > **Resolved in 13.3**: The standalone-dashboard workaround for [#16236](https://github.com/microsoft/aspire/issues/16236) is obsolete — `aspire dashboard run` ships in-box (see Standalone Dashboard section above).
 
@@ -214,6 +215,6 @@ No additional configuration is needed — Aspire wires the connection string dur
 | "Show me the logs" | `aspire logs <resource>` | `az containerapp logs show` / `kubectl logs <pod>` / `docker logs` |
 | "Show me distributed traces" | `aspire otel traces` | App Insights → Transaction Search |
 | "Why is this resource unhealthy?" | `aspire describe` + `aspire logs` | AppLens / azure-diagnostics / `kubectl describe pod` |
-| "What metrics are available?" | Aspire Dashboard (auto-launched or `aspire dashboard run`) | Azure Monitor / App Insights / Container Insights |
+| "What metrics are available?" | Open the Aspire Dashboard (VS Code no longer auto-opens it) or use `aspire dashboard run` | Azure Monitor / App Insights / Container Insights |
 | "Export telemetry for analysis" | `aspire export` | App Insights export / KQL query |
 | "Browser console / network logs" | `aspire resource <frontend>-browser-logs open-tracked-browser`, then `aspire logs <frontend>-browser-logs` (with `WithBrowserLogs()` enabled) | N/A in production |

@@ -21,8 +21,9 @@ It helps agents recognize Aspire workspaces, use the Aspire CLI correctly, route
 
 | Extension | Purpose |
 |-----------|---------|
-| `aspire-doctor` | Opens a Copilot canvas for `aspire doctor` results, showing environment checks, fixes, and detected CLI installations |
-| `aspire-app-model` | Opens a canvas-native Workspace/Global AppHost workbench with operational resource cards, a relationship graph, health, commands, and Dashboard-backed diagnostics |
+| `aspire-doctor` | Visualizes `aspire doctor` environment checks, suggested fixes, and detected CLI installations |
+| `aspireify` | Presents Aspireify findings and the proposed resource plan for confirmation before AppHost edits |
+| `aspire-app-model` | Workspace and Global AppHost workbench |
 
 ## Install
 
