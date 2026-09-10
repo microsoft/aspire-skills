@@ -1,0 +1,1 @@
+../../../../../../extensions/aspire-apphosts/lib/app-model.mjs

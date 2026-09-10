@@ -1,0 +1,117 @@
+# Aspire AppHosts canvas
+
+A GitHub Copilot App canvas extension that brings Aspire AppHosts into a
+canvas-native workbench: Workspace and Global discovery, a focused AppHost
+switcher, live resource state, parented resources, endpoints, health checks,
+commands, Dashboard-backed diagnostics, and a read-only relationship graph.
+
+Open the canvas with `open_aspire_apphosts`, or use canvas ID `aspire-apphosts`
+with `open_canvas`.
+
+## Data contract
+
+The extension uses the Aspire CLI's public surfaces:
+
+- `aspire ls --format Json` discovers workspace AppHost candidates.
+- `aspire ps --format Json` discovers running AppHosts for Workspace and Global
+  modes.
+- `aspire describe --format Json --apphost <path>` retrieves the evaluated
+  resource model and current state.
+- `aspire resource <resource> <command> --apphost <path>` invokes commands that
+  the AppHost exposes through its API command surface.
+- `aspire terminal attach <resource> --apphost <path>` opens an integrated
+  terminal only when the resource advertises terminal support.
+
+The canvas polls the public snapshots in place so discovery, model, and state
+changes appear without reopening the panel. Opening the canvas never starts an
+AppHost; Run, Stop, Deploy, Publish, and pipeline-step operations are explicit
+and serialized per AppHost.
+
+Snapshots carry a monotonic content revision across HTTP and server-sent events.
+An older response cannot replace a newer model, and freshness updates apply only
+to the model revision they describe. Selected context includes the owning
+AppHost, stable item identity, and that AppHost's freshness, including retained
+stale data.
+
+On Windows, the default runner invokes `aspire.exe` directly. An `ASPIRE_CLI`
+override must also name an executable rather than a `.cmd` or `.bat` wrapper:
+batch-wrapper argument serialization cannot safely preserve every command input.
+Unsupported wrappers fail explicitly instead of silently changing arguments.
+
+## Security boundary
+
+The provider projects an explicit allow-list of resource fields. It never sends
+environment values, arbitrary resource properties, connection strings, volumes,
+source paths, parameter values, or the token-bearing dashboard URL to the
+renderer or Copilot. Endpoint userinfo, query strings, and fragments are removed.
+Secret command inputs are redacted from command results and never persisted.
+Redaction happens before output is truncated. Duplicate AppHosts use a bounded
+directory-name hint and stable ID to distinguish targets, not a full source path.
+Dashboard URLs remain provider-side. The provider resolves resource-specific
+details, console logs, structured logs, traces, and metrics routes and opens
+them in the integrated browser while preserving the Aspire login token. Raw
+resource JSON and `.env` exports remain inside the authenticated Dashboard and
+never cross the canvas boundary.
+
+Each canvas instance serves its renderer from a random loopback port protected by
+a per-instance token, host/origin checks, a strict Content Security Policy, and
+bounded request bodies.
+
+## Experience
+
+- Workspace mode with a compact AppHost switcher and running hosts first.
+- Global mode with every running machine AppHost available from the same
+  switcher and a bounded describe fanout of four.
+- A responsive resource board that removes explorer-style nesting while
+  preserving parent ownership.
+- A second **Graph** tab visualizes Parent, Reference, and WaitFor relationships
+  from dependencies and parents toward the resources that use them. Graph nodes
+  are deliberately read-only; all operations remain in the default Resources
+  card view. Multiple semantics between the same pair collapse into one labeled
+  connector, and long edges route through column gutters rather than through
+  intermediate resources. A read-only relationship list supports selection and
+  sanitized Copilot context without enabling graph editing. Filtered graph
+  summaries distinguish hidden relationships from an AppHost with none declared.
+- Resource cards keep natural content-driven heights instead of stretching to
+  match neighboring cards.
+- Team App-style resource cards with compact labeled Endpoints and Health rows,
+  endpoint name plus sanitized host/port, natural-width semantic health pills, and
+  a distinct unlabeled command footer inside the resource that owns them.
+- Endpoint links open in GitHub Copilot's integrated browser and expose a
+  separate copy-URL control.
+- Resource overflow opens authenticated Dashboard details, console logs,
+  structured logs, traces, and metrics without adding a separate diagnostics
+  row to every card.
+- Resources that explicitly advertise terminal support can open an attached
+  terminal canvas.
+- Sanitized AppHost or resource context can be added to the Copilot composer as
+  an attachment; the user writes and sends the actual question.
+- AppHost-defined command forms with validation and command-result feedback.
+- Provider-owned dynamic command metadata remains authoritative through
+  validation and execution. Loads for one command are serialized and stale
+  renderer responses are ignored. Metadata is bound to its dependency values;
+  changing those values, a pending reload, or a failed reload blocks execution
+  until matching inputs are loaded. Live schema changes and effective non-secret
+  defaults are reconciled before execution; unstable metadata or an authority
+  conflict exposes **Retry inputs** without automatically retrying the command.
+- Non-secret command defaults are preserved; secret defaults are removed before
+  the model crosses into the renderer.
+- Explicit Run, Stop, Deploy, Publish, and pipeline-step actions, with blocked
+  operations explained in place and high-impact actions confirmed inline.
+- **View dashboard** opens the authenticated Aspire Dashboard in GitHub
+  Copilot's integrated browser.
+- Loading, empty, stale, partial-AppHost-failure, and error states.
+- Background and explicit refreshes preserve the last complete board or empty
+  state; the full skeleton appears only before the first complete snapshot.
+- Optional hidden-resource inclusion.
+- AppHost directory inputs resolve to one concrete project or source file before
+  discovery, source opening, and operation locking.
+- Older CLI compatibility retries only when the optional disabled-command flag
+  is actually unsupported and marks the resulting model accordingly.
+
+## Regression coverage
+
+Run `npm test` from the repository root. It includes the AppHosts model,
+provider, renderer, plugin-mirror and bundle-workflow suites as well as the
+nested Aspireify suites. Provider and renderer boundary fixtures use synthetic
+data and do not start, stop or deploy a real Aspire application.
