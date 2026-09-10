@@ -138,9 +138,9 @@
         <div class="action-menu" id="action-menu" role="menu" hidden></div>
         <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
 
-        <dialog class="operation-dialog" id="pipeline-dialog">
+        <dialog class="operation-dialog" id="pipeline-dialog" aria-labelledby="pipeline-dialog-title">
             <form method="dialog">
-                <h2>Run pipeline step</h2>
+                <h2 id="pipeline-dialog-title">Run pipeline step</h2>
                 <p>Select a step exposed by this AppHost, or enter its name.</p>
                 <label class="dialog-field">
                     <span>Pipeline step</span>
@@ -149,7 +149,7 @@
                 </label>
                 <p class="dialog-error" id="pipeline-error" hidden></p>
                 <div class="dialog-actions">
-                    <button class="button button-secondary" value="cancel">Cancel</button>
+                    <button class="button button-secondary" id="pipeline-cancel" type="button" value="cancel" formnovalidate>Cancel</button>
                     <button class="button button-primary" id="pipeline-run" value="run">Run step</button>
                 </div>
             </form>

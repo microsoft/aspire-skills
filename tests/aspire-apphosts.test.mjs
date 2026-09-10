@@ -364,14 +364,20 @@ test("ps projection never exposes the token-bearing dashboard URL", () => {
     }]);
 
     const publicRecord = publicAppHost(records[0], records[0].id);
-    assert.deepEqual(publicRecord, {
+    const { identityHint, ...publicFields } = publicRecord;
+    assert.equal(typeof identityHint, "string");
+    assert.ok(identityHint.length > 0 && identityHint.length <= 160);
+    assert.deepEqual(publicFields, {
         id: records[0].id,
         displayName: "Demo",
         status: "running",
         sdkVersion: "13.5.2",
         selected: true,
     });
-    assert.doesNotMatch(JSON.stringify(publicRecord), /dashboard|secret|private|repo/i);
+    assert.doesNotMatch(JSON.stringify(publicRecord), /dashboard|secret|private/i);
+    assert.equal("appHostPath" in publicRecord, false);
+    assert.ok(Object.values(publicRecord).every((value) =>
+        typeof value !== "string" || !value.includes(syntheticRepoRoot)));
     const [treeNode] = buildGlobalTree({ runningHosts: records, models: new Map() });
     assert.ok(treeNode.actions.includes("dashboard"));
     assert.doesNotMatch(JSON.stringify(treeNode), /login\?t=secret/);
@@ -756,6 +762,59 @@ test("filterTree keeps ancestors of matching descendants", () => {
     assert.equal(result[0].defaultExpanded, true);
 });
 
+test("duplicate AppHosts expose stable recognizable hints without their full paths", () => {
+    const records = normalizePsPayload(["checkout-one", "checkout-two"].map((checkout) => ({
+        appHostPath: repoPath(checkout, "Commerce.AppHost", "Commerce.AppHost.csproj"),
+        status: "running",
+    })));
+    const first = records.map((record) => publicAppHost(record));
+    assert.equal(first[0].displayName, first[1].displayName);
+    assert.notEqual(first[0].identityHint, first[1].identityHint);
+    for (const [index, checkout] of ["checkout-one", "checkout-two"].entries()) {
+        assert.ok(first[index].identityHint.includes(checkout));
+        assert.equal(first[index].identityHint.includes(syntheticRepoRoot), false);
+    }
+    const reordered = [...records].reverse().map((record) => publicAppHost(record));
+    assert.deepEqual(reordered, [...first].reverse());
+    const roots = buildGlobalTree({ runningHosts: records, models: new Map() });
+    for (const root of roots) {
+        assert.equal(root.identityHint, first.find((record) => record.id === root.appHostId).identityHint);
+    }
+});
+
+test("relationship context retains every edge semantic and belongs to its AppHost", () => {
+    const resources = projectDescribePayload({ resources: [
+        { name: "cache", resourceType: "Container", state: "Running" },
+        {
+            name: "api", resourceType: "Project", state: "Running",
+            relationships: [
+                { type: "Reference", resourceName: "cache" },
+                { type: "WaitFor", resourceName: "cache" },
+            ],
+        },
+    ] }).resources;
+    const records = normalizePsPayload(["first", "second"].map((checkout) => ({
+        appHostPath: repoPath(checkout, "Commerce.AppHost", "Commerce.AppHost.csproj"),
+        status: "running",
+    })));
+    const models = new Map(records.map((record) => [record.id, { resources }]));
+    const roots = buildGlobalTree({ runningHosts: records, models });
+    const contextIds = [];
+    for (const root of roots) {
+        assert.equal(root.graph.edges.length, 1);
+        const edge = root.graph.edges[0];
+        assert.equal(edge.context.kind, "relationship");
+        assert.equal(edge.context.appHostId, root.appHostId);
+        assert.equal(edge.context.id, `${root.id}:relationship:${edge.id}`);
+        assert.deepEqual(edge.context.relationship, {
+            from: edge.from, to: edge.to, types: edge.types,
+        });
+        assert.deepEqual(new Set(edge.context.relationship.types), new Set(["Reference", "WaitFor"]));
+        contextIds.push(edge.context.id);
+    }
+    assert.equal(new Set(contextIds).size, roots.length);
+});
+
 test("mapWithConcurrency never exceeds the configured fanout", async () => {
     let active = 0;
     let peak = 0;
@@ -1054,7 +1113,6 @@ test("canvas source carries the confirmed direction and protected data routes", 
     assert.match(provider, /canvasId: "browser"/);
     assert.match(provider, /canvasId: "terminal"/);
     assert.match(provider, /buildDashboardViewUrl/);
-    assert.match(model, /graph: buildResourceGraph\(resources\)/);
     assert.match(provider, /buildTerminalAttachCommand/);
     assert.match(provider, /privateDashboardUrl/);
     assert.match(provider, /KeyedTaskQueue/);

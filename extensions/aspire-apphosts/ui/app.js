@@ -123,6 +123,8 @@ let commandRunning = false;
 let actionMenuNodeId = null;
 let actionMenuTrigger = null;
 let pipelineAppHostId = null;
+let pipelineReturnFocus = null;
+let pipelineLoadGeneration = 0;
 let secretWarningAccepted = false;
 let pendingConfirmation = null;
 let confirmationNeedsFocus = false;
@@ -134,6 +136,7 @@ let appModelView = "resources";
 let activeGraphModel = null;
 let graphDrawFrame = null;
 let renderedAppHostId = null;
+let graphRelationshipsExpanded = false;
 const commandDrafts = new Map();
 const commandInputs = new Map();
 const commandResults = new Map();
@@ -141,6 +144,7 @@ const commandValidationErrors = new Map();
 const dynamicLoadTimers = new Map();
 const dynamicLoadGenerations = new Map();
 const dynamicLoadingIds = new Set();
+const dynamicLoadFailedIds = new Set();
 const appModelViewStateByAppHost = new Map();
 const graphResizeObserver = typeof ResizeObserver === "function"
     ? new ResizeObserver(() => scheduleResourceGraphDraw())
@@ -237,7 +241,9 @@ async function api(path, { method = "GET", body } = {}) {
             payload = { ok: false, error: `Canvas service returned HTTP ${response.status}.` };
         }
         if (!response.ok && !payload.validationErrors) {
-            throw new Error(payload.error || `Canvas service returned HTTP ${response.status}.`);
+            const error = new Error(payload.error || `Canvas service returned HTTP ${response.status}.`);
+            error.code = payload.errorCode;
+            throw error;
         }
         return payload;
     } finally {
@@ -277,7 +283,7 @@ function showToast(message, error = false) {
 }
 
 async function copyResourceName(resource) {
-    const name = String(resource.label || resource.resourceName || "").trim();
+    const name = resourceCopyName(resource);
     if (!name) {
         showToast("This resource does not expose a copyable name.", true);
         return;
@@ -292,6 +298,59 @@ async function copyResourceName(resource) {
     } catch {
         showToast(`Couldn't copy resource name “${name}”.`, true);
     }
+}
+
+function resourceCopyName(resource) {
+    return String(resource.resourceName || resource.label || "").trim();
+}
+
+function laterTimestamp(current, incoming) {
+    const currentTime = Date.parse(current);
+    const incomingTime = Date.parse(incoming);
+    return Number.isFinite(currentTime) && (!Number.isFinite(incomingTime) || currentTime > incomingTime)
+        ? current
+        : incoming;
+}
+
+function acceptState(state) {
+    if (!Number.isInteger(state?.revision) || state.revision < 0
+        || state.revision < (modelState?.revision ?? -1)) {
+        return false;
+    }
+    if (state.revision === modelState?.revision) {
+        state = {
+            ...state,
+            lastSuccessfulAt: laterTimestamp(modelState.lastSuccessfulAt, state.lastSuccessfulAt),
+            generatedAt: laterTimestamp(modelState.generatedAt, state.generatedAt),
+        };
+    }
+    hideActionMenu();
+    const previousCommand = activeCommandId ? findNode(activeCommandId) : undefined;
+    modelState = state;
+    const currentCommand = activeCommandId ? findNode(activeCommandId) : undefined;
+    if (currentCommand && JSON.stringify(previousCommand?.command?.argumentInputs)
+        !== JSON.stringify(currentCommand.command.argumentInputs)) {
+        cancelDynamicInputsLoad(currentCommand.id);
+        commandInputs.delete(currentCommand.id);
+        const inputs = commandInputList(currentCommand);
+        prepareCommandDraft(currentCommand, inputs);
+        if (inputs.some((input) => input.dynamicLoading)) {
+            void reloadDynamicInputs(currentCommand);
+        }
+    }
+    render();
+    return true;
+}
+
+function acceptFreshness(message) {
+    if (!Number.isInteger(modelState?.revision) || message.revision !== modelState.revision
+        || !Number.isFinite(Date.parse(message.lastSuccessfulAt))
+        || laterTimestamp(modelState.lastSuccessfulAt, message.lastSuccessfulAt) !== message.lastSuccessfulAt) {
+        return false;
+    }
+    modelState.lastSuccessfulAt = message.lastSuccessfulAt;
+    els.freshness.textContent = formatAge(modelState.lastSuccessfulAt);
+    return true;
 }
 
 function setModeButtons() {
@@ -460,6 +519,10 @@ function findNode(nodeId, nodes = modelState?.roots ?? []) {
         if (node.id === nodeId) {
             return node;
         }
+        const relationship = node.graph?.edges?.find((edge) => edge.context?.id === nodeId)?.context;
+        if (relationship) {
+            return relationship;
+        }
         const found = findNode(nodeId, node.children ?? []);
         if (found) {
             return found;
@@ -532,7 +595,8 @@ function trayAction(action, node) {
     const copilot = action === "ask";
     return element("button", {
         class:
-            `tray-action${primary ? " is-primary" : ""}${danger ? " is-danger" : ""}${copilot ? " is-copilot" : ""}`,
+            `tray-action${primary ? " is-primary" : ""}${danger ? " is-danger" : ""}${copilot ? " is-copilot" : ""}`
+            + `${["deploy", "publish", "pipeline-step", "source"].includes(action) ? " is-secondary-operation" : ""}`,
         type: "button",
         title: accessibleLabel,
         "aria-label": accessibleLabel,
@@ -649,6 +713,18 @@ function renderAppHostActionTray(node) {
         })] : []),
         actionGroup("Open and run", primaryActions, node),
         actionGroup("Lifecycle and deployment", operationalActions, node),
+        element("button", {
+            class: "tray-action host-more-actions resource-menu-trigger",
+            type: "button",
+            "aria-label": `More operations for ${node.presentationLabel || node.label}`,
+            "aria-haspopup": "menu",
+            "aria-expanded": "false",
+            on: {
+                click: (event) => openActionMenu(node, event.currentTarget, [
+                    "deploy", "publish", "pipeline-step", ...(node.actions?.includes("source") ? ["source"] : []),
+                ]),
+            },
+        }, [svgIcon("more", 14), element("span", { text: "More" })]),
     ]);
 }
 
@@ -824,15 +900,24 @@ function renderResourceCard({ resource, parentLabel, dashboardAvailable }) {
             }, [
                 rowIcon(resource),
                 element("span", { class: "resource-identity" }, [
-                    element("button", {
-                        class: "resource-name-copy",
-                        type: "button",
-                        title: `Copy resource name: ${resource.label || resource.resourceName}`,
-                        "aria-label": `Copy resource name ${resource.label || resource.resourceName}`,
-                        on: { click: () => void copyResourceName(resource) },
-                    }, [
-                        element("strong", { text: resource.label }),
-                        svgIcon("copy", 12),
+                    element("span", { class: "resource-name-actions" }, [
+                        element(dashboardAvailable ? "button" : "strong", {
+                            class: "resource-name",
+                            ...(dashboardAvailable ? {
+                                type: "button",
+                                title: `View details for ${resource.label}`,
+                                "aria-label": `View details for ${resource.label}`,
+                                on: { click: () => void executeNodeAction("details", resource) },
+                            } : { title: resource.label }),
+                            text: resource.label,
+                        }),
+                        element("button", {
+                            class: "resource-name-copy",
+                            type: "button",
+                            title: `Copy resource name: ${resourceCopyName(resource)}`,
+                            "aria-label": `Copy resource name ${resourceCopyName(resource)}`,
+                            on: { click: () => void copyResourceName(resource) },
+                        }, [svgIcon("copy", 12)]),
                     ]),
                     element("span", { text: resource.description, title: resource.description }),
                 ]),
@@ -847,6 +932,7 @@ function renderResourceCard({ resource, parentLabel, dashboardAvailable }) {
         ...(parentLabel ? [element("p", {
             class: "resource-parent",
             text: `Part of ${parentLabel}`,
+            title: `Part of ${parentLabel}`,
         })] : []),
         element("div", { class: "resource-card-details" }, [
             renderResourceAttributes(endpoints, healthItems),
@@ -867,7 +953,27 @@ function visibleResourceGraph(appHost, resources) {
     return {
         nodes: nodes.map((node) => ({ ...node, layer: normalizedLayers.get(node.layer) ?? 0 })),
         edges,
+        sourceNodeCount: source.nodes.length,
+        sourceEdgeCount: source.edges.length,
+        filtered: Boolean(filterText.trim()),
     };
+}
+
+function clearFilter() {
+    filterText = "";
+    els.searchInput.value = "";
+    updateHeader();
+    renderTree();
+    els.searchInput.focus();
+}
+
+function clearFilterButton() {
+    return element("button", {
+        class: "button button-secondary button-small",
+        type: "button",
+        text: "Clear filter",
+        on: { click: clearFilter },
+    });
 }
 
 function setAppModelView(view) {
@@ -1039,8 +1145,13 @@ function renderResourceGraphPanel(graph, active) {
         }, [
             element("div", { class: "resource-board-empty" }, [
                 svgIcon("steps", 18),
-                element("strong", { text: "No resource graph yet" }),
-                element("span", { text: "Start this AppHost to load its evaluated relationships." }),
+                element("strong", { text: graph.filtered ? "No resources visible in this graph" : "No resource graph yet" }),
+                element("span", {
+                    text: graph.filtered
+                        ? `0 of ${graph.sourceNodeCount} resources and 0 of ${graph.sourceEdgeCount} relationships visible.`
+                        : "Start this AppHost to load its evaluated relationships.",
+                }),
+                ...(graph.filtered ? [clearFilterButton()] : []),
             ]),
         ]);
     }
@@ -1070,9 +1181,6 @@ function renderResourceGraphPanel(graph, active) {
         `${columns.length * 220 + Math.max(0, columns.length - 1) * 56 + 40}px`,
     );
 
-    const relationshipItems = graph.edges.flatMap((edge) =>
-        edge.types.map((type) =>
-            element("li", { text: graphRelationshipSentence(edge, type, nodeByName) })));
     return element("div", {
         class: "app-model-panel",
         id: "graph-view-panel",
@@ -1084,20 +1192,62 @@ function renderResourceGraphPanel(graph, active) {
             element("p", {
                 text: graph.edges.length
                     ? "Arrows flow from dependencies and parents toward the resources that use them."
-                    : "This AppHost has no declared resource relationships.",
+                    : graph.sourceEdgeCount > 0
+                        ? "No relationships are visible for these resources."
+                        : "This AppHost has no declared resource relationships.",
             }),
             renderGraphLegend(graph),
         ]),
+        ...(graph.filtered ? [element("div", { class: "graph-filter-summary" }, [
+            element("p", {
+                text: `${graph.nodes.length} of ${graph.sourceNodeCount} resources and ${graph.edges.length} of ${graph.sourceEdgeCount} relationships visible.`,
+            }),
+            clearFilterButton(),
+        ])] : []),
         element("div", {
             class: "resource-graph-viewport",
             role: "region",
             tabIndex: 0,
             "aria-label": "Scrollable AppHost resource graph",
         }, [canvas]),
-        element("ul", {
-            class: "sr-only",
-            "aria-label": "Resource relationships",
-        }, relationshipItems),
+        ...(graph.edges.length ? [renderGraphRelationships(graph, nodeByName)] : []),
+    ]);
+}
+
+function renderGraphRelationships(graph, nodeByName) {
+    const selected = graph.edges.find((edge) => edge.context?.id === selectedNodeId)?.context;
+    return element("details", {
+        class: "graph-relationships",
+        open: graphRelationshipsExpanded,
+        on: { toggle: (event) => { graphRelationshipsExpanded = event.currentTarget.open; } },
+    }, [
+        element("summary", { text: `Relationships (${graph.edges.length}) · Select to add to Copilot` }),
+        element("ul", { "aria-label": "Resource relationships" }, graph.edges.map((edge) => {
+            const sentence = edge.types.map((type) => graphRelationshipSentence(edge, type, nodeByName)).join(" ");
+            return element("li", {}, [
+                edge.context
+                    ? element("button", {
+                        class: `relationship-select${selectedNodeId === edge.context.id ? " is-selected" : ""}`,
+                        type: "button",
+                        "aria-pressed": selectedNodeId === edge.context.id,
+                        dataset: { nodeId: edge.context.id },
+                        text: sentence,
+                        on: {
+                            click: () => {
+                                graphRelationshipsExpanded = true;
+                                setSelected(edge.context);
+                            },
+                        },
+                    })
+                    : element("span", { text: sentence }),
+            ]);
+        })),
+        ...(selected ? [element("button", {
+            class: "button button-secondary button-small",
+            type: "button",
+            text: "Add relationship to Copilot",
+            on: { click: () => void executeNodeAction("ask", selected) },
+        })] : []),
     ]);
 }
 
@@ -1352,7 +1502,8 @@ function duplicateHostLabel(appHost, hosts) {
     if (matches.length < 2) {
         return appHost.label;
     }
-    return `${appHost.label} ${matches.indexOf(appHost) + 1}`;
+    const identity = appHost.identityHint || String(appHost.appHostId || "").slice(0, 8) || "unknown";
+    return `${appHost.label} (${identity})`;
 }
 
 function appHostTabId(appHost) {
@@ -1400,7 +1551,7 @@ function renderAppHostSwitcher(hosts, activeHost) {
                     "aria-selected": active,
                     "aria-controls": "active-apphost",
                     "aria-label":
-                        `${duplicateHostLabel(host, hosts)}, ${status.label}, ${index + 1} of ${hosts.length}`,
+                        `${duplicateHostLabel(host, modelState?.roots ?? hosts)}, ${status.label}, ${index + 1} of ${hosts.length}`,
                     dataset: { nodeId: host.id },
                     on: {
                         click: () => selectAppHost(host),
@@ -1409,7 +1560,7 @@ function renderAppHostSwitcher(hosts, activeHost) {
                 }, [
                     rowIcon(host),
                     element("span", { class: "apphost-tab-copy" }, [
-                        element("strong", { text: duplicateHostLabel(host, hosts) }),
+                        element("strong", { text: duplicateHostLabel(host, modelState?.roots ?? hosts) }),
                         element("span", { text: status.label }),
                     ]),
                 ]);
@@ -1433,7 +1584,7 @@ function renderHostNotice(node) {
 function renderHostStage(appHost, hosts) {
     const presentationHost = {
         ...appHost,
-        presentationLabel: duplicateHostLabel(appHost, hosts),
+        presentationLabel: duplicateHostLabel(appHost, modelState?.roots ?? hosts),
     };
     const resources = flattenResources(appHostResources(appHost));
     const status = hostStatus(appHost);
@@ -1455,7 +1606,7 @@ function renderHostStage(appHost, hosts) {
                 element("span", { class: "apphost-mark" }, [svgIcon(appHost.icon || "apphost-running", 20)]),
                 element("span", { class: "apphost-heading-copy" }, [
                     element("span", { class: "apphost-title-line" }, [
-                        element("h2", { text: presentationHost.presentationLabel, title: appHost.label }),
+                        element("h2", { text: presentationHost.presentationLabel, title: presentationHost.presentationLabel }),
                         actionButton(`More actions for ${presentationHost.presentationLabel}`, "more", (event) =>
                             openActionMenu(presentationHost, event.currentTarget, ["ask"])),
                     ]),
@@ -1464,8 +1615,8 @@ function renderHostStage(appHost, hosts) {
             ]),
             element("div", { class: "apphost-facts", "aria-label": "AppHost summary" }, [
                 element("span", { class: `summary-chip tone-${status.tone}`, text: status.label }),
-                element("span", { class: "summary-chip", text: `${resources.length} resource${resources.length === 1 ? "" : "s"}` }),
-                ...(healthy ? [element("span", { class: "summary-chip tone-healthy", text: `${healthy} healthy` })] : []),
+                element("span", { class: "summary-chip is-secondary-fact", text: `${resources.length} resource${resources.length === 1 ? "" : "s"}` }),
+                ...(healthy ? [element("span", { class: "summary-chip tone-healthy is-secondary-fact", text: `${healthy} healthy` })] : []),
                 ...(attention ? [element("span", { class: "summary-chip tone-warning", text: `${attention} need attention` })] : []),
             ]),
         ]),
@@ -1499,20 +1650,7 @@ function renderTree() {
             element("p", {
                 text: "No AppHosts, resources, endpoints, health checks, or commands match this filter.",
             }),
-            element("button", {
-                class: "button button-secondary button-small",
-                type: "button",
-                text: "Clear filter",
-                on: {
-                    click: () => {
-                        filterText = "";
-                        els.searchInput.value = "";
-                        updateHeader();
-                        renderTree();
-                        els.searchInput.focus();
-                    },
-                },
-            }),
+            clearFilterButton(),
         ]));
         return;
     }
@@ -1580,6 +1718,7 @@ function restoreCommandFocus(focusState) {
 
 function hideActionMenu({ restoreFocus = false } = {}) {
     const trigger = actionMenuTrigger;
+    trigger?.setAttribute("aria-expanded", "false");
     actionMenuNodeId = null;
     actionMenuTrigger = null;
     els.actionMenu.hidden = true;
@@ -1598,10 +1737,11 @@ function menuAction(action, node) {
         class: "menu-action",
         type: "button",
         role: "menuitem",
+        disabled: isAppHostNode(node) && action !== "ask" && !node.actions?.includes(action),
         on: {
             click: () => {
                 hideActionMenu({ restoreFocus: true });
-                void executeNodeAction(action, node);
+                requestNodeAction(action, node);
             },
         },
     }, [svgIcon(definition.icon, 14), label]);
@@ -1614,6 +1754,8 @@ function openActionMenu(node, anchor, actions) {
     }
     actionMenuNodeId = node.id;
     actionMenuTrigger = anchor;
+    anchor.setAttribute("aria-haspopup", "menu");
+    anchor.setAttribute("aria-expanded", "true");
     const actionNames = actions ?? [...(node.actions ?? []), "ask"];
     els.actionMenu.replaceChildren(...actionNames.map((action) =>
         action === "separator"
@@ -1628,7 +1770,7 @@ function openActionMenu(node, anchor, actions) {
         8,
         Math.min(window.innerHeight - els.actionMenu.offsetHeight - 8, bounds.bottom + 3),
     )}px`;
-    els.actionMenu.querySelector("button")?.focus();
+    els.actionMenu.querySelector("button:not([disabled])")?.focus();
 }
 
 async function executeNodeAction(action, node) {
@@ -1713,16 +1855,25 @@ async function executeNodeAction(action, node) {
 }
 
 async function choosePipelineStep(appHostId) {
+    const generation = ++pipelineLoadGeneration;
     pipelineAppHostId = appHostId;
+    pipelineReturnFocus = document.activeElement;
     els.pipelineStepInput.value = "";
     els.pipelineStepOptions.replaceChildren();
     els.pipelineError.hidden = true;
+    els.pipelineDialog.returnValue = "";
     els.pipelineDialog.showModal();
     try {
         const result = await api(`/api/pipeline-steps?appHostId=${encodeURIComponent(appHostId)}`);
+        if (generation !== pipelineLoadGeneration || !els.pipelineDialog.open) {
+            return;
+        }
         els.pipelineStepOptions.replaceChildren(...(result.steps ?? []).map((step) =>
             element("option", { value: step.name, label: step.description || step.resourceName || step.name })));
     } catch (error) {
+        if (generation !== pipelineLoadGeneration || !els.pipelineDialog.open) {
+            return;
+        }
         els.pipelineError.hidden = false;
         els.pipelineError.textContent = `${error.message} You can still enter a step name.`;
     }
@@ -1774,6 +1925,13 @@ function pruneCommandDraft(nodeId, inputs) {
             delete draft[name];
         }
     }
+    for (const input of inputs) {
+        if (input.options?.length && !input.allowCustomChoice
+            && draft[input.name] !== undefined
+            && !input.options.some((option) => String(option.value) === String(draft[input.name]))) {
+            delete draft[input.name];
+        }
+    }
     const remainingErrors = (commandValidationErrors.get(nodeId) ?? [])
         .filter((error) => declared.has(error.argumentName));
     if (remainingErrors.length > 0) {
@@ -1781,6 +1939,36 @@ function pruneCommandDraft(nodeId, inputs) {
     } else {
         commandValidationErrors.delete(nodeId);
     }
+}
+
+function prepareCommandDraft(node, inputs) {
+    pruneCommandDraft(node.id, inputs);
+    const draft = commandDraft(node);
+    for (const input of inputs) {
+        const kind = input.inputType.toLowerCase();
+        if (input.disabled || kind.includes("secret") || draft[input.name] !== undefined) {
+            continue;
+        }
+        if (kind === "boolean" || kind === "checkbox") {
+            const defaultValue = String(input.value ?? "").trim().toLowerCase();
+            if (defaultValue === "true" || defaultValue === "false") {
+                draft[input.name] = defaultValue === "true";
+            } else if (input.required) {
+                draft[input.name] = false;
+            }
+        } else if (input.value !== undefined
+            && (!input.options?.length || input.allowCustomChoice
+                || input.options.some((option) => String(option.value) === String(input.value)))) {
+            draft[input.name] = input.value;
+        }
+    }
+    return draft;
+}
+
+function commandDependencySignature(node, inputs, values) {
+    const dependencies = [...new Set([...(node.command.argumentInputs ?? []), ...inputs]
+        .flatMap((input) => input.dynamicLoading?.dependsOnInputs ?? []))].sort();
+    return JSON.stringify(dependencies.map((name) => [name, values[name] == null ? null : String(values[name])]));
 }
 
 function focusCommandPanel(nodeId) {
@@ -1798,6 +1986,7 @@ function toggleCommandPanel(node, { focusPanel = false } = {}) {
         }
         activeCommandId = node.id;
         const inputs = commandInputList(node);
+        prepareCommandDraft(node, inputs);
         if (inputs.some((input) => input.dynamicLoading)) {
             void reloadDynamicInputs(node);
         }
@@ -1821,16 +2010,22 @@ function discardSensitiveCommandDraft(node, nodeId = node?.id) {
     commandValidationErrors.delete(nodeId);
 }
 
+function cancelDynamicInputsLoad(nodeId) {
+    clearTimeout(dynamicLoadTimers.get(nodeId));
+    dynamicLoadTimers.delete(nodeId);
+    dynamicLoadGenerations.set(nodeId, (dynamicLoadGenerations.get(nodeId) ?? 0) + 1);
+    dynamicLoadingIds.delete(nodeId);
+    dynamicLoadFailedIds.delete(nodeId);
+}
+
 function clearActiveCommand() {
     if (!activeCommandId) {
         return;
     }
     const nodeId = activeCommandId;
     discardSensitiveCommandDraft(findNode(nodeId), nodeId);
-    clearTimeout(dynamicLoadTimers.get(nodeId));
-    dynamicLoadTimers.delete(nodeId);
-    dynamicLoadGenerations.set(nodeId, (dynamicLoadGenerations.get(nodeId) ?? 0) + 1);
-    dynamicLoadingIds.delete(nodeId);
+    cancelDynamicInputsLoad(nodeId);
+    commandInputs.delete(nodeId);
     activeCommandId = null;
 }
 
@@ -1846,39 +2041,36 @@ function closeCommandPanel(node, { restoreFocus = true } = {}) {
     }
 }
 
+function commandFieldIds(node, input) {
+    const id = `command-input-${encodeURIComponent(node.id)}:${encodeURIComponent(input.name)}`;
+    return { id, hintId: `${id}:hint`, errorId: `${id}:error` };
+}
+
 function commandField(node, input) {
     const draft = commandDraft(node);
     const kind = input.inputType.toLowerCase();
-    if (draft[input.name] === undefined) {
-        if (kind === "boolean" || kind === "checkbox") {
-            const defaultValue = String(input.value ?? "").trim().toLowerCase();
-            if (defaultValue === "true" || defaultValue === "false") {
-                draft[input.name] = defaultValue === "true";
-            } else if (input.required) {
-                draft[input.name] = false;
-            }
-        } else if (input.value !== undefined) {
-            draft[input.name] = input.value;
-        }
-    }
     const validationMessage = (commandValidationErrors.get(node.id) ?? [])
         .find((error) => error.argumentName === input.name)?.errorMessage;
+    const { id, hintId, errorId } = commandFieldIds(node, input);
+    const accessibility = {
+        id,
+        "aria-invalid": Boolean(validationMessage),
+        "aria-describedby": [input.description ? hintId : "", validationMessage ? errorId : ""].filter(Boolean).join(" ") || undefined,
+    };
+    const checkbox = kind === "boolean" || kind === "checkbox";
     let control;
-    if (kind === "boolean" || kind === "checkbox") {
+    if (checkbox) {
         control = element("input", {
+            ...accessibility,
             type: "checkbox",
             name: input.name,
             checked: draft[input.name] === true || draft[input.name] === "true",
             disabled: input.disabled,
             on: { change: (event) => updateCommandDraft(node, input, event.target.checked) },
         });
-        return element("label", { class: "command-field checkbox-field" }, [
-            control,
-            element("span", { text: input.label }),
-        ]);
-    }
-    if (input.options?.length > 0 && !input.allowCustomChoice) {
+    } else if (input.options?.length > 0 && !input.allowCustomChoice) {
         control = element("select", {
+            ...accessibility,
             name: input.name,
             required: input.required,
             disabled: input.disabled,
@@ -1890,6 +2082,7 @@ function commandField(node, input) {
         control.value = draft[input.name] ?? "";
     } else {
         control = element("input", {
+            ...accessibility,
             type: kind.includes("secret") ? "password" : kind.includes("number") ? "number" : "text",
             name: input.name,
             value: draft[input.name] ?? "",
@@ -1901,19 +2094,22 @@ function commandField(node, input) {
             on: { input: (event) => updateCommandDraft(node, input, event.target.value) },
         });
     }
-    return element("label", { class: "command-field" }, [
-        element("span", { text: `${input.label}${input.required ? " *" : ""}` }),
-        control,
-        ...(input.description ? [element("small", { text: input.description })] : []),
+    const label = element("span", { text: `${input.label}${input.required ? " *" : ""}` });
+    return element("label", { class: `command-field${checkbox ? " checkbox-field" : ""}`, htmlFor: id }, [
+        ...(checkbox ? [control, label] : [label, control]),
+        ...(input.description ? [element("small", { id: hintId, text: input.description })] : []),
         element("span", {
             class: "field-error",
+            id: errorId,
             dataset: { errorFor: input.name },
             text: validationMessage ?? "",
+            hidden: !validationMessage,
         }),
     ]);
 }
 
 function updateCommandDraft(node, input, value) {
+    const changed = commandDraft(node)[input.name] !== value;
     commandDraft(node)[input.name] = value;
     const remainingErrors = (commandValidationErrors.get(node.id) ?? [])
         .filter((error) => error.argumentName !== input.name);
@@ -1922,45 +2118,83 @@ function updateCommandDraft(node, input, value) {
     } else {
         commandValidationErrors.delete(node.id);
     }
+    const { id, hintId, errorId } = commandFieldIds(node, input);
+    const control = document.getElementById(id);
+    control?.setAttribute("aria-invalid", "false");
+    if (input.description) {
+        control?.setAttribute("aria-describedby", hintId);
+    } else {
+        control?.removeAttribute("aria-describedby");
+    }
+    const error = document.getElementById(errorId);
+    if (error) {
+        error.textContent = "";
+        error.hidden = true;
+    }
     const inputs = commandInputList(node);
-    if (inputs.some((candidate) =>
+    if (changed && [...(node.command.argumentInputs ?? []), ...inputs].some((candidate) =>
         candidate.dynamicLoading?.dependsOnInputs?.includes(input.name))) {
         clearTimeout(dynamicLoadTimers.get(node.id));
-        dynamicLoadTimers.set(node.id, setTimeout(() => void reloadDynamicInputs(node), 250));
+        const generation = beginDynamicInputsLoad(node);
+        dynamicLoadTimers.set(node.id, setTimeout(() => {
+            dynamicLoadTimers.delete(node.id);
+            void reloadDynamicInputs(findNode(node.id) ?? node, generation);
+        }, 250));
     }
 }
 
-async function reloadDynamicInputs(node) {
+function beginDynamicInputsLoad(node) {
+    clearTimeout(dynamicLoadTimers.get(node.id));
+    dynamicLoadTimers.delete(node.id);
     const generation = (dynamicLoadGenerations.get(node.id) ?? 0) + 1;
     dynamicLoadGenerations.set(node.id, generation);
     dynamicLoadingIds.add(node.id);
+    dynamicLoadFailedIds.delete(node.id);
+    commandResults.delete(node.id);
     if (activeCommandId === node.id) {
         renderTree();
     }
+    return generation;
+}
+
+async function reloadDynamicInputs(node, generation = beginDynamicInputsLoad(node), reconcileDefaults = true) {
     try {
+        const argumentsToLoad = { ...prepareCommandDraft(node, commandInputList(node)) };
         const result = await api("/api/command-inputs", {
             method: "POST",
             body: {
                 appHostId: node.appHostId,
                 resourceName: node.resourceName,
                 commandName: node.commandName,
-                arguments: { ...commandDraft(node) },
+                arguments: argumentsToLoad,
             },
         });
-        if (dynamicLoadGenerations.get(node.id) !== generation) {
+        if (dynamicLoadGenerations.get(node.id) !== generation || activeCommandId !== node.id) {
             return;
         }
-        const inputs = result.inputs ?? [];
+        if (result.ok === false || !Array.isArray(result.inputs)) {
+            throw new Error(result.error || "Couldn't load command inputs. Retry inputs before running this command.");
+        }
+        const inputs = result.inputs;
         commandInputs.set(node.id, {
             baseSignature: JSON.stringify(node.command.argumentInputs ?? []),
             inputs,
         });
-        pruneCommandDraft(node.id, inputs);
+        const draft = prepareCommandDraft(node, inputs);
+        if (commandDependencySignature(node, inputs, argumentsToLoad) !== commandDependencySignature(node, inputs, draft)) {
+            if (reconcileDefaults) {
+                await reloadDynamicInputs(node, beginDynamicInputsLoad(node), false);
+                return;
+            }
+            throw new Error("Command input defaults changed again. Retry inputs before running this command.");
+        }
         commandResults.delete(node.id);
+        dynamicLoadFailedIds.delete(node.id);
     } catch (error) {
         if (dynamicLoadGenerations.get(node.id) !== generation) {
             return;
         }
+        dynamicLoadFailedIds.add(node.id);
         commandResults.set(node.id, { ok: false, error: error.message });
     } finally {
         if (dynamicLoadGenerations.get(node.id) === generation) {
@@ -1974,7 +2208,9 @@ async function reloadDynamicInputs(node) {
 
 function renderCommandPanel(node) {
     const inputs = commandInputList(node);
+    prepareCommandDraft(node, inputs);
     const loadingInputs = dynamicLoadingIds.has(node.id);
+    const failedInputs = dynamicLoadFailedIds.has(node.id);
     const hasSecret = inputs.some((input) =>
         !input.disabled && input.inputType.toLowerCase().includes("secret"));
     if (hasSecret && !secretWarningAccepted) {
@@ -1990,6 +2226,12 @@ function renderCommandPanel(node) {
                     text: "Cancel",
                     on: { click: () => closeCommandPanel(node) },
                 }),
+                ...(failedInputs ? [element("button", {
+                    class: "button button-secondary button-small",
+                    type: "button",
+                    text: "Retry inputs",
+                    on: { click: () => void reloadDynamicInputs(node) },
+                })] : []),
                 element("button", {
                     class: "button button-primary button-small",
                     type: "button",
@@ -2025,11 +2267,17 @@ function renderCommandPanel(node) {
                 text: "Cancel",
                 on: { click: () => closeCommandPanel(node) },
             }),
+            ...(failedInputs ? [element("button", {
+                class: "button button-secondary button-small",
+                type: "button",
+                text: "Retry inputs",
+                on: { click: () => void reloadDynamicInputs(node) },
+            })] : []),
             element("button", {
                 class: "button button-primary button-small",
                 type: "submit",
                 text: commandRunning ? "Running..." : loadingInputs ? "Loading inputs..." : "Run command",
-                disabled: commandRunning || loadingInputs,
+                disabled: commandRunning || loadingInputs || failedInputs,
             }),
         ]),
         ...(result ? [element("pre", {
@@ -2041,7 +2289,7 @@ function renderCommandPanel(node) {
 }
 
 async function submitResourceCommand(node, form) {
-    if (commandRunning || dynamicLoadingIds.has(node.id)) {
+    if (commandRunning || dynamicLoadingIds.has(node.id) || dynamicLoadFailedIds.has(node.id)) {
         return;
     }
     commandRunning = true;
@@ -2070,10 +2318,17 @@ async function submitResourceCommand(node, form) {
             const inputs = commandInputList(node);
             if (inputs.some((input) => input.inputType.toLowerCase().includes("secret"))) {
                 commandDrafts.delete(node.id);
+                if (activeCommandId === node.id
+                    && [...(node.command.argumentInputs ?? []), ...inputs].some((input) => input.dynamicLoading)) {
+                    void reloadDynamicInputs(findNode(node.id) ?? node);
+                }
             }
         }
         showToast(result.ok ? `${node.label} completed.` : result.error, !result.ok);
     } catch (error) {
+        if (error.code === "command_inputs_changed" && activeCommandId === node.id) {
+            dynamicLoadFailedIds.add(node.id);
+        }
         commandResults.set(node.id, { ok: false, error: error.message });
         showToast(error.message, true);
     } finally {
@@ -2084,6 +2339,7 @@ async function submitResourceCommand(node, form) {
 }
 
 function render() {
+    const stateToRender = modelState;
     const nextViewMode = modelState?.viewMode ?? null;
     const viewModeChanged = Boolean(renderedViewMode && nextViewMode !== renderedViewMode);
     if (viewModeChanged && modelState?.status === "loading" && modelState.refreshing) {
@@ -2097,6 +2353,10 @@ function render() {
     }
 
     const draw = () => {
+        // A newer HTTP/SSE state may render while the browser queues this transition.
+        if (modelState !== stateToRender) {
+            return;
+        }
         if (viewModeChanged) {
             clearActiveCommand();
             selectedNodeId = null;
@@ -2136,8 +2396,7 @@ function render() {
 async function refresh() {
     try {
         const result = await api("/api/refresh", { method: "POST", body: {} });
-        modelState = result.state;
-        render();
+        acceptState(result.state);
     } catch (error) {
         showToast(error.message, true);
     }
@@ -2156,8 +2415,11 @@ async function setViewMode(viewMode) {
     updateHeader();
     try {
         const result = await api("/api/mode", { method: "POST", body: { viewMode } });
-        modelState = result.state;
-        render();
+        acceptState(result.state);
+        if (pendingViewMode === viewMode && modelState?.status !== "loading") {
+            finishModeSwitch();
+            updateHeader();
+        }
     } catch (error) {
         finishModeSwitch();
         updateHeader();
@@ -2182,13 +2444,11 @@ function connectEvents() {
             return;
         }
         if (message.type === "state" && message.state) {
-            modelState = message.state;
-            render();
+            acceptState(message.state);
             return;
         }
         if (message.type === "freshness" && modelState) {
-            modelState.lastSuccessfulAt = message.lastSuccessfulAt;
-            els.freshness.textContent = formatAge(message.lastSuccessfulAt);
+            acceptFreshness(message);
             return;
         }
         if (message.type === "command") {
@@ -2248,8 +2508,7 @@ els.hiddenCheckbox.addEventListener("change", async () => {
             method: "POST",
             body: { includeHidden: els.hiddenCheckbox.checked },
         });
-        modelState = result.state;
-        render();
+        acceptState(result.state);
     } catch (error) {
         els.hiddenCheckbox.checked = modelState?.includeHidden === true;
         showToast(error.message, true);
@@ -2263,7 +2522,9 @@ document.addEventListener("pointerdown", (event) => {
 });
 document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
-        if (!els.actionMenu.hidden) {
+        if (els.pipelineDialog.open) {
+            return;
+        } else if (!els.actionMenu.hidden) {
             event.preventDefault();
             hideActionMenu({ restoreFocus: true });
         } else if (activeCommandId) {
@@ -2276,19 +2537,39 @@ document.addEventListener("keydown", (event) => {
     }
 });
 document.addEventListener("scroll", hideActionMenu, true);
+els.actionMenu.addEventListener("keydown", (event) => {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+        return;
+    }
+    const items = [...els.actionMenu.querySelectorAll("button:not([disabled])")];
+    if (!items.length) {
+        return;
+    }
+    event.preventDefault();
+    const index = items.indexOf(document.activeElement);
+    const next = event.key === "Home" ? 0
+        : event.key === "End" ? items.length - 1
+            : (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+    items[next].focus();
+});
+
+document.getElementById("pipeline-cancel").addEventListener("click", () => els.pipelineDialog.close("cancel"));
+els.pipelineDialog.addEventListener("cancel", () => {
+    els.pipelineDialog.returnValue = "cancel";
+});
 
 els.pipelineDialog.addEventListener("close", () => {
-    if (els.pipelineDialog.returnValue !== "run" || !pipelineAppHostId) {
-        pipelineAppHostId = null;
-        return;
-    }
-    const step = els.pipelineStepInput.value.trim();
-    if (!step) {
-        pipelineAppHostId = null;
-        return;
-    }
+    pipelineLoadGeneration++;
     const appHostId = pipelineAppHostId;
     pipelineAppHostId = null;
+    const focusTarget = pipelineReturnFocus?.isConnected ? pipelineReturnFocus
+        : els.tree.querySelector("[data-apphost-primary]:not([disabled])");
+    pipelineReturnFocus = null;
+    focusTarget?.focus();
+    const step = els.pipelineStepInput.value.trim();
+    if (els.pipelineDialog.returnValue !== "run" || !appHostId || !step) {
+        return;
+    }
     void runAppHostOperation(appHostId, "pipeline-step", step);
 });
 
@@ -2301,10 +2582,13 @@ setInterval(() => {
 connectEvents();
 void api("/api/state")
     .then((result) => {
-        modelState = result.state;
-        render();
+        acceptState(result.state);
     })
     .catch((error) => {
+        if (Number.isInteger(modelState?.revision)) {
+            showToast(error.message, true);
+            return;
+        }
         modelState = {
             viewMode: "workspace",
             status: "error",

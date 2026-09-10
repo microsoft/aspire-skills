@@ -13,6 +13,7 @@ import {
     CommandInputMetadataStore,
     KeyedTaskQueue,
     SnapshotGeneration,
+    appHostIdentityHint,
     appHostOperationKey,
     buildDashboardViewUrl,
     buildGlobalTree,
@@ -62,6 +63,7 @@ const CONTENT_TYPES = {
 };
 
 const instances = new Map();
+const pendingOpens = new Map();
 const cli = createAspireCliRunner();
 const appHostOperations = new AppHostOperationCoordinator();
 let sessionRef;
@@ -218,6 +220,7 @@ function broadcast(entry, payload) {
 
 function initialState(viewMode, includeHidden) {
     return {
+        revision: 0,
         viewMode,
         status: "loading",
         refreshing: true,
@@ -237,21 +240,27 @@ function initialState(viewMode, includeHidden) {
     };
 }
 
+function stateSignature(state) {
+    return JSON.stringify(state, (key, value) =>
+        ["revision", "generatedAt", "lastSuccessfulAt"].includes(key) ? undefined : value);
+}
+
 function publishState(entry, nextState) {
     const candidate = {
         ...entry.state,
         ...nextState,
         generatedAt: new Date().toISOString(),
     };
-    const signature = JSON.stringify({
-        ...candidate,
-        generatedAt: undefined,
-        lastSuccessfulAt: undefined,
-    });
+    const signature = stateSignature(candidate);
+    candidate.revision = entry.state.revision + (signature === entry.stateSignature ? 0 : 1);
     entry.state = candidate;
     if (signature === entry.stateSignature) {
         if ((candidate.status === "ready" || candidate.status === "empty") && candidate.lastSuccessfulAt) {
-            broadcast(entry, { type: "freshness", lastSuccessfulAt: candidate.lastSuccessfulAt });
+            broadcast(entry, {
+                type: "freshness",
+                revision: candidate.revision,
+                lastSuccessfulAt: candidate.lastSuccessfulAt,
+            });
         }
         return;
     }
@@ -456,6 +465,11 @@ function indexTree(entry, roots) {
         for (const child of node.children ?? []) {
             visit(child);
         }
+        for (const edge of node.graph?.edges ?? []) {
+            if (edge.context) {
+                visit(edge.context);
+            }
+        }
     };
     roots.forEach(visit);
     if (entry.selectionId && !entry.nodeIndex.has(entry.selectionId)) {
@@ -493,9 +507,10 @@ function setHostRecords(entry, candidates, runningHosts) {
 }
 
 function reconcileCommandInputMetadata(entry) {
-    entry.commandInputMetadata.prune(({ appHostId, resourceName, commandName }) => {
+    entry.commandInputMetadata.prune(({ appHostId, resourceName, commandName, baseSignature }) => {
         const { record, resource } = getResource(entry, appHostId, resourceName);
-        return Boolean(record && resource?.commands.some((command) => command.name === commandName));
+        const command = resource?.commands.find((candidate) => candidate.name === commandName);
+        return Boolean(record && command && JSON.stringify(command.argumentInputs) === baseSignature);
     });
 }
 
@@ -522,6 +537,7 @@ async function performRefresh(entry, generation, showProgress) {
     }
 
     if (!psResult.ok || !Array.isArray(psResult.data)) {
+        entry.discoveryStale = true;
         const error = privateError(entry, psResult.error || "Unable to list running AppHosts.");
         publishState(entry, {
             status: entry.state.roots.length > 0 ? "stale" : "error",
@@ -552,6 +568,7 @@ async function performRefresh(entry, generation, showProgress) {
     }
 
     const models = new Map(modelEntries);
+    entry.discoveryStale = false;
     entry.hostModels = models;
     entry.snapshot = { candidates, runningHosts };
     setHostRecords(entry, candidates, runningHosts);
@@ -650,30 +667,54 @@ function commandInputsFor(entry, record, resource, command) {
     }) ?? command.argumentInputs;
 }
 
-function commandWithCurrentInputs(entry, record, resource, command) {
+function commandMetadataOptions(record, resource, command) {
     return {
-        ...command,
-        argumentInputs: commandInputsFor(entry, record, resource, command),
+        appHostId: record.id,
+        resourceName: resource.name,
+        commandName: command.name,
+        baseInputs: command.argumentInputs,
     };
 }
 
 function submittedSecretValues(command, values) {
-    return command.argumentInputs
+    return [...new Set(command.argumentInputs
         .filter((input) => input.inputType.toLowerCase().includes("secret"))
         .map((input) => values?.[input.name])
-        .filter((value) => value !== undefined && value !== null && String(value) !== "");
+        .filter((value) => value !== undefined && value !== null && String(value) !== ""))];
 }
 
 function publicCommandText(entry, record, value, max, sensitiveValues) {
-    const text = redactText(value, max, sensitiveValues);
-    return redactAbsolutePaths(redactKnownPaths(text, [entry.workingDirectory, record.appHostPath]));
+    const text = redactText(value, Infinity, sensitiveValues);
+    return redactText(redactAbsolutePaths(redactKnownPaths(text, [entry.workingDirectory, record?.appHostPath])), max);
 }
 
-function nodeContext(node) {
+function nodeContext(entry, node) {
+    const record = getHostRecord(entry, node.appHostId);
+    const model = record ? modelForRecord(entry, record) : undefined;
+    const resource = node.resourceName
+        ? model?.resources?.find((candidate) => candidate.name === node.resourceName) : undefined;
     const context = {
+        nodeId: node.id,
         kind: node.kind,
         label: node.label,
         description: node.description,
+        ...(record ? {
+            appHost: {
+                id: record.id,
+                displayName: record.displayName,
+                identityHint: appHostIdentityHint(record),
+                status: record.status,
+                stale: Boolean(model?.stale || entry.discoveryStale),
+                lastSuccessfulAt: model?.lastSuccessfulAt ?? null,
+            },
+        } : {}),
+        ...(resource ? {
+            resourceIdentity: {
+                id: `apphost:${record.id}:resource:${resource.name}`,
+                name: resource.name,
+                displayName: resource.displayName,
+            },
+        } : {}),
     };
     if (node.resource) {
         context.resource = node.resource;
@@ -687,7 +728,12 @@ function nodeContext(node) {
     if (node.healthCheckName) {
         context.healthCheck = node.healthCheckName;
     }
-    return context;
+    if (node.relationship) {
+        context.relationship = node.relationship;
+    }
+    return JSON.parse(JSON.stringify(context, (key, value) => typeof value === "string"
+        ? publicCommandText(entry, record, value.replace(/[\u0000-\u001f\u007f-\u009f]/g, ""), 1000)
+        : value));
 }
 
 async function attachCopilotContext(entry, nodeId) {
@@ -698,15 +744,16 @@ async function attachCopilotContext(entry, nodeId) {
     if (typeof sessionRef?.rpc?.extensions?.sendAttachmentsToMessage !== "function") {
         return { ok: false, error: "The Copilot composer is not available." };
     }
+    const context = nodeContext(entry, node);
     await sessionRef.rpc.extensions.sendAttachmentsToMessage({
         instanceId: entry.instanceId,
         attachments: [{
             type: "extension_context",
-            title: `Aspire: ${node.label}`,
-            payload: nodeContext(node),
+            title: `Aspire: ${context.label}`,
+            payload: context,
         }],
     });
-    return { ok: true, title: node.label };
+    return { ok: true, title: context.label };
 }
 
 async function runResourceCommand(entry, request) {
@@ -722,8 +769,16 @@ async function runResourceCommand(entry, request) {
         return { ok: false, status: 409, error: "The resource command is not currently enabled." };
     }
 
-    const currentCommand = commandWithCurrentInputs(entry, record, resource, command);
+    const metadataOptions = commandMetadataOptions(record, resource, command);
+    const currentCommand = { ...command, argumentInputs: commandInputsFor(entry, record, resource, command) };
     const validation = validateCommandArguments(currentCommand, request?.arguments ?? {});
+    const currentInputs = entry.commandInputMetadata.executionInputsFor(metadataOptions, validation.values ?? {});
+    if (!currentInputs) {
+        return {
+            ok: false, status: 409, errorCode: "command_inputs_changed",
+            error: "Reload command inputs for the current argument values before running.",
+        };
+    }
     if (!validation.ok) {
         return {
             ok: false,
@@ -732,7 +787,9 @@ async function runResourceCommand(entry, request) {
             validationErrors: validation.errors,
         };
     }
-    const sensitiveValues = submittedSecretValues(currentCommand, validation.values);
+    const sensitiveValues = submittedSecretValues({
+        argumentInputs: [...command.argumentInputs, ...currentInputs],
+    }, validation.values);
 
     let result;
     let operationStarted = false;
@@ -741,6 +798,11 @@ async function runResourceCommand(entry, request) {
             appHostOperationKey(record.appHostPath),
             { name: "resource-command", label: `Running ${command.displayName}...` },
             async () => {
+                if (entry.commandInputMetadata.executionInputsFor(metadataOptions, validation.values) !== currentInputs) {
+                    const error = new Error("Command inputs changed. Reload inputs before running.");
+                    error.code = "command_inputs_changed";
+                    throw error;
+                }
                 operationStarted = true;
                 rebuildTreeForOperations(entry);
                 broadcast(entry, {
@@ -761,6 +823,7 @@ async function runResourceCommand(entry, request) {
                         cwd: defaultCwdForAppHost(record.appHostPath, entry.workingDirectory),
                         timeoutMs: OPERATION_TIMEOUT_MS,
                         maxOutputBytes: 512 * 1024,
+                        sensitiveValues,
                     },
                 );
             },
@@ -768,8 +831,9 @@ async function runResourceCommand(entry, request) {
     } catch (error) {
         return {
             ok: false,
-            status: error?.code === "apphost_busy" ? 409 : 500,
-            error: clampText(error?.message || error, 1000),
+            status: ["apphost_busy", "command_inputs_changed"].includes(error?.code) ? 409 : 500,
+            ...(error?.code === "command_inputs_changed" ? { errorCode: error.code } : {}),
+            error: publicCommandText(entry, record, error?.message || error, 1000, sensitiveValues),
         };
     } finally {
         if (operationStarted) {
@@ -797,11 +861,9 @@ async function runResourceCommand(entry, request) {
     return response;
 }
 
-function dynamicArgumentTokens(argumentInputs, values) {
+function declaredArgumentValues(argumentInputs, values) {
     const declared = new Set(argumentInputs.map((input) => input.name));
-    return buildCommandArgumentTokens(
-        Object.fromEntries(Object.entries(values ?? {}).filter(([name]) => declared.has(name))),
-    );
+    return Object.fromEntries(Object.entries(values ?? {}).filter(([name]) => declared.has(name)));
 }
 
 function commandInputLoadKey(request) {
@@ -813,13 +875,30 @@ function commandInputLoadKey(request) {
 }
 
 async function loadCommandInputs(entry, request) {
+    const { record, resource } = getResource(entry, request?.appHostId, String(request?.resourceName ?? ""));
+    const command = resource?.commands.find((candidate) => candidate.name === String(request?.commandName ?? ""));
+    if (!record || !command) {
+        return { ok: false, status: 404, error: "The resource command is no longer available." };
+    }
+    const options = commandMetadataOptions(record, resource, command);
+    // Invalidate immediately, including while this request waits behind an older load.
+    const ticket = entry.commandInputMetadata.beginLoad(options);
     return entry.commandInputLoads.run(
         commandInputLoadKey(request),
-        () => loadCommandInputsNow(entry, request),
+        async () => {
+            if (!entry.commandInputMetadata.isCurrentLoad(options, ticket)) {
+                return { ok: false, status: 409, error: "This command input load was superseded. Reload inputs." };
+            }
+            try {
+                return await loadCommandInputsNow(entry, request, options, ticket);
+            } finally {
+                entry.commandInputMetadata.failLoad(options, ticket);
+            }
+        },
     );
 }
 
-async function loadCommandInputsNow(entry, request) {
+async function loadCommandInputsNow(entry, request, options, ticket) {
     const { record, resource } = getResource(entry, request?.appHostId, String(request?.resourceName ?? ""));
     if (!record || !resource) {
         return { ok: false, status: 404, error: "The resource is no longer available." };
@@ -829,9 +908,15 @@ async function loadCommandInputsNow(entry, request) {
         return { ok: false, status: 404, error: "The resource command is no longer available." };
     }
     const currentInputs = commandInputsFor(entry, record, resource, command);
+    // Loads accept incomplete forms, but their dependency values must use the
+    // same typed normalization and omission rules as command execution.
+    const loadValues = validateCommandArguments(
+        { argumentInputs: currentInputs },
+        declaredArgumentValues(currentInputs, request?.arguments),
+    ).values;
     const sensitiveValues = submittedSecretValues(
-        { ...command, argumentInputs: currentInputs },
-        request?.arguments ?? {},
+        { argumentInputs: [...command.argumentInputs, ...currentInputs] },
+        loadValues,
     );
     const args = [
         "resource",
@@ -842,12 +927,18 @@ async function loadCommandInputsNow(entry, request) {
         "--load-arguments",
         "--non-interactive",
         "--nologo",
-        ...dynamicArgumentTokens(currentInputs, request?.arguments),
+        ...buildCommandArgumentTokens(loadValues),
     ];
-    const result = await runPreparedWithCompatibility(args, {
-        cwd: defaultCwdForAppHost(record.appHostPath, entry.workingDirectory),
-        timeoutMs: CLI_TIMEOUT_MS,
-    });
+    let result;
+    try {
+        result = await runPreparedWithCompatibility(args, {
+            cwd: defaultCwdForAppHost(record.appHostPath, entry.workingDirectory),
+            timeoutMs: CLI_TIMEOUT_MS,
+            sensitiveValues,
+        });
+    } catch (error) {
+        result = { ok: false, error: error?.message || String(error) };
+    }
     const payload = result.ok ? extractJsonPayload(result.stdout) : undefined;
     if (!result.ok || !Array.isArray(payload)) {
         return {
@@ -861,13 +952,19 @@ async function loadCommandInputsNow(entry, request) {
         };
     }
     const inputs = sanitizeCommandArgumentInputs(payload);
-    entry.commandInputMetadata.set({
-        appHostId: record.id,
-        resourceName: resource.name,
-        commandName: command.name,
-        baseInputs: command.argumentInputs,
+    const latest = getResource(entry, record.id, resource.name).resource?.commands
+        .find((candidate) => candidate.name === command.name);
+    if (!latest || JSON.stringify(latest.argumentInputs) !== JSON.stringify(options.baseInputs)) {
+        return { ok: false, status: 409, error: "Command inputs changed while loading. Reload inputs." };
+    }
+    if (!entry.commandInputMetadata.set({
+        ...options,
         inputs,
-    });
+        values: loadValues,
+        ticket,
+    })) {
+        return { ok: false, status: 409, error: "Command inputs changed while loading. Reload inputs." };
+    }
     return { ok: true, status: 200, inputs };
 }
 
@@ -1373,7 +1470,7 @@ async function startServer(ctx) {
         viewMode,
         includeHidden: input.includeHidden === true,
         state: initialState(viewMode, input.includeHidden === true),
-        stateSignature: null,
+        stateSignature: stateSignature(initialState(viewMode, input.includeHidden === true)),
         hostRecords: new Map(),
         hostModels: new Map(),
         commandInputMetadata: new CommandInputMetadataStore(),
@@ -1405,7 +1502,26 @@ async function startServer(ctx) {
             }
         });
     });
-    await new Promise((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
+    try {
+        await new Promise((resolveListen, rejectListen) => {
+            const cleanup = () => {
+                server.off("error", onError);
+                server.off("listening", onListening);
+            };
+            const onError = (error) => { cleanup(); rejectListen(error); };
+            const onListening = () => { cleanup(); resolveListen(); };
+            server.once("error", onError);
+            server.once("listening", onListening);
+            try {
+                server.listen(0, "127.0.0.1");
+            } catch (error) {
+                onError(error);
+            }
+        });
+    } catch (error) {
+        server.close(() => {});
+        throw error;
+    }
     const address = server.address();
     const port = typeof address === "object" && address ? address.port : 0;
     entry.server = server;
@@ -1414,7 +1530,6 @@ async function startServer(ctx) {
     entry.url = `${entry.origin}/?token=${encodeURIComponent(entry.token)}`;
     entry.timer = setInterval(() => void requestRefresh(entry), POLL_INTERVAL_MS);
     entry.timer.unref?.();
-    instances.set(ctx.instanceId, entry);
     void requestRefresh(entry);
     return entry;
 }
@@ -1514,14 +1629,34 @@ const appHostsCanvas = createCanvas({
                 if (!node) {
                     throw new CanvasError("selection_missing", "No current canvas selection is available.");
                 }
-                return nodeContext(node);
+                return nodeContext(entry, node);
             },
         },
     ],
     open: async (ctx) => {
         let entry = instances.get(ctx.instanceId);
         if (!entry) {
-            entry = await startServer(ctx);
+            let pending = pendingOpens.get(ctx.instanceId);
+            if (!pending) {
+                pending = { closed: false };
+                pendingOpens.set(ctx.instanceId, pending);
+                pending.promise = startServer(ctx).then(async (created) => {
+                    if (pending.closed) {
+                        await closeEntry(created);
+                        throw new CanvasError("canvas_closed", "The canvas was closed while opening.");
+                    }
+                    instances.set(ctx.instanceId, created);
+                    return created;
+                }).finally(() => {
+                    if (pendingOpens.get(ctx.instanceId) === pending) {
+                        pendingOpens.delete(ctx.instanceId);
+                    }
+                });
+            }
+            entry = await pending.promise;
+            if (pending.closed || entry.closed) {
+                throw new CanvasError("canvas_closed", "The canvas was closed while opening.");
+            }
             log(`Aspire AppHosts canvas opened (instance '${ctx.instanceId}').`);
         } else {
             try {
@@ -1536,9 +1671,24 @@ const appHostsCanvas = createCanvas({
                 });
             }
         }
+        if (entry.closed) {
+            throw new CanvasError("canvas_closed", "The canvas was closed while opening.");
+        }
         return { title: "Aspire AppHosts", status: "AppHost workbench", url: entry.url };
     },
     onClose: async (ctx) => {
+        const pending = pendingOpens.get(ctx.instanceId);
+        if (pending) {
+            pending.closed = true;
+            const created = await pending.promise.catch(() => undefined);
+            if (created) {
+                if (instances.get(ctx.instanceId) === created) {
+                    instances.delete(ctx.instanceId);
+                }
+                await closeEntry(created);
+            }
+            return;
+        }
         const entry = instances.get(ctx.instanceId);
         if (!entry) {
             return;

@@ -27,6 +27,17 @@ changes appear without reopening the panel. Opening the canvas never starts an
 AppHost; Run, Stop, Deploy, Publish, and pipeline-step operations are explicit
 and serialized per AppHost.
 
+Snapshots carry a monotonic content revision across HTTP and server-sent events.
+An older response cannot replace a newer model, and freshness updates apply only
+to the model revision they describe. Selected context includes the owning
+AppHost, stable item identity, and that AppHost's freshness, including retained
+stale data.
+
+On Windows, the default runner invokes `aspire.exe` directly. An `ASPIRE_CLI`
+override must also name an executable rather than a `.cmd` or `.bat` wrapper:
+batch-wrapper argument serialization cannot safely preserve every command input.
+Unsupported wrappers fail explicitly instead of silently changing arguments.
+
 ## Security boundary
 
 The provider projects an explicit allow-list of resource fields. It never sends
@@ -34,6 +45,8 @@ environment values, arbitrary resource properties, connection strings, volumes,
 source paths, parameter values, or the token-bearing dashboard URL to the
 renderer or Copilot. Endpoint userinfo, query strings, and fragments are removed.
 Secret command inputs are redacted from command results and never persisted.
+Redaction happens before output is truncated. Duplicate AppHosts use a bounded
+directory-name hint and stable ID to distinguish targets, not a full source path.
 Dashboard URLs remain provider-side. The provider resolves resource-specific
 details, console logs, structured logs, traces, and metrics routes and opens
 them in the integrated browser while preserving the Aspire login token. Raw
@@ -56,7 +69,9 @@ bounded request bodies.
   are deliberately read-only; all operations remain in the default Resources
   card view. Multiple semantics between the same pair collapse into one labeled
   connector, and long edges route through column gutters rather than through
-  intermediate resources.
+  intermediate resources. A read-only relationship list supports selection and
+  sanitized Copilot context without enabling graph editing. Filtered graph
+  summaries distinguish hidden relationships from an AppHost with none declared.
 - Resource cards keep natural content-driven heights instead of stretching to
   match neighboring cards.
 - Team App-style resource cards with compact labeled Endpoints and Health rows,
@@ -74,7 +89,11 @@ bounded request bodies.
 - AppHost-defined command forms with validation and command-result feedback.
 - Provider-owned dynamic command metadata remains authoritative through
   validation and execution. Loads for one command are serialized and stale
-  renderer responses are ignored.
+  renderer responses are ignored. Metadata is bound to its dependency values;
+  changing those values, a pending reload, or a failed reload blocks execution
+  until matching inputs are loaded. Live schema changes and effective non-secret
+  defaults are reconciled before execution; unstable metadata or an authority
+  conflict exposes **Retry inputs** without automatically retrying the command.
 - Non-secret command defaults are preserved; secret defaults are removed before
   the model crosses into the renderer.
 - Explicit Run, Stop, Deploy, Publish, and pipeline-step actions, with blocked
@@ -89,3 +108,10 @@ bounded request bodies.
   discovery, source opening, and operation locking.
 - Older CLI compatibility retries only when the optional disabled-command flag
   is actually unsupported and marks the resulting model accordingly.
+
+## Regression coverage
+
+Run `npm test` from the repository root. It includes the AppHosts model,
+provider, renderer, plugin-mirror and bundle-workflow suites as well as the
+nested Aspireify suites. Provider and renderer boundary fixtures use synthetic
+data and do not start, stop or deploy a real Aspire application.

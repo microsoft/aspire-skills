@@ -8,17 +8,19 @@
 
     --accent: var(--color-focus-outline, var(--true-color-blue, #0969da));
     --accent-fg: var(--color-white, #ffffff);
+    --danger-fg: var(--color-white, #ffffff);
+    --brand-fg: var(--color-white, #ffffff);
     --surface: var(--background-color-default, #ffffff);
     --surface-inset: rgba(140, 149, 159, 0.1);
-    --surface-inset: color-mix(in srgb, var(--text-color-default, #1f2328) 5%, transparent);
+    --surface-inset: color-mix(in srgb, var(--text) 5%, transparent);
     --surface-muted: rgba(140, 149, 159, 0.16);
-    --surface-muted: color-mix(in srgb, var(--text-color-default, #1f2328) 9%, transparent);
+    --surface-muted: color-mix(in srgb, var(--text) 9%, transparent);
     --card-surface: color-mix(in srgb, var(--surface), var(--text) 4%);
     --card-control: color-mix(in srgb, var(--surface), var(--text) 7%);
     --card-control-hover: color-mix(in srgb, var(--surface), var(--text) 10%);
     --border: var(--border-color-default, #d1d9e0);
     --border-soft: rgba(140, 149, 159, 0.3);
-    --border-soft: color-mix(in srgb, var(--text-color-default, #1f2328) 14%, transparent);
+    --border-soft: color-mix(in srgb, var(--text) 14%, transparent);
     --border-strong: color-mix(in srgb, var(--border), var(--text) 22%);
     --text: var(--text-color-default, #1f2328);
     --muted: var(--text-color-muted, #59636e);
@@ -32,6 +34,23 @@
     --shadow-medium: rgba(0, 0, 0, 0.16);
     --shadow-high: rgba(0, 0, 0, 0.22);
     --scrim: rgba(0, 0, 0, 0.42);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-color-mode]):not(:has(body[data-color-mode])) {
+        --surface: var(--background-color-default, #151b23);
+        --text: var(--text-color-default, #f0f6fc);
+        --muted: var(--text-color-muted, #b1bac4);
+        --border: var(--border-color-default, #3d444d);
+        --accent: var(--color-focus-outline, var(--true-color-blue, #58a6ff));
+        --accent-fg: var(--color-white, #151b23);
+        --danger-fg: var(--color-white, #151b23);
+        --brand-fg: var(--color-white, #151b23);
+        --healthy: var(--true-color-green, #3fb950);
+        --warning: var(--true-color-orange, #f0883e);
+        --failure: var(--true-color-red, #ff7b72);
+        --brand: var(--true-color-purple, #b392f0);
+    }
 }
 
 * {
@@ -109,6 +128,7 @@ button:focus-visible,
 .brand-mark:focus-visible,
 input:focus-visible,
 select:focus-visible,
+summary:focus-visible,
 [tabindex]:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
@@ -181,7 +201,7 @@ p {
 
 .apphost-mark {
     background: var(--brand);
-    color: var(--color-white, #ffffff);
+    color: var(--brand-fg);
 }
 
 .title-copy {
@@ -426,7 +446,7 @@ body.is-busy .progress-track span {
 .button-danger {
     border-color: var(--failure);
     background: var(--failure);
-    color: var(--color-white, #ffffff);
+    color: var(--danger-fg);
 }
 
 .button-danger:hover {
@@ -661,6 +681,7 @@ body.is-mode-switching .empty-state {
 .apphost-heading {
     display: flex;
     min-width: 0;
+    max-width: 100%;
     flex: 1 1 auto;
     align-items: center;
     gap: 11px;
@@ -686,13 +707,14 @@ body.is-mode-switching .empty-state {
 }
 
 .apphost-heading h2 {
+    min-width: 0;
     overflow: hidden;
     flex: 0 1 auto;
     font-size: 20px;
     font-weight: var(--font-weight-semibold, 600);
     line-height: 1.25;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    white-space: normal;
 }
 
 .apphost-heading p {
@@ -751,7 +773,7 @@ body.is-mode-switching .empty-state {
     border-left: 1px solid var(--border);
 }
 
-.tray-action-group:last-child {
+.tray-action-group:last-of-type {
     margin-left: auto;
     padding-left: 0;
     border-left: 0;
@@ -767,6 +789,10 @@ body.is-mode-switching .empty-state {
     color: var(--muted);
     font-size: 12px;
     font-weight: var(--font-weight-semibold, 600);
+}
+
+.host-more-actions {
+    display: none;
 }
 
 .tray-busy-icon {
@@ -969,6 +995,57 @@ body.is-mode-switching .empty-state {
     max-width: 68ch;
     color: var(--muted);
     font-size: 11.5px;
+}
+
+.graph-filter-summary {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.graph-relationships {
+    margin-top: 12px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.graph-relationships summary {
+    width: fit-content;
+    cursor: pointer;
+}
+
+.graph-relationships ul {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 8px 0;
+    padding: 0;
+    list-style: none;
+}
+
+.relationship-select {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-inline);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    text-align: left;
+    overflow-wrap: anywhere;
+}
+
+.relationship-select:hover {
+    background: var(--surface-muted);
+}
+
+.relationship-select.is-selected {
+    border-color: var(--accent);
+    background: var(--surface-inset);
 }
 
 .graph-legend {
@@ -1246,40 +1323,57 @@ body.is-mode-switching .empty-state {
     white-space: nowrap;
 }
 
-.resource-name-copy {
+.resource-identity .resource-name-actions {
     display: inline-flex;
     min-width: 0;
     max-width: 100%;
     align-items: center;
-    align-self: flex-start;
     gap: 5px;
+    overflow: visible;
+}
+
+.resource-name {
+    min-width: 0;
+    overflow: hidden;
     padding: 0;
     border: 0;
     border-radius: var(--radius-inline);
     background: transparent;
     color: var(--text);
-    cursor: copy;
+    font-size: 13px;
+    font-weight: var(--font-weight-semibold, 600);
     text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.resource-name-copy strong {
-    min-width: 0;
-}
-
-.resource-name-copy svg {
-    flex: none;
-    color: var(--muted);
-    opacity: 0;
-    transition: opacity 120ms ease;
-}
-
-.resource-name-copy:hover strong {
+button.resource-name {
     color: var(--accent);
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    text-underline-offset: 2px;
 }
 
-.resource-name-copy:hover svg,
-.resource-name-copy:focus-visible svg {
-    opacity: 1;
+.resource-name-copy {
+    display: inline-flex;
+    width: 24px;
+    height: 24px;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-inline);
+    background: transparent;
+    color: var(--muted);
+    cursor: copy;
+}
+
+button.resource-name:hover,
+.resource-name-copy:hover {
+    color: var(--accent);
+    background: var(--surface-muted);
 }
 
 .resource-identity strong {
@@ -1305,9 +1399,11 @@ body.is-mode-switching .empty-state {
 }
 
 .resource-parent {
+    min-width: 0;
     margin: -2px 14px 8px 47px;
     color: var(--brand);
     font-size: 10.5px;
+    overflow-wrap: anywhere;
 }
 
 .resource-card-details {
@@ -1667,6 +1763,12 @@ body.is-mode-switching .empty-state {
 .command-field.checkbox-field {
     flex-direction: row;
     align-items: center;
+    flex-wrap: wrap;
+}
+
+.checkbox-field small,
+.checkbox-field .field-error {
+    flex-basis: 100%;
 }
 
 .command-field.checkbox-field input {
@@ -1693,6 +1795,7 @@ body.is-mode-switching .empty-state {
     display: flex;
     justify-content: flex-end;
     gap: 7px;
+    flex-wrap: wrap;
 }
 
 .command-result {
@@ -2018,7 +2121,7 @@ body.is-mode-switching .empty-state {
         justify-content: flex-start;
     }
 
-    .tray-action-group:last-child {
+    .tray-action-group:last-of-type {
         width: 100%;
         margin-left: 0;
     }
@@ -2031,8 +2134,13 @@ body.is-mode-switching .empty-state {
 
     .title-row {
         display: grid;
-        grid-template-columns: 40px minmax(0, 1fr) 30px;
+        grid-template-columns: 40px minmax(0, 1fr) auto;
         gap: 8px;
+        padding-top: 6px;
+    }
+
+    .title-copy p {
+        display: none;
     }
 
     .brand-mark {
@@ -2060,6 +2168,7 @@ body.is-mode-switching .empty-state {
     .control-row {
         align-items: stretch;
         flex-wrap: wrap;
+        padding-bottom: 6px;
     }
 
     .search-field {
@@ -2074,10 +2183,11 @@ body.is-mode-switching .empty-state {
     .model-view {
         padding-right: 8px;
         padding-left: 8px;
+        padding-top: 10px;
     }
 
     .apphost-switcher {
-        margin-bottom: 14px;
+        margin-bottom: 10px;
     }
 
     .apphost-tab {
@@ -2085,22 +2195,50 @@ body.is-mode-switching .empty-state {
     }
 
     .host-action-bar {
-        align-items: stretch;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 0;
     }
 
-    .tray-action-group {
-        width: 100%;
+    .apphost-overview {
+        gap: 7px;
+        padding-bottom: 10px;
+    }
+
+    .apphost-facts .is-secondary-fact {
+        display: none;
+    }
+
+    .tray-action-group,
+    .tray-action-group:last-of-type {
+        width: auto;
+        gap: 6px;
     }
 
     .tray-action-group + .tray-action-group {
-        padding-top: 7px;
+        padding-top: 0;
         padding-left: 0;
-        border-top: 1px solid var(--border-soft);
+        border-top: 0;
         border-left: 0;
     }
 
-    .tray-action {
-        flex: 1 1 auto;
+    .host-action-bar .is-secondary-operation {
+        display: none;
+    }
+
+    .host-more-actions {
+        display: inline-flex;
+        width: auto;
+        height: auto;
+        margin-left: auto;
+    }
+
+    .resource-workspace {
+        padding-top: 12px;
+    }
+
+    .app-model-view-description {
+        display: none;
     }
 
     .resource-board {
@@ -2110,6 +2248,7 @@ body.is-mode-switching .empty-state {
     .app-model-tabs {
         display: flex;
         width: 100%;
+        margin-bottom: 10px;
     }
 
     .app-model-tab {
@@ -2162,6 +2301,9 @@ body.is-mode-switching .empty-state {
     .search-field,
     .hidden-toggle,
     .resource-menu-trigger,
+    .resource-name-copy,
+    button.resource-name,
+    .relationship-select,
     .endpoint-copy,
     .tray-action,
     .detail-chip,
@@ -2172,6 +2314,10 @@ body.is-mode-switching .empty-state {
     .icon-button,
     .resource-menu-trigger {
         width: 44px;
+    }
+
+    .host-more-actions {
+        width: auto;
     }
 }
 

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
 
@@ -605,8 +605,20 @@ export function appHostDisplayName(appHostPath) {
     if (["apphost.cs", "apphost.ts", "apphost.mts"].includes(fileName.toLowerCase())) {
         return basename(dirname(appHostPath)) || "AppHost";
     }
+
     const withoutExtension = extension ? fileName.slice(0, -extension.length) : fileName;
     return withoutExtension.replace(/\.apphost$/i, "") || "AppHost";
+}
+
+export function appHostIdentityHint(record) {
+    const directory = defaultCwdForAppHost(record.appHostPath);
+    const directoryName = basename(directory);
+    const hostDirectory = /apphost$/i.test(directoryName)
+        || directoryName.toLowerCase() === String(record.displayName ?? "").toLowerCase();
+    const hint = basename(hostDirectory ? dirname(directory) : directory);
+    const safeHint = redactAbsolutePaths(redactText(hint.replace(/[\u0000-\u001f\u007f-\u009f]/g, ""), Infinity))
+        .trim().slice(0, 88);
+    return `${safeHint || "AppHost"} · ${String(record.id || stableId(record.appHostPath)).slice(0, 8)}`;
 }
 
 export function normalizePsPayload(payload) {
@@ -1188,6 +1200,16 @@ export function buildAppHostTreeNode(record, model, {
     );
     const actions = appHostActions(record, operation)
         .filter((action) => action !== "dashboard" || hasDashboard);
+    const graph = buildResourceGraph(resources);
+    for (const edge of graph.edges) {
+        edge.context = {
+            id: `apphost:${record.id}:relationship:${edge.id}`,
+            kind: "relationship",
+            label: clampText(`${edge.from} → ${edge.to} (${edge.types.join(", ")})`, 500),
+            appHostId: record.id,
+            relationship: { from: edge.from, to: edge.to, types: edge.types },
+        };
+    }
     const appHostChildren = [
         ...(nestedResources && resourceNodes.length > 0 ? [{
             id: `apphost:${record.id}:resources`,
@@ -1228,10 +1250,11 @@ export function buildAppHostTreeNode(record, model, {
         icon: record.status === "running" ? "apphost-running" : "apphost-idle",
         tone: model?.error && !model?.stale ? "error" : record.status === "running" ? "healthy" : "inactive",
         appHostId: record.id,
+        identityHint: appHostIdentityHint(record),
         actions,
         unavailableActionReason: appHostUnavailableReason(record),
         operation,
-        graph: buildResourceGraph(resources),
+        graph,
         defaultExpanded: record.status === "running",
         children: appHostChildren,
     };
@@ -1423,26 +1446,90 @@ function commandInputMetadataSignature(inputs) {
 
 export class CommandInputMetadataStore {
     #entries = new Map();
+    #fingerprintKey = randomBytes(32);
 
-    set({ appHostId, resourceName, commandName, baseInputs, inputs }) {
+    #entry({ appHostId, resourceName, commandName, baseInputs }) {
+        const key = commandInputMetadataKey(appHostId, resourceName, commandName);
+        const entry = this.#entries.get(key);
+        if (entry && entry.baseSignature !== commandInputMetadataSignature(baseInputs)) {
+            this.#entries.delete(key);
+            return undefined;
+        }
+        return entry;
+    }
+
+    #fingerprint(baseInputs, inputs, values) {
+        const dependencies = [...new Set([...baseInputs, ...inputs]
+            .flatMap((input) => input.dynamicLoading?.dependsOnInputs ?? []))].sort();
+        // Keep dependency values (especially secrets) out of the cached authority.
+        return createHmac("sha256", this.#fingerprintKey)
+            .update(JSON.stringify(dependencies.map((name) => [
+                name, values?.[name] == null ? null : String(values[name]),
+            ]))).digest("hex");
+    }
+
+    beginLoad(options) {
+        const previous = this.#entry(options);
+        const ticket = Symbol("command-input-load");
+        const { appHostId, resourceName, commandName, baseInputs } = options;
         const key = commandInputMetadataKey(appHostId, resourceName, commandName);
         this.#entries.set(key, {
             appHostId,
             resourceName,
             commandName,
             baseSignature: commandInputMetadataSignature(baseInputs),
-            inputs,
+            inputs: previous?.inputs,
+            ticket,
+            ready: false,
         });
+        return ticket;
     }
 
-    inputsFor({ appHostId, resourceName, commandName, baseInputs }) {
-        const key = commandInputMetadataKey(appHostId, resourceName, commandName);
-        const entry = this.#entries.get(key);
-        if (!entry) {
-            return undefined;
+    isCurrentLoad(options, ticket) {
+        const entry = this.#entries.get(commandInputMetadataKey(
+            options.appHostId, options.resourceName, options.commandName,
+        ));
+        return entry?.ticket === ticket
+            && entry?.baseSignature === commandInputMetadataSignature(options.baseInputs);
+    }
+
+    failLoad(options, ticket) {
+        if (this.isCurrentLoad(options, ticket)) {
+            const entry = this.#entries.get(commandInputMetadataKey(
+                options.appHostId, options.resourceName, options.commandName,
+            ));
+            entry.ready = false;
+            entry.ticket = undefined;
         }
-        if (entry.baseSignature !== commandInputMetadataSignature(baseInputs)) {
-            this.#entries.delete(key);
+    }
+
+    set({ appHostId, resourceName, commandName, baseInputs, inputs, values = {}, ticket }) {
+        const options = { appHostId, resourceName, commandName, baseInputs };
+        if (ticket && !this.isCurrentLoad(options, ticket)) {
+            return false;
+        }
+        const key = commandInputMetadataKey(appHostId, resourceName, commandName);
+        this.#entries.set(key, {
+            ...options,
+            baseSignature: commandInputMetadataSignature(baseInputs),
+            inputs,
+            fingerprint: this.#fingerprint(baseInputs ?? [], inputs, values),
+            ready: true,
+        });
+        return true;
+    }
+
+    inputsFor(options) {
+        return this.#entry(options)?.inputs;
+    }
+
+    executionInputsFor(options, values) {
+        const entry = this.#entry(options);
+        if (!entry) {
+            return options.baseInputs?.some((input) => input.dynamicLoading)
+                ? undefined : options.baseInputs ?? [];
+        }
+        if (!entry.ready || entry.fingerprint !== this.#fingerprint(options.baseInputs ?? [], entry.inputs, values)) {
             return undefined;
         }
         return entry.inputs;
@@ -1568,38 +1655,45 @@ export async function discoverConfiguredAppHosts(workingDirectory) {
     return [...new Map(scanned.map((value) => [normalizePathKey(value), normalize(value)])).values()];
 }
 
-function windowsCliSpawn(command, args, options) {
-    const encodedArgs = Buffer.from(JSON.stringify(args), "utf8").toString("base64");
-    const script = [
-        "$ErrorActionPreference = 'Stop'",
-        "$json = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:ASPIRE_CANVAS_ARGS_B64))",
-        "$parsedArgs = ConvertFrom-Json -InputObject $json",
-        "[string[]]$cliArgs = @()",
-        "foreach ($item in $parsedArgs) { $cliArgs += [string]$item }",
-        "& $env:ASPIRE_CANVAS_CLI @cliArgs",
-        "if ($null -eq $LASTEXITCODE) { exit 0 } else { exit $LASTEXITCODE }",
-    ].join("; ");
-    return spawn(
-        "powershell.exe",
-        ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
-        {
-            ...options,
-            env: {
-                ...process.env,
-                ...options.env,
-                ASPIRE_CANVAS_CLI: command,
-                ASPIRE_CANVAS_ARGS_B64: encodedArgs,
-            },
-        },
-    );
-}
-
 export function runProcess(command, args, {
     cwd,
     timeoutMs = DEFAULT_TIMEOUT_MS,
     maxOutputBytes = DEFAULT_MAX_OUTPUT_BYTES,
     env,
+    sensitiveValues = [],
 } = {}) {
+    const secrets = [...new Set(sensitiveValues.flatMap((value) => {
+        const text = String(value ?? "");
+        return text ? [text, JSON.stringify(text).slice(1, -1)] : [];
+    }))].sort((left, right) => right.length - left.length);
+    const redactOutput = (value, incomplete) => {
+        let text = String(value ?? "");
+        for (const secret of secrets) {
+            text = text.replaceAll(secret, "[redacted]");
+        }
+        if (incomplete) {
+            for (const secret of secrets) {
+                if (secret.length < 2) continue;
+                // KMP finds the longest suffix that is an incomplete secret without
+                // quadratic scans when a long secret has repeated characters.
+                const prefixes = new Uint32Array(secret.length);
+                for (let i = 1, matched = 0; i < secret.length; i++) {
+                    while (matched && secret[i] !== secret[matched]) matched = prefixes[matched - 1];
+                    if (secret[i] === secret[matched]) matched++;
+                    prefixes[i] = matched;
+                }
+                let matched = 0;
+                const tail = text.slice(-(secret.length - 1));
+                for (let i = 0; i < tail.length; i++) {
+                    const character = tail[i];
+                    while (matched && character !== secret[matched]) matched = prefixes[matched - 1];
+                    if (character === secret[matched]) matched++;
+                }
+                if (matched) text = `${text.slice(0, -matched)}[redacted]`;
+            }
+        }
+        return text;
+    };
     return new Promise((resolveResult) => {
         let stdout = "";
         let stderr = "";
@@ -1615,10 +1709,19 @@ export function runProcess(command, args, {
             if (timer) {
                 clearTimeout(timer);
             }
-            resolveResult(result);
+            resolveResult({
+                ...result,
+                stdout: redactOutput(result.stdout, result.code === null),
+                stderr: redactOutput(result.stderr, result.code === null),
+                error: result.error === undefined
+                    ? undefined : redactText(redactOutput(result.error, result.code === null), 8000),
+            });
         };
 
         const append = (current, chunk) => {
+            if (settled) {
+                return current;
+            }
             const next = current + chunk.toString();
             if (Buffer.byteLength(next, "utf8") > maxOutputBytes) {
                 try {
@@ -1641,14 +1744,21 @@ export function runProcess(command, args, {
         try {
             const spawnOptions = { cwd, env, windowsHide: true };
             const commandExtension = extname(command).toLowerCase();
-            child = process.platform === "win32" && [".cmd", ".bat"].includes(commandExtension)
-                ? windowsCliSpawn(command, args, spawnOptions)
-                : spawn(command, args, spawnOptions);
+            if (process.platform === "win32" && [".cmd", ".bat"].includes(commandExtension)) {
+                finish({
+                    ok: false, code: null, stdout, stderr,
+                    error: "ASPIRE_CLI batch wrappers (.cmd/.bat) are unsupported on Windows. Set ASPIRE_CLI to the Aspire executable (.exe).",
+                });
+                return;
+            }
+            child = spawn(command, args, spawnOptions);
         } catch (error) {
             finish({ ok: false, code: null, stdout, stderr, error: `Failed to launch Aspire CLI: ${error.message}` });
             return;
         }
 
+        child.stdout?.setEncoding("utf8");
+        child.stderr?.setEncoding("utf8");
         child.stdout?.on("data", (chunk) => {
             stdout = append(stdout, chunk);
         });
@@ -1664,7 +1774,7 @@ export function runProcess(command, args, {
                 code,
                 stdout,
                 stderr,
-                error: code === 0 ? undefined : redactText(stderr || stdout || `Aspire CLI exited with code ${code}.`, 8000),
+                error: code === 0 ? undefined : stderr || stdout || `Aspire CLI exited with code ${code}.`,
             });
         });
 
@@ -1813,6 +1923,7 @@ export function publicAppHost(record, selectedAppHostId) {
     return {
         id: record.id,
         displayName: record.displayName,
+        identityHint: appHostIdentityHint(record),
         status: record.status,
         sdkVersion: record.sdkVersion,
         selected: record.id === selectedAppHostId,
