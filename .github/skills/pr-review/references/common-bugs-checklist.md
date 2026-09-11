@@ -105,10 +105,11 @@ routing failures and silently degraded agent behavior.
 ## JSON — manifests and MCP
 
 Files: `.plugin/plugin.json`, `.claude-plugin/plugin.json`,
-`.claude-plugin/marketplace.json`, `gemini-extension.json`, `.mcp.json`.
+`.claude-plugin/marketplace.json`, `.cursor-plugin/marketplace.json`,
+`gemini-extension.json`, `package.json`, `.mcp.json`.
 
 - [ ] Valid JSON (no trailing commas, no comments — these silently break some loaders).
-- [ ] `version` fields are consistent across all four plugin manifests (see
+- [ ] `version` fields are consistent across all six plugin version sources (see
       `aspire-skills-review-checklist.md` §6).
 - [ ] `name`, `description`, `repository`, `homepage`, `license` match across manifests.
 - [ ] `keywords` and `tags` lists don't diverge — divergence confuses marketplace

@@ -2,10 +2,25 @@ name: Publish Aspire bundles
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
       - "[0-9]*"
+    paths:
+      - ".github/workflows/publish.yml"
+      - ".plugin/plugin.json"
+      - ".claude-plugin/plugin.json"
+      - ".claude-plugin/marketplace.json"
+      - ".cursor-plugin/marketplace.json"
+      - "gemini-extension.json"
+      - "package.json"
+      - "scripts/resolve-release.mjs"
   workflow_dispatch:
+
+concurrency:
+  group: publish-aspire-bundles
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -27,52 +42,94 @@ jobs:
         with:
           node-version: 22
 
-      - name: Read version from tag
-        id: version
+      - name: Resolve release
+        id: release
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          REPOSITORY_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: node scripts/resolve-release.mjs
+
+      - name: Check release status
+        id: status
+        env:
+          AUTO_TAG: ${{ steps.release.outputs.auto_tag }}
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: ${{ steps.release.outputs.source_commit }}
+          TAG_NAME: ${{ steps.release.outputs.tag_name }}
+          VERSION_CHANGED: ${{ steps.release.outputs.version_changed }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
-            echo "This workflow must run from a version tag such as v0.0.1." >&2
-            exit 1
-          fi
 
-          version="${GITHUB_REF_NAME#v}"
-          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Tag '${GITHUB_REF_NAME}' is not a supported semantic version tag." >&2
-            exit 1
-          fi
+          if git ls-remote --exit-code --refs --tags origin "refs/tags/$TAG_NAME" >/dev/null 2>&1; then
+            git fetch --force origin "refs/tags/$TAG_NAME:refs/tags/$TAG_NAME"
+            tag_commit="$(git rev-list -n 1 "$TAG_NAME")"
+            echo "create_tag=false" >> "$GITHUB_OUTPUT"
+            if [[ "$AUTO_TAG" == "true" ]] && gh release view "$TAG_NAME" >/dev/null 2>&1; then
+              if [[ "$VERSION_CHANGED" == "true" && "$tag_commit" != "$SOURCE_COMMIT" ]]; then
+                echo "Version $TAG_NAME already belongs to $tag_commit, not $SOURCE_COMMIT." >&2
+                exit 1
+              fi
 
-          source_commit="$(git rev-parse 'HEAD^{commit}')"
-          echo "source_commit=$source_commit" >> "$GITHUB_OUTPUT"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "skills_asset=dist/aspire-skills-v$version.tgz" >> "$GITHUB_OUTPUT"
-          echo "extensions_asset=dist/aspire-extensions-v$version.tgz" >> "$GITHUB_OUTPUT"
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              echo "::notice title=Release already published::$TAG_NAME already exists."
+            else
+              if [[ "$tag_commit" != "$SOURCE_COMMIT" ]]; then
+                echo "Tag '$TAG_NAME' points to $tag_commit instead of $SOURCE_COMMIT." >&2
+                exit 1
+              fi
+
+              echo "publish=true" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            if [[ "$AUTO_TAG" != "true" ]]; then
+              echo "Tag '$TAG_NAME' does not exist on origin." >&2
+              exit 1
+            fi
+
+            echo "create_tag=true" >> "$GITHUB_OUTPUT"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Test bundles
+        if: steps.status.outputs.publish == 'true'
         run: npm test
 
       - name: Build bundles
+        if: steps.status.outputs.publish == 'true'
         run: >-
           npm run bundle --
-          --version "${{ steps.version.outputs.version }}"
+          --version "${{ steps.release.outputs.version }}"
           --out dist
-          --source-commit "${{ steps.version.outputs.source_commit }}"
+          --source-commit "${{ steps.release.outputs.source_commit }}"
 
       - name: Attest bundles
+        if: steps.status.outputs.publish == 'true'
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
         with:
           subject-path: |
-            ${{ steps.version.outputs.skills_asset }}
-            ${{ steps.version.outputs.extensions_asset }}
+            ${{ steps.release.outputs.skills_asset }}
+            ${{ steps.release.outputs.extensions_asset }}
+
+      - name: Create release tag
+        if: steps.status.outputs.create_tag == 'true'
+        env:
+          SOURCE_COMMIT: ${{ steps.release.outputs.source_commit }}
+          TAG_NAME: ${{ steps.release.outputs.tag_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git tag "$TAG_NAME" "$SOURCE_COMMIT"
+          git push origin "refs/tags/$TAG_NAME"
 
       - name: Publish GitHub release
+        if: steps.status.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG_NAME: ${{ github.ref_name }}
-          VERSION: ${{ steps.version.outputs.version }}
-          SKILLS_ASSET: ${{ steps.version.outputs.skills_asset }}
-          EXTENSIONS_ASSET: ${{ steps.version.outputs.extensions_asset }}
+          TAG_NAME: ${{ steps.release.outputs.tag_name }}
+          VERSION: ${{ steps.release.outputs.version }}
+          SKILLS_ASSET: ${{ steps.release.outputs.skills_asset }}
+          EXTENSIONS_ASSET: ${{ steps.release.outputs.extensions_asset }}
         shell: bash
         run: |
           set -euo pipefail

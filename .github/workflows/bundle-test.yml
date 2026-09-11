@@ -4,8 +4,13 @@ on:
   pull_request:
     paths:
       - ".gitattributes"
+      - ".plugin/plugin.json"
+      - ".claude-plugin/plugin.json"
+      - ".claude-plugin/marketplace.json"
+      - ".cursor-plugin/marketplace.json"
       - ".github/workflows/bundle-test.yml"
       - ".github/workflows/publish.yml"
+      - "gemini-extension.json"
       - "hooks/**"
       - "package.json"
       - "scripts/**"
@@ -15,8 +20,13 @@ on:
       - main
     paths:
       - ".gitattributes"
+      - ".plugin/plugin.json"
+      - ".claude-plugin/plugin.json"
+      - ".claude-plugin/marketplace.json"
+      - ".cursor-plugin/marketplace.json"
       - ".github/workflows/bundle-test.yml"
       - ".github/workflows/publish.yml"
+      - "gemini-extension.json"
       - "hooks/**"
       - "package.json"
       - "scripts/**"

@@ -4,10 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/*.test.mjs",
+    "test": "node --test",
     "bundle": "node scripts/build-aspire-bundles.mjs",
     "bundle:skills": "node scripts/build-aspire-bundles.mjs --bundle skills",
-    "bundle:extensions": "node scripts/build-aspire-bundles.mjs --bundle extensions",
-    "test": "node --test tests/aspireify/provider-state.test.mjs tests/aspireify/interaction-model.test.mjs tests/aspireify/static-assets.test.mjs"
+    "bundle:extensions": "node scripts/build-aspire-bundles.mjs --bundle extensions"
   }
 }
