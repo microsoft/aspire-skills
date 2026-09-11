@@ -85,9 +85,9 @@ Eval tasks must reference the shared fixtures at repo-root `evals/`:
 **Severity if a PR introduces per-skill fixture copies:** `important`. The shared
 baseline exists so that cross-skill behavior is measured against the same project.
 
-## 6. Plugin manifest version sync
+## 6. Plugin version sync
 
-Four files carry the plugin version. Any user-visible change should bump all four to the
+Six files carry the plugin version. Any user-visible change should bump all six to the
 same value:
 
 | File | Field |
@@ -95,7 +95,9 @@ same value:
 | `.plugin/plugin.json` | `version` |
 | `.claude-plugin/plugin.json` | `version` |
 | `.claude-plugin/marketplace.json` | `plugins[0].version` |
+| `.cursor-plugin/marketplace.json` | `plugins[0].version` |
 | `gemini-extension.json` | `version` |
+| `package.json` | `version` |
 
 Also check that the per-skill `metadata.version` in each changed `SKILL.md` advances
 when that skill's behavior changes — independently of the plugin-wide version.
