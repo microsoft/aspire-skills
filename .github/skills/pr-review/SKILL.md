@@ -9,7 +9,8 @@ description: >-
   comments as a review.
   USE FOR: review this PR, review the current branch, review pull request, gh pr view,
   gh pr diff, "what should I check before merging", PR review of changes to skills/,
-  evals/, .plugin/, .claude-plugin/, gemini-extension.json, CHANGELOG.md.
+  evals/, .plugin/, .claude-plugin/, .cursor-plugin/, gemini-extension.json,
+  package.json, CHANGELOG.md.
   DO NOT USE FOR: reviewing application code in *consumer* Aspire projects (this skill
   is scoped to microsoft/aspire-skills authoring); end-user Aspire workflows (use the
   shipped `aspire` router and its sub-skills); generic code review on unrelated repos.
@@ -154,7 +155,7 @@ specific** — adjust the focus column to what the file actually demands.
 | Trigger tests | `skills/<skill>/evals/trigger_tests.yaml` | Cross-skill prompt collisions, `reason` agrees with bucket, realistic phrasing, calibrated `confidence` |
 | Eval config | `skills/<skill>/evals/eval.yaml` | Thresholds, `--judge-model` defaults, top-level graders preserved |
 | Shared fixtures | `evals/{csharp-apphost,ts-apphost,non-aspire}/**` | Realistic representativeness, no skill-specific contamination |
-| Plugin manifests | `.plugin/plugin.json`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `gemini-extension.json` | Version sync across all four, identical metadata, valid JSON, `skills` glob unchanged at `./skills/` |
+| Plugin manifests | `.plugin/plugin.json`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `.cursor-plugin/marketplace.json`, `gemini-extension.json`, `package.json` | Version sync across all six, identical metadata, valid JSON, `skills` glob unchanged at `./skills/` |
 | MCP | `.mcp.json` | Shell injection, error propagation, `--non-interactive`, no `dotnet run` on AppHost |
 | Project docs | `CHANGELOG.md`, `README.md`, `CONTRIBUTING.md` | Accuracy only; consistency with shipped behavior |
 | Author skills | `.github/skills/**` | Must not leak into shipped `skills/`; must stay invisible to the plugin glob |
