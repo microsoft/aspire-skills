@@ -30,6 +30,12 @@ If Aspire markers are present but this skill was not automatically invoked, swit
 
 ## Guiding principles
 
+### Reuse repository knowledge, not necessarily release machinery
+
+Before deployment design, inspect existing deployment assets and extract how the application runs. Reuse the repository's deployment knowledge. Reuse its deployment machinery only when it fits.
+
+For a demo or bare-minimum request, preserve the application architecture and add only the deployment target, required connections/configuration, and simplest runnable image. Do not add production hardening, image optimization, or custom hosting extensions unless required to make deployment work. For production requests, agree on the additional scope explicitly.
+
 ### Use Aspire docs before changing deployment code
 
 Before adding target packages, editing the AppHost, or using an unfamiliar deployment API, use Aspire docs:
@@ -133,6 +139,7 @@ Migrate obsolete 13.5 surfaces while editing deployment code:
    - If no AppHost exists, stop deployment work and invoke the `aspireify` skill to initialize/wire the AppHost before continuing.
    - Identify C# vs TypeScript AppHost.
    - Prefer Aspire CLI commands for discovery and state inspection.
+   - Before designing changes, perform the bounded [repository discovery](references/preflight.md#repository-discovery-before-design): inspect deployment assets, extract runtime requirements, and identify build-context/platform mismatches.
 2. **Clarify or infer the deployment target.**
    - If the user named Docker Compose, Kubernetes, Azure Container Apps, Azure App Service, Azure Kubernetes Service (AKS), or AWS, load that target reference without asking again.
    - If they only said "deploy", inspect existing AppHost target environment resources.
@@ -150,7 +157,11 @@ Migrate obsolete 13.5 surfaces while editing deployment code:
 4. **Use Aspire docs search for current guidance.**
     - Search and get the target deployment docs.
     - Search API docs before editing AppHost code.
-5. **Apply the target code changes.**
+5. **Apply the smallest deployable translation.**
+   - Explain the production serving model before editing: a local Vite resource may become static files served by the backend, not a separate Container App.
+   - Reuse compatible Dockerfiles, not incompatible release packaging. Prefer a simple source-build image when adapting packaging adds unnecessary complexity; document any larger-image tradeoff and optimize later on request.
+   - Express connections, configuration, and targets through the AppHost; do not translate generated infrastructure back into hand-maintained infrastructure unnecessarily.
+   - Preserve local development behavior while adding publish-mode behavior.
    - Run the target's `aspire add ...` command if the integration is missing.
    - Add the deployment environment resource to the AppHost.
    - Do not add explicit compute-environment assignment for the common single-environment case. Only disambiguate when the AppHost has multiple deployment environments. In C# this is usually `WithComputeEnvironment(...)`; for TypeScript AppHosts, verify the current language-specific docs before assuming an equivalent.
@@ -160,14 +171,15 @@ Migrate obsolete 13.5 surfaces while editing deployment code:
    - Confirm the AppHost has the target environment resource.
    - Confirm compute resources are assigned to the target environment only when multiple compute environments exist. A single compute environment is the common case and can be inferred.
    - Inventory parameters, secrets, connection strings, external endpoints, container registries, and target-specific prerequisites.
-   - For Azure or AWS, confirm auth, target account/subscription, region/location, and resource group/stack context.
+   - For Azure or AWS, confirm auth and the effective deployment target, including saved state and interactive choices, using [effective-target verification](references/preflight.md#authorization-and-effective-target).
 7. **Preview before applying.**
    - Run `aspire publish --list-steps` or `aspire deploy --list-steps`.
    - Use `aspire publish -o <scratch-or-output-path>` when artifact review is requested.
    - Treat published artifacts as a preview/handoff. `aspire deploy` resolves values and applies the deployment from the AppHost model; it does not consume a previously published output directory.
    - Summarize resources, endpoints, parameters, secrets, identities, and generated artifacts.
 8. **Deploy or hand off.**
-   - Run `aspire deploy` when the user asked to deploy and preflight is complete.
+   - Once provisioning is authorized and the effective target is confirmed, run `aspire deploy` early. Fix one observed image-build, push, provisioning, or configuration blocker at a time and retry; do not expand into speculative production work.
+   - Successful `aspire publish` validation is artifact validation, not proof that images build or the application runs. Do not require repeated publish-only validation before the actual deploy.
    - Run a named step with `aspire do <step>` only when the user asked for a specific pipeline step.
    - For published artifacts, explain the target-native apply step.
 9. **Destroy only when explicitly requested.**
@@ -177,6 +189,7 @@ Migrate obsolete 13.5 surfaces while editing deployment code:
    - Prefer `aspire destroy` over target-native delete commands unless you are troubleshooting failed teardown or cleaning up unmanaged leftovers.
 10. **Verify the outcome.**
    - Use target output, `aspire describe`, cloud CLI, Docker Compose, kubectl, or endpoint checks appropriate to the target.
+   - Report **deployment pipeline**, **application usability**, and **telemetry delivery** separately, with evidence and explicit failures or unverified behavior. Follow the [validation checklist](references/preflight.md#validation); frontend HTTP 200, infrastructure success, and enabled OpenTelemetry are not sufficient.
    - After destroy, verify target resources are removed or record any leftovers that require manual cleanup.
 
 ## AppHost target detection
@@ -227,6 +240,8 @@ When running unattended (CI, scripted, agent-driven), append `--non-interactive`
 Prefer surfacing prompt-driving values up front (target subscription/region/resource group, parameters, secrets, registry credentials) so the unattended run does not stall. See [references/preflight.md](references/preflight.md) for the full preflight checklist.
 
 ## Handoff Rules
+
+Keep one agent responsible for the edit/deploy/fix loop. Delegated research or diagnostics must not concurrently edit the same files or deploy. If ownership changes, the previous agent must acknowledge that it stopped editing and deployment work before another agent takes over. Hand off the effective target, authorization scope, changes, and current blocker; without acknowledgment, wait.
 
 | Scenario | Route To |
 |----------|----------|
