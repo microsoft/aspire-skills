@@ -1202,8 +1202,9 @@ async function openResourceDashboardView(entry, nodeId, view) {
     }
     const dashboardUrl = privateDashboardUrl(entry, record);
     const viewLabel = DASHBOARD_VIEW_TITLES[view];
+    const resourceIdentifier = view === "details" ? resource.name : resource.displayName ?? resource.name;
     const url = dashboardUrl
-        ? buildDashboardViewUrl(dashboardUrl, view, resource.displayName ?? resource.name)
+        ? buildDashboardViewUrl(dashboardUrl, view, resourceIdentifier)
         : undefined;
     if (!viewLabel || !url) {
         return { ok: false, error: "This Dashboard view is not available." };

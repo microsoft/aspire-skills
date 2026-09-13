@@ -45,6 +45,7 @@ async function harness(t, { listenGate, failListen = false, cliOverride } = {}) 
     const servers = [];
     const intervals = new Set();
     const attachments = [];
+    const canvasOpens = [];
     const logs = [];
     const calls = [];
     const controls = { failedHost: null, failPs: false, inputs: baseInputs, state: "Running", loader: null, executor: null };
@@ -110,7 +111,10 @@ async function harness(t, { listenGate, failListen = false, cliOverride } = {}) 
             declaration = options.canvases[0];
             return {
                 log: (message) => logs.push(message),
-                rpc: { extensions: { sendAttachmentsToMessage: async (payload) => attachments.push(clone(payload)) } },
+                rpc: {
+                    extensions: { sendAttachmentsToMessage: async (payload) => attachments.push(clone(payload)) },
+                    canvas: { open: async (payload) => canvasOpens.push(clone(payload)) },
+                },
             };
         },
     };
@@ -129,7 +133,7 @@ async function harness(t, { listenGate, failListen = false, cliOverride } = {}) 
     await module.evaluate();
     const opened = new Set();
     const h = {
-        controls, calls, servers, intervals, attachments, logs,
+        controls, calls, servers, intervals, attachments, canvasOpens, logs,
         async open(instanceId = "test") {
             opened.add(instanceId);
             return declaration.open({ instanceId, input: { viewMode: "global" } });
@@ -288,6 +292,39 @@ test("state revisions advance only for meaningful content and freshness carries 
     const unchanged = (await h.request(open, "/api/state")).state;
     assert.equal(unchanged.revision, changed.revision);
     stream.close();
+});
+
+test("Dashboard details use canonical identity without changing telemetry grouping", async (t) => {
+    const h = await harness(t, {
+        cliOverride: async (args) => {
+            if (args[0] !== "describe") return undefined;
+            const payload = describe();
+            payload.resources[0].name = "api-ab12";
+            payload.resources[0].displayName = "api";
+            return ok(payload);
+        },
+    });
+    const open = await h.open();
+    const { state } = await h.request(open, "/api/state");
+    const node = allNodes(state.roots).find((candidate) => candidate.kind === "resource" && candidate.resourceName === "api-ab12");
+    const pathsByView = {
+        details: "/?resource=api-ab12",
+        "console-logs": "/consolelogs/resource/api",
+        "structured-logs": "/structuredlogs/resource/api",
+        traces: "/traces/resource/api",
+        metrics: "/metrics/resource/api",
+    };
+    for (const [view, expectedPath] of Object.entries(pathsByView)) {
+        const response = await h.request(open, "/api/open-dashboard-view", { nodeId: node.id, view });
+        assert.equal(response.ok, true);
+        const handoff = h.canvasOpens.at(-1);
+        assert.equal(handoff.canvasId, "browser");
+        const url = new URL(handoff.input.url);
+        assert.equal(url.pathname, "/login");
+        assert.equal(url.searchParams.get("returnUrl"), expectedPath);
+        assert.equal(url.searchParams.get("t"), "private-host-token");
+        assert.doesNotMatch(JSON.stringify(response), /private-host-token/);
+    }
 });
 
 test("direct HTTP execution rejects missing, mismatched, failed and pending dynamic metadata", async (t) => {
