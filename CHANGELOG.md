@@ -43,6 +43,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   (AWS deploy, deployment-plan validation, `--list-steps` pipeline preview).
 
 ### Added
+- Added the `aspire-apphosts` GitHub App canvas extension for Workspace and Global
+  AppHost discovery, live resource state, endpoints, health, commands, Dashboard
+  diagnostics, and a read-only relationship graph with Copilot context.
 - Added the `aspire-doctor` GitHub App canvas extension for viewing `aspire doctor`
   results as a live checklist in a side panel.
 - Added the `aspireify` GitHub App canvas extension for reviewing and confirming
