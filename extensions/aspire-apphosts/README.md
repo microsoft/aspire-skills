@@ -69,7 +69,9 @@ bounded request bodies.
   are deliberately read-only; all operations remain in the default Resources
   card view. Multiple semantics between the same pair collapse into one labeled
   connector, and long edges route through column gutters rather than through
-  intermediate resources. A read-only relationship list supports selection and
+  intermediate resources. Incoming connectors use separate attachment points
+  with straight final approaches so their arrowheads remain distinguishable.
+  A read-only relationship list supports selection and
   sanitized Copilot context without enabling graph editing. Filtered graph
   summaries distinguish hidden relationships from an AppHost with none declared.
 - Resource cards keep natural content-driven heights instead of stretching to

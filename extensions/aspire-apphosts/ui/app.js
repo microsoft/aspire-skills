@@ -1292,7 +1292,7 @@ function graphMarker(presentation) {
     const marker = svgElement("marker", {
         id: `graph-arrow-${presentation.id}`,
         viewBox: "0 0 8 8",
-        refX: "7",
+        refX: "8",
         refY: "4",
         markerWidth: "6",
         markerHeight: "6",
@@ -1305,20 +1305,49 @@ function graphMarker(presentation) {
     return marker;
 }
 
-function graphEdgePath(from, to, canvas, selfEdge, fromLayer, toLayer, reciprocalSide) {
+function graphIncomingPorts(edges, nodeBounds) {
+    const incoming = new Map();
+    for (const edge of edges) {
+        if (!nodeBounds.has(edge.from) || !nodeBounds.has(edge.to)) {
+            continue;
+        }
+        const group = incoming.get(edge.to) ?? [];
+        group.push(edge);
+        incoming.set(edge.to, group);
+    }
+    const ports = new Map();
+    for (const [target, group] of incoming) {
+        group.sort((left, right) => {
+            const a = nodeBounds.get(left.from);
+            const b = nodeBounds.get(right.from);
+            return (a.top + a.height / 2) - (b.top + b.height / 2)
+                || (a.left + a.width / 2) - (b.left + b.width / 2)
+                || left.id.localeCompare(right.id);
+        });
+        const bounds = nodeBounds.get(target);
+        const spacing = (size) => Math.min(14, Math.max(0, size - 32) / Math.max(1, group.length - 1));
+        group.forEach((edge, index) => {
+            const slot = index - (group.length - 1) / 2;
+            ports.set(edge.id, { x: slot * spacing(bounds.width), y: slot * spacing(bounds.height) });
+        });
+    }
+    return ports;
+}
+
+function graphEdgePath(from, to, canvas, selfEdge, fromLayer, toLayer, reciprocalSide, port = { x: 0, y: 0 }) {
     const fromCenterX = from.left + from.width / 2 - canvas.left;
     const fromCenterY = from.top + from.height / 2 - canvas.top;
-    const toCenterX = to.left + to.width / 2 - canvas.left;
-    const toCenterY = to.top + to.height / 2 - canvas.top;
+    const toCenterX = to.left + to.width / 2 - canvas.left + port.x;
+    const toCenterY = to.top + to.height / 2 - canvas.top + port.y;
 
     if (selfEdge) {
         const startX = from.right - canvas.left;
         const startY = fromCenterY;
-        const endX = fromCenterX;
+        const endX = toCenterX;
         const endY = from.top - canvas.top;
         const outerX = startX + 30;
         const outerY = Math.max(8, endY - 24);
-        return `M ${startX} ${startY} C ${outerX} ${startY}, ${outerX} ${outerY}, ${endX} ${outerY} S ${endX} ${outerY}, ${endX} ${endY}`;
+        return `M ${startX} ${startY} C ${outerX} ${startY}, ${outerX} ${outerY}, ${endX} ${outerY} S ${endX} ${outerY}, ${endX} ${endY - 12} L ${endX} ${endY}`;
     }
 
     if (to.left > from.right + 8) {
@@ -1326,14 +1355,15 @@ function graphEdgePath(from, to, canvas, selfEdge, fromLayer, toLayer, reciproca
         const startY = fromCenterY;
         const endX = to.left - canvas.left;
         const endY = toCenterY;
+        const approachX = endX - 12;
         if (toLayer - fromLayer > 1) {
             const firstGutterX = startX + 28;
             const lastGutterX = endX - 28;
             const corridorY = 8;
-            return `M ${startX} ${startY} C ${firstGutterX} ${startY}, ${firstGutterX} ${corridorY}, ${firstGutterX} ${corridorY} L ${lastGutterX} ${corridorY} C ${lastGutterX} ${corridorY}, ${lastGutterX} ${endY}, ${endX} ${endY}`;
+            return `M ${startX} ${startY} C ${firstGutterX} ${startY}, ${firstGutterX} ${corridorY}, ${firstGutterX} ${corridorY} L ${lastGutterX} ${corridorY} C ${lastGutterX} ${corridorY}, ${lastGutterX} ${endY}, ${approachX} ${endY} L ${endX} ${endY}`;
         }
-        const bend = Math.max(28, (endX - startX) * 0.44);
-        return `M ${startX} ${startY} C ${startX + bend} ${startY}, ${endX - bend} ${endY}, ${endX} ${endY}`;
+        const bend = Math.max(12, (approachX - startX) * 0.44);
+        return `M ${startX} ${startY} C ${startX + bend} ${startY}, ${approachX - bend} ${endY}, ${approachX} ${endY} L ${endX} ${endY}`;
     }
 
     if (fromLayer === toLayer) {
@@ -1342,10 +1372,11 @@ function graphEdgePath(from, to, canvas, selfEdge, fromLayer, toLayer, reciproca
         const startY = fromCenterY;
         const endX = (useRightGutter ? to.right : to.left) - canvas.left;
         const endY = toCenterY;
+        const approachX = endX + (useRightGutter ? 12 : -12);
         const gutterX = useRightGutter
             ? Math.min(canvas.width - 6, Math.max(startX, endX) + 16)
             : Math.max(6, Math.min(startX, endX) - 16);
-        return `M ${startX} ${startY} C ${gutterX} ${startY}, ${gutterX} ${endY}, ${endX} ${endY}`;
+        return `M ${startX} ${startY} C ${gutterX} ${startY}, ${gutterX} ${endY}, ${approachX} ${endY} L ${endX} ${endY}`;
     }
 
     if (from.left > to.right + 8) {
@@ -1354,7 +1385,7 @@ function graphEdgePath(from, to, canvas, selfEdge, fromLayer, toLayer, reciproca
         const endX = to.right - canvas.left;
         const endY = toCenterY;
         const outerY = Math.max(8, Math.min(from.top, to.top) - canvas.top - 24);
-        return `M ${startX} ${startY} C ${startX - 32} ${outerY}, ${endX + 32} ${outerY}, ${endX} ${endY}`;
+        return `M ${startX} ${startY} C ${startX - 32} ${outerY}, ${endX + 32} ${endY}, ${endX + 12} ${endY} L ${endX} ${endY}`;
     }
 
     const downward = toCenterY >= fromCenterY;
@@ -1362,8 +1393,9 @@ function graphEdgePath(from, to, canvas, selfEdge, fromLayer, toLayer, reciproca
     const endX = toCenterX;
     const startY = (downward ? from.bottom : from.top) - canvas.top;
     const endY = (downward ? to.top : to.bottom) - canvas.top;
+    const approachY = endY + (downward ? -12 : 12);
     const middleY = (startY + endY) / 2;
-    return `M ${startX} ${startY} C ${startX} ${middleY}, ${endX} ${middleY}, ${endX} ${endY}`;
+    return `M ${startX} ${startY} C ${startX} ${middleY}, ${endX} ${middleY}, ${endX} ${approachY} L ${endX} ${endY}`;
 }
 
 function drawResourceGraphEdges() {
@@ -1377,6 +1409,8 @@ function drawResourceGraphEdges() {
     const canvasBounds = canvas.getBoundingClientRect();
     const nodeElements = new Map([...canvas.querySelectorAll("[data-graph-node-id]")]
         .map((node) => [node.dataset.graphNodeId, node]));
+    const nodeBounds = new Map([...nodeElements].map(([name, node]) => [name, node.getBoundingClientRect()]));
+    const incomingPorts = graphIncomingPorts(activeGraphModel.edges, nodeBounds);
     svg.setAttribute("viewBox", `0 0 ${canvasBounds.width} ${canvasBounds.height}`);
     svg.setAttribute("width", String(canvasBounds.width));
     svg.setAttribute("height", String(canvasBounds.height));
@@ -1399,8 +1433,8 @@ function drawResourceGraphEdges() {
         if (!fromElement || !toElement) {
             continue;
         }
-        const fromBounds = fromElement.getBoundingClientRect();
-        const toBounds = toElement.getBoundingClientRect();
+        const fromBounds = nodeBounds.get(edge.from);
+        const toBounds = nodeBounds.get(edge.to);
         const presentation = graphEdgePresentation(edge);
         const fromNode = nodeByName.get(edge.from);
         const toNode = nodeByName.get(edge.to);
@@ -1418,6 +1452,7 @@ function drawResourceGraphEdges() {
                 fromNode?.layer ?? 0,
                 toNode?.layer ?? 0,
                 reciprocalSide,
+                incomingPorts.get(edge.id),
             ),
             "marker-end": `url(#graph-arrow-${presentation.id})`,
         });

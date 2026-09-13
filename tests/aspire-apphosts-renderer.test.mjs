@@ -798,6 +798,81 @@ test("filtered graph counts are honest and one combined relationship can be sele
     assert.ok(button(emptyPanel, "Clear filter"));
 });
 
+test("graph fan-in ports are distinct, bounded, and stable regardless of edge enumeration", async () => {
+    const renderer = await boot();
+    const bounds = (left, top) => ({ left, top, right: left + 220, bottom: top + 90, width: 220, height: 90 });
+    const nodeBounds = new Map([["api", bounds(20, 20)], ["catalog", bounds(20, 130)], ["orders", bounds(296, 20)]]);
+    const edges = [
+        { id: "api-orders", from: "api", to: "orders", types: ["Reference", "WaitFor"] },
+        { id: "catalog-orders", from: "catalog", to: "orders", types: ["Reference", "WaitFor"] },
+    ];
+    const ports = renderer.context.graphIncomingPorts(edges, nodeBounds);
+    const reversed = renderer.context.graphIncomingPorts([...edges].reverse(), nodeBounds);
+    assert.equal(JSON.stringify([...ports]), JSON.stringify([...reversed]));
+    assert.equal(ports.get(edges[1].id).y - ports.get(edges[0].id).y, 14);
+    const canvas = { left: 0, top: 0, width: 800, height: 400 };
+    const paths = edges.map((edge) => renderer.context.graphEdgePath(
+        nodeBounds.get(edge.from), nodeBounds.get(edge.to), canvas, false, 0, 1, undefined, ports.get(edge.id),
+    ));
+    assert.match(paths[0], /284 58 L 296 58$/);
+    assert.match(paths[1], /284 72 L 296 72$/);
+    const many = Array.from({ length: 12 }, (_, index) => ({ id: `edge-${index}`, from: "api", to: "orders" }));
+    const crowded = [...renderer.context.graphIncomingPorts(many, nodeBounds).values()];
+    assert.equal(new Set(crowded.map((port) => port.y)).size, many.length);
+    assert.ok(crowded.every((port) => Math.abs(port.y) <= 29));
+    assert.equal(renderer.context.graphIncomingPorts([edges[0]], nodeBounds).get(edges[0].id).y, 0);
+});
+
+test("graph arrows approach the target boundary in the correct direction for every route", async () => {
+    const renderer = await boot();
+    const rect = (left, top) => ({ left, top, right: left + 100, bottom: top + 80, width: 100, height: 80 });
+    const canvas = { left: 0, top: 0, width: 900, height: 600 };
+    const cases = [
+        { from: rect(20, 20), to: rect(300, 100), layers: [0, 1], end: /288 147 L 300 147$/ },
+        { from: rect(20, 20), to: rect(600, 100), layers: [0, 3], end: /588 147 L 600 147$/ },
+        { from: rect(600, 20), to: rect(300, 100), layers: [2, 1], end: /412 147 L 400 147$/ },
+        { from: rect(100, 20), to: rect(100, 200), layers: [0, 0], end: /88 247 L 100 247$/ },
+        { from: rect(100, 200), to: rect(100, 20), layers: [0, 0], side: "right", end: /212 67 L 200 67$/ },
+        { from: rect(100, 20), to: rect(100, 200), layers: [0, 1], end: /157 188 L 157 200$/ },
+        { from: rect(100, 200), to: rect(100, 20), layers: [1, 0], end: /157 112 L 157 100$/ },
+        { from: rect(100, 100), to: rect(100, 100), layers: [0, 0], self: true, end: /157 88 L 157 100$/ },
+    ];
+    for (const scenario of cases) {
+        const path = renderer.context.graphEdgePath(
+            scenario.from, scenario.to, canvas, scenario.self ?? false,
+            ...scenario.layers, scenario.side, { x: 7, y: 7 },
+        );
+        assert.match(path, scenario.end);
+    }
+    const marker = renderer.context.graphMarker({ id: "combined", className: "is-combined" });
+    assert.equal(marker.getAttribute("refX"), "8", "the triangle tip must be anchored on the path endpoint");
+    assert.equal(marker.getAttribute("orient"), "auto");
+});
+
+test("drawn fan-in connectors retain combined semantics and use separated target ports", async () => {
+    const renderer = await boot();
+    const state = snapshot(2);
+    const graph = state.roots[0].graph;
+    const cache = { ...graph.nodes[0], id: "host-a:resource:cache", resourceName: "cache", label: "Cache" };
+    graph.nodes.push(cache);
+    state.roots[0].children[0].children.push(cache);
+    graph.edges.push({ id: "cache-api", from: "cache", to: "api", types: ["Reference", "WaitFor"] });
+    await renderer.push({ type: "state", state });
+    renderer.document.getElementById("graph-view-tab").click();
+    const canvas = renderer.document.querySelector(".resource-graph-canvas");
+    const makeBounds = (left, top) => ({ left, top, right: left + 220, bottom: top + 90, width: 220, height: 90 });
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 600, height: 300 });
+    canvas.querySelector('[data-graph-node-id="database"]').getBoundingClientRect = () => makeBounds(20, 20);
+    canvas.querySelector('[data-graph-node-id="cache"]').getBoundingClientRect = () => makeBounds(20, 130);
+    canvas.querySelector('[data-graph-node-id="api"]').getBoundingClientRect = () => makeBounds(296, 20);
+    renderer.flushFrames();
+    const paths = canvas.querySelectorAll("path.graph-edge");
+    assert.equal(paths.length, 2);
+    assert.ok(paths.every((path) => path.classList.contains("is-combined-reference-waitfor")));
+    assert.ok(paths.every((path) => path.getAttribute("marker-end") === "url(#graph-arrow-combined-reference-waitfor)"));
+    assert.notEqual(paths[0].getAttribute("d").split(" L ").at(-1), paths[1].getAttribute("d").split(" L ").at(-1));
+});
+
 test("narrow More reuses confirmations and exposes disabled operations without executing them", async () => {
     const renderer = await boot();
     const more = renderer.document.querySelector(".host-more-actions");
