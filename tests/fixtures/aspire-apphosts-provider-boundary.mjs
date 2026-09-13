@@ -323,6 +323,28 @@ test("direct HTTP execution rejects missing, mismatched, failed and pending dyna
     assert.equal(h.commandCalls().length, count, "no invalid request reached the fake CLI");
 });
 
+test("every SSE connection receives the current snapshot after missing a content revision", async (t) => {
+    const h = await harness(t);
+    const open = await h.open();
+    const first = (await h.request(open, "/api/state")).state;
+    const original = await sse(h, open);
+    t.after(() => original.close());
+    assert.deepEqual((await original.waitFor((event) => event.type === "state")).state, first);
+    original.close();
+
+    h.controls.state = "Stopped";
+    const changed = (await h.request(open, "/api/state")).state;
+    assert.ok(changed.revision > first.revision);
+    const reconnected = await sse(h, open);
+    t.after(() => reconnected.close());
+    const replay = await reconnected.waitFor((event) => event.type === "state");
+    assert.deepEqual(replay.state, changed);
+    assert.equal(allNodes(replay.state.roots).find((node) => node.resourceName === "api").resource.state, "Stopped");
+    await h.request(open, "/api/state");
+    await reconnected.waitFor((event) => event.type === "freshness" && event.revision === changed.revision);
+    assert.equal(reconnected.events.filter((event) => event.type === "state").length, 1);
+});
+
 test("queued loads cannot apply older metadata to newer dependency values", async (t) => {
     const h = await harness(t);
     const open = await h.open();

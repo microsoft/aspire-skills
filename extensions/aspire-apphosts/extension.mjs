@@ -204,6 +204,7 @@ function addSseClient(entry, req, res) {
     });
     res.write(": connected\n\n");
     entry.clients.add(res);
+    res.write(`data: ${JSON.stringify({ type: "state", state: publicState(entry) })}\n\n`);
     req.once("close", () => entry.clients.delete(res));
 }
 

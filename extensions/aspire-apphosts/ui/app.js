@@ -137,6 +137,7 @@ let activeGraphModel = null;
 let graphDrawFrame = null;
 let renderedAppHostId = null;
 let graphRelationshipsExpanded = false;
+let eventStreamStatus = "connecting";
 const commandDrafts = new Map();
 const commandInputs = new Map();
 const commandResults = new Map();
@@ -445,7 +446,12 @@ function updateHeader() {
     setModeButtons();
 
     els.connectionDot.className = "connection-dot";
-    if (modelState?.status === "ready" || modelState?.status === "empty") {
+    if (eventStreamStatus !== "connected") {
+        els.connectionDot.classList.add("is-stale");
+        els.connectionStatus.textContent = eventStreamStatus === "disconnected"
+            ? "Connection lost; AppHost data may be stale"
+            : "Synchronizing AppHost data";
+    } else if (modelState?.status === "ready" || modelState?.status === "empty") {
         els.connectionDot.classList.add("is-live");
         els.connectionStatus.textContent = "AppHost data is live";
     } else if (modelState?.stale) {
@@ -2430,11 +2436,8 @@ async function setViewMode(viewMode) {
 function connectEvents() {
     const source = new EventSource(`/events?token=${encodeURIComponent(apiToken)}`);
     source.addEventListener("open", () => {
-        if (modelState?.status === "ready") {
-            els.connectionDot.classList.remove("is-stale", "is-error");
-            els.connectionDot.classList.add("is-live");
-            els.connectionStatus.textContent = "AppHost data is live";
-        }
+        eventStreamStatus = "connecting";
+        updateHeader();
     });
     source.addEventListener("message", (event) => {
         let message;
@@ -2444,7 +2447,10 @@ function connectEvents() {
             return;
         }
         if (message.type === "state" && message.state) {
-            acceptState(message.state);
+            if (acceptState(message.state)) {
+                eventStreamStatus = "connected";
+                updateHeader();
+            }
             return;
         }
         if (message.type === "freshness" && modelState) {
@@ -2468,9 +2474,8 @@ function connectEvents() {
         }
     });
     source.addEventListener("error", () => {
-        els.connectionDot.classList.remove("is-live");
-        els.connectionDot.classList.add("is-stale");
-        els.connectionStatus.textContent = "Connection lost; AppHost data may be stale";
+        eventStreamStatus = "disconnected";
+        updateHeader();
     });
 }
 
