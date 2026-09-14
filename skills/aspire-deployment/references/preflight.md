@@ -16,6 +16,29 @@ Find the AppHost before choosing commands:
 
 Use `--apphost <path>` when discovery is ambiguous, multiple AppHosts exist, or CI/CD should pin a specific AppHost. The path can point to an AppHost project file or supported single-file AppHost, such as `apphost.cs`.
 
+## Repository discovery before design
+
+Keep discovery bounded: inspect existing deployment assets first and follow references only as needed to learn how the app runs, not to reproduce its complete release pipeline. Stop when you can summarize the runtime requirements and known mismatches.
+
+| Asset | Information to extract |
+|-------|------------------------|
+| Dockerfiles and entrypoint scripts | Runtime, build inputs/outputs, native dependencies, startup commands, user, and ports |
+| Compose files | Runnable services, references, environment variables, volumes, and startup dependencies |
+| Deployment scripts and CI workflows | Build order, image preparation, registries, and configuration |
+| Helm charts and cloud templates | Public/internal endpoints, health checks, storage, and scaling constraints |
+| Deployment documentation | Required secrets, supported modes, and operational limitations |
+
+Before editing, summarize:
+
+- Each runnable service, its production startup command, required build outputs, native dependencies, ports, and public/internal exposure.
+- The frontend serving model: if the backend serves compiled frontend files, preserve that architecture rather than deploying the local Vite server separately.
+- Shared state, secrets (names only), storage, and startup dependencies. For example, a worker may use the same application image with a different command, while queue mode requires shared PostgreSQL, Redis, and an encryption key.
+- How these requirements map to AppHost resources, references, parameters, and the chosen deployment environment.
+
+Treat existing Dockerfiles as candidates, not automatic solutions. Check the Docker build context, `COPY` inputs, `.dockerignore`, prepackaged directories, and where/how artifacts are prepared. Check host OS and target OS/architecture assumptions: dependencies packaged on Windows can contain links or native binaries unusable in a Linux build. Identify these mismatches before implementing.
+
+For a demo or minimum deployment, prefer a simple image that installs dependencies and builds source inside the target platform when adapting release packaging would be more complex. Keep secrets and host dependencies out of the build context. Keeping the built workspace instead of pruning dependencies can be an acceptable larger-image tradeoff; explain it and defer optimization until requested. Preserve required runtime dependencies and local run-mode behavior. Production hardening, packaging optimization, and custom hosting extensions are separate scope unless needed for a working deployment.
+
 ## Docs lookup checklist
 
 Use Aspire docs search before changing target configuration:
@@ -89,6 +112,19 @@ When running a command that may prompt, do not pipe it through `tee`, `tail`, or
 - Running `aspire deploy` later does not consume the directory produced by a previous `aspire publish`.
 
 Use `--environment <name>` when the user wants a staging/production context other than the default. Deployment state and cached values are scoped by AppHost and environment, so changing the environment changes which cached values are used.
+
+## Authorization and effective target
+
+"Make this deployable", preview, and artifact requests do not authorize billable provisioning. Ask for authorization before applying; an explicit request to deploy now authorizes deployment only within the confirmed scope.
+
+Before provisioning, confirm the effective AppHost and deployment environment plus the target account/cluster/stack. For Azure, read back the effective **subscription, tenant, resource group, region, and deployment environment** and resolve ambiguity with the user.
+
+- Inspect relevant configuration and saved deployment state for the selected AppHost/environment without exposing secrets. Use installed-version docs and CLI state/configuration output; do not assume one configuration precedence rule across Aspire versions.
+- Environment variables express intended settings, not proof that a saved target changed. Verify the resolved target before retrying. If cached state conflicts, use a documented correction or a separate, explicitly selected deployment environment, then verify again; do not blindly delete state.
+- After an interactive selector, read back the actual selected value from its confirmation/output or state. Typing a resource-group name does not prove it was selected or created. If the effective choice cannot be verified before provisioning, stop rather than guess.
+- If resources were created in the wrong target, stop and disclose what was created and where. Obtain approval before deleting them; a retry or cleanup is not implicit authorization.
+
+Once authorized and verified, run `aspire deploy` early to exercise image build, push, provisioning, and configuration. Fix one observed blocker at a time. A successful `aspire publish` or infrastructure validation alone does not validate image builds or a running application.
 
 ## Destroying deployments
 
@@ -186,4 +222,12 @@ After deployment, verify with target-appropriate checks:
 - Kubernetes: `kubectl get pods`, `kubectl get svc`, `helm status`, endpoint checks.
 - Azure: CLI output, Azure CLI resource inspection, endpoint checks, and dashboard URL when available.
 
-Do not mark cloud deployment complete until provisioning, deployment, and at least one target-specific health or endpoint check succeeded.
+Report these as separate milestones with evidence; mark failures and unverified checks explicitly:
+
+| Milestone | Required evidence |
+|-----------|-------------------|
+| Deployment pipeline succeeded | Actual `aspire deploy` completed, including applicable image builds, pushes, and provisioning. Published artifact validation alone is insufficient. |
+| Application is usable | Active revision/workload readiness; browser renders the frontend and reaches its API; expected API responses; worker startup confirmed through status/logs and a representative operation where applicable. Infrastructure success or HTTP 200 for frontend HTML alone is insufficient. |
+| Telemetry is working | Exporter endpoint and required credentials are supplied, and expected telemetry actually arrives at the destination (for example, traces/logs from a test request). Enabling OpenTelemetry alone is insufficient. |
+
+If a browser, worker check, or telemetry destination is unavailable, report it as unverified rather than claiming success. Use “not applicable” only when the application genuinely has no such component. Do not claim overall success while required checks remain failed or unverified.

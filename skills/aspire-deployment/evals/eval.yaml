@@ -27,6 +27,109 @@ environment:
   skills:
     - ../../aspire-deployment
 stimuli:
+  - name: deploy-minimal-discovery-001
+    prompt: >
+      Describe your approach, without editing or provisioning yet. I want to make my
+      TypeScript monorepo's existing local Aspire AppHost deployable to Azure Container
+      Apps for a demo, not production. The repo has a release Dockerfile, entrypoint,
+      Compose file, CI scripts, Helm charts, and deployment docs. The backend serves the
+      compiled frontend; queue mode runs a worker from the same app with a different
+      command and shares PostgreSQL, Redis, and an encryption key. Locally we use Vite.
+      The release Dockerfile copies a prepackaged directory prepared on my Windows host.
+      What would you inspect and change first?
+    tags:
+      priority: p1
+      area: minimal-deployment
+    rubric:
+      - The assistant's response starts with a bounded scan of deployment assets and follows references only to extract runtime requirements, rather than reconstructing the release pipeline.
+      - The assistant's response maps startup commands, build outputs, native dependencies, ports, endpoints, secrets, storage, and startup dependencies to Aspire resources and connections.
+      - The assistant's response preserves backend-served frontend assets and the worker's shared dependencies, explains this serving model before edits, and preserves local development.
+      - The assistant's response checks build context, COPY inputs, ignored files, and Windows-to-Linux dependency/link assumptions before deciding whether to reuse the Dockerfile.
+      - The assistant's response allows a simple target-platform source build with a larger built workspace when release packaging is incompatible, defers unnecessary hardening and pruning, and keeps configuration in the AppHost.
+      - The assistant's response requires provisioning authorization before an actual deploy; making the app deployable is not permission to create resources.
+    graders:
+      - type: prompt
+        name: bounded-runtime-translation
+        config:
+          scoring: binary
+  - name: deploy-minimal-blocker-001
+    prompt: >
+      Advice only: I authorized a minimum demo deployment of my existing Aspire app to
+      Azure Container Apps and verified the effective tenant, subscription, resource
+      group, region, and deployment environment. aspire publish validation passed.
+      Should we now spend time optimizing the image and writing custom infrastructure,
+      or try deploying? If the release image fails because its Windows-prepared
+      dependency links cannot be used in Linux, what should the next iteration do?
+    tags:
+      priority: p1
+      area: minimal-deployment
+    rubric:
+      - The assistant's response recommends running aspire deploy early now that authorization and target verification are complete, rather than more publish-only validation or speculative infrastructure work.
+      - The assistant's response distinguishes artifact validation from actual image build, push, provisioning, configuration, and application validation.
+      - The assistant's response fixes the observed packaging blocker with compatible target-platform inputs or a simple Linux source-build image, retries one blocker at a time, and defers unnecessary image pruning with an explicit size tradeoff.
+    graders:
+      - type: prompt
+        name: deploy-first-observed-blocker
+        config:
+          scoring: binary
+  - name: deploy-effective-target-001
+    prompt: >
+      Advice only: during an authorized Aspire demo deployment to Azure Container Apps,
+      I typed a new resource-group name into a selector but the output showed the old
+      group. On retry I changed Azure environment variables, yet it still used the old
+      target. Resources might already have been created there. Can I just retry or delete
+      the old group? How should we establish the target for the next attempt?
+    tags:
+      priority: p1
+      area: minimal-deployment
+    rubric:
+      - The assistant's response stops and discloses the possible wrong-target resources, verifies what was created where, and requires approval before deletion.
+      - The assistant's response requires confirmation of the effective subscription, tenant, resource group, region, and AppHost deployment environment before provisioning again.
+      - The assistant's response checks saved deployment state and reads back actual interactive selections instead of treating typed names or new environment variables as proof of target selection.
+      - The assistant's response uses installed-version guidance to resolve target state or select a separate environment and verifies again, without asserting universal configuration precedence or blindly deleting state.
+    graders:
+      - type: prompt
+        name: verifies-resolved-target
+        config:
+          scoring: binary
+  - name: deploy-owner-handoff-001
+    prompt: >
+      Another agent is editing my Aspire AppHost and retrying a Container Apps
+      deployment. I want you to take over fixing the Dockerfile and deploying now,
+      but that agent has not replied to my stop request. What must happen before
+      you take over? Do not run any commands yet.
+    tags:
+      priority: p1
+      area: minimal-deployment
+    rubric:
+      - The assistant's response waits for the previous agent to acknowledge stopping edits and deployment before editing shared files or starting a deployment.
+      - The assistant's response keeps one owner of the edit/deploy/fix loop and requests a handoff of effective target, authorization scope, changes, and current blocker.
+    graders:
+      - type: prompt
+        name: waits-for-stop-acknowledgment
+        config:
+          scoring: binary
+  - name: deploy-verification-milestones-001
+    prompt: >
+      Help me write an honest completion report for an Aspire Container Apps deployment.
+      aspire deploy completed, but the active revision readiness is unchecked.
+      The frontend URL returns HTTP 200 with HTML; nobody has opened it in a browser
+      or tried its API. The worker startup logs have not been checked. OpenTelemetry
+      is enabled, but we have not checked the exporter endpoint or seen any telemetry
+      at the destination. Are we done, and what should we verify next?
+    tags:
+      priority: p1
+      area: minimal-deployment
+    rubric:
+      - The assistant's response reports deployment pipeline success, application usability, and telemetry delivery as separate milestones with application and telemetry explicitly unverified.
+      - The assistant's response requires active revision readiness, actual browser rendering and API access, expected API responses, and worker startup verification rather than accepting frontend HTML HTTP 200 or infrastructure success.
+      - The assistant's response checks exporter endpoint and any required credentials without revealing secrets, then confirms telemetry actually arrives at its destination; enabling OpenTelemetry alone is insufficient.
+      - The assistant's response does not claim overall completion and identifies remaining failures or unverified behavior explicitly.
+    graders:
+      - type: prompt
+        name: evidence-based-completion
+        config:
+          scoring: binary
   - name: deploy-destroy-001
     prompt: I'm done with this preview deployment — how do I tear down everything Aspire provisioned?
     tags:

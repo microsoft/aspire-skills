@@ -64,7 +64,7 @@ Check:
 
 - Azure CLI is installed when local deploy uses Azure CLI credentials.
 - The user is authenticated (`az login`) or another `Azure:CredentialSource` is configured.
-- Target subscription, location, and resource group are known.
+- Effective subscription, tenant, resource group, region, and deployment environment are verified, including saved deployment state and interactive selections. Follow [authorization and effective-target verification](preflight.md#authorization-and-effective-target) before provisioning or retrying; environment variables alone do not prove an existing target changed.
 - Required AppHost parameters are configured or can be prompted.
 - The AppHost has the correct Azure target integration and environment resource.
 - Production-only resources are not hidden behind run-mode-only execution context checks.
