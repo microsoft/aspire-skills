@@ -420,28 +420,28 @@ test("freshness must match the current revision and timestamps never regress at 
     await renderer.respond(renderer.request("/api/refresh"), {
         state: snapshot(1, { generatedAt: "2026-09-10T10:00:00Z" }),
     });
-
-    test("reconnect waits for a current full snapshot before reporting live data", async () => {
-        const renderer = await boot();
-        await renderer.push({ type: "state", state: snapshot(1) });
-        renderer.streamEvent("error");
-        assert.match(renderer.document.getElementById("connection-status").textContent, /Connection lost/);
-        renderer.streamEvent("open");
-        assert.match(renderer.document.getElementById("connection-status").textContent, /Synchronizing/);
-        await renderer.push({ type: "freshness", revision: 3, lastSuccessfulAt: "2026-09-10T12:00:00Z" });
-        assert.equal(renderer.state().revision, 1);
-        assert.match(renderer.document.getElementById("connection-status").textContent, /Synchronizing/);
-        const current = snapshot(3);
-        current.roots[0].children[0].children[1].description = "Stopped";
-        await renderer.push({ type: "state", state: current });
-        assert.equal(renderer.state().revision, 3);
-        assert.match(renderer.document.getElementById("model-view").textContent, /Stopped/);
-        assert.equal(renderer.document.getElementById("connection-status").textContent, "AppHost data is live");
-        await renderer.push({ type: "freshness", revision: 3, lastSuccessfulAt: "2026-09-10T12:00:00Z" });
-        assert.equal(renderer.state().lastSuccessfulAt, "2026-09-10T12:00:00Z");
-    });
     assert.equal(renderer.state().lastSuccessfulAt, newer);
     assert.equal(renderer.state().generatedAt, snapshot().generatedAt);
+});
+
+test("reconnect waits for a current full snapshot before reporting live data", async () => {
+    const renderer = await boot();
+    await renderer.push({ type: "state", state: snapshot(1) });
+    renderer.streamEvent("error");
+    assert.match(renderer.document.getElementById("connection-status").textContent, /Connection lost/);
+    renderer.streamEvent("open");
+    assert.match(renderer.document.getElementById("connection-status").textContent, /Synchronizing/);
+    await renderer.push({ type: "freshness", revision: 3, lastSuccessfulAt: "2026-09-10T12:00:00Z" });
+    assert.equal(renderer.state().revision, 1);
+    assert.match(renderer.document.getElementById("connection-status").textContent, /Synchronizing/);
+    const current = snapshot(3);
+    current.roots[0].children[0].children[1].description = "Stopped";
+    await renderer.push({ type: "state", state: current });
+    assert.equal(renderer.state().revision, 3);
+    assert.match(renderer.document.getElementById("model-view").textContent, /Stopped/);
+    assert.equal(renderer.document.getElementById("connection-status").textContent, "AppHost data is live");
+    await renderer.push({ type: "freshness", revision: 3, lastSuccessfulAt: "2026-09-10T12:00:00Z" });
+    assert.equal(renderer.state().lastSuccessfulAt, "2026-09-10T12:00:00Z");
 });
 
 test("initial GET failure leaves a valid SSE board intact and surfaces its error", async () => {
