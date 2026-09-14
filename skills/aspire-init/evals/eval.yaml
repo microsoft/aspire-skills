@@ -37,7 +37,7 @@ stimuli:
       area: prerequisites
     graders:
       - type: prompt
-        name: suggests_supported_install
+        name: suggests-supported-install
         config:
           prompt: Does the assistant's response suggest a supported Aspire 13.5 CLI install path, such as
             `npm install -g @microsoft/aspire-cli`, `dotnet tool install -g Aspire.Cli`, or the
@@ -45,12 +45,12 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet workload install aspire
-        name: no_obsolete_workload
+        name: no-obsolete-workload-init-cli-install-001
       - type: output-not-contains
         config:
           substring: dotnet workload install Aspire
       - type: prompt
-        name: mentions_doctor_or_prereqs
+        name: mentions-doctor-or-prereqs
         config:
           prompt: After installing the CLI, does the assistant's response also tell the user how to verify the
             install (for example, `aspire doctor`, `aspire --version`, or re-running `aspire init`)?
@@ -61,7 +61,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet new aspire-py-starter
-        name: never_dotnet_new_aspire
+        name: never-dotnet-new-aspire-init-cli-install-001
       - type: output-not-contains
         config:
           substring: dotnet new aspire-starter
@@ -83,13 +83,13 @@ stimuli:
           dest: csharp-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: detects_existing_apphost
+        name: detects-existing-apphost
         config:
           prompt: The assistant's response should detect that an AppHost already exists in the repo (the
             `.csproj` references `Aspire.AppHost.Sdk` and `aspire.config.json` is present) and
             explicitly say `aspire init` is NOT needed.
       - type: prompt
-        name: routes_to_correct_skill
+        name: routes-to-correct-skill
         config:
           prompt: The assistant's response should route the user to either `aspireify` (for adding/changing
             resources in the existing AppHost) or `aspire-orchestration` (for starting and managing
@@ -97,7 +97,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: Run `aspire init`
-        name: no_init_or_new
+        name: no-init-or-new
       - type: output-not-contains
         config:
           substring: run aspire init
@@ -113,7 +113,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet new aspire-py-starter
-        name: never_dotnet_new_aspire
+        name: never-dotnet-new-aspire-init-skip-001
       - type: output-not-contains
         config:
           substring: dotnet new aspire-starter
@@ -127,13 +127,13 @@ stimuli:
       area: core-flow
     graders:
       - type: prompt
-        name: runs_aspire_init
+        name: runs-aspire-init
         config:
           prompt: Does the assistant's response recommend running `aspire init` (not `aspire new`) to
             bootstrap the existing repository? It should pick init because the repo already contains
             services. Answer based on intent, not exact string matching.
       - type: prompt
-        name: hands_off_to_aspireify
+        name: hands-off-to-aspireify
         config:
           prompt: Does the assistant's response explicitly hand off the resource-wiring step to the
             `aspireify` skill (or the project-local `aspireify` skill installed by `aspire init`)?
@@ -142,7 +142,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet workload install aspire
-        name: no_obsolete_workload
+        name: no-obsolete-workload-init-existing-001
       - type: output-contains
         config:
           substring: aspire init
@@ -158,7 +158,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet new aspire-py-starter
-        name: never_dotnet_new_aspire
+        name: never-dotnet-new-aspire-init-existing-001
       - type: output-not-contains
         config:
           substring: dotnet new aspire-starter
@@ -178,11 +178,11 @@ stimuli:
         - typescript
     graders:
       - type: output-contains
-        name: uses_typescript_init
+        name: uses-typescript-init
         config:
           substring: aspire init --language typescript
       - type: prompt
-        name: explains_nested_current_layout
+        name: explains-nested-current-layout
         config:
           prompt: >
             Does the assistant's response explain that, because the existing repository
@@ -190,7 +190,7 @@ stimuli:
             package containing apphost.mts and points the root aspire.config.json at it?
             Answer based on intent.
       - type: output-not-contains
-        name: does_not_claim_current_apphost_ts
+        name: does-not-claim-current-apphost-ts
         config:
           substring: creates apphost.ts
   - name: init-new-001
@@ -201,14 +201,14 @@ stimuli:
       area: core-flow
     graders:
       - type: prompt
-        name: uses_aspire_new
+        name: uses-aspire-new
         config:
           prompt: Does the assistant's response recommend `aspire new aspire-starter` (or a similar `aspire
             new` template) to scaffold a brand-new project? Answer based on intent.
       - type: output-not-contains
         config:
           substring: dotnet new aspire-starter
-        name: no_dotnet_new_template
+        name: no-dotnet-new-template
       - type: output-not-contains
         config:
           substring: dotnet new aspire-empty
@@ -216,7 +216,7 @@ stimuli:
         config:
           substring: dotnet new aspire-ts-starter
       - type: prompt
-        name: no_init_for_greenfield
+        name: no-init-for-greenfield
         config:
           prompt: For a brand-new, empty project, the assistant's response should pick `aspire new` rather
             than `aspire init`. The `aspire init` command is for existing repositories that already
@@ -237,7 +237,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet new aspire-py-starter
-        name: never_dotnet_new_aspire
+        name: never-dotnet-new-aspire-init-new-001
       - type: output-not-contains
         config:
           substring: dotnet new aspire-starter
@@ -253,13 +253,13 @@ stimuli:
         - 13.3-breaking
     graders:
       - type: prompt
-        name: uses_aspire_new_py_starter
+        name: uses-aspire-new-py-starter
         config:
           prompt: Does the assistant's response use `aspire new aspire-py-starter` (the Aspire 13.3 path) and
             NOT `dotnet new aspire-py-starter` (which was removed in 13.3)? It should also explain
             that the AppHost will be TypeScript and orchestrates the Python service.
       - type: prompt
-        name: includes_redis_flag
+        name: includes-redis-flag
         config:
           prompt: Since the user asked for Redis, the assistant's response should include the
             `--use-redis-cache true` template option (or note that this option exists for the
@@ -267,7 +267,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet new aspire-py-starter
-        name: no_dotnet_new
+        name: no-dotnet-new
       - type: output-not-contains
         config:
           substring: dotnet new aspire-py
@@ -283,7 +283,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet new aspire-py-starter
-        name: never_dotnet_new_aspire
+        name: never-dotnet-new-aspire-init-py-001
       - type: output-not-contains
         config:
           substring: dotnet new aspire-starter
@@ -300,7 +300,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_init
+        name: invokes-aspire-init-should-trigger-01
         config:
           required:
             - aspire-init
@@ -315,7 +315,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_init
+        name: invokes-aspire-init-should-trigger-02
         config:
           required:
             - aspire-init
@@ -327,7 +327,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_init
+        name: invokes-aspire-init-should-trigger-03
         config:
           required:
             - aspire-init
@@ -342,7 +342,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_init
+        name: invokes-aspire-init-should-trigger-04
         config:
           required:
             - aspire-init
@@ -357,7 +357,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_init
+        name: invokes-aspire-init-should-trigger-05
         config:
           required:
             - aspire-init
@@ -369,7 +369,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_init
+        name: invokes-aspire-init-should-trigger-06
         config:
           required:
             - aspire-init
@@ -384,7 +384,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_init
+        name: invokes-aspire-init-should-trigger-07
         config:
           required:
             - aspire-init
@@ -396,7 +396,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_init
+        name: invokes-aspire-init-should-trigger-08
         config:
           required:
             - aspire-init
@@ -411,7 +411,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_init
+        name: does-not-invoke-aspire-init-should-not-trigger-01
         config:
           disallowed:
             - aspire-init
@@ -423,7 +423,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_init
+        name: does-not-invoke-aspire-init-should-not-trigger-02
         config:
           disallowed:
             - aspire-init
@@ -435,7 +435,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_init
+        name: does-not-invoke-aspire-init-should-not-trigger-03
         config:
           disallowed:
             - aspire-init
@@ -447,7 +447,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_init
+        name: does-not-invoke-aspire-init-should-not-trigger-04
         config:
           disallowed:
             - aspire-init
@@ -459,7 +459,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_init
+        name: does-not-invoke-aspire-init-should-not-trigger-05
         config:
           disallowed:
             - aspire-init
@@ -471,7 +471,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_init
+        name: does-not-invoke-aspire-init-should-not-trigger-06
         config:
           disallowed:
             - aspire-init
@@ -486,7 +486,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_init
+        name: does-not-invoke-aspire-init-should-not-trigger-07
         config:
           disallowed:
             - aspire-init

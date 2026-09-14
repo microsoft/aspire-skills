@@ -58,7 +58,7 @@ Eval-level `environment.skills` is **union-merged** into every stimulus, so you 
 - **Capability specs** load the skill under test **plus its transitive in-repo dependencies** (whatever its `SKILL.md` `INVOKES:`). E.g. `aspireify` loads `aspireify` + `aspire-orchestration` because it validates wiring by running `aspire start`.
 - **Routing stimuli** (the `aspire` router spec, and `area: routing` stimuli) load the **full set** of six skills so routing decisions are made against the real siblings.
 
-**Activation assertions:** `constraints.expect_skills` / `constraints.reject_skills` assert which skills the agent actually invoked — use them to make routing tests first-class rather than relying only on response-content graders.
+**Activation assertions:** Use a `skill-invocation` grader with `config.required` / `config.disallowed` to assert which skills the agent actually invoked. These replace the removed `constraints.expect_skills` / `constraints.reject_skills` fields and make routing tests first-class rather than relying only on response-content graders.
 
 ### Comparative baselines (`vally experiment`)
 

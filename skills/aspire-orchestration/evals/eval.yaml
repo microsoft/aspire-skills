@@ -46,11 +46,9 @@ stimuli:
           dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: csharp-apphost/aspire.config.json
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
-        name: uses_vscode_stop_tool_first
+        name: uses-vscode-stop-tool-first
         config:
           scoring: binary
           prompt: >
@@ -60,11 +58,11 @@ stimuli:
             stimulus asks only for the routing decision, not successful tool
             execution. Answer based on action ordering and intent.
       - type: output-contains
-        name: names_vscode_stop_tool
+        name: names-vscode-stop-tool-orch-vscode-stop-tool-001
         config:
           substring: aspire_apphost_stop
       - type: skill-invocation
-        name: invokes_orchestration
+        name: invokes-orchestration-orch-vscode-stop-tool-001
         config:
           required: [aspire-orchestration]
   - name: orch-vscode-stop-external-001
@@ -85,11 +83,9 @@ stimuli:
           dest: MyApp.AppHost/MyApp.AppHost.csproj
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: aspire.config.json
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
-        name: uses_exact_cli_fallback_for_external_apphost
+        name: uses-exact-cli-fallback-for-external-apphost
         config:
           scoring: binary
           prompt: >
@@ -98,11 +94,11 @@ stimuli:
             AppHost path because the VS Code tool reported `notEditorOwned`?
             Answer based on intent.
       - type: output-contains
-        name: scopes_external_stop
+        name: scopes-external-stop
         config:
           substring: --apphost
       - type: skill-invocation
-        name: invokes_orchestration
+        name: invokes-orchestration-orch-vscode-stop-external-001
         config:
           required: [aspire-orchestration]
   - name: orch-vscode-stop-external-multiroot-001
@@ -128,11 +124,9 @@ stimuli:
           dest: repo-a/MyApp.AppHost/MyApp.AppHost.csproj
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: repo-a/aspire.config.json
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
-        name: uses_exact_cli_fallback_for_multiroot_external_apphost
+        name: uses-exact-cli-fallback-for-multiroot-external-apphost
         config:
           scoring: binary
           prompt: >
@@ -141,11 +135,11 @@ stimuli:
             after the `notEditorOwned`/`external` result? Answer based on
             intent.
       - type: output-contains
-        name: scopes_multiroot_external_stop
+        name: scopes-multiroot-external-stop
         config:
           substring: aspire stop --non-interactive --apphost /workspaces/repo-a/MyApp.AppHost/MyApp.AppHost.csproj
       - type: skill-invocation
-        name: invokes_orchestration
+        name: invokes-orchestration-vscode-stop-external-multiroot-001
         config:
           required: [aspire-orchestration]
   - name: orch-vscode-stop-multiple-001
@@ -159,11 +153,9 @@ stimuli:
         - agent-mode
         - lifecycle-tools
         - multi-apphost
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
-        name: disambiguates_multiple_apphosts
+        name: disambiguates-multiple-apphosts
         config:
           scoring: binary
           prompt: >
@@ -171,11 +163,11 @@ stimuli:
             stopped instead of guessing, invoking an unscoped terminal stop,
             or trying to stop both? Answer based on intent.
       - type: output-not-contains
-        name: no_unscoped_cli_stop
+        name: no-unscoped-cli-stop
         config:
           substring: aspire stop --non-interactive
       - type: skill-invocation
-        name: invokes_orchestration
+        name: invokes-orchestration-orch-vscode-stop-multiple-001
         config:
           required: [aspire-orchestration]
   - name: orch-vscode-start-tool-001
@@ -199,11 +191,9 @@ stimuli:
           dest: repo-a/MyApp.AppHost/MyApp.AppHost.csproj
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: repo-a/aspire.config.json
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
-        name: uses_vscode_start_tool_in_run_mode_with_exact_selector
+        name: uses-vscode-start-tool-in-run-mode-with-exact-selector
         config:
           scoring: binary
           prompt: >
@@ -212,11 +202,11 @@ stimuli:
             `repo-a~1/MyApp.AppHost/MyApp.AppHost.csproj`? Answer based on
             intent.
       - type: output-contains
-        name: names_exact_vscode_start_selector
+        name: names-exact-vscode-start-selector
         config:
           substring: repo-a~1/MyApp.AppHost/MyApp.AppHost.csproj
       - type: skill-invocation
-        name: invokes_orchestration
+        name: invokes-orchestration-orch-vscode-start-tool-001
         config:
           required: [aspire-orchestration]
   - name: orch-vscode-start-worktree-001
@@ -231,11 +221,9 @@ stimuli:
         - agent-mode
         - lifecycle-tools
         - worktree
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
-        name: uses_isolated_cli_start_in_worktree
+        name: uses-isolated-cli-start-in-worktree
         config:
           scoring: binary
           prompt: >
@@ -245,11 +233,11 @@ stimuli:
             because `aspire_apphost_start` cannot request isolation? Answer
             based on intent; all three flags are required.
       - type: output-contains
-        name: scopes_worktree_start
+        name: scopes-worktree-start
         config:
           substring: --apphost
       - type: skill-invocation
-        name: invokes_orchestration
+        name: invokes-orchestration-orch-vscode-start-worktree-001
         config:
           required: [aspire-orchestration]
   - name: orch-vscode-stop-run-mode-001
@@ -263,11 +251,9 @@ stimuli:
       area:
         - agent-mode
         - lifecycle-tools
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
-        name: stops_editor_owned_run_session_with_tool
+        name: stops-editor-owned-run-session-with-tool
         config:
           scoring: binary
           prompt: >
@@ -275,11 +261,11 @@ stimuli:
             and explain or rely on the fact that `run` mode still has an
             editor-owned Aspire session even though no debugger is attached?
       - type: output-contains
-        name: names_vscode_stop_tool
+        name: names-vscode-stop-tool-orch-vscode-stop-run-mode-001
         config:
           substring: aspire_apphost_stop
       - type: skill-invocation
-        name: invokes_orchestration
+        name: invokes-orchestration-orch-vscode-stop-run-mode-001
         config:
           required: [aspire-orchestration]
   - name: orch-vscode-stop-tool-unavailable-001
@@ -302,11 +288,9 @@ stimuli:
           dest: MyApp.AppHost/MyApp.AppHost.csproj
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: aspire.config.json
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
-        name: uses_exact_cli_stop_when_editor_tool_is_unavailable
+        name: uses-exact-cli-stop-when-editor-tool-is-unavailable
         config:
           scoring: binary
           prompt: >
@@ -315,11 +299,11 @@ stimuli:
             editor stop tool is unavailable in this normal workspace? Answer
             based on intent.
       - type: output-contains
-        name: scopes_unavailable_stop
+        name: scopes-unavailable-stop
         config:
           substring: aspire stop --non-interactive --apphost MyApp.AppHost/MyApp.AppHost.csproj
       - type: skill-invocation
-        name: invokes_orchestration
+        name: invokes-orchestration-orch-vscode-stop-tool-unavailable-001
         config:
           required: [aspire-orchestration]
   - name: orch-vscode-stop-ambiguous-session-001
@@ -333,11 +317,9 @@ stimuli:
         - agent-mode
         - lifecycle-tools
         - multi-apphost
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
-        name: refuses_ambiguous_session_fallback
+        name: refuses-ambiguous-session-fallback
         config:
           scoring: binary
           prompt: >
@@ -345,11 +327,11 @@ stimuli:
             editor sessions before any further stop action? Answer based on
             intent.
       - type: output-not-contains
-        name: no_cli_stop_fallback
+        name: no-cli-stop-fallback
         config:
           substring: aspire stop --non-interactive
       - type: skill-invocation
-        name: invokes_orchestration
+        name: invokes-orchestration-orch-vscode-stop-ambiguous-session-001
         config:
           required: [aspire-orchestration]
   - name: orch-vscode-stop-unknown-controller-001
@@ -363,11 +345,9 @@ stimuli:
       area:
         - agent-mode
         - lifecycle-tools
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
-        name: retries_then_uses_exact_unknown_fallback
+        name: retries-then-uses-exact-unknown-fallback
         config:
           scoring: binary
           prompt: >
@@ -375,11 +355,11 @@ stimuli:
             only if the same failed/unknown result repeats, fall back to a
             non-interactive `aspire stop` command scoped to the exact AppHost?
       - type: output-contains
-        name: scopes_unknown_fallback
+        name: scopes-unknown-fallback
         config:
           substring: --apphost
       - type: skill-invocation
-        name: invokes_orchestration
+        name: invokes-orchestration-vscode-stop-unknown-controller-001
         config:
           required: [aspire-orchestration]
   - name: orch-vscode-stop-starting-001
@@ -395,11 +375,9 @@ stimuli:
       area:
         - agent-mode
         - lifecycle-tools
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
-        name: retries_starting_stop_without_cli_fallback
+        name: retries-starting-stop-without-cli-fallback
         config:
           scoring: binary
           prompt: >
@@ -407,11 +385,11 @@ stimuli:
             should be retried once and, if `alreadyStarting` repeats, report
             that startup is still in progress? Answer based on intent.
       - type: output-not-contains
-        name: no_cli_stop_for_starting
+        name: no-cli-stop-for-starting
         config:
           substring: aspire stop --non-interactive
       - type: skill-invocation
-        name: invokes_orchestration
+        name: invokes-orchestration-orch-vscode-stop-starting-001
         config:
           required: [aspire-orchestration]
   - name: orch-vscode-stop-stopping-001
@@ -426,11 +404,9 @@ stimuli:
       area:
         - agent-mode
         - lifecycle-tools
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
-        name: reports_stopping_without_another_action
+        name: reports-stopping-without-another-action
         config:
           scoring: binary
           prompt: >
@@ -438,11 +414,11 @@ stimuli:
             already in progress and take no further stop action? Answer based
             on intent.
       - type: output-not-contains
-        name: no_cli_stop_for_stopping
+        name: no-cli-stop-for-stopping
         config:
           substring: aspire stop --non-interactive
       - type: skill-invocation
-        name: invokes_orchestration
+        name: invokes-orchestration-orch-vscode-stop-stopping-001
         config:
           required: [aspire-orchestration]
   - name: orch-update-self-001
@@ -460,13 +436,13 @@ stimuli:
           dest: csharp-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: uses_update_self
+        name: uses-update-self
         config:
           prompt: Does the assistant's response recommend `aspire update --self` to check or upgrade the Aspire
             CLI itself, while noting that package-manager-owned npm, .NET tool, or Nix installs may
             print the matching update command rather than modifying the managed install?
       - type: prompt
-        name: distinguishes_project_update
+        name: distinguishes-project-update
         config:
           prompt: Does the assistant's response distinguish `aspire update --self` (CLI upgrade) from bare
             `aspire update` (which modifies project package references and `aspire.config.json`)? It
@@ -475,7 +451,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: automatically run aspire update
-        name: never_runs_project_update_unattended
+        name: never-runs-project-update-unattended
       - type: output-not-contains
         config:
           substring: run aspire update without confirmation
@@ -485,14 +461,14 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet run
-        name: never_dotnet_run
+        name: never-dotnet-run-orch-update-self-001
       - type: output-not-contains
         config:
           substring: dotnet build
       - type: output-not-contains
         config:
           substring: while true
-        name: never_curl_polling
+        name: never-curl-polling-orch-update-self-001
       - type: output-not-contains
         config:
           substring: sleep
@@ -517,31 +493,29 @@ stimuli:
           dest: csharp-apphost/MyApp.AppHost/Program.cs
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: csharp-apphost/aspire.config.json
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
-        name: warns_about_data_loss
+        name: warns-about-data-loss
         config:
           prompt: >
             Does the assistant's response explain that Aspire 13.5 `aspire stop --force`
             permanently removes persistent resource instances without another confirmation
             and can lose data? Answer based on intent.
       - type: prompt
-        name: requires_exact_apphost
+        name: requires-exact-apphost
         config:
           prompt: >
             Does the assistant's response reject combining `--force` with `--all` and
             require selecting and confirming one exact AppHost before destructive cleanup?
       - type: prompt
-        name: never_recommends_force_all
+        name: never-recommends-force-all
         config:
           prompt: >
             Does the assistant's response avoid recommending or executing
             `aspire stop --force --all`, while allowing it to quote that invalid form
             when explaining why it is rejected?
       - type: skill-invocation
-        name: invokes_orchestration
+        name: invokes-orchestration-orch-stop-force-135-001
         config:
           required: [aspire-orchestration]
   - name: orch-aspireify-001
@@ -560,7 +534,7 @@ stimuli:
           dest: non-aspire/MyApp/Program.cs
     graders:
       - type: prompt
-        name: hands_off_to_aspireify
+        name: hands-off-to-aspireify-orch-aspireify-001
         config:
           prompt: Does the assistant's response explicitly hand the AppHost wiring step off to the `aspireify`
             skill (in-plugin sibling at `../aspireify/SKILL.md`, OR the project-local
@@ -568,7 +542,7 @@ stimuli:
             skill itself should defer scanning the repo, choosing resources, and editing the AppHost
             to aspireify. Answer based on intent.
       - type: prompt
-        name: mentions_project_local_precedence
+        name: mentions-project-local-precedence
         config:
           prompt: Does the assistant's response acknowledge that if a project-local
             `.agents/skills/aspireify/SKILL.md` exists, the agent should defer to it (with a warning
@@ -576,7 +550,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: I'll write the AppHost
-        name: never_handauthors_apphost
+        name: never-handauthors-apphost
       - type: output-not-contains
         config:
           substring: Let me edit apphost.cs
@@ -586,14 +560,14 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet run
-        name: never_dotnet_run
+        name: never-dotnet-run-orch-aspireify-001
       - type: output-not-contains
         config:
           substring: dotnet build
       - type: output-not-contains
         config:
           substring: while true
-        name: never_curl_polling
+        name: never-curl-polling-orch-aspireify-001
       - type: output-not-contains
         config:
           substring: sleep
@@ -620,11 +594,9 @@ stimuli:
           dest: csharp-apphost/MyApp.AppHost/Program.cs
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: csharp-apphost/aspire.config.json
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
-        name: uses_vscode_stop_tool
+        name: uses-vscode-stop-tool
         config:
           scoring: binary
           prompt: >
@@ -632,14 +604,14 @@ stimuli:
             because the VS Code tool is available, rather than choosing a
             terminal `aspire stop` command first?
       - type: prompt
-        name: explains_cleanup
+        name: explains-cleanup
         config:
           scoring: binary
           prompt: >
             Does the assistant's response explain that leaving Aspire running
             causes port conflicts, file locks, or unnecessary resource use?
       - type: skill-invocation
-        name: invokes_orchestration
+        name: invokes-orchestration-orch-cleanup-001
         config:
           required: [aspire-orchestration]
   - name: orch-detect-001
@@ -657,7 +629,7 @@ stimuli:
           dest: csharp-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: identifies_aspire
+        name: identifies-aspire
         config:
           prompt: The assistant's response should identify this as an Aspire project based on the
             Aspire.AppHost.Sdk reference in the csproj file. It should mention using aspire CLI
@@ -671,14 +643,14 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet run
-        name: never_dotnet_run
+        name: never-dotnet-run-orch-detect-001
       - type: output-not-contains
         config:
           substring: dotnet build
       - type: output-not-contains
         config:
           substring: while true
-        name: never_curl_polling
+        name: never-curl-polling-orch-detect-001
       - type: output-not-contains
         config:
           substring: sleep
@@ -696,7 +668,7 @@ stimuli:
           dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
     graders:
       - type: prompt
-        name: recognizes_aspire
+        name: recognizes-aspire
         config:
           prompt: Does the assistant's response recognize this as an Aspire project and recommend using
             'aspire start' or the Aspire CLI to run it, rather than 'dotnet run' or 'dotnet
@@ -704,21 +676,21 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet run
-        name: never_dotnet_run
+        name: never-dotnet-run-orch-detect-filebased-001
       - type: output-not-contains
         config:
           substring: dotnet apphost.cs
       - type: output-not-contains
         config:
           substring: dotnet run
-        name: never_dotnet_run_2
+        name: never-dotnet-run-2-orch-detect-filebased-001
       - type: output-not-contains
         config:
           substring: dotnet build
       - type: output-not-contains
         config:
           substring: while true
-        name: never_curl_polling
+        name: never-curl-polling-orch-detect-filebased-001
       - type: output-not-contains
         config:
           substring: sleep
@@ -747,11 +719,9 @@ stimuli:
           dest: csharp-apphost/MyApp.AppHost/Program.cs
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: csharp-apphost/aspire.config.json
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
-        name: diagnoses_and_routes_filelock
+        name: diagnoses-and-routes-filelock
         config:
           scoring: binary
           prompt: >
@@ -760,7 +730,7 @@ stimuli:
             lifecycle routing before rebuilding, choosing
             `aspire_apphost_stop` first because it is available?
       - type: prompt
-        name: correct_recovery
+        name: correct-recovery
         config:
           scoring: binary
           prompt: >
@@ -768,7 +738,7 @@ stimuli:
             stop as the default and limit `aspire stop --non-interactive
             --apphost <path>` to a result-matrix fallback?
       - type: skill-invocation
-        name: invokes_orchestration
+        name: invokes-orchestration-orch-filelock-001
         config:
           required: [aspire-orchestration]
   - name: orch-include-hidden-001
@@ -790,13 +760,13 @@ stimuli:
           dest: csharp-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: suggests_include_hidden
+        name: suggests-include-hidden
         config:
           prompt: Does the assistant's response recommend running `aspire describe --include-hidden`
             before concluding that the AppHost is misconfigured? In Aspire 13.5, `aspire ps`
             lists AppHosts rather than resources, while `aspire describe` owns resource details.
       - type: prompt
-        name: explains_default_filtering
+        name: explains-default-filtering
         config:
           prompt: Does the assistant's response explain that `aspire ps` is AppHost-level and that
             `aspire describe --include-hidden` is the resource diagnostic for hidden proxies,
@@ -807,14 +777,14 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet run
-        name: never_dotnet_run
+        name: never-dotnet-run-orch-include-hidden-001
       - type: output-not-contains
         config:
           substring: dotnet build
       - type: output-not-contains
         config:
           substring: while true
-        name: never_curl_polling
+        name: never-curl-polling-orch-include-hidden-001
       - type: output-not-contains
         config:
           substring: sleep
@@ -837,16 +807,16 @@ stimuli:
           dest: non-aspire/MyApp/Program.cs
     graders:
       - type: prompt
-        name: uses_aspire_init
+        name: uses-aspire-init
         config:
           prompt: Does the assistant's response recommend running `aspire init` to drop the AppHost skeleton
             into the existing repository? Answer based on intent.
       - type: output-not-contains
         config:
           substring: dotnet workload install
-        name: never_workload
+        name: never-workload
       - type: prompt
-        name: hands_off_to_aspireify
+        name: hands-off-to-aspireify-orch-init-001
         config:
           prompt: After running `aspire init`, does the assistant's response hand the wiring step off to the
             `aspireify` skill (the in-plugin sibling skill, or the project-local
@@ -854,7 +824,7 @@ stimuli:
             orchestration skill should explicitly defer to `aspireify` for repo scanning, resource
             selection, ServiceDefaults / OTel wiring, and validation.
       - type: prompt
-        name: knows_workflow
+        name: knows-workflow
         config:
           prompt: "Does the assistant's response describe (or reference, via aspireify) the wiring workflow:
             scanning the repository, selecting services, adding resources to the AppHost using the
@@ -863,14 +833,14 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet run
-        name: never_dotnet_run
+        name: never-dotnet-run-orch-init-001
       - type: output-not-contains
         config:
           substring: dotnet build
       - type: output-not-contains
         config:
           substring: while true
-        name: never_curl_polling
+        name: never-curl-polling-orch-init-001
       - type: output-not-contains
         config:
           substring: sleep
@@ -886,7 +856,7 @@ stimuli:
         - init-workflow
     graders:
       - type: prompt
-        name: preserves_sdk
+        name: preserves-sdk
         config:
           prompt: Does the assistant's response confirm that Aspire works with existing .NET SDK versions and
             that global.json plus existing project target frameworks should be left untouched? The
@@ -894,7 +864,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: change global.json
-        name: never_modify_globaljson
+        name: never-modify-globaljson
       - type: output-not-contains
         config:
           substring: update global.json
@@ -904,14 +874,14 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet run
-        name: never_dotnet_run
+        name: never-dotnet-run-orch-sdk-001
       - type: output-not-contains
         config:
           substring: dotnet build
       - type: output-not-contains
         config:
           substring: while true
-        name: never_curl_polling
+        name: never-curl-polling-orch-sdk-001
       - type: output-not-contains
         config:
           substring: sleep
@@ -933,7 +903,7 @@ stimuli:
           dest: csharp-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: uses_noninteractive
+        name: uses-noninteractive
         config:
           prompt: Does the assistant's response recommend using the '--non-interactive' flag (or an equivalent
             mechanism to prevent CLI prompts from hanging) when running Aspire in a CI pipeline?
@@ -944,14 +914,14 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet run
-        name: never_dotnet_run
+        name: never-dotnet-run-orch-noninteractive-001
       - type: output-not-contains
         config:
           substring: dotnet build
       - type: output-not-contains
         config:
           substring: while true
-        name: never_curl_polling
+        name: never-curl-polling-orch-noninteractive-001
       - type: output-not-contains
         config:
           substring: sleep
@@ -979,7 +949,7 @@ stimuli:
           dest: csharp-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: uses_resource_restart
+        name: uses-resource-restart
         config:
           prompt: Does the assistant's response recommend using 'aspire resource restart' (or an equivalent
             Aspire CLI hot-reload/restart command) to apply code changes while the app is running?
@@ -987,9 +957,9 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet build
-        name: never_dotnet_build
+        name: never-dotnet-build
       - type: prompt
-        name: mentions_file_locks
+        name: mentions-file-locks
         config:
           prompt: The assistant's response should mention that 'dotnet build' would cause file lock errors
             because Aspire holds locks on running projects. It should recommend using aspire
@@ -1006,14 +976,14 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet run
-        name: never_dotnet_run
+        name: never-dotnet-run-orch-rebuild-001
       - type: output-not-contains
         config:
           substring: dotnet build
       - type: output-not-contains
         config:
           substring: while true
-        name: never_curl_polling
+        name: never-curl-polling-orch-rebuild-001
       - type: output-not-contains
         config:
           substring: sleep
@@ -1037,7 +1007,7 @@ stimuli:
           dest: csharp-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: uses_aspire_start
+        name: uses-aspire-start
         config:
           prompt: Does the assistant's response recommend using 'aspire start' (or an equivalent Aspire CLI
             start command) to launch the application for development? Answer based on the intent,
@@ -1045,9 +1015,9 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet run
-        name: never_dotnet_run
+        name: never-dotnet-run-orch-start-001
       - type: prompt
-        name: explains_why
+        name: explains-why
         config:
           prompt: Does the assistant's response explain why 'aspire start' should be used instead of 'dotnet
             run' for Aspire projects, mentioning that the Aspire CLI manages the full application
@@ -1061,14 +1031,14 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet run
-        name: never_dotnet_run_2
+        name: never-dotnet-run-2-orch-start-001
       - type: output-not-contains
         config:
           substring: dotnet build
       - type: output-not-contains
         config:
           substring: while true
-        name: never_curl_polling
+        name: never-curl-polling-orch-start-001
       - type: output-not-contains
         config:
           substring: sleep
@@ -1088,28 +1058,28 @@ stimuli:
           dest: csharp-apphost/MyApp.AppHost/Program.cs
     graders:
       - type: prompt
-        name: correct_tiers
+        name: correct-tiers
         config:
           prompt: Does the assistant's response use the correct integration tiers? PostgreSQL should use Tier
             1 first-party Aspire.Hosting.PostgreSQL (AddPostgres). Go should use Tier 2
             CommunityToolkit (AddGolangApp) or Tier 3 fallback (AddExecutable). The agent should
             prefer higher tiers when available.
       - type: prompt
-        name: uses_aspire_docs
+        name: uses-aspire-docs
         config:
           prompt: Does the assistant's response recommend looking up the API with aspire docs search or aspire
             docs api search before writing AppHost code?
       - type: output-not-contains
         config:
           substring: dotnet run
-        name: never_dotnet_run
+        name: never-dotnet-run-orch-tier-001
       - type: output-not-contains
         config:
           substring: dotnet build
       - type: output-not-contains
         config:
           substring: while true
-        name: never_curl_polling
+        name: never-curl-polling-orch-tier-001
       - type: output-not-contains
         config:
           substring: sleep
@@ -1129,27 +1099,27 @@ stimuli:
           dest: csharp-apphost/MyApp.AppHost/Program.cs
     graders:
       - type: prompt
-        name: uses_docs_api
+        name: uses-docs-api
         config:
           prompt: Does the assistant's response recommend using 'aspire docs search' or 'aspire docs api
             search' to look up the WithCommand API before editing the AppHost code, rather than
             guessing the API shape? Answer based on intent.
       - type: prompt
-        name: uses_docs_first
+        name: uses-docs-first
         config:
           prompt: Does the assistant's response follow a docs-first pattern — looking up documentation or API
             reference before making code changes to the AppHost?
       - type: output-not-contains
         config:
           substring: dotnet run
-        name: never_dotnet_run
+        name: never-dotnet-run-orch-apidocs-001
       - type: output-not-contains
         config:
           substring: dotnet build
       - type: output-not-contains
         config:
           substring: while true
-        name: never_curl_polling
+        name: never-curl-polling-orch-apidocs-001
       - type: output-not-contains
         config:
           substring: sleep
@@ -1173,7 +1143,7 @@ stimuli:
           dest: csharp-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: uses_aspire_wait
+        name: uses-aspire-wait
         config:
           prompt: Does the assistant's response recommend using 'aspire wait' (or an equivalent Aspire CLI
             readiness-check command) to wait for a resource to become ready, rather than manual HTTP
@@ -1181,7 +1151,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: curl
-        name: no_polling
+        name: no-polling
       - type: output-not-contains
         config:
           substring: while true
@@ -1209,14 +1179,14 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet run
-        name: never_dotnet_run
+        name: never-dotnet-run-orch-wait-001
       - type: output-not-contains
         config:
           substring: dotnet build
       - type: output-not-contains
         config:
           substring: while true
-        name: never_curl_polling
+        name: never-curl-polling-orch-wait-001
       - type: output-not-contains
         config:
           substring: sleep
@@ -1246,11 +1216,9 @@ stimuli:
           dest: csharp-apphost/MyApp.AppHost/Program.cs
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: csharp-apphost/aspire.config.json
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
-        name: uses_isolated
+        name: uses-isolated
         config:
           scoring: binary
           prompt: >
@@ -1259,11 +1227,11 @@ stimuli:
             to the exact supplied AppHost when running in a git worktree,
             rather than using `dotnet run`?
       - type: output-contains
-        name: uses_exact_worktree_command
+        name: uses-exact-worktree-command
         config:
           substring: aspire start --non-interactive --isolated --apphost csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
       - type: skill-invocation
-        name: invokes_orchestration
+        name: invokes-orchestration-orch-worktree-001
         config:
           required: [aspire-orchestration]
   # Routing stimuli below are phrased as explanatory questions ("How do I run
@@ -1281,7 +1249,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_orchestration
+        name: invokes-aspire-orchestration-should-trigger-01
         config:
           required:
             - aspire-orchestration
@@ -1293,7 +1261,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_orchestration
+        name: invokes-aspire-orchestration-should-trigger-02
         config:
           required:
             - aspire-orchestration
@@ -1305,7 +1273,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_orchestration
+        name: invokes-aspire-orchestration-should-trigger-03
         config:
           required:
             - aspire-orchestration
@@ -1317,7 +1285,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_orchestration
+        name: invokes-aspire-orchestration-should-trigger-04
         config:
           required:
             - aspire-orchestration
@@ -1329,7 +1297,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_orchestration
+        name: invokes-aspire-orchestration-should-trigger-05
         config:
           required:
             - aspire-orchestration
@@ -1341,7 +1309,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_orchestration
+        name: invokes-aspire-orchestration-should-trigger-06
         config:
           required:
             - aspire-orchestration
@@ -1353,7 +1321,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_orchestration
+        name: invokes-aspire-orchestration-should-trigger-07
         config:
           required:
             - aspire-orchestration
@@ -1365,7 +1333,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_orchestration
+        name: invokes-aspire-orchestration-should-trigger-08
         config:
           required:
             - aspire-orchestration
@@ -1377,7 +1345,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_orchestration
+        name: invokes-aspire-orchestration-should-trigger-09
         config:
           required:
             - aspire-orchestration
@@ -1389,7 +1357,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_orchestration
+        name: invokes-aspire-orchestration-should-trigger-10
         config:
           required:
             - aspire-orchestration
@@ -1401,7 +1369,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_orchestration
+        name: invokes-aspire-orchestration-should-trigger-11
         config:
           required:
             - aspire-orchestration
@@ -1419,7 +1387,7 @@ stimuli:
         - ../../aspire-deployment
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_orchestration
+        name: does-not-invoke-aspire-orchestration-should-not-trigger-01
         config:
           disallowed:
             - aspire-orchestration
@@ -1431,7 +1399,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_orchestration
+        name: does-not-invoke-aspire-orchestration-should-not-trigger-02
         config:
           disallowed:
             - aspire-orchestration
@@ -1443,7 +1411,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_orchestration
+        name: does-not-invoke-aspire-orchestration-should-not-trigger-03
         config:
           disallowed:
             - aspire-orchestration
@@ -1458,7 +1426,7 @@ stimuli:
         - ../../aspire-deployment
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_orchestration
+        name: does-not-invoke-aspire-orchestration-should-not-trigger-04
         config:
           disallowed:
             - aspire-orchestration
@@ -1470,7 +1438,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_orchestration
+        name: does-not-invoke-aspire-orchestration-should-not-trigger-05
         config:
           disallowed:
             - aspire-orchestration
@@ -1482,7 +1450,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_orchestration
+        name: does-not-invoke-aspire-orchestration-should-not-trigger-06
         config:
           disallowed:
             - aspire-orchestration
@@ -1494,7 +1462,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_orchestration
+        name: does-not-invoke-aspire-orchestration-should-not-trigger-07
         config:
           disallowed:
             - aspire-orchestration
@@ -1506,7 +1474,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_orchestration
+        name: does-not-invoke-aspire-orchestration-should-not-trigger-08
         config:
           disallowed:
             - aspire-orchestration
@@ -1518,7 +1486,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_orchestration
+        name: does-not-invoke-aspire-orchestration-should-not-trigger-09
         config:
           disallowed:
             - aspire-orchestration
@@ -1530,7 +1498,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_orchestration
+        name: does-not-invoke-aspire-orchestration-should-not-trigger-10
         config:
           disallowed:
             - aspire-orchestration
@@ -1542,7 +1510,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_orchestration
+        name: does-not-invoke-aspire-orchestration-should-not-trigger-11
         config:
           disallowed:
             - aspire-orchestration
@@ -1557,7 +1525,7 @@ stimuli:
         - ../../aspire-deployment
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_orchestration
+        name: does-not-invoke-aspire-orchestration-should-not-trigger-12
         config:
           disallowed:
             - aspire-orchestration
@@ -1575,7 +1543,7 @@ stimuli:
         - ../../aspire-monitoring
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_orchestration
+        name: does-not-invoke-aspire-orchestration-should-not-trigger-13
         config:
           disallowed:
             - aspire-orchestration
