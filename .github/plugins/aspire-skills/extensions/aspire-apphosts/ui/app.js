@@ -1,0 +1,1 @@
+../../../../../../extensions/aspire-apphosts/ui/app.js
