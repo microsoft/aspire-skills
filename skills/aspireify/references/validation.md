@@ -53,7 +53,7 @@ container-internal health.
 | Resource missing from `aspire describe` | Re-run `aspire describe --include-hidden`; if still missing, the AppHost edit is wrong |
 | Mixed JSON output from `aspire start` | Strip non-JSON lines before parsing |
 | Container-backed resource fails | Confirm Docker / Podman is running; re-run `aspire doctor` |
-| TS AppHost change had no effect | You probably edited `.aspire/modules/`. Edit the configured `apphost.mts` (or legacy `apphost.ts`) only |
+| TS AppHost change had no effect | You probably edited `.aspire/modules/`. Edit the metadata-selected AppHost source only |
 
 ## Hand-off Criteria
 

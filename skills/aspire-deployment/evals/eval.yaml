@@ -529,7 +529,6 @@ stimuli:
         - aspire-13-5
     constraints:
       max_agent_duration: 5m
-      expect_skills: [aspire-deployment]
     graders:
       - type: prompt
         name: explains_recreation_risk

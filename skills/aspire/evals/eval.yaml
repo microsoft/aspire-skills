@@ -20,10 +20,16 @@ scoring:
   # scale_1_5 an "adequate" 3/5 answer normalises to 0.5 — below this eval's
   # 0.7 per-trial gate — so a correctly routed response could still fail the
   # trial. Binary scoring makes the grader verdict ("did it route correctly?")
-  # match the trial gate. Each stimulus is then scored by the weighted share of
-  # graders that pass and gated on the aggregate (>= threshold); genuine
-  # regressions still drag the aggregate below the bar.
+  # match the trial gate. Outcome graders therefore carry 90% of the score.
+  # `skill-invocation` is still a 10% activation signal, but cannot make an
+  # otherwise correctly routed response fail because the executor selected an
+  # equivalent specialist skill directly.
   threshold: 0.7
+  weights:
+    prompt: 0.50
+    output-contains: 0.25
+    output-not-contains: 0.15
+    skill-invocation: 0.10
 environment:
   # vally 0.8.0 loads no skills unless declared here (paths resolve relative to
   # this eval file). The router fans out to every sub-skill (see SKILL.md
@@ -215,10 +221,6 @@ stimuli:
       priority: p0
       area: routing
       scenario: lifecycle-tools
-    constraints:
-      expect_skills:
-        - aspire
-        - aspire-orchestration
     environment:
       files:
         - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
@@ -228,6 +230,12 @@ stimuli:
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: csharp-apphost/aspire.config.json
     graders:
+      - type: skill-invocation
+        name: invokes_required_skills
+        config:
+          required:
+            - aspire
+            - aspire-orchestration
       - type: prompt
         name: routes_correctly
         config:
@@ -259,13 +267,15 @@ stimuli:
       area:
         - routing
         - package-manager-routing
-    constraints:
-      expect_skills:
-        - aspire
-        - aspireify
     rubric:
       - The assistant routes TypeScript AppHost package-manager diagnosis to aspireify and keeps normal AppHost execution on aspire start.
     graders:
+      - type: skill-invocation
+        name: invokes_required_skills
+        config:
+          required:
+            - aspire
+            - aspireify
       - type: prompt
         name: routes_package_manager_repair
         config:
@@ -281,13 +291,16 @@ stimuli:
         - typescript-migration
     constraints:
       max_agent_duration: 5m
-      expect_skills:
-        - aspire
-        - aspire-orchestration
     rubric:
       - The assistant routes the CLI-driven package and apphost.ts migration to aspire-orchestration, not aspireify.
       - The assistant explains that package, config, tsconfig, import, and entry-point changes require approval before noninteractive migration.
     graders:
+      - type: skill-invocation
+        name: invokes_required_skills
+        config:
+          required:
+            - aspire
+            - aspire-orchestration
       - type: prompt
         name: routes_migration_to_orchestration
         config:
@@ -311,10 +324,57 @@ stimuli:
             - aspire-orchestration
           disallowed:
             - aspireify
+  - name: router-metadata-first-ts-apphost-135-001
+    prompt: >
+      Use the aspire router skill before answering. This repository contains an
+      aspire.config.json pointing at infra/orchestrator.mts and an apphost.run.json.
+      I need to wire the existing TypeScript AppHost. Do not edit files; identify the
+      correct authoring target and route the work.
+    tags:
+      priority: p1
+      area:
+        - routing
+        - aspire-13-5
+        - typescript
+    environment:
+      files:
+        - src: ../../../evals/ts-apphost-metadata/aspire.config.json
+          dest: metadata-apphost/aspire.config.json
+        - src: ../../../evals/ts-apphost-metadata/apphost.run.json
+          dest: metadata-apphost/apphost.run.json
+        - src: ../../../evals/ts-apphost-metadata/infra/orchestrator.mts
+          dest: metadata-apphost/infra/orchestrator.mts
+    rubric:
+      - The assistant selects infra/orchestrator.mts by resolving aspire.config.json appHost.path before filename heuristics.
+      - The assistant recognizes apphost.run.json as launch metadata, not an AppHost source to edit.
+      - The assistant routes resource wiring for the existing AppHost to aspireify.
+    graders:
+      - type: skill-invocation
+        name: invokes_required_skills
+        config:
+          required:
+            - aspire
+            - aspireify
+      - type: prompt
+        name: resolves_configured_authoring_path
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant identify infra/orchestrator.mts as the TypeScript AppHost
+            authoring target by following aspire.config.json appHost.path rather than
+            relying on conventional AppHost filenames? Answer based on intent.
+      - type: prompt
+        name: recognizes_launch_metadata
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant explicitly identify apphost.run.json as launch-profile
+            metadata rather than the TypeScript AppHost authoring target, and route the
+            wiring work to aspireify? Answer based on intent.
   # Positive-routing stimuli assert both activation and outcome. Because this
   # spec tests the top-level router, model knowledge that merely produces an
-  # Aspire-flavored answer is insufficient: `constraints.expect_skills` requires
-  # an actual `aspire` activation, while the prompt grader checks the workflow.
+  # Aspire-flavored answer is insufficient: skill-invocation graders require an
+  # actual `aspire` activation, while prompt graders check the workflow.
   # The complementary should_not_trigger stimuli use skill-invocation
   # `disallowed` to guard against over-triggering.
   - name: should_trigger_01
@@ -328,10 +388,12 @@ stimuli:
     tags:
       priority: p1
       area: routing
-    constraints:
-      expect_skills:
-        - aspire
     graders:
+      - type: skill-invocation
+        name: invokes_aspire
+        config:
+          required:
+            - aspire
       - type: prompt
         name: engages_aspire_start
         config:
@@ -347,10 +409,12 @@ stimuli:
     tags:
       priority: p1
       area: routing
-    constraints:
-      expect_skills:
-        - aspire
     graders:
+      - type: skill-invocation
+        name: invokes_aspire
+        config:
+          required:
+            - aspire
       - type: prompt
         name: engages_aspire_deploy
         config:
@@ -365,10 +429,12 @@ stimuli:
     tags:
       priority: p1
       area: routing
-    constraints:
-      expect_skills:
-        - aspire
     graders:
+      - type: skill-invocation
+        name: invokes_aspire
+        config:
+          required:
+            - aspire
       - type: prompt
         name: engages_aspire_diagnostics
         config:
@@ -383,10 +449,12 @@ stimuli:
     tags:
       priority: p1
       area: routing
-    constraints:
-      expect_skills:
-        - aspire
     graders:
+      - type: skill-invocation
+        name: invokes_aspire
+        config:
+          required:
+            - aspire
       - type: prompt
         name: engages_aspire_run
         config:
@@ -400,10 +468,12 @@ stimuli:
     tags:
       priority: p1
       area: routing
-    constraints:
-      expect_skills:
-        - aspire
     graders:
+      - type: skill-invocation
+        name: invokes_aspire
+        config:
+          required:
+            - aspire
       - type: prompt
         name: provides_aspire_cli_guidance
         config:
@@ -417,10 +487,12 @@ stimuli:
     tags:
       priority: p1
       area: routing
-    constraints:
-      expect_skills:
-        - aspire
     graders:
+      - type: skill-invocation
+        name: invokes_aspire
+        config:
+          required:
+            - aspire
       - type: prompt
         name: engages_aspire_integration_wiring
         config:
@@ -435,10 +507,12 @@ stimuli:
     tags:
       priority: p1
       area: routing
-    constraints:
-      expect_skills:
-        - aspire
     graders:
+      - type: skill-invocation
+        name: invokes_aspire
+        config:
+          required:
+            - aspire
       - type: prompt
         name: engages_typescript_apphost
         config:
@@ -456,10 +530,12 @@ stimuli:
     tags:
       priority: p1
       area: routing
-    constraints:
-      expect_skills:
-        - aspire
     graders:
+      - type: skill-invocation
+        name: invokes_aspire
+        config:
+          required:
+            - aspire
       - type: prompt
         name: engages_aspire_doctor
         config:
@@ -476,10 +552,12 @@ stimuli:
     tags:
       priority: p1
       area: routing
-    constraints:
-      expect_skills:
-        - aspire
     graders:
+      - type: skill-invocation
+        name: invokes_aspire
+        config:
+          required:
+            - aspire
       - type: prompt
         name: engages_aspire_init
         config:
@@ -497,10 +575,12 @@ stimuli:
     tags:
       priority: p1
       area: routing
-    constraints:
-      expect_skills:
-        - aspire
     graders:
+      - type: skill-invocation
+        name: invokes_aspire
+        config:
+          required:
+            - aspire
       - type: prompt
         name: engages_aspire_destroy
         config:

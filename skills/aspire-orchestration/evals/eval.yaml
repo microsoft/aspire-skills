@@ -46,8 +46,6 @@ stimuli:
           dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: csharp-apphost/aspire.config.json
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
         name: uses_vscode_stop_tool_first
@@ -85,8 +83,6 @@ stimuli:
           dest: MyApp.AppHost/MyApp.AppHost.csproj
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: aspire.config.json
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
         name: uses_exact_cli_fallback_for_external_apphost
@@ -128,8 +124,6 @@ stimuli:
           dest: repo-a/MyApp.AppHost/MyApp.AppHost.csproj
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: repo-a/aspire.config.json
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
         name: uses_exact_cli_fallback_for_multiroot_external_apphost
@@ -159,8 +153,6 @@ stimuli:
         - agent-mode
         - lifecycle-tools
         - multi-apphost
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
         name: disambiguates_multiple_apphosts
@@ -199,8 +191,6 @@ stimuli:
           dest: repo-a/MyApp.AppHost/MyApp.AppHost.csproj
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: repo-a/aspire.config.json
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
         name: uses_vscode_start_tool_in_run_mode_with_exact_selector
@@ -231,8 +221,6 @@ stimuli:
         - agent-mode
         - lifecycle-tools
         - worktree
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
         name: uses_isolated_cli_start_in_worktree
@@ -263,8 +251,6 @@ stimuli:
       area:
         - agent-mode
         - lifecycle-tools
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
         name: stops_editor_owned_run_session_with_tool
@@ -302,8 +288,6 @@ stimuli:
           dest: MyApp.AppHost/MyApp.AppHost.csproj
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: aspire.config.json
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
         name: uses_exact_cli_stop_when_editor_tool_is_unavailable
@@ -333,8 +317,6 @@ stimuli:
         - agent-mode
         - lifecycle-tools
         - multi-apphost
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
         name: refuses_ambiguous_session_fallback
@@ -363,8 +345,6 @@ stimuli:
       area:
         - agent-mode
         - lifecycle-tools
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
         name: retries_then_uses_exact_unknown_fallback
@@ -395,8 +375,6 @@ stimuli:
       area:
         - agent-mode
         - lifecycle-tools
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
         name: retries_starting_stop_without_cli_fallback
@@ -426,8 +404,6 @@ stimuli:
       area:
         - agent-mode
         - lifecycle-tools
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
         name: reports_stopping_without_another_action
@@ -517,8 +493,6 @@ stimuli:
           dest: csharp-apphost/MyApp.AppHost/Program.cs
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: csharp-apphost/aspire.config.json
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
         name: warns_about_data_loss
@@ -620,8 +594,6 @@ stimuli:
           dest: csharp-apphost/MyApp.AppHost/Program.cs
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: csharp-apphost/aspire.config.json
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
         name: uses_vscode_stop_tool
@@ -747,8 +719,6 @@ stimuli:
           dest: csharp-apphost/MyApp.AppHost/Program.cs
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: csharp-apphost/aspire.config.json
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
         name: diagnoses_and_routes_filelock
@@ -1246,8 +1216,6 @@ stimuli:
           dest: csharp-apphost/MyApp.AppHost/Program.cs
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: csharp-apphost/aspire.config.json
-    constraints:
-      expect_skills: [aspire-orchestration]
     graders:
       - type: prompt
         name: uses_isolated

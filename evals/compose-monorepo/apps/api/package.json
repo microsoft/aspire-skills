@@ -1,0 +1,6 @@
+{
+  "name": "api",
+  "scripts": {
+    "dev": "node server.mjs"
+  }
+}
