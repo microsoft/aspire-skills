@@ -47,25 +47,25 @@ stimuli:
           dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
     graders:
       - type: prompt
-        name: uses_add_next_js_app
+        name: uses-add-next-js-app
         config:
           prompt: Does the assistant's response use AddNextJsApp("web", "./web") (the 13.3 first-class Next.js
             helper that auto-applies standalone publishing) rather than AddNodeApp or a hand-rolled
             Dockerfile?
       - type: prompt
-        name: mentions_standalone_output
+        name: mentions-standalone-output
         config:
           prompt: Does the assistant's response mention setting output:"standalone" in next.config.js so that
             AddNextJsApp's auto-publish works correctly?
       - type: prompt
-        name: wires_to_api
+        name: wires-to-api
         config:
           prompt: Does the assistant's response connect the Next.js app to the API via WithReference (or
             equivalent) so the frontend gets the API endpoint via service discovery?
       - type: output-not-contains
         config:
           substring: write a Dockerfile
-        name: no_dockerfile_recommendation
+        name: no-dockerfile-recommendation
       - type: output-not-contains
         config:
           substring: create a Dockerfile
@@ -81,7 +81,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: withEnvironmentEndpoint
-        name: never_deprecated_apis
+        name: never-deprecated-apis
       - type: output-not-contains
         config:
           substring: withEnvironmentParameter
@@ -94,7 +94,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: edit .aspire/modules/
-        name: never_edit_modules
+        name: never-edit-modules
       - type: output-not-contains
         config:
           substring: modify .aspire/modules/
@@ -113,19 +113,19 @@ stimuli:
           dest: ts-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: refuses_modules_edit
+        name: refuses-modules-edit
         config:
           prompt: Does the assistant's response explicitly refuse to edit files inside the .aspire/modules/
             directory and explain that .aspire/modules/ is generated and edits will be clobbered?
       - type: prompt
-        name: redirects_to_apphost_ts
+        name: redirects-to-apphost-ts
         config:
           prompt: Does the assistant's response redirect the user's intended change to apphost.mts (the current
             file the user should edit in this TS AppHost)?
       - type: output-not-contains
         config:
           substring: edit .aspire/modules
-        name: never_recommends_modules_edit
+        name: never-recommends-modules-edit
       - type: output-not-contains
         config:
           substring: modify .aspire/modules
@@ -141,7 +141,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: withEnvironmentEndpoint
-        name: never_deprecated_apis
+        name: never-deprecated-apis-2
       - type: output-not-contains
         config:
           substring: withEnvironmentParameter
@@ -154,7 +154,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: edit .aspire/modules/
-        name: never_edit_modules
+        name: never-edit-modules-3
       - type: output-not-contains
         config:
           substring: modify .aspire/modules/
@@ -184,26 +184,26 @@ stimuli:
           dest: csharp-apphost/MyApp.ServiceDefaults/MyApp.ServiceDefaults.csproj
     graders:
       - type: prompt
-        name: adds_service_defaults
+        name: adds-service-defaults
         config:
           scoring: binary
           prompt: Does the assistant's response add builder.AddServiceDefaults() to each service's Program.cs
             (the ApiService and Web projects)?
       - type: prompt
-        name: maps_default_endpoints
+        name: maps-default-endpoints
         config:
           scoring: binary
           prompt: Does the assistant's response add app.MapDefaultEndpoints() so /health and /alive are
             exposed for use by AppHost's WaitFor / HealthChecks?
       - type: prompt
-        name: mentions_otel_health_discovery
+        name: mentions-otel-health-discovery
         config:
           scoring: binary
           prompt: Does the assistant's response explain that AddServiceDefaults wires OpenTelemetry (tracing,
             metrics, logs), health checks, service discovery, and HTTP resilience — i.e., the agent
             understands what they are configuring?
       - type: prompt
-        name: project_reference
+        name: project-reference
         config:
           scoring: binary
           prompt: Does the assistant's response add a ProjectReference from each service project to the
@@ -217,7 +217,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: withEnvironmentEndpoint
-        name: never_deprecated_apis
+        name: never-deprecated-apis-3
       - type: output-not-contains
         config:
           substring: withEnvironmentParameter
@@ -230,7 +230,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: edit .aspire/modules/
-        name: never_edit_modules
+        name: never-edit-modules-4
       - type: output-not-contains
         config:
           substring: modify .aspire/modules/
@@ -251,7 +251,7 @@ stimuli:
           dest: ts-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: uses_unified_api
+        name: uses-unified-api
         config:
           prompt: Does the assistant's response use the unified withEnvironment(name, value) API (one method)
             for ALL three injections — endpoint, parameter, and connection string — rather than
@@ -259,7 +259,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: withEnvironmentEndpoint
-        name: no_per_kind_helpers
+        name: no-per-kind-helpers
       - type: output-not-contains
         config:
           substring: withEnvironmentParameter
@@ -270,7 +270,7 @@ stimuli:
         config:
           substring: withEnvironmentExpression
       - type: prompt
-        name: explains_deprecation
+        name: explains-deprecation
         config:
           prompt: Does the assistant's response mention that per-kind helpers (withEnvironmentEndpoint,
             withEnvironmentParameter, etc.) are @deprecated in 13.3 and should not be used in new
@@ -281,7 +281,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: withEnvironmentEndpoint
-        name: never_deprecated_apis
+        name: never-deprecated-apis-4
       - type: output-not-contains
         config:
           substring: withEnvironmentParameter
@@ -294,7 +294,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: edit .aspire/modules/
-        name: never_edit_modules
+        name: never-edit-modules-5
       - type: output-not-contains
         config:
           substring: modify .aspire/modules/
@@ -313,22 +313,22 @@ stimuli:
           dest: csharp-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: uses_non_interactive
+        name: uses-non-interactive
         config:
           prompt: Does the assistant's response use aspire start --non-interactive (required for agent
             execution to suppress prompts and spinners)?
       - type: prompt
-        name: uses_aspire_wait
+        name: uses-aspire-wait
         config:
           prompt: Does the assistant's response use aspire wait <resource> rather than curl loops or HTTP
             polling to confirm each resource is healthy?
       - type: prompt
-        name: uses_describe
+        name: uses-describe
         config:
           prompt: Does the assistant's response use aspire describe --format Json (with --include-hidden if
             appropriate) to sanity-check the resource graph?
       - type: prompt
-        name: hands_off_to_orchestration
+        name: hands-off-to-orchestration
         config:
           prompt: Does the assistant's response announce that aspireify is done and hand off day-to-day
             start/stop/wait responsibility to the aspire-orchestration skill (i.e., self-deactivates
@@ -345,7 +345,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: withEnvironmentEndpoint
-        name: never_deprecated_apis
+        name: never-deprecated-apis-5
       - type: output-not-contains
         config:
           substring: withEnvironmentParameter
@@ -358,7 +358,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: edit .aspire/modules/
-        name: never_edit_modules
+        name: never-edit-modules-6
       - type: output-not-contains
         config:
           substring: modify .aspire/modules/
@@ -379,19 +379,19 @@ stimuli:
           dest: csharp-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: uses_addpostgres
+        name: uses-addpostgres
         config:
           prompt: Does the assistant's response wire Postgres into the AppHost using AddPostgres (e.g.,
             AddPostgres("pg").AddDatabase("appdb"))? Answer based on intent.
       - type: prompt
-        name: wires_with_reference
+        name: wires-with-reference
         config:
           prompt: Does the assistant's response connect the API project to Postgres via WithReference and
             WaitFor (so the API blocks startup until Postgres is healthy)?
       - type: output-not-contains
         config:
           substring: withEnvironmentEndpoint
-        name: no_deprecated_helpers
+        name: no-deprecated-helpers
       - type: output-not-contains
         config:
           substring: withEnvironmentParameter
@@ -410,7 +410,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: withEnvironmentEndpoint
-        name: never_deprecated_apis
+        name: never-deprecated-apis-6
       - type: output-not-contains
         config:
           substring: withEnvironmentParameter
@@ -423,7 +423,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: edit .aspire/modules/
-        name: never_edit_modules
+        name: never-edit-modules-7
       - type: output-not-contains
         config:
           substring: modify .aspire/modules/
@@ -436,18 +436,18 @@ stimuli:
         - file-based-csharp
     graders:
       - type: prompt
-        name: edits_apphost_cs
+        name: edits-apphost-cs
         config:
           prompt: "Does the assistant's response edit apphost.cs directly (with #:sdk and #:package directives
             at the top), rather than creating a .csproj file?"
       - type: prompt
-        name: uses_path_overload
+        name: uses-path-overload
         config:
           prompt: Does the assistant's response use AddProject("name", "path/to/Api.csproj") — the path
             overload — instead of AddProject<Projects.Api>("name") which is only available in
             SDK-style AppHosts with strongly-typed references?
       - type: prompt
-        name: adds_redis_package
+        name: adds-redis-package
         config:
           prompt: "Does the assistant's response add a #:package directive for Aspire.Hosting.Redis so
             AddRedis is available?"
@@ -466,7 +466,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: withEnvironmentEndpoint
-        name: never_deprecated_apis
+        name: never-deprecated-apis-7
       - type: output-not-contains
         config:
           substring: withEnvironmentParameter
@@ -479,7 +479,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: edit .aspire/modules/
-        name: never_edit_modules
+        name: never-edit-modules-8
       - type: output-not-contains
         config:
           substring: modify .aspire/modules/
@@ -502,7 +502,7 @@ stimuli:
           dest: ts-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: uses_unified_with_environment
+        name: uses-unified-with-environment
         config:
           prompt: Does the assistant's response use the unified withEnvironment(name, value) API (a single
             method that accepts any value kind) rather than per-kind helpers like
@@ -510,7 +510,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: withEnvironmentEndpoint
-        name: no_deprecated_helpers
+        name: no-deprecated-helpers-2
       - type: output-not-contains
         config:
           substring: withEnvironmentParameter
@@ -523,12 +523,12 @@ stimuli:
       - type: output-not-contains
         config:
           substring: edit .aspire/modules
-        name: never_edit_modules
+        name: never-edit-modules-9
       - type: output-not-contains
         config:
           substring: modify .aspire/modules
       - type: prompt
-        name: edits_apphost_mts
+        name: edits-apphost-mts
         config:
           prompt: Does the assistant's response edit apphost.mts (and explicitly avoid editing the generated
             .aspire/modules/ directory)?
@@ -541,7 +541,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: withEnvironmentEndpoint
-        name: never_deprecated_apis
+        name: never-deprecated-apis-8
       - type: output-not-contains
         config:
           substring: withEnvironmentParameter
@@ -554,7 +554,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: edit .aspire/modules/
-        name: never_edit_modules_2
+        name: never-edit-modules-2
       - type: output-not-contains
         config:
           substring: modify .aspire/modules/
@@ -577,20 +577,20 @@ stimuli:
           dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
     graders:
       - type: prompt
-        name: declares_command_arguments
+        name: declares-command-arguments
         config:
           prompt: >
             Does the assistant's response define the required message input through
             CommandOptions.Arguments with an InteractionInput, so the same input works
             from the dashboard and CLI? Answer based on intent.
       - type: prompt
-        name: reads_execute_context_arguments
+        name: reads-execute-context-arguments
         config:
           prompt: >
             Does the assistant's response read the message from
             ExecuteCommandContext.Arguments rather than prompting unconditionally?
       - type: prompt
-        name: avoids_obsolete_service_provider
+        name: avoids-obsolete-service-provider
         config:
           prompt: >
             Does the assistant's response avoid using obsolete
@@ -611,7 +611,6 @@ stimuli:
         - typescript
     constraints:
       max_agent_duration: 5m
-      expect_skills: [aspireify]
     environment:
       files:
         - src: ../../../evals/ts-apphost/apphost.mts
@@ -620,7 +619,7 @@ stimuli:
           dest: ts-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: resolves_interaction_service
+        name: resolves-interaction-service
         config:
           prompt: >
             Does the assistant's response obtain the TypeScript Interaction Service with
@@ -628,7 +627,7 @@ stimuli:
             services-accessor call), rather than treating `context.services()` itself as
             the Interaction Service? Answer based on intent.
       - type: prompt
-        name: checks_interaction_availability
+        name: checks-interaction-availability
         config:
           prompt: >
             Does the assistant's response call and await `interaction.isAvailable()`
@@ -641,9 +640,67 @@ stimuli:
         config:
           substring: isAvailable
       - type: skill-invocation
-        name: invokes_aspireify
+        name: invokes-aspireify
         config:
           required: [aspireify]
+  - name: aspireify-preserves-package-family-136-001
+    prompt: >
+      Use the aspireify skill before answering. This existing C# AppHost centrally
+      selects AspireVersion 13.6.0-dev. Give me a read-only plan for adding another
+      Redis resource and wiring it to the existing API while preserving the
+      application's selected Aspire release family. Do not edit files, restore,
+      build, start, run cloud commands, or migrate Project resources.
+    tags:
+      priority: p1
+      scenario: version-compatibility
+      area:
+        - authoring
+        - aspire-13-6
+        - version-preservation
+    constraints:
+      max_agent_duration: 5m
+    environment:
+      skills:
+        - ../../aspireify
+        - ../../aspire-orchestration
+        - ../../aspire-project-v2-migration
+      files:
+        - src: ../../../evals/project-v2-migration/runnable-csharp/Directory.Packages.props
+          dest: app/Directory.Packages.props
+        - src: ../../../evals/project-v2-migration/runnable-csharp/Migration.AppHost/Migration.AppHost.csproj
+          dest: app/Migration.AppHost/Migration.AppHost.csproj
+        - src: ../../../evals/project-v2-migration/runnable-csharp/Migration.AppHost/Program.cs
+          dest: app/Migration.AppHost/Program.cs
+    rubric:
+      - The assistant keeps ordinary AddRedis and WithReference authoring in aspireify and does not initiate Project v2 migration.
+      - The assistant preserves the explicitly selected 13.6.0-dev Aspire family for any package guidance rather than pinning 13.5.3 or implicitly upgrading or downgrading.
+      - The assistant provides advisory guidance only and leaves the workspace unchanged.
+    graders:
+      - type: prompt
+        name: keeps-ordinary-wiring-in-aspireify
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response keep this ordinary Redis resource wiring
+            request in aspireify and avoid initiating or requiring a Project v2
+            migration? Answer based on intent.
+      - type: prompt
+        name: preserves-selected-136-family
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response preserve the fixture's explicitly selected
+            Aspire 13.6.0-dev family for package guidance, without pinning 13.5.3 or
+            implicitly upgrading or downgrading the application? Answer based on intent.
+      - type: skill-invocation
+        name: invokes-aspireify-not-project-v2-migration
+        config:
+          required:
+            - aspireify
+          disallowed:
+            - aspire-project-v2-migration
+      - type: diff-empty
+        name: keeps-read-only-workspace-unchanged
   - name: should_trigger_01
     description: "Reason: Direct wiring request — aspireify owns AppHost wiring"
     prompt: Wire up my Aspire AppHost
@@ -652,7 +709,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspireify
+        name: invokes-aspireify-2
         config:
           required:
             - aspireify
@@ -664,7 +721,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspireify
+        name: invokes-aspireify-3
         config:
           required:
             - aspireify
@@ -679,7 +736,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspireify
+        name: invokes-aspireify-4
         config:
           required:
             - aspireify
@@ -691,7 +748,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspireify
+        name: invokes-aspireify-5
         config:
           required:
             - aspireify
@@ -703,7 +760,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspireify
+        name: invokes-aspireify-6
         config:
           required:
             - aspireify
@@ -715,7 +772,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspireify
+        name: invokes-aspireify-7
         config:
           required:
             - aspireify
@@ -727,7 +784,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspireify
+        name: invokes-aspireify-8
         config:
           required:
             - aspireify
@@ -739,7 +796,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspireify
+        name: invokes-aspireify-9
         config:
           required:
             - aspireify
@@ -751,7 +808,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspireify
+        name: invokes-aspireify-10
         config:
           required:
             - aspireify
@@ -763,7 +820,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspireify
+        name: invokes-aspireify-11
         config:
           required:
             - aspireify
@@ -775,7 +832,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspireify
+        name: invokes-aspireify-12
         config:
           required:
             - aspireify
@@ -787,7 +844,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspireify
+        name: does-not-invoke-aspireify
         config:
           disallowed:
             - aspireify
@@ -802,7 +859,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspireify
+        name: does-not-invoke-aspireify-2
         config:
           disallowed:
             - aspireify
@@ -814,7 +871,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspireify
+        name: does-not-invoke-aspireify-3
         config:
           disallowed:
             - aspireify
@@ -829,7 +886,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspireify
+        name: does-not-invoke-aspireify-4
         config:
           disallowed:
             - aspireify
@@ -841,7 +898,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspireify
+        name: does-not-invoke-aspireify-5
         config:
           disallowed:
             - aspireify
@@ -853,7 +910,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspireify
+        name: does-not-invoke-aspireify-6
         config:
           disallowed:
             - aspireify
@@ -867,7 +924,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspireify
+        name: does-not-invoke-aspireify-7
         config:
           disallowed:
             - aspireify
@@ -882,7 +939,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspireify
+        name: does-not-invoke-aspireify-8
         config:
           disallowed:
             - aspireify
@@ -909,17 +966,17 @@ stimuli:
       - The assistant preserves the existing package-manager metadata and lockfiles instead of recommending that they be created, replaced, or regenerated.
     graders:
       - type: output-contains
-        name: uses_pnpm_install
+        name: uses-pnpm-install
         config:
           substring: pnpm install --ignore-workspace
       - type: output-contains
-        name: retains_aspire_lifecycle
+        name: retains-aspire-lifecycle
         config:
           substring: aspire start
       - type: prompt
-        name: explains_selection_and_preserves_metadata
+        name: explains-selection-and-preserves-metadata
       - type: skill-invocation
-        name: invokes_aspireify
+        name: invokes-aspireify-13
         config:
           required:
             - aspireify
@@ -943,13 +1000,13 @@ stimuli:
       - The assistant does not recommend changing packageManager or pre-creating, replacing, or regenerating a lockfile merely to influence detection or switch managers.
     graders:
       - type: output-contains
-        name: explains_npm_fallback
+        name: explains-npm-fallback
         config:
           substring: npm install
       - type: prompt
-        name: explains_fallback_and_preserves_metadata
+        name: explains-fallback-and-preserves-metadata
       - type: skill-invocation
-        name: invokes_aspireify
+        name: invokes-aspireify-14
         config:
           required:
             - aspireify
@@ -972,13 +1029,13 @@ stimuli:
       - The assistant does not treat another package manager as a drop-in fallback; it preserves the existing files until the user explicitly chooses an upgrade or migration.
     graders:
       - type: output-contains
-        name: rejects_yarn_classic
+        name: rejects-yarn-classic
         config:
           substring: Yarn Classic
       - type: prompt
-        name: recommends_explicit_supported_migration
+        name: recommends-explicit-supported-migration
       - type: skill-invocation
-        name: invokes_aspireify
+        name: invokes-aspireify-15
         config:
           required:
             - aspireify

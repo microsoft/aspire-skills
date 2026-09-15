@@ -25,7 +25,9 @@ jobs:
           node-version: "22"
 
       - name: Install vally CLI
-        run: npm install -g @microsoft/vally-cli
+        run: |
+          npm install -g @microsoft/vally-cli@0.16.0
+          vally --version
 
       - name: Lint skills
         # `vally lint skills` matches the plugin's own `./skills/` glob.
@@ -37,7 +39,7 @@ jobs:
         # Each skills/*/evals/eval.yaml is in the canonical vally schema.
         # `vally lint --eval-spec` checks shape, stimulus structure, grader
         # config, and resolves environment.files against the working dir.
-        # No --strict; the validator is strict by default.
+        # Schema errors fail the check; existing warnings remain visible.
         shell: bash
         run: |
           set -euo pipefail
@@ -47,8 +49,12 @@ jobs:
             echo "::error::No eval specs found under skills/*/evals/eval.yaml" >&2
             exit 1
           fi
+          status=0
           for spec in "${specs[@]}"; do
             echo "::group::Validating $spec"
-            vally lint --eval-spec "$spec"
+            if ! vally lint --eval-spec "$spec"; then
+              status=1
+            fi
             echo "::endgroup::"
           done
+          exit "$status"

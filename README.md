@@ -13,6 +13,7 @@ It helps agents recognize Aspire workspaces, use the Aspire CLI correctly, route
 | `aspire` | Top-level router for Aspire projects |
 | `aspire-init` | Creates a new Aspire project or adds an Aspire skeleton to an existing repo |
 | `aspireify` | Wires an AppHost after `aspire init` |
+| `aspire-project-v2-migration` | Assesses and migrates eligible Aspire 13.6+ legacy project resources to Project v2 after explicit edit approval |
 | `aspire-orchestration` | Starts, stops, waits for, and manages Aspire resources |
 | `aspire-deployment` | Publishes, deploys, and tears down Aspire apps |
 | `aspire-monitoring` | Routes logs, traces, dashboard, telemetry, and diagnostics work |
@@ -152,6 +153,18 @@ each file under `hooks/scripts/`. Downstream consumers can copy the `hooks` obje
 directly instead of maintaining hook provenance separately.
 
 Use `npm run bundle:skills` or `npm run bundle:extensions` to build one bundle type.
+
+Both archives declare Aspire CLI/SDK compatibility with `>=13.5.0 <13.7.0`.
+Individual features can have narrower requirements: `aspire-project-v2-migration`
+remains discoverable on 13.5 but refuses edits unless the actual AppHost targets
+13.6+ and exposes the required APIs. Bundle compatibility never authorizes an
+implicit application upgrade, downgrade, or migration. Guidance and examples
+labeled 13.5.3 remain specific to the 13.5 family.
+
+For a separately validated release target, the bundle generator accepts
+`--supports-aspire-cli` and `--supports-aspire-sdk` overrides for both archives.
+Current Aspire consumers check the skills archive's range as a whole; the manifest
+does not provide per-skill installation-time version filtering.
 
 ## Contributing
 

@@ -44,34 +44,34 @@ stimuli:
         - routing
     graders:
       - type: prompt
-        name: discovers_browser_logs_child_resource
+        name: discovers-browser-logs-child-resource
         config:
           prompt: Does the assistant's response direct the user to discover the `<frontend>-browser-logs`
             child resource with normal `aspire describe` output, using
             `aspire describe --include-hidden` only if the expected resource is unavailable?
             Answer based on intent.
       - type: prompt
-        name: correlates_browser_logs_to_frontend
+        name: correlates-browser-logs-to-frontend
         config:
           prompt: Does the assistant's response explain that the BrowserLogs child resource can be
             correlated to its frontend through its parent relationship and `Source` property? Answer
             based on intent.
       - type: output-contains
-        name: starts_tracked_browser_session
+        name: starts-tracked-browser-session
         config:
           substring: aspire resource storefront-browser-logs open-tracked-browser
       - type: output-contains
-        name: reads_browser_console_log_stream
+        name: reads-browser-console-log-stream
         config:
           substring: aspire logs storefront-browser-logs
       - type: prompt
-        name: keeps_browser_output_out_of_frontend_otel_logs
+        name: keeps-browser-output-out-of-frontend-otel-logs
         config:
           prompt: Does the assistant's response explicitly avoid the incorrect claim that
             `aspire otel logs storefront` returns browser diagnostics, and instead direct the user
             to the BrowserLogs child resource's console stream? Answer based on intent.
       - type: prompt
-        name: routes_browser_log_authoring_to_aspireify
+        name: routes-browser-log-authoring-to-aspireify
         config:
           prompt: If the assistant discusses adding or configuring `WithBrowserLogs()`, does its response
             route that AppHost authoring work to the `aspireify` skill rather than performing it as
@@ -87,20 +87,20 @@ stimuli:
         - 13-3
     graders:
       - type: prompt
-        name: knows_dashboard_run
+        name: knows-dashboard-run
         config:
           prompt: Does the assistant's response recommend `aspire dashboard run` as the way to launch the
             Aspire Dashboard standalone (without an AppHost) and capture OTLP from any source?
             Answer based on intent.
       - type: prompt
-        name: warns_foreground_blocking
+        name: warns-foreground-blocking
         config:
           prompt: Does the assistant's response warn that `aspire dashboard run` is foreground / blocking and
             must be treated as a long-running background process by agents (e.g., bash mode="async",
             capture the printed dashboard URL and token, do not wait for it to "finish")? This is
             the critical safety note. Answer based on intent.
       - type: prompt
-        name: connects_cli_via_dashboard_url
+        name: connects-cli-via-dashboard-url
         config:
           prompt: Does the assistant's response show how to connect the Aspire CLI to a standalone dashboard
             using `--dashboard-url` on `aspire otel logs` and/or `aspire otel traces`? The simplest
@@ -111,7 +111,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: issue 16236
-        name: not_obsolete_workaround
+        name: not-obsolete-workaround
       - type: output-not-contains
         config:
           substring: "#16236"
@@ -145,7 +145,7 @@ stimuli:
           dest: csharp-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: routes_to_azure_diagnostics
+        name: routes-to-azure-diagnostics
         config:
           prompt: Does the assistant's response route the user to azure-diagnostics, App Insights, or
             platform-specific Azure monitoring tools for the deployed app? It should cover both the
@@ -155,12 +155,12 @@ stimuli:
       - type: output-not-contains
         config:
           substring: aspire logs
-        name: no_local_commands
+        name: no-local-commands
       - type: output-not-contains
         config:
           substring: aspire describe
       - type: prompt
-        name: explains_why
+        name: explains-why
         config:
           prompt: The assistant's response should explain that the Aspire CLI uses a local backchannel and
             cannot reach deployed apps directly, then route to azure-diagnostics or App Insights. It
@@ -192,7 +192,7 @@ stimuli:
           dest: csharp-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: uses_docker
+        name: uses-docker
         config:
           prompt: Does the assistant's response recommend using Docker CLI commands (docker logs, docker
             compose logs, etc.) to check logs for a service running in Docker Compose? Answer based
@@ -200,7 +200,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: aspire logs
-        name: not_aspire_cli
+        name: not-aspire-cli
       - type: output-contains
         config:
           substring: docker
@@ -219,7 +219,7 @@ stimuli:
           dest: csharp-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: explains_three_way_routing
+        name: explains-three-way-routing
         config:
           prompt: |-
             The assistant's response should ask or determine where the app is running and route to the correct tooling. Specifically it should distinguish at least three deployed targets: (1) local dev → aspire CLI (aspire describe, aspire logs, aspire otel), (2) AKS / Kubernetes workload → kubectl + Container Insights for pod
@@ -230,7 +230,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: aspire logs <pod>
-        name: no_local_for_deployed
+        name: no-local-for-deployed
   - name: mon-export-001
     prompt: I need to share the diagnostic data with another team member
     tags:
@@ -246,7 +246,7 @@ stimuli:
           dest: csharp-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: uses_export
+        name: uses-export
         config:
           prompt: Does the assistant's response recommend using 'aspire export' (or an equivalent Aspire CLI
             command for creating portable diagnostics bundles) to share diagnostic data? Answer
@@ -274,13 +274,13 @@ stimuli:
           dest: csharp-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: suggests_include_hidden
+        name: suggests-include-hidden
         config:
           prompt: Does the assistant's response recommend `aspire describe --include-hidden` to surface
             hidden-by-default resources such as proxies, helper containers, and migrations?
             Answer based on intent.
       - type: prompt
-        name: explains_default_behavior
+        name: explains-default-behavior
         config:
           prompt: Does the assistant's response explain that Aspire 13.5 `aspire ps` lists AppHosts,
             while `aspire describe` lists resources and accepts `--include-hidden` for resource
@@ -288,7 +288,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: restart your app
-        name: not_misleading_workaround
+        name: not-misleading-workaround
       - type: output-not-contains
         config:
           substring: reinstall aspire
@@ -317,7 +317,7 @@ stimuli:
           dest: csharp-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: investigates_first
+        name: investigates-first
         config:
           prompt: "The assistant's response should follow an investigation workflow before suggesting code
             changes: 1. Check resource state with 'aspire describe' 2. Check structured logs with
@@ -325,7 +325,7 @@ stimuli:
             otel traces' Investigation must come before any proposed code edit. Answer based on
             intent."
       - type: prompt
-        name: uses_aspire_commands
+        name: uses-aspire-commands
         config:
           prompt: Does the assistant's response recommend using Aspire CLI diagnostic commands (such as aspire
             describe, aspire logs, aspire otel) to investigate the issue before suggesting code
@@ -349,7 +349,7 @@ stimuli:
           dest: csharp-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: uses_aspire_logs
+        name: uses-aspire-logs
         config:
           prompt: Does the assistant's response recommend using 'aspire logs' (or an equivalent Aspire CLI log
             viewing command) to view application logs locally? Answer based on the intent, not exact
@@ -357,7 +357,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: cat
-        name: not_manual_logs
+        name: not-manual-logs
       - type: output-not-contains
         config:
           substring: tail -f
@@ -382,13 +382,13 @@ stimuli:
           dest: csharp-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: uses_otel_traces
+        name: uses-otel-traces
         config:
           prompt: Does the assistant's response recommend using 'aspire otel traces' (or an equivalent Aspire
             CLI distributed tracing command) for cross-service trace analysis? Answer based on the
             intent, not exact string matching.
       - type: prompt
-        name: structured_first
+        name: structured-first
         config:
           prompt: The assistant's response should prefer structured telemetry (aspire otel traces) over raw
             console logs (aspire logs). It should recommend checking traces first for cross-service
@@ -417,14 +417,14 @@ stimuli:
           dest: ts-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: knows_1353_fix
+        name: knows-1353-fix
         config:
           prompt: >
             Does the assistant's response recognize the missing DevTunnel public URL as a
             regression fixed in Aspire 13.5.3 and recommend upgrading before rewriting
             endpoint configuration? Answer based on intent.
       - type: prompt
-        name: avoids_unnecessary_rewiring
+        name: avoids-unnecessary-rewiring
         config:
           prompt: >
             Aspire 13.5.3 fixed the 13.5.0-13.5.2 regression where healthy DevTunnel
@@ -442,7 +442,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_monitoring
+        name: invokes-aspire-monitoring
         config:
           required:
             - aspire-monitoring
@@ -454,7 +454,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_monitoring
+        name: invokes-aspire-monitoring-2
         config:
           required:
             - aspire-monitoring
@@ -466,7 +466,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_monitoring
+        name: invokes-aspire-monitoring-3
         config:
           required:
             - aspire-monitoring
@@ -478,7 +478,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_monitoring
+        name: invokes-aspire-monitoring-4
         config:
           required:
             - aspire-monitoring
@@ -490,7 +490,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_monitoring
+        name: invokes-aspire-monitoring-5
         config:
           required:
             - aspire-monitoring
@@ -502,7 +502,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_monitoring
+        name: invokes-aspire-monitoring-6
         config:
           required:
             - aspire-monitoring
@@ -514,7 +514,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_monitoring
+        name: invokes-aspire-monitoring-7
         config:
           required:
             - aspire-monitoring
@@ -528,7 +528,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_monitoring
+        name: invokes-aspire-monitoring-8
         config:
           required:
             - aspire-monitoring
@@ -540,7 +540,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_monitoring
+        name: invokes-aspire-monitoring-9
         config:
           required:
             - aspire-monitoring
@@ -552,7 +552,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_monitoring
+        name: invokes-aspire-monitoring-10
         config:
           required:
             - aspire-monitoring
@@ -564,7 +564,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_monitoring
+        name: invokes-aspire-monitoring-11
         config:
           required:
             - aspire-monitoring
@@ -579,7 +579,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_monitoring
+        name: does-not-invoke-aspire-monitoring
         config:
           disallowed:
             - aspire-monitoring
@@ -591,7 +591,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_monitoring
+        name: does-not-invoke-aspire-monitoring-2
         config:
           disallowed:
             - aspire-monitoring
@@ -603,7 +603,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_monitoring
+        name: does-not-invoke-aspire-monitoring-3
         config:
           disallowed:
             - aspire-monitoring
@@ -615,7 +615,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_monitoring
+        name: does-not-invoke-aspire-monitoring-4
         config:
           disallowed:
             - aspire-monitoring
@@ -627,7 +627,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_monitoring
+        name: does-not-invoke-aspire-monitoring-5
         config:
           disallowed:
             - aspire-monitoring
@@ -639,7 +639,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_monitoring
+        name: does-not-invoke-aspire-monitoring-6
         config:
           disallowed:
             - aspire-monitoring
@@ -651,7 +651,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_monitoring
+        name: does-not-invoke-aspire-monitoring-7
         config:
           disallowed:
             - aspire-monitoring
@@ -663,7 +663,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_monitoring
+        name: does-not-invoke-aspire-monitoring-8
         config:
           disallowed:
             - aspire-monitoring

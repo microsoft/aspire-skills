@@ -5,7 +5,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [0.0.2] - Unreleased
 
 ### Changed
-- Aligned the shipped skill family and bundle compatibility metadata with Aspire 13.5.3.
+- Aligned Aspire 13.5 guidance with Aspire 13.5.3. Bundle compatibility covers
+  Aspire 13.5 and 13.6, with version-aware routing, wiring, and deployment guidance
+  that preserves the AppHost's existing release family.
   Updated current TypeScript AppHosts to `apphost.mts`, separated AppHost discovery
   (`aspire ps`) from resource inspection (`aspire describe`), removed resolved 13.4
   workarounds, documented 13.5 AppHost interactions and CLI behavior, and added the
@@ -43,6 +45,11 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   (AWS deploy, deployment-plan validation, `--list-steps` pipeline preview).
 
 ### Added
+- Added the approval-first `aspire-project-v2-migration` skill for eligible Aspire
+  13.6+ AppHosts and experimental Project v2 APIs, with explicit per-file/resource
+  approval, capability checks, conservative reference cleanup, routing and telemetry
+  registration, and no-edit/actual-edit evaluation fixtures. Its narrower eligibility
+  gate remains in force when the bundle is installed on Aspire 13.5.
 - Added the `aspire-apphosts` GitHub App canvas extension for Workspace and Global
   AppHost discovery, live resource state, endpoints, health, commands, Dashboard
   diagnostics, and a read-only relationship graph with Copilot context.
