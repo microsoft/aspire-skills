@@ -13,10 +13,15 @@ const sourceCommit = "a".repeat(40);
 const annotatedTag = "b".repeat(40);
 const otherCommit = "c".repeat(40);
 
-test("publishing supports version-tag pushes and manual version inputs", () => {
+test("publishing supports version-tag pushes and only manual artifact inputs", () => {
   assert.match(workflow, /^on:\n  push:\n    tags:\n      - "v\*"\n      - "\[0-9\]\*"\n  workflow_dispatch:/m);
-  assert.match(workflow, /      version:\n        description: .+\n        type: string\n        required: true\n/);
-  assert.match(stepSource("Read release version"), /RELEASE_VERSION: \$\{\{ inputs\.version \}\}/);
+  const inputs = workflow.match(/  workflow_dispatch:\n    inputs:\n([\s\S]*?)\npermissions:/)?.[1];
+  assert.ok(inputs, "Manual dispatch inputs must be declared.");
+  assert.deepEqual(
+    [...inputs.matchAll(/^      ([a-z_]+):$/gm)].map(match => match[1]),
+    ["include_skills", "include_extensions"]
+  );
+  assert.doesNotMatch(workflow, /inputs\.version|RELEASE_VERSION/);
 });
 
 test("releases retain up to 100 pending runs without replacing earlier queued releases", () => {
@@ -49,16 +54,17 @@ test("building, attesting, and publishing share the selected bundle outputs", ()
   assert.match(stepSource("Publish GitHub release"), /BUNDLE_ASSETS: \$\{\{ steps\.build\.outputs\.assets \}\}/);
 });
 
-test("the built-in repository token creates tags and publishes without App credentials", () => {
+test("the built-in repository token verifies existing tags and publishes without App credentials", () => {
   assert.match(workflow, /permissions:\n  contents: write\n/);
   assert.match(stepSource("Checkout"), /persist-credentials: false/);
   assert.doesNotMatch(workflow, /create-github-app-token|RELEASE_APP_|release-token/);
-  for (const step of ["Create or verify release tag", "Publish GitHub release"]) {
+  for (const step of ["Verify release tag", "Publish GitHub release"]) {
     assert.match(stepSource(step), /GH_TOKEN: \$\{\{ github\.token \}\}/);
     assert.match(stepSource(step), /TAG_NAME: \$\{\{ steps\.version\.outputs\.tag \}\}/);
   }
-  assert.match(stepSource("Create or verify release tag"), /SOURCE_COMMIT: \$\{\{ steps\.version\.outputs\.source_commit \}\}/);
+  assert.match(stepSource("Verify release tag"), /SOURCE_COMMIT: \$\{\{ steps\.version\.outputs\.source_commit \}\}/);
   assert.match(stepSource("Publish GitHub release"), /--verify-tag/);
+  assert.doesNotMatch(workflow, /\/git\/refs|--raw-field|--target/);
 
   const orderedSteps = [
     "Select bundles",
@@ -67,7 +73,7 @@ test("the built-in repository token creates tags and publishes without App crede
     "Test bundles",
     "Build bundles",
     "Attest bundles",
-    "Create or verify release tag",
+    "Verify release tag",
     "Publish GitHub release"
   ].map(name => workflow.indexOf(`- name: ${name}`));
   assert.deepEqual(orderedSteps, [...orderedSteps].sort((left, right) => left - right));
@@ -165,9 +171,8 @@ for (const event of ["workflow_dispatch", "push"]) {
     test(`${event} version ${version} resolves the correct release tag and commit`, t => {
       const result = runStep(t, "Read release version", {
         GITHUB_EVENT_NAME: event,
-        GITHUB_REF_TYPE: event === "push" ? "tag" : "branch",
-        GITHUB_REF_NAME: event === "push" ? version : "main",
-        RELEASE_VERSION: event === "push" ? "" : version,
+        GITHUB_REF_TYPE: "tag",
+        GITHUB_REF_NAME: version,
         SOURCE_COMMIT: sourceCommit
       }, `
 git() {
@@ -181,8 +186,7 @@ git() {
 `);
       assert.equal(result.status, 0, result.stderr);
       const normalized = version.replace(/^v/, "");
-      const tag = event === "push" ? version : `v${normalized}`;
-      assert.equal(result.outputs, `source_commit=${sourceCommit}\nversion=${normalized}\ntag=${tag}\n`);
+      assert.equal(result.outputs, `source_commit=${sourceCommit}\nversion=${normalized}\ntag=${version}\n`);
     });
   }
 
@@ -190,9 +194,8 @@ git() {
     test(`${event} publishing rejects invalid Git tag name ${JSON.stringify(version)} before emitting outputs`, t => {
       const result = runStep(t, "Read release version", {
         GITHUB_EVENT_NAME: event,
-        GITHUB_REF_TYPE: event === "push" ? "tag" : "branch",
-        GITHUB_REF_NAME: event === "push" ? version : "main",
-        RELEASE_VERSION: event === "push" ? "" : version
+        GITHUB_REF_TYPE: "tag",
+        GITHUB_REF_NAME: version
       });
       assert.equal(result.status, 1);
       assert.match(result.stderr, /::error::Tag '.+' is not a valid Git reference\./);
@@ -204,58 +207,46 @@ git() {
     test(`${event} publishing rejects invalid version ${JSON.stringify(version)}`, t => {
       const result = runStep(t, "Read release version", {
         GITHUB_EVENT_NAME: event,
-        GITHUB_REF_TYPE: event === "push" ? "tag" : "branch",
-        GITHUB_REF_NAME: event === "push" ? version : "main",
-        RELEASE_VERSION: event === "push" ? "" : version
+        GITHUB_REF_TYPE: "tag",
+        GITHUB_REF_NAME: version
       }, "git() { return 99; }");
       assert.equal(result.status, 1);
-      assert.match(result.stderr, /::error::Version /);
+      assert.match(result.stderr, /::error::Tag '.*' is not a supported release version\./s);
       assert.equal(result.outputs, "");
     });
   }
 }
 
-test("push-triggered publishing rejects branch refs", t => {
-  const result = runStep(t, "Read release version", {
-    GITHUB_EVENT_NAME: "push",
-    GITHUB_REF_TYPE: "branch",
-    GITHUB_REF_NAME: "main"
-  });
-  assert.equal(result.status, 1);
-  assert.match(result.stderr, /Push-triggered publishing requires a version tag/);
-  assert.equal(result.outputs, "");
-});
-
-test("a new release tag is created at the bundle source commit", t => {
-  const result = runTagStep(t);
-  assert.equal(result.status, 0, result.stderr);
-  assert.equal(result.stdout, formatArgs([
-    "api", "--method", "POST", "repos/microsoft/aspire-skills/git/refs",
-    "--raw-field", "ref=refs/tags/v9.9.9",
-    "--raw-field", `sha=${sourceCommit}`,
-    "--silent"
-  ]) + `Created tag 'v9.9.9' at '${sourceCommit}'.\n`);
-});
-
 for (const event of ["workflow_dispatch", "push"]) {
+  test(`${event} publishing rejects branch refs`, t => {
+    const result = runStep(t, "Read release version", {
+      GITHUB_EVENT_NAME: event,
+      GITHUB_REF_TYPE: "branch",
+      GITHUB_REF_NAME: "main"
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Select an existing version tag when running this workflow/);
+    assert.equal(result.outputs, "");
+  });
+
+  test(`${event} publishing never creates a missing or deleted tag`, t => {
+    const result = runTagStep(t, { GITHUB_EVENT_NAME: event });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Tag 'v9\.9\.9' no longer exists\. Select an existing version tag/);
+    assert.equal(result.stdout, "");
+  });
+
   for (const type of ["commit", "tag"]) {
-    test(`${event} reuses an existing ${type} tag at the source commit without mutation`, t => {
+    test(`${event} verifies an existing ${type} tag at the source commit without mutation`, t => {
       const result = runTagStep(t, {
         GITHUB_EVENT_NAME: event,
         TAG_OBJECT: `${type}\t${type === "tag" ? annotatedTag : sourceCommit}`
       });
       assert.equal(result.status, 0, result.stderr);
-      assert.equal(result.stdout, `Reusing tag 'v9.9.9' at '${sourceCommit}'.\n`);
+      assert.equal(result.stdout, `Verified tag 'v9.9.9' at '${sourceCommit}'.\n`);
     });
   }
 }
-
-test("tag-push publishing never recreates a tag that was deleted after the push", t => {
-  const result = runTagStep(t, { GITHUB_EVENT_NAME: "push" });
-  assert.equal(result.status, 1);
-  assert.match(result.stderr, /Tag 'v9\.9\.9' no longer exists\. Only manual runs can create release tags/);
-  assert.equal(result.stdout, "");
-});
 
 for (const type of ["commit", "tag", "blob"]) {
   test(`an existing ${type} tag with the wrong target fails without mutation`, t => {
@@ -264,12 +255,12 @@ for (const type of ["commit", "tag", "blob"]) {
       ANNOTATED_TAG_OBJECT: `commit\t${otherCommit}`
     });
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /::error::Tag 'v9\.9\.9' already exists and does not point to release commit/);
+    assert.match(result.stderr, /::error::Tag 'v9\.9\.9' does not point to release commit/);
     assert.equal(result.stdout, "");
   });
 }
 
-for (const failure of ["LOOKUP_STATUS", "ANNOTATED_LOOKUP_STATUS", "CREATE_STATUS"]) {
+for (const failure of ["LOOKUP_STATUS", "ANNOTATED_LOOKUP_STATUS"]) {
   test(`tag API failure ${failure} aborts rather than reporting success`, t => {
     const result = runTagStep(t, {
       [failure]: "1",
@@ -277,15 +268,12 @@ for (const failure of ["LOOKUP_STATUS", "ANNOTATED_LOOKUP_STATUS", "CREATE_STATU
     });
     assert.equal(result.status, 1);
     assert.match(result.stderr, /tag API failed/);
-    assert.doesNotMatch(result.stdout, /Created tag|Reusing tag/);
-    if (failure !== "CREATE_STATUS") {
-      assert.equal(result.stdout, "");
-    }
+    assert.equal(result.stdout, "");
   });
 }
 
 function runTagStep(t, env = {}) {
-  return runStep(t, "Create or verify release tag", {
+  return runStep(t, "Verify release tag", {
     GITHUB_REPOSITORY: "microsoft/aspire-skills",
     TAG_NAME: "v9.9.9",
     SOURCE_COMMIT: sourceCommit,
@@ -293,7 +281,6 @@ function runTagStep(t, env = {}) {
     ANNOTATED_TAG_OBJECT: `commit\t${sourceCommit}`,
     LOOKUP_STATUS: "0",
     ANNOTATED_LOOKUP_STATUS: "0",
-    CREATE_STATUS: "0",
     ...env
   }, `
 gh() {
@@ -315,14 +302,6 @@ gh() {
         return "$ANNOTATED_LOOKUP_STATUS"
       fi
       printf '%s\\n' "$ANNOTATED_TAG_OBJECT"
-      ;;
-    "--method")
-      printf '<%s>' "$@"
-      printf '\\n'
-      if [[ "$CREATE_STATUS" != "0" ]]; then
-        echo "tag API failed" >&2
-        return "$CREATE_STATUS"
-      fi
       ;;
     *)
       echo "Unexpected tag API request" >&2
