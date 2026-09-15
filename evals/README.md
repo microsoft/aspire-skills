@@ -8,11 +8,14 @@ This plugin uses [vally](https://www.npmjs.com/package/@microsoft/vally-cli) to 
 
 ```bash
 # Requires Node.js 22+
-npm install -g @microsoft/vally-cli
+npm install -g @microsoft/vally-cli@0.16.0
 
 # Verify
 vally --version
 ```
+
+All four CI workflows pin the same Vally version. Validate every spec when updating
+that pin; schema and exit-code changes can affect skills unrelated to a PR.
 
 ## Repo structure
 
@@ -65,7 +68,11 @@ files. Runnable fixture outputs can then be compiled and started against matchin
 local Aspire 13.6 development packages without presenting those packages as a
 released 13.6 build.
 
-**Activation assertions:** `constraints.expect_skills` / `constraints.reject_skills` assert which skills the agent actually invoked — use them to make routing tests first-class rather than relying only on response-content graders.
+**Activation assertions:** use a `skill-invocation` grader with `config.required`
+and/or `config.disallowed` to assert which skills the agent actually invoked.
+The removed `constraints.expect_skills` / `constraints.reject_skills` aliases
+are rejected by the pinned CLI. Reuse an equivalent existing grader rather than
+grading the same activation twice. See [AUTHORING.md](./AUTHORING.md#routing-assertions-skill-invocation).
 
 ### Comparative baselines (`vally experiment`)
 
@@ -95,20 +102,20 @@ The `with-skills` − `no-skills` pass-rate delta is the measured lift. The expe
 
 | Goal | Command |
 |------|---------|
-| Reproduce the PR gate for one changed skill | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --tag priority=p0,p1` |
-| Run p0 + p1 across all skills | `vally eval --suite ci-gate` |
-| Run full nightly suite | `vally eval --suite nightly` |
+| Reproduce the PR gate for one changed skill | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --tag priority=p0,p1 --workers 1 --require-pass` |
+| Run p0 + p1 across all skills | `vally eval --suite ci-gate --require-pass` |
+| Run full nightly suite | `vally eval --suite nightly --require-pass` |
 | Run one skill | `vally eval --eval-spec skills/aspire-deployment/evals/eval.yaml` |
 | Run one stimulus by tag | `vally eval --eval-spec skills/aspire/evals/eval.yaml --tag area=routing` |
 | Run the skill-lift baseline experiment | `vally experiment run skill-lift.experiment.yaml --output-dir ./results` |
 | Plan the experiment (no model calls) | `vally experiment run skill-lift.experiment.yaml --dry-run` |
-| Save PR-gate results for one skill | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --tag priority=p0,p1 --output-dir ./results` |
-| Emit JUnit XML for the all-skill p0 + p1 suite | `vally eval --suite ci-gate --junit --output-dir ./results` |
+| Save PR-gate results for one skill | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --tag priority=p0,p1 --workers 1 --require-pass --output-dir ./results` |
+| Emit JUnit XML for the all-skill p0 + p1 suite | `vally eval --suite ci-gate --require-pass --junit --output-dir ./results` |
 | Browse results in the dashboard | `vally serve ./results` |
 | Persist runs to a SQLite store | `vally ingest ./results --store ./vally.sqlite` |
 | Lint all skills | `vally lint skills` |
 | Validate one eval spec | `vally lint --eval-spec skills/<skill>/evals/eval.yaml` |
-| Plan a run without grading | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --skip-grade` |
+| Execute a run without grading | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --skip-grade` |
 
 ## Key flags
 
@@ -122,6 +129,7 @@ The `with-skills` − `no-skills` pass-rate delta is the measured lift. The expe
 | `--model <name>` | Executor model. Overrides `defaults.model` in the spec. |
 | `--judge-model <name>` | Model used by `prompt` / `pairwise` graders. Defaults to `claude-sonnet-4.6`. |
 | `--runs <n>` | Override `defaults.runs` (number of executions per stimulus). |
+| `--require-pass` | Exit nonzero on a failing eval verdict. Without it, valid failing verdicts still exit zero; execution/configuration errors always fail. |
 | `--timeout <duration>` | Per-stimulus timeout (e.g. `120s`, `2m`). |
 | `--workers <n>` | Parallel stimulus workers. Default 1. |
 | `--max-retries <n>` | Retries for transient executor errors. |
@@ -171,6 +179,9 @@ Vally tags are **records**, not bare arrays. Stimuli inherit eval-level tags and
 | `area` | `routing`, `safety-guardrail`, `core-flow`, `known-bug`, `aspire-13-3` | Functional area the stimulus probes. |
 
 Filter examples:
+
+In PowerShell, quote comma-separated values, for example
+`--tag 'priority=p0,p1'`, so they reach Vally as one argument rather than an array.
 
 ```bash
 # All p0 + p1 routing stimuli across every spec
@@ -234,8 +245,8 @@ The repo ships four GitHub Actions workflows that drive `vally` automatically:
 | Workflow | Trigger | Command |
 |----------|---------|---------|
 | [`skill-lint.yml`](../.github/workflows/skill-lint.yml) | PR (`SKILL.md` / `*.yaml` / `.vally.yaml`) | `vally lint skills` + per-spec `vally lint --eval-spec <spec>` |
-| [`skill-eval.yml`](../.github/workflows/skill-eval.yml) | PR (`SKILL.md` / `eval.yaml` / `.vally.yaml`) | `vally eval -e <changed-spec> [...] --tag priority=p0,p1 --output-dir ./results` |
-| [`skill-eval-nightly.yml`](../.github/workflows/skill-eval-nightly.yml) | `cron: "0 6 * * 0"` (Sun 06:00 UTC) + `workflow_dispatch` | `vally eval --suite nightly --output-dir ./results` |
+| [`skill-eval.yml`](../.github/workflows/skill-eval.yml) | PR (`SKILL.md` / `eval.yaml` / `.vally.yaml`) | `vally eval -e <changed-spec> --tag priority=p0,p1 --workers 1 --require-pass --output-dir ./results/<skill>` |
+| [`skill-eval-nightly.yml`](../.github/workflows/skill-eval-nightly.yml) | `cron: "0 6 * * 0"` (Sun 06:00 UTC) + `workflow_dispatch` | `vally eval --suite nightly --require-pass --output-dir ./results` |
 | [`skill-experiment.yml`](../.github/workflows/skill-experiment.yml) | `cron: "0 6 * * 6"` (Sat 06:00 UTC) + `workflow_dispatch` | `vally experiment run skill-lift.experiment.yaml --output-dir ./results` — informational baseline (skills vs no-skills), never gates |
 
 The all-skill suites are declared at the repo root in [`.vally.yaml`](../.vally.yaml) and filter on the `priority` tag every stimulus carries:
@@ -250,7 +261,16 @@ suites:
       priority: [p0, p1, p2]
 ```
 
-`vally` exits non-zero if any stimulus fails grading. Because `--suite` cannot be combined with explicit `-e` specs, the PR workflow discovers changed skill specs and applies the `ci-gate`-equivalent `priority=p0,p1` filter only to them. The comprehensive `nightly` suite runs weekly and uploads the full `./results` directory as a workflow artifact for later dashboard inspection.
+Gating eval commands use `--require-pass` so a failing verdict produces a nonzero
+exit code. Vally otherwise returns zero for valid failing verdicts; configuration,
+execution, and tooling errors always fail. The lint workflow reports every spec
+before returning failure, including specs after the first invalid one.
+
+Because `--suite` cannot be combined with explicit `-e` specs, the PR workflow
+discovers changed skill specs and applies the `ci-gate`-equivalent `priority=p0,p1`
+filter only to them, in isolated one-worker processes. The comprehensive `nightly`
+suite runs weekly and uploads the full `./results` directory as a workflow artifact
+for later dashboard inspection.
 
 ## CI authentication
 
@@ -276,6 +296,15 @@ The workflow's default `secrets.GITHUB_TOKEN` is the **wrong** token — it has 
 - `skill-eval.yml` and `skill-eval-nightly.yml` **soft-skip** with a `::warning::` annotation and a `$GITHUB_STEP_SUMMARY` block pointing back at this section. The job stays green so a missing-secret state never blocks merges or paints scheduled runs red — but the warning + summary are highly visible in the PR / run UI until a maintainer provisions the secret.
 - `skill-eval.yml` additionally **does not run at all** for PRs opened from forks (GitHub does not forward secrets to fork-triggered workflows), so external contributors get a clean skip rather than a confusing warning they can't act on. `skill-lint.yml` still runs for forks since it needs no token.
 - `skill-lint.yml` always hard-gates schema and wiring correctness regardless of whether the model token is configured.
+
+### Authentication failures with a configured secret
+
+A nonempty secret only passes the presence check; it does not prove authentication
+or Copilot access. If session creation fails with `401 Bad credentials` or
+`Failed to fetch PAT user login`, a maintainer must verify the credential reaching
+the runtime and its Copilot access. Do not substitute the workflow's default
+`GITHUB_TOKEN`, disable grading, or lower thresholds. These are execution errors,
+not evidence that the skill failed its behavioral assertions.
 
 ## Interpreting results
 

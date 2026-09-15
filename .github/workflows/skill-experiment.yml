@@ -70,7 +70,8 @@ jobs:
         # @github/copilot-sdk can resolve the platform package.
         run: |
           tools_dir="$RUNNER_TEMP/aspire-eval-tools"
-          npm install --prefix "$tools_dir" @microsoft/vally-cli @github/copilot-linux-x64
+          npm install --prefix "$tools_dir" @microsoft/vally-cli@0.16.0 @github/copilot-linux-x64
+          "$tools_dir/node_modules/.bin/vally" --version
           cli_path="$tools_dir/node_modules/@github/copilot-linux-x64/index.js"
           test -f "$cli_path"
           node "$cli_path" --version

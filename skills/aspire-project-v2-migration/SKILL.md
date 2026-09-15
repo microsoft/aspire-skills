@@ -50,6 +50,8 @@ This skill first applies to AppHosts targeting **Aspire 13.6 or newer**.
    capability stop. Never treat the handle as a plain object or assume every
    Aspire 13.6 build contains the DTO.
 
+## Project-Local Skill Override
+
 If `.agents/skills/aspire-project-v2-migration/SKILL.md` exists, warn the user and
 defer to that project-local skill while retaining these safety gates.
 

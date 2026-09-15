@@ -59,11 +59,38 @@ test("Project v2 plugin mirrors have exact relative targets without trailing byt
     const mirror = join(root, ".github", "plugins", "aspire-skills", "skills", skill, path);
     const source = join(root, "skills", skill, path);
     const expected = relative(dirname(mirror), source).split(sep).join("/");
-    const actual = lstatSync(mirror).isSymbolicLink()
+    const isSymbolicLink = lstatSync(mirror).isSymbolicLink();
+    const actual = isSymbolicLink
       ? readlinkSync(mirror)
       : readFileSync(mirror, "utf8");
-    assert.equal(actual, expected);
+    assertMirrorTarget(actual, expected, isSymbolicLink);
   }
+});
+
+function assertMirrorTarget(target, expected, isSymbolicLink, separator = sep) {
+  assert.equal(isSymbolicLink ? target.split(separator).join("/") : target, expected);
+}
+
+test("Project v2 mirror comparison handles native separators without relaxing exact targets", () => {
+  const target = "../../../../../skills/aspire-project-v2-migration/SKILL.md";
+  const windowsTarget = target.replaceAll("/", "\\");
+
+  assertMirrorTarget(target, target, true, "/");
+  assertMirrorTarget(windowsTarget, target, true, "\\");
+  assertMirrorTarget(target, target, true, "\\");
+
+  for (const separator of ["/", "\\"]) {
+    assertMirrorTarget(target, target, false, separator);
+    assert.throws(() => assertMirrorTarget(windowsTarget, target, false, separator));
+    for (const suffix of ["\n", "\r\n", " ", "\0"]) {
+      assert.throws(() => assertMirrorTarget(target + suffix, target, false, separator));
+      const nativeTarget = separator === "\\" ? windowsTarget : target;
+      assert.throws(() => assertMirrorTarget(nativeTarget + suffix, target, true, separator));
+    }
+  }
+
+  assert.throws(() => assertMirrorTarget(windowsTarget, target, true, "/"));
+  assert.throws(() => assertMirrorTarget(`../${target}`, target, true));
 });
 
 test("Project v2 C# fixture binds health checks to the intended endpoints", () => {

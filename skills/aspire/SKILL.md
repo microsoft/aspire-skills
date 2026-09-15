@@ -1,7 +1,7 @@
 ---
 name: aspire
 description: >-
-  **WORKFLOW SKILL** - Aspire 13.5.3 router. Detects AppHosts, enforces guardrails,
+  **WORKFLOW SKILL** - Aspire 13.5/13.6 router. Detects AppHosts, enforces guardrails,
   and selects the right sub-skill.
   USE FOR: Aspire AppHost, Aspire CLI, distributed app, cloud-native .NET, aspire
   start/stop/resource/deploy/destroy/publish/init/new/add/wait/describe/ps/logs/otel,
@@ -23,6 +23,12 @@ metadata:
 Use this skill when the task involves an Aspire distributed application — operating the
 AppHost or its resources through the Aspire CLI rather than falling back to ad-hoc `dotnet`,
 `docker`, or shell workflows.
+
+Preserve the AppHost's resolved Aspire 13.5 or 13.6 release family. Routing, wiring,
+and deployment are not requests to upgrade, downgrade, or migrate project resources.
+The 13.5.3 references apply to the 13.5 family, not a version override for 13.6.
+Project v2 migration still requires an eligible 13.6+ AppHost, the required APIs,
+and separate approval of exact edits.
 
 ## Triage first
 

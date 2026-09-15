@@ -24,8 +24,8 @@ const shouldBuildSkills = bundleSelection === undefined || bundleSelection === "
 const shouldBuildExtensions = bundleSelection === undefined || bundleSelection === "extensions";
 
 const supports = {
-  aspireCli: args["supports-aspire-cli"] ?? ">=13.6.0 <13.7.0",
-  aspireSdk: args["supports-aspire-sdk"] ?? ">=13.6.0 <13.7.0"
+  aspireCli: args["supports-aspire-cli"] ?? ">=13.5.0 <13.7.0",
+  aspireSdk: args["supports-aspire-sdk"] ?? ">=13.5.0 <13.7.0"
 };
 
 if (shouldBuildSkills) {

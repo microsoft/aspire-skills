@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-test("bundle manifests emit Aspire 13.6 support metadata and compatible SHA-256/SHA-512 file hashes", () => {
+test("bundle manifests support Aspire 13.5 and 13.6 with compatible SHA-256/SHA-512 file hashes", () => {
   const outputRoot = mkdtempSync(join(tmpdir(), "aspire-bundle-manifest-"));
 
   try {
@@ -29,7 +29,11 @@ test("bundle manifests emit Aspire 13.6 support metadata and compatible SHA-256/
       bundleRoot: join(outputRoot, "aspire-skills-v9.9.9"),
       manifestName: "skill-manifest.json",
       entriesProperty: "skills",
-      entriesDirectory: "skills"
+      entriesDirectory: "skills",
+      expectedSupports: {
+        aspireCli: ">=13.5.0 <13.7.0",
+        aspireSdk: ">=13.5.0 <13.7.0"
+      }
     });
     const migrationSkill = skillsManifest.skills.find(skill => skill.name === "aspire-project-v2-migration");
     assert.ok(migrationSkill, "skills bundle must include aspire-project-v2-migration");
@@ -47,8 +51,51 @@ test("bundle manifests emit Aspire 13.6 support metadata and compatible SHA-256/
       bundleRoot: join(outputRoot, "aspire-extensions-v9.9.9"),
       manifestName: "extension-manifest.json",
       entriesProperty: "extensions",
-      entriesDirectory: "extensions"
+      entriesDirectory: "extensions",
+      expectedSupports: {
+        aspireCli: ">=13.5.0 <13.7.0",
+        aspireSdk: ">=13.5.0 <13.7.0"
+      }
     });
+  }
+  finally {
+    rmSync(outputRoot, { recursive: true, force: true });
+  }
+});
+
+test("both bundles preserve independent CLI and SDK support overrides", () => {
+  const outputRoot = mkdtempSync(join(tmpdir(), "aspire-bundle-overrides-"));
+  const supports = {
+    aspireCli: ">=13.6.0 <13.7.0",
+    aspireSdk: ">=13.5.3 <13.6.0"
+  };
+
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [
+        join(repoRoot, "scripts", "build-aspire-bundles.mjs"),
+        "--version", "9.9.9",
+        "--out", outputRoot,
+        "--supports-aspire-cli", supports.aspireCli,
+        "--supports-aspire-sdk", supports.aspireSdk
+      ],
+      { cwd: repoRoot, encoding: "utf8" }
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    for (const [bundle, manifestName, entriesProperty] of [
+      ["aspire-skills", "skill-manifest.json", "skills"],
+      ["aspire-extensions", "extension-manifest.json", "extensions"]
+    ]) {
+      assertManifestHashes({
+        bundleRoot: join(outputRoot, `${bundle}-v9.9.9`),
+        manifestName,
+        entriesProperty,
+        entriesDirectory: entriesProperty,
+        expectedSupports: supports
+      });
+    }
   }
   finally {
     rmSync(outputRoot, { recursive: true, force: true });
@@ -59,15 +106,13 @@ function assertManifestHashes({
   bundleRoot,
   manifestName,
   entriesProperty,
-  entriesDirectory
+  entriesDirectory,
+  expectedSupports
 }) {
   const manifest = JSON.parse(readFileSync(join(bundleRoot, manifestName), "utf8"));
   const entries = manifest[entriesProperty];
 
-  assert.deepEqual(manifest.supports, {
-    aspireCli: ">=13.6.0 <13.7.0",
-    aspireSdk: ">=13.6.0 <13.7.0"
-  });
+  assert.deepEqual(manifest.supports, expectedSupports);
   assert.ok(entries.length > 0, `${manifestName} must contain ${entriesProperty}.`);
 
   for (const entry of entries) {
