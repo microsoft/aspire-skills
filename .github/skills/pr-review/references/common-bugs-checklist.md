@@ -111,9 +111,10 @@ Files: `.plugin/plugin.json`, `.claude-plugin/plugin.json`,
 - [ ] Valid JSON (no trailing commas, no comments — these silently break some loaders).
 - [ ] `version` fields are consistent across all six plugin version sources (see
       `aspire-skills-review-checklist.md` §6).
-- [ ] `name`, `description`, `repository`, `homepage`, `license` match across manifests.
-- [ ] `keywords` and `tags` lists don't diverge — divergence confuses marketplace
-      indexing.
+- [ ] Shared plugin `name`, `description`, `repository`, `homepage`, and `license`
+      fields are consistent where applicable; `package.json` has independent metadata.
+- [ ] Plugin `keywords` and `tags` lists don't diverge where shared — divergence
+      confuses marketplace indexing.
 - [ ] `skills` glob in `.plugin/plugin.json` and `.claude-plugin/plugin.json` is still
       `./skills/` (never `./.github/skills/` — author skills must stay invisible to the
       published plugin).

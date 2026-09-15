@@ -81,7 +81,7 @@ export function compareVersions(left, right) {
     if (leftNumeric !== rightNumeric) {
       return leftNumeric ? -1 : 1;
     }
-    return Math.sign(leftIdentifier.localeCompare(rightIdentifier, "en"));
+    return leftIdentifier > rightIdentifier ? 1 : -1;
   }
 
   return 0;
@@ -126,11 +126,13 @@ export function resolveReleaseContext({
     !/^0+$/.test(env.BEFORE_SHA)
   ) {
     previousVersion = readPluginVersionAtRef(repoRoot, env.BEFORE_SHA);
-    if (previousVersion !== version && compareVersions(version, previousVersion) <= 0) {
-      throw new Error(
-        `Plugin version must increase on main: ${previousVersion} -> ${version}.`
-      );
-    }
+  } else if (refType === "branch" && env.GITHUB_EVENT_NAME === "workflow_dispatch") {
+    previousVersion = readPreviousPluginVersion(repoRoot, version);
+  }
+  if (previousVersion !== "" && compareVersions(version, previousVersion) < 0) {
+    throw new Error(
+      `Plugin version must increase on ${refName}: ${previousVersion} -> ${version}.`
+    );
   }
 
   const sourceCommit = runGit(repoRoot, ["rev-parse", "HEAD^{commit}"]);
@@ -142,7 +144,9 @@ export function resolveReleaseContext({
     source_commit: sourceCommit,
     tag_name: tagName,
     version,
-    version_changed: String(previousVersion !== "" && previousVersion !== version)
+    version_changed: String(
+      env.GITHUB_EVENT_NAME === "push" && previousVersion !== "" && previousVersion !== version
+    )
   };
 }
 
@@ -150,15 +154,31 @@ function parseVersion(version) {
   validateVersion(version, "version");
   const match = versionPattern.exec(version);
   return {
-    core: match.slice(1, 4).map(Number),
+    core: match.slice(1, 4).map(BigInt),
     prerelease: match[4]?.split(".")
   };
 }
 
 function validateVersion(version, source) {
-  if (typeof version !== "string" || !versionPattern.test(version)) {
+  const match = typeof version === "string" ? versionPattern.exec(version) : null;
+  if (!match || match[0] !== version ||
+      match[4]?.split(".").some(identifier => /^0\d+$/.test(identifier))) {
     throw new Error(`${source} has unsupported semantic version '${version}'.`);
   }
+}
+
+function readPreviousPluginVersion(repoRoot, version) {
+  // Skip metadata-only changes so dispatch retries cannot hide a version rollback.
+  const commits = runGit(repoRoot, [
+    "log", "--first-parent", "--format=%H", "HEAD", "--", ".plugin/plugin.json"
+  ]);
+  for (const commit of commits.split("\n").filter(Boolean)) {
+    const previousVersion = readPluginVersionAtRef(repoRoot, commit);
+    if (previousVersion !== version) {
+      return previousVersion;
+    }
+  }
+  return "";
 }
 
 function readPluginVersionAtRef(repoRoot, ref) {
@@ -173,6 +193,9 @@ function runGit(repoRoot, args) {
     cwd: repoRoot,
     encoding: "utf8"
   });
+  if (result.error) {
+    throw result.error;
+  }
   if (result.status !== 0) {
     throw new Error(result.stderr.trim() || `git ${args.join(" ")} failed.`);
   }
