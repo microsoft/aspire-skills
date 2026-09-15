@@ -153,6 +153,37 @@ directly instead of maintaining hook provenance separately.
 
 Use `npm run bundle:skills` or `npm run bundle:extensions` to build one bundle type.
 
+### Publishing releases
+
+**Publish Aspire bundles** runs on version-tag pushes and manual dispatches.
+Pushing a tag matching `v*` or `[0-9]*` publishes only `aspire-skills` to that
+existing tag. The pushed name is preserved: pushing `0.0.3` publishes to `0.0.3`,
+while pushing `v0.0.3` publishes to `v0.0.3`. Tag deletions do not publish.
+
+For a manual run, select the source ref to release and provide a `version` such
+as `0.0.3` or `v0.0.3`. Both inputs create `v0.0.3` at the checked-out commit if
+that tag does not already exist. The version and resulting Git tag name are
+validated before building. Manual runs expose two checkboxes:
+`include_skills` (checked by default) and `include_extensions` (unchecked by
+default). Select either bundle or both; selecting neither fails before testing or
+publishing. Only selected bundles are built for release, attested, and uploaded.
+
+Authentication uses the built-in, repository-scoped `GITHUB_TOKEN` with
+`contents: write`. No additional GitHub App, repository variables, or secrets are
+required.
+
+A manual run creates a missing tag only after testing, building, and attesting
+the selected bundles. Tags created using `GITHUB_TOKEN` do not trigger another
+publish run. Runs are serialized without cancelling an in-progress release.
+Up to 100 pending runs are retained instead of replacing an earlier queued
+release; additional runs are cancelled if that queue is full.
+
+An existing tag is reused only if it resolves to the same source commit;
+otherwise, the run fails without publishing or moving the tag. A tag-push run
+fails if its tag has since been deleted; it never recreates the tag. If a manual
+run fails after tag creation, rerun it with the same version and source commit.
+Reruns replace only selected release assets and do not delete unselected assets.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
