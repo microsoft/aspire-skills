@@ -1,0 +1,640 @@
+name: aspire-project-v2-migration-eval
+description: >
+  Evaluates approval-first Aspire 13.6+ ProjectResource migration, exact C# and
+  TypeScript edits, eligibility stops, reference safety, and compatibility boundaries.
+version: "1.0"
+type: capability
+tags:
+  skill: aspire-project-v2-migration
+
+defaults:
+  runs: 1
+  timeout: 10m
+  executor: copilot-sdk
+  model: gpt-5.6-sol-fast
+
+scoring:
+  threshold: 1.0
+
+environment:
+  skills:
+    - ../../aspire
+    - ../../aspire-init
+    - ../../aspireify
+    - ../../aspire-project-v2-migration
+    - ../../aspire-orchestration
+    - ../../aspire-deployment
+    - ../../aspire-monitoring
+
+stimuli:
+  - name: project-v2-assessment-before-edits
+    description: A generic migration request must produce an assessment and leave files untouched.
+    prompt: |
+      Use the appropriate Aspire skill. Migrate this AppHost to Project v2.
+      Inspect the fixture and tell me what you would change. Do not ask me to
+      approve a vague migration; show the exact per-resource/file plan first.
+      The 13.6.0-dev label represents local development packages, not a release.
+    tags:
+      priority: p0
+      area: approval
+    constraints:
+      max_agent_duration: 6m
+    rubric:
+      - The response presents an exact per-resource and per-file assessment before requesting approval.
+      - The response preserves profile, metadata, reference, and development-package distinctions.
+    environment:
+      files: &runnable_files
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Directory.Packages.props, dest: project-v2/Migration/Directory.Packages.props }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.slnx, dest: project-v2/Migration/Migration.slnx }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.AppHost/Migration.AppHost.csproj, dest: project-v2/Migration/Migration.AppHost/Migration.AppHost.csproj }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.AppHost/Program.cs, dest: project-v2/Migration/Migration.AppHost/Program.cs }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.Api/Migration.Api.csproj, dest: project-v2/Migration/Migration.Api/Migration.Api.csproj }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.Api/Program.cs, dest: project-v2/Migration/Migration.Api/Program.cs }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.Api/Properties/launchSettings.json, dest: project-v2/Migration/Migration.Api/Properties/launchSettings.json }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.Worker/Migration.Worker.csproj, dest: project-v2/Migration/Migration.Worker/Migration.Worker.csproj }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.Worker/Program.cs, dest: project-v2/Migration/Migration.Worker/Program.cs }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.Worker/Properties/launchSettings.json, dest: project-v2/Migration/Migration.Worker/Properties/launchSettings.json }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.Shared/Migration.Shared.csproj, dest: project-v2/Migration/Migration.Shared/Migration.Shared.csproj }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.Shared/FixtureContract.cs, dest: project-v2/Migration/Migration.Shared/FixtureContract.cs }
+    graders:
+      - type: diff-empty
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.AppHost/Program.cs, value: "AddProject<Projects.CatalogApi>" }
+      - type: file-not-contains
+        config: { path: project-v2/Migration/Migration.AppHost/Program.cs, value: "AddDotnetProject" }
+      - type: file-not-contains
+        config: { path: project-v2/Migration/Migration.AppHost/Migration.AppHost.csproj, value: "Aspire.Hosting.Dotnet" }
+      - type: prompt
+        name: exact-assessment
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response provide a per-resource assessment, distinguish the
+            API named profile from the worker's explicit-null profile exclusion, identify the
+            metadata override and exact project paths, retain the shared-library AppHost
+            reference, identify only API/worker resource references as removal candidates,
+            disclose experimental/development-package status, and request approval before edits?
+
+  - name: project-v2-approved-csharp-edit
+    description: Explicitly approved full C# migration must edit actual files and preserve behavior.
+    prompt: |
+      Use the Aspire Project v2 migration skill. You already showed me and I
+      explicitly approve this exact plan: migrate both api and worker, add
+      Aspire.Hosting.Dotnet as a versionless AppHost PackageReference and add
+      its central PackageVersion using the existing $(AspireVersion) property,
+      preserve all
+      fluent behavior, map api's "http" profile and worker's explicit null
+      correctly, add paired narrowly scoped ASPIREDOTNETPROJECT001 pragmas around
+      the migrated declarations, remove only the API and worker AppHost
+      ProjectReference items, and retain the shared-library AppHost reference.
+      Make the edits now.
+      Do not restore or run because these are local development package labels.
+    tags:
+      priority: p0
+      area: csharp-edit
+    constraints:
+      max_agent_duration: 8m
+    environment:
+      files: *runnable_files
+    graders:
+      - type: file-matches
+        config:
+          path: project-v2/Migration/Migration.AppHost/Program.cs
+          pattern: 'AddDotnetProject\(\s*"api",\s*@?"\.\.[\\/]Migration\.Api[\\/]Migration\.Api\.csproj"'
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.AppHost/Program.cs, value: 'options.LaunchProfileName = "http"' }
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.AppHost/Program.cs, value: "options.ExcludeLaunchProfile = true" }
+      - type: file-not-contains
+        config: { path: project-v2/Migration/Migration.AppHost/Program.cs, value: "AddProject<" }
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.AppHost/Migration.AppHost.csproj, value: 'PackageReference Include="Aspire.Hosting.Dotnet"' }
+      - type: file-matches
+        config:
+          path: project-v2/Migration/Migration.AppHost/Migration.AppHost.csproj
+          pattern: '<PackageReference\s+Include="Aspire\.Hosting\.Dotnet"\s*/>'
+      - type: file-not-matches
+        config:
+          path: project-v2/Migration/Migration.AppHost/Migration.AppHost.csproj
+          pattern: '<PackageReference[^>]*Include="Aspire\.Hosting\.Dotnet"[^>]*Version\s*='
+      - type: file-contains
+        config: { path: project-v2/Migration/Directory.Packages.props, value: '<AspireVersion>13.6.0-dev</AspireVersion>' }
+      - type: file-contains
+        config: { path: project-v2/Migration/Directory.Packages.props, value: '<PackageVersion Include="Aspire.Hosting.Dotnet" Version="$(AspireVersion)" />' }
+      - type: file-not-contains
+        config: { path: project-v2/Migration/Migration.AppHost/Migration.AppHost.csproj, value: "..\\Migration.Api\\Migration.Api.csproj" }
+      - type: file-not-contains
+        config: { path: project-v2/Migration/Migration.AppHost/Migration.AppHost.csproj, value: "..\\Migration.Worker\\Migration.Worker.csproj" }
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.AppHost/Migration.AppHost.csproj, value: "..\\Migration.Shared\\Migration.Shared.csproj" }
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.AppHost/Migration.AppHost.csproj, value: 'IsAspireProjectResource="false"' }
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.AppHost/Program.cs, value: ".WithReplicas(2)" }
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.AppHost/Program.cs, value: '.WithArgs("--mode", "fixture")' }
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.AppHost/Program.cs, value: "#pragma warning disable ASPIREDOTNETPROJECT001" }
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.AppHost/Program.cs, value: "#pragma warning restore ASPIREDOTNETPROJECT001" }
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.AppHost/Program.cs, value: '.WithHttpHealthCheck("/", endpointName: "http")' }
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.AppHost/Program.cs, value: '.WithHttpHealthCheck("/", endpointName: "status")' }
+
+  - name: project-v2-approved-csharp-subset
+    description: Explicit subset approval migrates only API and retains worker metadata/build edge.
+    prompt: |
+      Use the Aspire Project v2 migration skill. I reviewed the assessment and
+      approve only the api migration. Add Aspire.Hosting.Dotnet, convert api with
+      a versionless AppHost PackageReference and central PackageVersion using
+      the existing $(AspireVersion) property,
+      its named profile and exact resolved path, and preserve all api behavior.
+      Add paired narrowly scoped ASPIREDOTNETPROJECT001 pragmas around the
+      migrated api declaration.
+      Leave worker on AddProject with explicit null and keep its AppHost
+      ProjectReference. Remove the API ProjectReference only. Keep the shared
+      code reference. Make only those edits; do not restore or run.
+    tags:
+      priority: p1
+      area: subset
+    constraints:
+      max_agent_duration: 8m
+    environment:
+      files: *runnable_files
+    graders:
+      - type: file-matches
+        config:
+          path: project-v2/Migration/Migration.AppHost/Program.cs
+          pattern: 'AddDotnetProject\(\s*"api",\s*@?"\.\.[\\/]Migration\.Api[\\/]Migration\.Api\.csproj"'
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.AppHost/Program.cs, value: "AddProject<Projects.Migration_Worker>" }
+      - type: file-not-contains
+        config: { path: project-v2/Migration/Migration.AppHost/Migration.AppHost.csproj, value: "..\\Migration.Api\\Migration.Api.csproj" }
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.AppHost/Migration.AppHost.csproj, value: "..\\Migration.Worker\\Migration.Worker.csproj" }
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.AppHost/Migration.AppHost.csproj, value: "..\\Migration.Shared\\Migration.Shared.csproj" }
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.AppHost/Migration.AppHost.csproj, value: 'IsAspireProjectResource="false"' }
+      - type: file-matches
+        config:
+          path: project-v2/Migration/Migration.AppHost/Migration.AppHost.csproj
+          pattern: '<PackageReference\s+Include="Aspire\.Hosting\.Dotnet"\s*/>'
+      - type: file-not-matches
+        config:
+          path: project-v2/Migration/Migration.AppHost/Migration.AppHost.csproj
+          pattern: '<PackageReference[^>]*Include="Aspire\.Hosting\.Dotnet"[^>]*Version\s*='
+      - type: file-contains
+        config: { path: project-v2/Migration/Directory.Packages.props, value: '<AspireVersion>13.6.0-dev</AspireVersion>' }
+      - type: file-contains
+        config: { path: project-v2/Migration/Directory.Packages.props, value: '<PackageVersion Include="Aspire.Hosting.Dotnet" Version="$(AspireVersion)" />' }
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.AppHost/Program.cs, value: "#pragma warning disable ASPIREDOTNETPROJECT001" }
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.AppHost/Program.cs, value: "#pragma warning restore ASPIREDOTNETPROJECT001" }
+
+  - name: project-v2-ineligible-13-5
+    description: A new CLI does not make a 13.5 AppHost eligible.
+    prompt: |
+      I installed the newest Aspire CLI. Migrate this AppHost to Project v2.
+      Inspect its actual AppHost version and act safely.
+    tags:
+      priority: p0
+      area: eligibility
+    constraints:
+      max_agent_duration: 4m
+    rubric:
+      - The response refuses edits because the AppHost targets Aspire 13.5.3.
+      - The response does not treat the newer CLI as AppHost eligibility evidence.
+    environment:
+      files:
+        - { src: ../../../evals/project-v2-migration/eligibility/aspire-13.5/AppHost.csproj, dest: app/AppHost.csproj }
+        - { src: ../../../evals/project-v2-migration/eligibility/aspire-13.5/Program.cs, dest: app/Program.cs }
+    graders:
+      - type: diff-empty
+      - type: file-contains
+        config: { path: app/Program.cs, value: "AddProject<Projects.Service>" }
+      - type: file-not-contains
+        config: { path: app/Program.cs, value: "AddDotnetProject" }
+      - type: prompt
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response stop without edits because the AppHost targets
+            Aspire 13.5.3, explain that the CLI version is not eligibility evidence, and avoid
+            offering an implicit AppHost upgrade?
+
+  - name: project-v2-conflicting-version
+    description: Conflicting SDK/hosting versions must stop without edits.
+    prompt: Use the appropriate Aspire skill to migrate this AppHost to Project v2.
+    tags:
+      priority: p1
+      area: eligibility
+    constraints:
+      max_agent_duration: 4m
+    rubric:
+      - The response identifies the conflicting Aspire SDK and hosting versions and stops without edits.
+    environment:
+      files:
+        - { src: ../../../evals/project-v2-migration/eligibility/conflicting/AppHost.csproj, dest: app/AppHost.csproj }
+        - { src: ../../../evals/project-v2-migration/eligibility/conflicting/Program.cs, dest: app/Program.cs }
+    graders:
+      - type: diff-empty
+      - type: file-contains
+        config: { path: app/Program.cs, value: "AddProject<Projects.Service>" }
+      - type: file-not-contains
+        config: { path: app/AppHost.csproj, value: "Aspire.Hosting.Dotnet" }
+      - type: prompt
+        config:
+          scoring: binary
+          prompt: Does the assistant's response identify conflicting 13.6.0-dev SDK and 13.5.3 hosting versions and stop without edits?
+
+  - name: project-v2-unresolved-version
+    description: Unresolved version inputs must stop without edits.
+    prompt: Assess and migrate this AppHost to Project v2 if it is eligible.
+    tags:
+      priority: p1
+      area: eligibility
+    constraints:
+      max_agent_duration: 4m
+    rubric:
+      - The response identifies unresolved AppHost version inputs and stops without guessing or editing.
+    environment:
+      files:
+        - { src: ../../../evals/project-v2-migration/eligibility/unresolved/AppHost.csproj, dest: app/AppHost.csproj }
+        - { src: ../../../evals/project-v2-migration/eligibility/unresolved/Program.cs, dest: app/Program.cs }
+    graders:
+      - type: diff-empty
+      - type: file-contains
+        config: { path: app/Program.cs, value: "AddProject<Projects.Service>" }
+      - type: file-not-contains
+        config: { path: app/AppHost.csproj, value: "Aspire.Hosting.Dotnet" }
+      - type: prompt
+        config:
+          scoring: binary
+          prompt: Does the assistant's response explain that the actual AppHost version is unresolved and stop without edits rather than guessing?
+
+  - name: project-v2-typescript-options-blocked
+    description: Handle-only generated APIs block safe named-profile migration.
+    prompt: |
+      Use the Aspire Project v2 migration skill. Assess these TypeScript
+      addProject calls against the supplied resolved generated API snapshot,
+      handle-only-api.mts. This older Project v2 build exposes only the shared
+      ProjectResourceOptions handle, not DotnetProjectOptions. The named-profile
+      resource must retain its behavior. I have not approved edits. Do not edit
+      or generate .aspire/modules.
+    tags:
+      priority: p0
+      area: typescript-options
+    constraints:
+      max_agent_duration: 6m
+    rubric:
+      - The response allows default-options TypeScript migration but blocks named/options migration on the supplied generated handle-only API.
+      - The response leaves source/config/modules unchanged and does not invent a plain options object.
+    environment:
+      files:
+        - { src: ../../../evals/project-v2-migration/typescript/package.json, dest: ts/package.json }
+        - { src: ../../../evals/project-v2-migration/typescript/aspire.config.json, dest: ts/aspire.config.json }
+        - { src: ../../../evals/project-v2-migration/typescript/apphost.mts, dest: ts/apphost.mts }
+        - { src: ../../../evals/project-v2-migration/typescript/handle-only-api.mts, dest: ts/handle-only-api.mts }
+    graders:
+      - type: diff-empty
+      - type: file-contains
+        config: { path: ts/apphost.mts, value: 'addProject("default-api", "../Api/Api.csproj")' }
+      - type: file-contains
+        config: { path: ts/apphost.mts, value: "namedProfile.withReference(defaultProfile)" }
+      - type: file-not-contains
+        config: { path: ts/apphost.mts, value: "addDotnetProject" }
+      - type: file-not-exists
+        config: { path: ts/.aspire/modules }
+      - type: file-not-contains
+        config: { path: ts/aspire.config.json, value: "Aspire.Hosting.Dotnet" }
+      - type: file-contains
+        config: { path: ts/handle-only-api.mts, value: "options?: Awaitable<ProjectResourceOptions>" }
+      - type: prompt
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response explain that default-options calls are migratable but
+            the named-profile call must remain unchanged because the supplied AddDotnetProjectOptions
+            requires a ProjectResourceOptions RPC handle with no authored-code factory, and avoid
+            suggesting a flat or nested plain options object?
+
+  - name: project-v2-approved-typescript-named-profile-edit
+    description: A package with DotnetProjectOptions supports a flat named-profile migration.
+    prompt: |
+      Use the Aspire Project v2 migration skill. I reviewed and approve this
+      exact edit: add Aspire.Hosting.Dotnet 13.6.0-dev to aspire.config.json and
+      migrate named-api from the legacy addProject named-profile wrapper to
+      addDotnetProject. The resolved generated package exposes the new
+      constructible DotnetProjectOptions DTO and flattens it as the third
+      addDotnetProject argument. Preserve the name, path, "http" profile, and
+      replicas. Do not edit or generate .aspire/modules, install packages, or
+      run; a separate validator will use the rebuilt local package.
+    tags:
+      priority: p0
+      area: typescript-named-edit
+    constraints:
+      max_agent_duration: 6m
+    environment:
+      files:
+        - { src: ../../../evals/project-v2-migration/typescript/package.json, dest: ts/package.json }
+        - { src: ../../../evals/project-v2-migration/typescript/aspire.config.json, dest: ts/aspire.config.json }
+        - { src: ../../../evals/project-v2-migration/typescript-named/apphost.mts, dest: ts/apphost.mts }
+    graders:
+      - type: file-not-contains
+        config: { path: ts/apphost.mts, value: ".addProject(" }
+      - type: file-contains
+        config: { path: ts/apphost.mts, value: 'addDotnetProject("named-api", "../Api/Api.csproj", {' }
+      - type: file-contains
+        config: { path: ts/apphost.mts, value: 'launchProfileName: "http"' }
+      - type: file-not-contains
+        config: { path: ts/apphost.mts, value: "launchProfileOrOptions" }
+      - type: file-not-contains
+        config: { path: ts/apphost.mts, value: "options:" }
+      - type: file-contains
+        config: { path: ts/apphost.mts, value: "await api.withReplicas(2)" }
+      - type: file-contains
+        config: { path: ts/aspire.config.json, value: '"Aspire.Hosting.Dotnet": "13.6.0-dev"' }
+      - type: file-not-exists
+        config: { path: ts/.aspire/modules }
+
+  - name: project-v2-approved-runnable-typescript-edit
+    description: Approved TypeScript migration output is a complete API/worker/shared fixture for parent validation.
+    prompt: |
+      Use the Aspire Project v2 migration skill. I reviewed and approve this
+      exact migration: add Aspire.Hosting.Dotnet 13.6.0-dev to aspire.config.json,
+      convert the default-options api and worker calls from addProject to
+      addDotnetProject, and preserve Redis, environment, health checks, external
+      endpoint, replicas, reference, wait, and status endpoint calls. Do not
+      handwrite or generate .aspire/modules, install packages, or run; a separate
+      validator will use the local development CLI.
+    tags:
+      priority: p0
+      area: typescript-runnable-edit
+    constraints:
+      max_agent_duration: 8m
+    environment:
+      files:
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Directory.Packages.props, dest: project-v2/Migration/Directory.Packages.props }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.slnx, dest: project-v2/Migration/Migration.slnx }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.Api/Migration.Api.csproj, dest: project-v2/Migration/Migration.Api/Migration.Api.csproj }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.Api/Program.cs, dest: project-v2/Migration/Migration.Api/Program.cs }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.Api/Properties/launchSettings.json, dest: project-v2/Migration/Migration.Api/Properties/launchSettings.json }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.Worker/Migration.Worker.csproj, dest: project-v2/Migration/Migration.Worker/Migration.Worker.csproj }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.Worker/Program.cs, dest: project-v2/Migration/Migration.Worker/Program.cs }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.Worker/Properties/launchSettings.json, dest: project-v2/Migration/Migration.Worker/Properties/launchSettings.json }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.Shared/Migration.Shared.csproj, dest: project-v2/Migration/Migration.Shared/Migration.Shared.csproj }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.Shared/FixtureContract.cs, dest: project-v2/Migration/Migration.Shared/FixtureContract.cs }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.TypeScriptAppHost/aspire.config.json, dest: project-v2/Migration/Migration.TypeScriptAppHost/aspire.config.json }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.TypeScriptAppHost/package.json, dest: project-v2/Migration/Migration.TypeScriptAppHost/package.json }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.TypeScriptAppHost/tsconfig.json, dest: project-v2/Migration/Migration.TypeScriptAppHost/tsconfig.json }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.TypeScriptAppHost/tsconfig.apphost.json, dest: project-v2/Migration/Migration.TypeScriptAppHost/tsconfig.apphost.json }
+        - { src: ../../../evals/project-v2-migration/runnable-csharp/Migration.TypeScriptAppHost/apphost.mts, dest: project-v2/Migration/Migration.TypeScriptAppHost/apphost.mts }
+    graders:
+      - type: file-not-contains
+        config: { path: project-v2/Migration/Migration.TypeScriptAppHost/apphost.mts, value: ".addProject(" }
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.TypeScriptAppHost/apphost.mts, value: ".addDotnetProject(" }
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.TypeScriptAppHost/apphost.mts, value: ".withReference(api)" }
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.TypeScriptAppHost/apphost.mts, value: ".waitFor(api)" }
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.TypeScriptAppHost/apphost.mts, value: ".withReplicas(2)" }
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.TypeScriptAppHost/apphost.mts, value: '.withHttpHealthCheck({ path: "/", endpointName: "http" })' }
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.TypeScriptAppHost/apphost.mts, value: '.withHttpHealthCheck({ path: "/", endpointName: "status" })' }
+      - type: file-contains
+        config: { path: project-v2/Migration/Migration.TypeScriptAppHost/aspire.config.json, value: '"Aspire.Hosting.Dotnet": "13.6.0-dev"' }
+      - type: file-not-exists
+        config: { path: project-v2/Migration/Migration.TypeScriptAppHost/.aspire/modules }
+
+  - name: project-v2-unsupported-assessment
+    description: Functions, F#, direct construction, custom publishing, and existing v2 stay unchanged.
+    prompt: |
+      Use the Project v2 migration skill to assess this file. I have not approved
+      edits. Explain what is automatic, manual, unsupported, or already migrated.
+    tags:
+      priority: p0
+      area: compatibility
+    constraints:
+      max_agent_duration: 5m
+    rubric:
+      - The response accurately classifies unsupported, manual-decision, and already-migrated resources.
+      - The response leaves the unapproved source unchanged.
+    environment:
+      files:
+        - { src: ../../../evals/project-v2-migration/unsupported/AppHost.csproj, dest: app/AppHost.csproj }
+        - { src: ../../../evals/project-v2-migration/unsupported/Program.cs, dest: app/Program.cs }
+        - { src: ../../../evals/project-v2-migration/unsupported/FSharpService.fsproj, dest: FSharpService/FSharpService.fsproj }
+    graders:
+      - type: diff-empty
+      - type: file-contains
+        config: { path: app/AppHost.csproj, value: 'AspireProjectMetadataTypeName="FSharpService"' }
+      - type: file-contains
+        config: { path: FSharpService/FSharpService.fsproj, value: '<Project Sdk="Microsoft.NET.Sdk.Web">' }
+      - type: file-contains
+        config: { path: app/Program.cs, value: "AddAzureFunctionsProject" }
+      - type: file-contains
+        config: { path: app/Program.cs, value: "new ProjectResource" }
+      - type: file-contains
+        config: { path: app/Program.cs, value: "AddDotnetProject" }
+      - type: prompt
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response leave files unchanged; classify Functions and F# as
+            unsupported automatic conversions; classify direct construction, the custom publisher,
+            and concrete ProjectResource constraint as decision/manual work; and identify the
+            existing AddDotnetProject resource as already migrated?
+
+  - name: project-v2-file-app-aot-assessment
+    description: File-app conversion must not silently disable Native AOT or move runtime environment.
+    prompt: |
+      Assess this Windows-authored file AppHost for Project v2 and container
+      publishing to Linux. Explain the SDK prerequisites and whether the
+      file-based service supports build-only environment settings and EF Core
+      migration commands. I have not approved edits.
+    tags:
+      priority: p1
+      area: file-app
+    constraints:
+      max_agent_duration: 5m
+    rubric:
+      - The response preserves runtime environment and Native AOT settings before approval.
+      - The response explains file-app and cross-operating-system publishing boundaries accurately.
+    environment:
+      files: &file_app_files
+        - { src: ../../../evals/project-v2-migration/file-app/apphost.cs, dest: file-app/apphost.cs }
+        - { src: ../../../evals/project-v2-migration/file-app/file-api.cs, dest: file-app/file-api.cs }
+    graders:
+      - type: diff-empty
+      - type: file-contains
+        config: { path: file-app/apphost.cs, value: "AddCSharpApp" }
+      - type: file-contains
+        config: { path: file-app/file-api.cs, value: "PublishAot=true" }
+      - type: prompt
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response preserve the runtime environment, explain that file apps
+            require .NET 10+, reject WithBuildEnvironment and EF CLI for file apps, and present
+            target-OS publishing versus an explicitly approved PublishAot=false change without
+            silently changing AOT?
+
+  - name: project-v2-approved-file-app-edit
+    description: Approved file-app conversion preserves runtime values and AOT directive.
+    prompt: |
+      I approve the assessed source-only conversion: add the matching
+      Aspire.Hosting.Dotnet 13.6.0-dev file directive and replace AddCSharpApp
+      with AddDotnetProject using the correct same-directory file-api.cs path.
+      Add paired narrowly scoped ASPIREDOTNETPROJECT001 pragmas around the
+      migrated declaration. Preserve RUNTIME_ONLY, the Web SDK directive, and
+      PublishAot=true. Do not build or publish.
+    tags:
+      priority: p1
+      area: file-app-edit
+    constraints:
+      max_agent_duration: 5m
+    environment:
+      files: *file_app_files
+    graders:
+      - type: file-contains
+        config: { path: file-app/apphost.cs, value: "#:package Aspire.Hosting.Dotnet@13.6.0-dev" }
+      - type: file-contains
+        config: { path: file-app/apphost.cs, value: 'AddDotnetProject("file-api", "file-api.cs")' }
+      - type: file-contains
+        config: { path: file-app/apphost.cs, value: '.WithEnvironment("RUNTIME_ONLY", "preserve-me")' }
+      - type: file-contains
+        config: { path: file-app/apphost.cs, value: "#:property AspireUseCliBundle=true" }
+      - type: file-contains
+        config: { path: file-app/apphost.cs, value: "#pragma warning disable ASPIREDOTNETPROJECT001" }
+      - type: file-contains
+        config: { path: file-app/apphost.cs, value: "#pragma warning restore ASPIREDOTNETPROJECT001" }
+      - type: file-contains
+        config: { path: file-app/file-api.cs, value: "#:sdk Microsoft.NET.Sdk.Web" }
+      - type: file-contains
+        config: { path: file-app/file-api.cs, value: "PublishAot=true" }
+
+  - name: project-v2-approved-blazor-ef-edit
+    description: Specialized Blazor and EF behavior must be preserved with disclosed risk.
+    prompt: |
+      I reviewed the assessment and approve converting api and gateway. Use
+      AddDotnetProject for api and AddDotnetProjectBlazorGateway for gateway.
+      Add Aspire.Hosting.Dotnet at the existing 13.6.0-dev version; the existing
+      Aspire.Hosting.Blazor, Aspire.Hosting.EntityFrameworkCore, and
+      Aspire.Hosting.PostgreSQL references are approved evidence for the
+      specialized APIs. Preserve the existing API, migrations, and client
+      ProjectReference metadata. Add narrowly scoped suppressions required by
+      the approved experimental Dotnet project, Blazor gateway, and EF APIs:
+      ASPIREDOTNETPROJECT001, ASPIREBLAZOR001, and ASPIREPROJECTS001.
+      Preserve the database reference, runtime environment, EF migration call,
+      client, prefixes, telemetry setting, and all fluent configuration. Do not
+      invent WithBuildEnvironment. Make only the approved source and package edits.
+    tags:
+      priority: p1
+      area: blazor-ef-edit
+    constraints:
+      max_agent_duration: 6m
+    environment:
+      files:
+        - { src: ../../../evals/project-v2-migration/blazor-ef/AppHost.csproj, dest: app/AppHost.csproj }
+        - { src: ../../../evals/project-v2-migration/blazor-ef/Program.cs, dest: app/Program.cs }
+        - { src: ../../../evals/project-v2-migration/blazor-ef/Api/Api.csproj, dest: Api/Api.csproj }
+        - { src: ../../../evals/project-v2-migration/blazor-ef/Api/Program.cs, dest: Api/Program.cs }
+        - { src: ../../../evals/project-v2-migration/blazor-ef/Migrations/Migrations.csproj, dest: Migrations/Migrations.csproj }
+        - { src: ../../../evals/project-v2-migration/blazor-ef/Migrations/Program.cs, dest: Migrations/Program.cs }
+        - { src: ../../../evals/project-v2-migration/blazor-ef/Client/Client.csproj, dest: Client/Client.csproj }
+        - { src: ../../../evals/project-v2-migration/blazor-ef/Client/Program.cs, dest: Client/Program.cs }
+    graders:
+      - type: file-contains
+        config: { path: app/AppHost.csproj, value: '<PackageReference Include="Aspire.Hosting.Blazor" Version="$(AspireVersion)" />' }
+      - type: file-contains
+        config: { path: app/AppHost.csproj, value: '<PackageReference Include="Aspire.Hosting.PostgreSQL" Version="$(AspireVersion)" />' }
+      - type: file-contains
+        config: { path: app/AppHost.csproj, value: '<PackageReference Include="Aspire.Hosting.EntityFrameworkCore" Version="$(AspireVersion)" />' }
+      - type: file-contains
+        config: { path: app/AppHost.csproj, value: '<PackageReference Include="Aspire.Hosting.Dotnet" Version="$(AspireVersion)" />' }
+      - type: file-contains
+        config: { path: app/AppHost.csproj, value: 'AspireProjectMetadataTypeName="Api"' }
+      - type: file-contains
+        config: { path: app/AppHost.csproj, value: 'AspireProjectMetadataTypeName="Migrations"' }
+      - type: file-contains
+        config: { path: app/AppHost.csproj, value: 'AspireProjectMetadataTypeName="Client"' }
+      - type: file-contains
+        config: { path: app/Program.cs, value: 'AddDotnetProject("api"' }
+      - type: file-contains
+        config: { path: app/Program.cs, value: 'api.AddEFMigrations("api-migrations")' }
+      - type: file-contains
+        config: { path: app/Program.cs, value: ".WithMigrationsProject<Projects.Migrations>()" }
+      - type: file-contains
+        config: { path: app/Program.cs, value: '.WithEnvironment("CUSTOM_BUILD_INPUT", "runtime-value")' }
+      - type: file-not-contains
+        config: { path: app/Program.cs, value: "WithBuildEnvironment" }
+      - type: file-contains
+        config: { path: app/Program.cs, value: 'AddDotnetProjectBlazorGateway("gateway")' }
+      - type: file-contains
+        config: { path: app/Program.cs, value: 'apiPrefix: "backend"' }
+      - type: file-contains
+        config: { path: app/Program.cs, value: 'otlpPrefix: "telemetry"' }
+      - type: file-contains
+        config: { path: app/Program.cs, value: "proxyTelemetry: true" }
+      - type: file-contains
+        config: { path: app/Program.cs, value: "#pragma warning disable ASPIREDOTNETPROJECT001" }
+      - type: file-contains
+        config: { path: app/Program.cs, value: "#pragma warning restore ASPIREDOTNETPROJECT001" }
+      - type: file-contains
+        config: { path: app/Program.cs, value: "#pragma warning disable ASPIREPROJECTS001" }
+      - type: file-contains
+        config: { path: app/Program.cs, value: "#pragma warning restore ASPIREPROJECTS001" }
+      - type: file-contains
+        config: { path: app/Program.cs, value: "#pragma warning disable ASPIREBLAZOR001" }
+      - type: file-contains
+        config: { path: app/Program.cs, value: "#pragma warning restore ASPIREBLAZOR001" }
+
+  - name: project-v2-routing-positive
+    description: Explicit ProjectResource migration routes away from general Aspireify.
+    prompt: |
+      My existing Aspire 13.6 AppHost uses AddProject and AddCSharpApp. I want an
+      assessment for migrating those resources to DotnetProjectResource.
+    tags:
+      priority: p0
+      area: routing
+    constraints:
+      max_agent_duration: 3m
+    graders:
+      - type: skill-invocation
+        config:
+          required: [aspire-project-v2-migration]
+          disallowed: [aspireify, aspire-orchestration]
+
+  - name: project-v2-routing-negative-new-apphost
+    description: New AppHost wiring remains Aspireify's responsibility.
+    prompt: I just ran aspire init. Scan my services and wire the empty AppHost.
+    tags:
+      priority: p1
+      area: routing
+    constraints:
+      max_agent_duration: 3m
+    graders:
+      - type: skill-invocation
+        config:
+          required: [aspireify]
+          disallowed: [aspire-project-v2-migration]
+
+  - name: project-v2-routing-negative-version-upgrade
+    description: A package/CLI upgrade is not a Project v2 resource migration.
+    prompt: Upgrade my Aspire CLI and AppHost packages to the latest supported release.
+    tags:
+      priority: p1
+      area: routing
+    constraints:
+      max_agent_duration: 3m
+    graders:
+      - type: skill-invocation
+        config:
+          required: [aspire-orchestration]
+          disallowed: [aspire-project-v2-migration]

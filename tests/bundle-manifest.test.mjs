@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-test("bundle manifests emit Aspire 13.5 support metadata and compatible SHA-256/SHA-512 file hashes", () => {
+test("bundle manifests emit Aspire 13.6 support metadata and compatible SHA-256/SHA-512 file hashes", () => {
   const outputRoot = mkdtempSync(join(tmpdir(), "aspire-bundle-manifest-"));
 
   try {
@@ -25,12 +25,24 @@ test("bundle manifests emit Aspire 13.5 support metadata and compatible SHA-256/
 
     assert.equal(result.status, 0, result.stderr);
 
-    assertManifestHashes({
+    const skillsManifest = assertManifestHashes({
       bundleRoot: join(outputRoot, "aspire-skills-v9.9.9"),
       manifestName: "skill-manifest.json",
       entriesProperty: "skills",
       entriesDirectory: "skills"
     });
+    const migrationSkill = skillsManifest.skills.find(skill => skill.name === "aspire-project-v2-migration");
+    assert.ok(migrationSkill, "skills bundle must include aspire-project-v2-migration");
+    assert.deepEqual(
+      migrationSkill.files.map(file => file.relativePath),
+      [
+        "references/compatibility-and-validation.md",
+        "references/migration-patterns.md",
+        "SKILL.md"
+      ],
+      "migration skill bundle must include its references and exclude eval assets"
+    );
+    assert.deepEqual(migrationSkill.installExcludedRelativePaths, ["evals"]);
     assertManifestHashes({
       bundleRoot: join(outputRoot, "aspire-extensions-v9.9.9"),
       manifestName: "extension-manifest.json",
@@ -53,8 +65,8 @@ function assertManifestHashes({
   const entries = manifest[entriesProperty];
 
   assert.deepEqual(manifest.supports, {
-    aspireCli: ">=13.5.0 <13.6.0",
-    aspireSdk: ">=13.5.0 <13.6.0"
+    aspireCli: ">=13.6.0 <13.7.0",
+    aspireSdk: ">=13.6.0 <13.7.0"
   });
   assert.ok(entries.length > 0, `${manifestName} must contain ${entriesProperty}.`);
 
@@ -85,5 +97,8 @@ function assertManifestHashes({
       assert.equal(file.sha256, expectedSha256, `${entry.name}/${file.relativePath} SHA-256 must match its contents.`);
       assert.equal(file.sha512, expectedSha512, `${entry.name}/${file.relativePath} SHA-512 must match its contents.`);
     }
+
   }
+
+  return manifest;
 }

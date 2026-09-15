@@ -56,7 +56,14 @@ Eval-level `environment.skills` is **union-merged** into every stimulus, so you 
 **Hybrid loading convention used here:**
 
 - **Capability specs** load the skill under test **plus its transitive in-repo dependencies** (whatever its `SKILL.md` `INVOKES:`). E.g. `aspireify` loads `aspireify` + `aspire-orchestration` because it validates wiring by running `aspire start`.
-- **Routing stimuli** (the `aspire` router spec, and `area: routing` stimuli) load the **full set** of six skills so routing decisions are made against the real siblings.
+- **Routing stimuli** (the `aspire` router spec, and `area: routing` stimuli) load the **full set** of seven skills so routing decisions are made against the real siblings, including `aspire-project-v2-migration`.
+
+The Project v2 migration suite also uses deterministic file-state graders against
+disposable fixture copies. Assessment scenarios prove that no edit occurs before
+approval; separately approved scenarios inspect the generated AppHost and project
+files. Runnable fixture outputs can then be compiled and started against matching
+local Aspire 13.6 development packages without presenting those packages as a
+released 13.6 build.
 
 **Activation assertions:** `constraints.expect_skills` / `constraints.reject_skills` assert which skills the agent actually invoked — use them to make routing tests first-class rather than relying only on response-content graders.
 

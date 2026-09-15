@@ -13,6 +13,7 @@ It helps agents recognize Aspire workspaces, use the Aspire CLI correctly, route
 | `aspire` | Top-level router for Aspire projects |
 | `aspire-init` | Creates a new Aspire project or adds an Aspire skeleton to an existing repo |
 | `aspireify` | Wires an AppHost after `aspire init` |
+| `aspire-project-v2-migration` | Assesses and migrates eligible Aspire 13.6+ legacy project resources to Project v2 after explicit edit approval |
 | `aspire-orchestration` | Starts, stops, waits for, and manages Aspire resources |
 | `aspire-deployment` | Publishes, deploys, and tears down Aspire apps |
 | `aspire-monitoring` | Routes logs, traces, dashboard, telemetry, and diagnostics work |

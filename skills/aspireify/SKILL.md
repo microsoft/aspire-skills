@@ -9,9 +9,9 @@ description: >-
   Interaction Service, command arguments, apphost.cs, apphost.mts, unified
   withEnvironment, .aspire/modules refusal, config/secrets,
   TS dependency restore, pnpm/yarn/bun, or Yarn Classic.
-  DO NOT USE FOR: skeleton drop (aspire-init), lifecycle-only start/stop/wait/restart
-  or `aspire update --migrate` (aspire-orchestration), publish/deploy/destroy
-  (aspire-deployment), logs/traces (aspire-monitoring).
+  DO NOT USE FOR: skeleton drop (aspire-init), lifecycle-only work or
+  `aspire update --migrate` (aspire-orchestration), ProjectResource migration
+  (aspire-project-v2-migration), deploy/publish (aspire-deployment), or monitoring.
   INVOKES: aspire CLI, AppHost source edits, ServiceDefaults wiring.
   FOR SINGLE OPERATIONS: Run `aspire add PACKAGE` directly for a one-off integration.
 license: MIT
@@ -136,6 +136,8 @@ declared beyond the stub):
 
 If the AppHost already has wired resources and the user wants to **start/stop**
 the app → `aspire-orchestration`. If the user wants to **deploy** → `aspire-deployment`.
+If the user wants to replace legacy `AddProject`, `AddCSharpApp`, or Blazor gateway
+resources with Project v2 `DotnetProjectResource` APIs → `aspire-project-v2-migration`.
 
 ## Language Support
 

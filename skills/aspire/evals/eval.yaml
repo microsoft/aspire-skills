@@ -1,6 +1,7 @@
 name: aspire-router-eval
 description: Evaluates the top-level aspire router skill for correct sub-skill routing. Tests that
-  prompts are directed to aspire-orchestration, aspire-deployment, or aspire-monitoring based on
+  prompts are directed to aspire-project-v2-migration, aspire-orchestration,
+  aspire-deployment, or aspire-monitoring based on
   intent.
 version: "1.0"
 type: capability
@@ -32,6 +33,7 @@ environment:
     - ../../aspire
     - ../../aspire-init
     - ../../aspireify
+    - ../../aspire-project-v2-migration
     - ../../aspire-orchestration
     - ../../aspire-deployment
     - ../../aspire-monitoring
