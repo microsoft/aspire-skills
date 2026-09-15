@@ -49,6 +49,8 @@ test("npm test includes root and nested Aspireify suites without an overridden s
 
 test("publish workflow watches every plugin version source on main", () => {
   assert.match(publishWorkflow, /branches:\s*\n\s*- main/);
+  assert.match(publishWorkflow, /tags:\s*\n\s*- "v\*"\s*\n\s*- "\[0-9\]\*"/);
+  assert.match(publishWorkflow, /^  workflow_dispatch:/m);
 
   for (const path of [
     ".plugin/plugin.json",

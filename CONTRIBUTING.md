@@ -33,6 +33,11 @@ When that version lands on `main`, the publish workflow validates the version
 increase, runs the bundle tests, builds and attests both archives, creates the
 missing `v<version>` tag at that commit, and publishes the GitHub release.
 
+Manual runs on `main` also reject downgrades by comparing with the previous
+distinct plugin version in first-parent history. To retry publication at an
+existing tag's commit, run the workflow on that tag. Existing releases are
+skipped by automatic branch runs; tag runs can replace their bundle assets.
+
 ## Code of Conduct
 
 This project follows the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).

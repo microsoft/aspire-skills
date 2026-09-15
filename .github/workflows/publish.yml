@@ -61,7 +61,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          if git ls-remote --exit-code --refs --tags origin "refs/tags/$TAG_NAME" >/dev/null 2>&1; then
+          remote_tag="$(git ls-remote --refs --tags origin "refs/tags/$TAG_NAME")"
+          if [[ -n "$remote_tag" ]]; then
             git fetch --force origin "refs/tags/$TAG_NAME:refs/tags/$TAG_NAME"
             tag_commit="$(git rev-list -n 1 "$TAG_NAME")"
             echo "create_tag=false" >> "$GITHUB_OUTPUT"

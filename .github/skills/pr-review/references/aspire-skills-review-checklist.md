@@ -102,7 +102,7 @@ same value:
 Also check that the per-skill `metadata.version` in each changed `SKILL.md` advances
 when that skill's behavior changes — independently of the plugin-wide version.
 
-**Severity if any manifest is out of sync:** `blocking`. **Severity if all four match but
+**Severity if any version source is out of sync:** `blocking`. **Severity if all six match but
 the bump itself is missing on a behavior change:** `important`.
 
 ## 7. CHANGELOG
