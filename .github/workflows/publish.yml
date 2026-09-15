@@ -21,160 +21,86 @@ permissions:
   id-token: write
   attestations: write
 
-concurrency:
-  group: ${{ github.workflow }}
-  queue: max
-  cancel-in-progress: false
-
 jobs:
   publish:
     name: Publish bundles
-    if: ${{ github.event_name != 'push' || !github.event.deleted }}
     runs-on: ubuntu-latest
     steps:
-      - name: Select bundles
-        id: selection
-        env:
-          INCLUDE_SKILLS: ${{ inputs.include_skills }}
-          INCLUDE_EXTENSIONS: ${{ inputs.include_extensions }}
+      - name: Validate bundle selection
+        if: ${{ github.event_name == 'workflow_dispatch' && !inputs.include_skills && !inputs.include_extensions }}
         shell: bash
         run: |
-          set -euo pipefail
-          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
-            INCLUDE_SKILLS=true
-            INCLUDE_EXTENSIONS=false
-          fi
-
-          if [[ "$INCLUDE_SKILLS" != "true" && "$INCLUDE_EXTENSIONS" != "true" ]]; then
-            echo "::error::Select at least one bundle: aspire-skills or aspire-extensions." >&2
-            exit 1
-          fi
-
-          bundles=()
-          if [[ "$INCLUDE_SKILLS" == "true" ]]; then
-            bundles+=("skills")
-          fi
-          if [[ "$INCLUDE_EXTENSIONS" == "true" ]]; then
-            bundles+=("extensions")
-          fi
-
-          echo "bundles=${bundles[*]}" >> "$GITHUB_OUTPUT"
+          echo "::error::Select at least one bundle: aspire-skills or aspire-extensions." >&2
+          exit 1
 
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: 22
 
-      - name: Read release version
+      - name: Read version from tag
         id: version
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_REF_TYPE" != "tag" ]]; then
-            echo "::error::Select an existing version tag when running this workflow." >&2
+          if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
+            echo "This workflow must run from a version tag such as v0.0.1." >&2
             exit 1
           fi
 
-          tag="$GITHUB_REF_NAME"
-          version="${tag#v}"
+          version="${GITHUB_REF_NAME#v}"
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
-            echo "::error::Tag '$tag' is not a supported release version. Select a tag such as 0.0.3 or v0.0.3." >&2
-            exit 1
-          fi
-
-          if ! git check-ref-format "refs/tags/$tag"; then
-            echo "::error::Tag '$tag' is not a valid Git reference." >&2
+            echo "Tag '${GITHUB_REF_NAME}' is not a supported semantic version tag." >&2
             exit 1
           fi
 
           source_commit="$(git rev-parse 'HEAD^{commit}')"
           echo "source_commit=$source_commit" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "skills_asset=dist/aspire-skills-v$version.tgz" >> "$GITHUB_OUTPUT"
+          echo "extensions_asset=dist/aspire-extensions-v$version.tgz" >> "$GITHUB_OUTPUT"
 
       - name: Test bundles
         run: npm test
 
       - name: Build bundles
-        id: build
-        env:
-          BUNDLES: ${{ steps.selection.outputs.bundles }}
-          VERSION: ${{ steps.version.outputs.version }}
-          SOURCE_COMMIT: ${{ steps.version.outputs.source_commit }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          read -r -a bundles <<< "$BUNDLES"
-          assets=()
-          for bundle in "${bundles[@]}"; do
-            npm run bundle -- \
-              --bundle "$bundle" \
-              --version "$VERSION" \
-              --out dist \
-              --source-commit "$SOURCE_COMMIT"
-            assets+=("dist/aspire-$bundle-v$VERSION.tgz")
-          done
-
-          {
-            echo "assets<<EOF"
-            printf '%s\n' "${assets[@]}"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+        run: >-
+          npm run bundle --
+          --version "${{ steps.version.outputs.version }}"
+          --out dist
+          --source-commit "${{ steps.version.outputs.source_commit }}"
 
       - name: Attest bundles
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
         with:
-          subject-path: ${{ steps.build.outputs.assets }}
-
-      - name: Verify release tag
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG_NAME: ${{ steps.version.outputs.tag }}
-          SOURCE_COMMIT: ${{ steps.version.outputs.source_commit }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          tag_object="$(gh api \
-            "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$TAG_NAME" \
-            --jq ".[] | select(.ref == \"refs/tags/$TAG_NAME\") | [.object.type, .object.sha] | @tsv")"
-
-          if [[ -z "$tag_object" ]]; then
-            echo "::error::Tag '$TAG_NAME' no longer exists. Select an existing version tag." >&2
-            exit 1
-          fi
-
-          IFS=$'\t' read -r object_type object_sha <<< "$tag_object"
-          while [[ "$object_type" == "tag" ]]; do
-            tag_object="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$object_sha" \
-              --jq '[.object.type, .object.sha] | @tsv')"
-            IFS=$'\t' read -r object_type object_sha <<< "$tag_object"
-          done
-
-          if [[ "$object_type" != "commit" || "$object_sha" != "$SOURCE_COMMIT" ]]; then
-            echo "::error::Tag '$TAG_NAME' does not point to release commit '$SOURCE_COMMIT'." >&2
-            exit 1
-          fi
-          echo "Verified tag '$TAG_NAME' at '$SOURCE_COMMIT'."
+          subject-path: |
+            ${{ steps.version.outputs.skills_asset }}
+            ${{ steps.version.outputs.extensions_asset }}
 
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG_NAME: ${{ steps.version.outputs.tag }}
+          TAG_NAME: ${{ github.ref_name }}
           VERSION: ${{ steps.version.outputs.version }}
-          BUNDLE_ASSETS: ${{ steps.build.outputs.assets }}
+          SKILLS_ASSET: ${{ steps.version.outputs.skills_asset }}
+          EXTENSIONS_ASSET: ${{ steps.version.outputs.extensions_asset }}
+          INCLUDE_SKILLS: ${{ github.event_name == 'push' || inputs.include_skills }}
+          INCLUDE_EXTENSIONS: ${{ github.event_name == 'workflow_dispatch' && inputs.include_extensions }}
         shell: bash
         run: |
           set -euo pipefail
           assets=()
-          while IFS= read -r asset; do
-            assets+=("$asset")
-          done <<< "$BUNDLE_ASSETS"
+          if [[ "$INCLUDE_SKILLS" == "true" ]]; then
+            assets+=("$SKILLS_ASSET")
+          fi
+          if [[ "$INCLUDE_EXTENSIONS" == "true" ]]; then
+            assets+=("$EXTENSIONS_ASSET")
+          fi
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             gh release upload "$TAG_NAME" "${assets[@]}" --clobber
           else

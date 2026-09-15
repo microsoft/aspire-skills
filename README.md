@@ -155,32 +155,11 @@ Use `npm run bundle:skills` or `npm run bundle:extensions` to build one bundle t
 
 ### Publishing releases
 
-**Publish Aspire bundles** runs on version-tag pushes and manual dispatches.
-Pushing a tag matching `v*` or `[0-9]*` publishes only `aspire-skills` to that
-existing tag. The pushed name is preserved: pushing `0.0.3` publishes to `0.0.3`,
-while pushing `v0.0.3` publishes to `v0.0.3`. Tag deletions do not publish.
-
-For a manual run, select an existing version tag in GitHub's **Use workflow from**
-ref picker, not a branch. The version is derived from that tag; there is no
-separate version input. Manual runs expose only two checkboxes:
-`include_skills` (checked by default) and `include_extensions` (unchecked by
-default). Select either bundle or both; selecting neither fails before testing or
-publishing. Only selected bundles are built for release, attested, and uploaded.
-Both entry points preserve the existing tag name and validate it before building.
-
-Authentication uses the built-in, repository-scoped `GITHUB_TOKEN` with
-`contents: write`. No additional GitHub App, repository variables, or secrets are
-required.
-
-The workflow creates or updates GitHub releases, but never creates or moves Git
-tags. Runs are serialized without cancelling an in-progress release.
-Up to 100 pending runs are retained instead of replacing an earlier queued
-release; additional runs are cancelled if that queue is full.
-
-Before publishing, the workflow verifies that the tag still exists and resolves
-to the checked-out source commit. Both entry points fail if the tag was deleted
-or moved; neither recreates it. Reruns replace only selected release assets and
-do not delete unselected assets.
+The publish workflow builds and attests both bundles, but uploads only
+`aspire-skills` by default. Manual runs on an existing version tag can select
+`include_skills` (default `true`) and `include_extensions` (default `false`); at
+least one must be selected. Tag pushes use the defaults. The workflow does not
+create Git tags.
 
 ## Contributing
 
