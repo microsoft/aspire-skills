@@ -17,50 +17,27 @@ jobs:
   eval:
     name: Run nightly eval suite
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      copilot-requests: write
     steps:
-      # Fail-fast preflight: if the Copilot token isn't provisioned, exit
-      # the job immediately (as a soft-skip, so scheduled runs don't paint
-      # the Actions UI red) before wasting CI minutes on checkout / setup-
-      # node / install. The secret must be added once on the repo as
-      # `COPILOT_GITHUB_TOKEN` — see evals/README.md → "CI authentication".
-      - name: Preflight COPILOT_GITHUB_TOKEN
-        id: preflight
-        env:
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
-        run: |
-          if [ -z "${COPILOT_GITHUB_TOKEN:-}" ]; then
-            echo "::warning title=Nightly eval skipped::COPILOT_GITHUB_TOKEN secret is not configured on this repo, so the nightly eval suite was skipped. A maintainer must add the secret (see evals/README.md → CI authentication) for the suite to run."
-            {
-              echo "### ⚠️ Nightly eval skipped"
-              echo ""
-              echo "The \`COPILOT_GITHUB_TOKEN\` repository secret is not configured, so"
-              echo "the model-backed \`nightly\` eval suite did not run."
-              echo ""
-              echo "**To enable the suite**, a maintainer needs to add the secret once —"
-              echo "see [\`evals/README.md\` → CI authentication](../blob/main/evals/README.md#ci-authentication)."
-            } >> "$GITHUB_STEP_SUMMARY"
-            echo "has_token=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "has_token=true" >> "$GITHUB_OUTPUT"
-
       - name: Checkout
-        if: steps.preflight.outputs.has_token == 'true'
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Setup Node
-        if: steps.preflight.outputs.has_token == 'true'
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: "22"
 
       - name: Install vally and Copilot runtime
-        if: steps.preflight.outputs.has_token == 'true'
         # Keep Vally and its native runtime under one node_modules ancestor so
-        # @github/copilot-sdk can resolve the platform package.
+        # @github/copilot-sdk can resolve the matching platform package.
         run: |
           tools_dir="$RUNNER_TEMP/aspire-eval-tools"
-          npm install --prefix "$tools_dir" @microsoft/vally-cli @github/copilot-linux-x64
+          npm install --ignore-scripts --prefix "$tools_dir" @microsoft/vally-cli@0.16.0 @github/copilot-linux-x64@1.0.80
+          "$tools_dir/node_modules/.bin/vally" --version
           cli_path="$tools_dir/node_modules/@github/copilot-linux-x64/index.js"
           test -f "$cli_path"
           node "$cli_path" --version
@@ -68,19 +45,26 @@ jobs:
           echo "COPILOT_CLI_PATH=$cli_path" >> "$GITHUB_ENV"
 
       - name: Run nightly evals
-        if: steps.preflight.outputs.has_token == 'true'
-        # COPILOT_GITHUB_TOKEN is read by @github/copilot-sdk (the vally
-        # `copilot-sdk` executor) to invoke Copilot models. It is scoped to
-        # this step only so install / upload never see it.
+        id: evals
+        # Runtime env auth avoids Vally's explicit SDK user-token override.
         env:
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          COPILOT_GITHUB_TOKEN: ${{ github.token }}
         run: |
+          unset GITHUB_TOKEN GH_TOKEN GITHUB_COPILOT_API_TOKEN
           vally eval \
+            --require-pass \
             --suite nightly \
             --output-dir ./results
 
+      - name: Redact evaluation artifacts
+        id: redact
+        if: ${{ !cancelled() && (steps.evals.outcome == 'success' || steps.evals.outcome == 'failure') }}
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/redact-eval-artifacts.mjs ./results
+
       - name: Upload trajectories
-        if: always() && steps.preflight.outputs.has_token == 'true'
+        if: ${{ !cancelled() && steps.redact.outcome == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: eval-results-nightly
