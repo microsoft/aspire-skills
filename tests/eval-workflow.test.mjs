@@ -89,7 +89,7 @@ test("gate and nightly evaluations fail closed while baseline remains informatio
 });
 
 test("workflow and redaction changes exercise regression coverage", () => {
-  const workflow = readWorkflow("bundle-test.yml");
+  const workflow = readWorkflow("test.yml");
   for (const filter of [".github/workflows/skill-eval*.yml", ".github/workflows/skill-experiment.yml"]) {
     assert.equal(workflow.split(`- "${filter}"`).length - 1, 2);
   }

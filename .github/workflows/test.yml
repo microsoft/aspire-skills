@@ -1,16 +1,18 @@
-name: Bundle Tests
+name: Tests
 
 on:
   pull_request:
     paths:
       - ".gitattributes"
-      - ".github/workflows/bundle-test.yml"
+      - ".github/workflows/test.yml"
       - ".github/workflows/publish.yml"
       - ".github/workflows/skill-eval*.yml"
       - ".github/workflows/skill-experiment.yml"
+      - ".github/workflows/publish-opencode-catalog.yml"
       - ".github/plugins/aspire-skills/extensions/**"
       - "extensions/**"
       - "hooks/**"
+      - "skills/**"
       - "package.json"
       - "scripts/**"
       - "tests/**"
@@ -19,13 +21,15 @@ on:
       - main
     paths:
       - ".gitattributes"
-      - ".github/workflows/bundle-test.yml"
+      - ".github/workflows/test.yml"
       - ".github/workflows/publish.yml"
       - ".github/workflows/skill-eval*.yml"
       - ".github/workflows/skill-experiment.yml"
+      - ".github/workflows/publish-opencode-catalog.yml"
       - ".github/plugins/aspire-skills/extensions/**"
       - "extensions/**"
       - "hooks/**"
+      - "skills/**"
       - "package.json"
       - "scripts/**"
       - "tests/**"
@@ -35,7 +39,7 @@ permissions:
 
 jobs:
   test:
-    name: Test and build bundles
+    name: Test and build
     strategy:
       fail-fast: false
       matrix:
@@ -59,6 +63,12 @@ jobs:
 
       - name: Test
         run: npm test
+
+      - name: Build OpenCode catalog
+        run: npm run catalog
+
+      - name: Check OpenCode catalog
+        run: npm run catalog:check
 
       - name: Build release-equivalent bundles
         run: >-

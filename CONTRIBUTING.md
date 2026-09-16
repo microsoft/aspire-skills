@@ -20,6 +20,8 @@ Skills follow the standard SKILL.md format:
 
 ## Testing
 
+See the [development guide](docs/development.md) for local setup and test commands.
+
 - Ensure SKILL.md files are under 5000 tokens
 - Verify frontmatter compliance
 - Test with at least one agent host (Copilot CLI, Claude Code, etc.)
