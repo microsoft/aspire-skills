@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -46,12 +46,83 @@ test("preserves binary bytes and unchanged files", t => {
   writeFileSync(file, Buffer.concat([prefix, Buffer.from(token), prefix]));
   const unchanged = join(directory, "unchanged");
   writeFileSync(unchanged, prefix);
+  utimesSync(unchanged, new Date("2000-01-01"), new Date("2000-01-01"));
+  const modifiedAt = statSync(unchanged).mtimeMs;
 
   redactEvalArtifacts([directory], token);
 
   assert.deepEqual(readFileSync(file), Buffer.concat([prefix, Buffer.from("***"), prefix]));
   assert.deepEqual(readFileSync(unchanged), prefix);
+  assert.equal(statSync(unchanged).mtimeMs, modifiedAt);
 });
+
+const pathToken = "ghs_synthetic_artifact_credential";
+const credentialForms = [
+  ["literal", pathToken],
+  ["base64", Buffer.from(pathToken).toString("base64")],
+  ["basic", Buffer.from(`x-access-token:${pathToken}`).toString("base64")],
+];
+
+for (const [label, value] of credentialForms) {
+  for (const kind of ["file", "directory"]) {
+    for (const scope of ["root", "nested"]) {
+      test(`rejects ${label} credentials in ${scope} ${kind} names before modifying contents`, t => {
+        const directory = fixture(t);
+        const results = join(directory, "results");
+        mkdirSync(results);
+        const target = join(results, `trace-${value}`);
+        if (kind === "directory") mkdirSync(target);
+        const file = kind === "directory" ? join(target, "trace.json") : target;
+        writeFileSync(file, pathToken);
+
+        assert.throws(
+          () => redactEvalArtifacts([scope === "root" ? target : results], pathToken),
+          /credential-bearing evaluation artifact paths/,
+        );
+        assert.equal(readFileSync(file, "utf8"), pathToken);
+      });
+    }
+  }
+}
+
+test("detects base64 credentials spanning path separators on every platform", t => {
+  const directory = fixture(t);
+  const secret = "credential???";
+  const encoded = Buffer.from(secret).toString("base64");
+  assert.ok(encoded.includes("/"));
+  const target = join(directory, ...encoded.split("/"));
+  mkdirSync(target, { recursive: true });
+  const file = join(target, "trace.json");
+  writeFileSync(file, secret);
+
+  assert.throws(() => redactEvalArtifacts([directory], secret), /credential-bearing/);
+  assert.equal(readFileSync(file, "utf8"), secret);
+});
+
+test("rejects credential-bearing paths even when optional outputs do not exist", t => {
+  const directory = fixture(t);
+  assert.throws(() => redactEvalArtifacts([join(directory, pathToken)], pathToken), /credential-bearing/);
+});
+
+for (const [label, value] of credentialForms) {
+  test(`CLI blocks publication without printing ${label} credential-bearing paths`, t => {
+    const directory = fixture(t);
+    const file = join(directory, `trace-${value}.json`);
+    writeFileSync(file, "innocuous content");
+    const result = spawnSync(process.execPath, [
+      join(repoRoot, "scripts", "redact-eval-artifacts.mjs"), directory,
+    ], {
+      env: { ...process.env, COPILOT_GITHUB_TOKEN: pathToken },
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /must not be published/);
+    assert.ok(!result.stderr.includes(value));
+    assert.ok(!result.stderr.includes(pathToken));
+    assert.ok(!result.stderr.includes(file));
+  });
+}
 
 test("tolerates missing outputs but fails closed without a token or output paths", t => {
   const directory = fixture(t);

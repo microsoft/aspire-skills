@@ -19,6 +19,12 @@ export function redactEvalArtifacts(paths, token) {
   const replacement = Buffer.from("***");
 
   function redact(path, optional = false) {
+    const rawPath = Buffer.from(path);
+    // Base64 can span directory separators, which Windows joins with backslashes.
+    const portablePath = Buffer.from(path.replaceAll("\\", "/"));
+    if (secrets.some(secret => rawPath.includes(secret) || portablePath.includes(secret))) {
+      throw new Error("Refusing to publish credential-bearing evaluation artifact paths.");
+    }
     const stat = lstatSync(path, { throwIfNoEntry: !optional });
     if (!stat) {
       return;
