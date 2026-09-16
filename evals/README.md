@@ -243,32 +243,48 @@ suites:
       priority: [p0, p1, p2]
 ```
 
-`vally` exits non-zero if any stimulus fails grading. Because `--suite` cannot be combined with explicit `-e` specs, the PR workflow discovers changed skill specs and applies the `ci-gate`-equivalent `priority=p0,p1` filter only to them. The comprehensive `nightly` suite runs weekly and uploads the full `./results` directory as a workflow artifact for later dashboard inspection.
+The PR gate and nightly workflows use `vally eval --require-pass` so failed evaluations, including authentication errors, fail the job. Because `--suite` cannot be combined with explicit `-e` specs, the PR workflow discovers changed skill specs and applies the `ci-gate`-equivalent `priority=p0,p1` filter only to them. The comprehensive `nightly` suite runs weekly and uploads the redacted `./results` directory as a workflow artifact for later dashboard inspection. The comparative baseline remains informational.
 
 ## CI authentication
 
-The `copilot-sdk` executor (declared by every `skills/<skill>/evals/eval.yaml`) invokes Copilot models via the [`@github/copilot-sdk`](https://www.npmjs.com/package/@github/copilot-sdk) package. That package reads the **`COPILOT_GITHUB_TOKEN`** environment variable.
+The `copilot-sdk` executor invokes Copilot models via [`@github/copilot-sdk`](https://www.npmjs.com/package/@github/copilot-sdk) and the Copilot CLI runtime. CI uses the automatically generated, short-lived **Actions `GITHUB_TOKEN`**, not a stored personal access token (PAT). This is supported in ordinary GitHub Actions workflows; converting these evaluations to GitHub Agentic Workflows is not required.
 
 | Context | How auth is supplied |
 |---------|----------------------|
 | **Local** (`vally eval ...`) | Set `COPILOT_GITHUB_TOKEN` from a Copilot-enabled `gh` login — e.g. `export COPILOT_GITHUB_TOKEN="$(gh auth token)"`. |
-| **CI** (`skill-eval.yml`, `skill-eval-nightly.yml`) | Reads the **`COPILOT_GITHUB_TOKEN`** repository (or org) secret and exposes it as the env var of the same name **at step level only** (so checkout / install / artifact-upload steps never see it). |
+| **CI** (`skill-eval.yml`, `skill-eval-nightly.yml`, `skill-experiment.yml`) | Maps **`${{ github.token }}`** to **`COPILOT_GITHUB_TOKEN`** only in the evaluation and artifact-redaction steps. No repository or organization authentication secret is read. |
 
-The workflow's default `secrets.GITHUB_TOKEN` is the **wrong** token — it has repo scopes but **no Copilot model access**, so the SDK 401s on it.
+Each evaluation job grants only:
 
-### One-time maintainer setup
+```yaml
+permissions:
+  contents: read
+  copilot-requests: write
+```
 
-1. Mint a Copilot-enabled GitHub token for the bot / service identity you want CI to run as. Personal PATs work for spike testing; a dedicated service account is the right long-term choice so eval history isn't tied to one human.
-2. Repo → **Settings → Secrets and variables → Actions → New repository secret**
-   - Name: `COPILOT_GITHUB_TOKEN`
-   - Value: the token from step 1
-3. Optionally promote to a **GitHub Environment** (e.g. `aspire-skills-evals`) with required reviewers and protected-branch policy for an extra approval gate.
+`copilot-requests: write` permits model requests; it does not grant repository write access. The workflow-level default remains `contents: read`, and unspecified token permissions are not granted.
 
-### Behavior when the secret is missing
+### Vally authentication compatibility
 
-- `skill-eval.yml` and `skill-eval-nightly.yml` **soft-skip** with a `::warning::` annotation and a `$GITHUB_STEP_SUMMARY` block pointing back at this section. The job stays green so a missing-secret state never blocks merges or paints scheduled runs red — but the warning + summary are highly visible in the PR / run UI until a maintainer provisions the secret.
-- `skill-eval.yml` additionally **does not run at all** for PRs opened from forks (GitHub does not forward secrets to fork-triggered workflows), so external contributors get a clean skip rather than a confusing warning they can't act on. `skill-lint.yml` still runs for forks since it needs no token.
-- `skill-lint.yml` always hard-gates schema and wiring correctness regardless of whether the model token is configured.
+Use `COPILOT_GITHUB_TOKEN: ${{ github.token }}` rather than exposing a `GITHUB_TOKEN` environment variable to Vally. Vally 0.16.0's LLM grader passes `GITHUB_TOKEN` (or `GITHUB_COPILOT_API_TOKEN`) through the SDK's explicit `gitHubToken` option. That option is for user tokens; installation tokens must use [runtime environment authentication](https://github.com/github/copilot-sdk/blob/main/docs/auth/server-to-server-tokens.md). Evaluation steps unset those overrides and `GH_TOKEN` before launching Vally. The separate PR-file-discovery step still uses `GH_TOKEN` for `gh pr diff`.
+
+The workflows pin Vally 0.16.0 and its matching Copilot runtime 1.0.80, install them with npm lifecycle scripts disabled, and retain commit-SHA-pinned Actions. When updating these versions, exercise both the agent executor and the LLM judge; a successful CLI version check alone does not prove authentication works.
+
+### Maintainer rollout and billing
+
+1. Confirm the organization's **Copilot CLI > Allow use of Copilot CLI billed to the organization** policy is enabled. See [Using Copilot CLI in GitHub Actions with GITHUB_TOKEN](https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli-in-actions).
+2. Confirm organization-level spending controls before enabling or merging the migration. These workflows retain their automatic PR, scheduled, and manual triggers; there is no new repository opt-in. **User-level Copilot budgets do not apply to organization-billed requests.** Use organization usage monitoring and cost-center budgets, and review the existing eval run counts and concurrency. This change does not introduce a hard AI-credit cap.
+3. Run a same-repository PR evaluation containing an LLM-graded stimulus, then exercise the nightly and baseline paths. Confirm successful model execution and grading, organization billing attribution, and redacted artifacts. A workflow version check or local offline test cannot verify organization policy or Actions-token authorization.
+4. After successful rollout, remove the obsolete `COPILOT_GITHUB_TOKEN` secret and revoke its underlying PAT if no other consumer needs it. Removing a secret alone does not revoke a token. These workflows never fall back to that PAT.
+
+Missing organization policy, permission, or runtime support is an authentication failure, not a successful soft-skip. The PR gate and nightly suite fail on evaluation errors; the baseline retains its existing informational behavior. `skill-lint.yml` remains independent of Copilot model access.
+
+### Trust boundary and published results
+
+- **Fork and Dependabot PRs remain excluded** from model-backed evaluation: they previously had no access to the Actions PAT secret. The job requires a same-repository PR and excludes both Dependabot authors and actors. Do not switch to `pull_request_target` or run fork code in a privileged follow-up workflow. Lint and offline tests still run for external contributions.
+- **Same-repository PR authors and manual workflow operators remain trusted.** Skills, fixtures, and evaluation tools can execute code and read the evaluation process environment. A short-lived token limits credential lifetime and repository scope, but does not sandbox agents or prevent organization-billed misuse. Changes to workflows, skills, evals, and their dependencies still need normal maintainer review.
+- **Checkout credentials are not persisted** in Git configuration. Tokens are not written to `GITHUB_ENV`, outputs, or the repository. Step-level environment scoping reduces accidental exposure; job permissions remain the actual Actions authorization boundary.
+- **Artifacts and the baseline summary are published only after successful redaction**, including after failed evaluations. The shared redactor removes the literal token and common base64 representations, preserves unrelated bytes, and rejects linked/non-regular files. Cancellation or redaction failure prevents publication. This is defense in depth against accidental disclosure, not protection against malicious arbitrary encoding or exfiltration.
 
 ## Interpreting results
 
