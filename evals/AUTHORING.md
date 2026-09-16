@@ -27,18 +27,18 @@ stimuli:
           dest: csharp-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: uses_aspire_destroy
+        name: uses-aspire-destroy
         config:
           prompt: >
             Does the assistant's response recommend `aspire destroy` (new in
             Aspire 13.3) as the way to tear down a deployed Aspire app? Answer
             based on intent.
       - type: output-not-contains
-        name: no_manual_teardown
+        name: no-manual-teardown
         config:
           substring: "az group delete"
       - type: skill-invocation
-        name: routes_to_deployment
+        name: routes-to-deployment
         config:
           required: [aspire-deployment]
 ```
@@ -54,13 +54,15 @@ stimuli:
 | `tags` | record | Merged over the eval-level `tags`. Always include a `priority` (`p0`/`p1`/`p2`) and at least one `area` (a single value or a list). |
 | `environment.files[]` | `{ src, dest }[]` | `src` resolves **relative to the eval spec file** (shared fixtures: `../../../evals/<fixture>`); `dest` is the workspace-relative path the executor sees. Reference the **shared fixtures** rather than copy-pasting per skill. |
 | `environment.skills[]` | string[] | (Optional) skill dirs to **add** for this stimulus on top of the eval-level set — used by routing stimuli to pull in siblings. Union-merged during normal eval runs; experiment variants replace the resolved list wholesale. |
-| `constraints.expect_skills` / `reject_skills` | string[] | (Optional) assert the agent *did* / *did not* activate these skills. |
+| `constraints.max_agent_duration` | string | (Optional) constrain agent execution duration. Use a `skill-invocation` grader for skill activation assertions. |
 | `graders[]` | object[] | One or more graders. See below. |
 | `scoring` | object | (Optional) per-grader weights + pass threshold. Omitted → equal weights, threshold `1.0` (every grader must pass). |
 
 ## Grader types
 
 Each grader has a `type`, an optional `name`, and a `config`. The types this suite uses:
+
+When supplied, grader names must match `[a-z0-9][a-z0-9-]{0,59}`: use lowercase letters, digits, and hyphens, not underscores. Names must be unique across the entire eval file, not just within each stimulus; add a descriptive or numeric suffix when repeating an assertion. Vally 0.16.0 rejects invalid or duplicate grader names before executing any trials. This restriction applies to grader names, not stimulus names.
 
 | Type | What it does | `config` keys | When to use |
 |------|--------------|---------------|-------------|
@@ -73,7 +75,7 @@ Each grader has a `type`, an optional `name`, and a `config`. The types this sui
 
 Other static graders exist (`file-exists`, `file-contains`, `file-matches`, `tool-call`, `run-command`, `program`, `metric-threshold`); run `vally lint --eval-spec <spec>` and see the [vally docs](https://www.npmjs.com/package/@microsoft/vally-cli) for the full set.
 
-`eval.yaml` can also declare **top-level graders** that run on every stimulus in the spec (used in this repo for the global `never_azd` rule on `aspire-deployment`).
+`eval.yaml` can also declare **top-level graders** that run on every stimulus in the spec (used in this repo for the global `never-azd` rule on `aspire-deployment`).
 
 ## Grader patterns (do's and don'ts)
 
@@ -85,7 +87,7 @@ Without this, judges sometimes evaluate the input fixture files instead of the a
 
 ```yaml
 # ✅ Good
-- name: uses_aspire_destroy
+- name: uses-aspire-destroy
   type: prompt
   config:
     prompt: >
@@ -93,7 +95,7 @@ Without this, judges sometimes evaluate the input fixture files instead of the a
       tear down a deployed Aspire app?
 
 # ❌ Bad — judge may evaluate the workspace files, not the response
-- name: uses_aspire_destroy
+- name: uses-aspire-destroy
   type: prompt
   config:
     prompt: >
@@ -106,19 +108,19 @@ A combined "Does X recommend Y? It should NOT do Z." prompt confuses judges — 
 
 ```yaml
 # ✅ Good — two narrow graders
-- name: uses_aspire_destroy
+- name: uses-aspire-destroy
   type: prompt
   config:
     prompt: >
       Does the assistant's response recommend `aspire destroy`?
 
-- name: no_az_group_delete
+- name: no-az-group-delete
   type: output-not-contains
   config:
     substring: "az group delete"
 
 # ❌ Bad — combined positive + negative confuses the judge
-- name: uses_aspire_destroy
+- name: uses-aspire-destroy
   type: prompt
   config:
     prompt: >
@@ -135,12 +137,12 @@ Forbidding the bare substring `"azd"` will fire on legitimate "do not use azd" g
 
 ```yaml
 # ✅ Good — specific command tokens
-- { type: output-not-contains, name: no_azd_up,      config: { substring: "azd up" } }
-- { type: output-not-contains, name: no_azd_deploy,  config: { substring: "azd deploy" } }
-- { type: output-not-contains, name: no_azd_provision, config: { substring: "azd provision" } }
+- { type: output-not-contains, name: no-azd-up,      config: { substring: "azd up" } }
+- { type: output-not-contains, name: no-azd-deploy,  config: { substring: "azd deploy" } }
+- { type: output-not-contains, name: no-azd-provision, config: { substring: "azd provision" } }
 
 # ❌ Bad — fires on the literal letters "azd" anywhere in the response
-- { type: output-not-contains, name: no_azd, config: { substring: "azd" } }
+- { type: output-not-contains, name: no-azd, config: { substring: "azd" } }
 ```
 
 The same applies to bare `"docker"`, `"kubectl"`, `"helm"` — agents will mention them in valid context (e.g., "Aspire generates a Helm chart; you do not need to run `helm install` yourself"). Forbid the **action** (`docker compose down`, `kubectl apply`, `helm install`), not the noun.
@@ -159,7 +161,7 @@ The judge model (typically `gpt-4.1`) may have stale Aspire knowledge. If your g
 
 ```yaml
 # ✅ Good — grader teaches the judge
-- name: uses_helm_engine
+- name: uses-helm-engine
   type: prompt
   config:
     prompt: >
@@ -185,7 +187,7 @@ Routing is graded **inline** with the `skill-invocation` grader (there is no sep
   tags: { priority: p0, area: routing }
   graders:
     - type: skill-invocation
-      name: routes_to_deployment
+      name: routes-to-deployment
       config:
         required: [aspire-deployment]
         disallowed: [aspire-monitoring]
@@ -196,7 +198,7 @@ Rules:
 - **Routing stimuli must load the full skill set** so the decision is made against real siblings — add the siblings via stimulus-level `environment.skills` (union-merged on top of the eval-level list). See [README → Skills & baselines](./README.md#skills--baselines-vally-080).
 - **A skill cannot be in both `required` and `disallowed`** (vally errors). For an "any of these N is fine" intent, list them all in `required` only if all are acceptable, or fall back to a `prompt` grader on the response content.
 - **Pair routing with a content check.** `skill-invocation` proves *which* skill ran; add a `prompt` or `output-contains` grader if the *answer* also matters.
-- **`constraints.expect_skills` / `reject_skills`** are a lighter-weight alternative when you only need an activation assertion and no scoring weight.
+- **Do not use `constraints.expect_skills` / `reject_skills`.** Vally 0.16.0 removed these fields. Express the same requirements with `skill-invocation` grader `config.required` / `config.disallowed`; extend an existing invocation grader instead of duplicating it.
 - **Phrase like a real user.** "I want to ship this" is more realistic than "Invoke aspire deploy."
 
 ## Adding a new stimulus — checklist
