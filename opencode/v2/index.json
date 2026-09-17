@@ -11,7 +11,7 @@
     },
     {
       "name": "aspire-deployment",
-      "version": "sha512-5fe4acddcb16c8371b90af776a6b347da88c50b0ce81975012cbed6348995dad0fb1d0f6346d38d58a5c253174257d8ca7b890d9d7bfbefcbd163acf4c1bc161",
+      "version": "test-change",
       "files": [
         "aspire-deployment.md",
         "references/aws.md",
