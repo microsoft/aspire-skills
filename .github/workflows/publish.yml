@@ -6,6 +6,15 @@ on:
       - "v*"
       - "[0-9]*"
   workflow_dispatch:
+    inputs:
+      include_skills:
+        description: Include aspire-skills
+        type: boolean
+        default: true
+      include_extensions:
+        description: Include aspire-extensions
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -17,6 +26,13 @@ jobs:
     name: Publish bundles
     runs-on: ubuntu-latest
     steps:
+      - name: Validate bundle selection
+        if: ${{ github.event_name == 'workflow_dispatch' && !inputs.include_skills && !inputs.include_extensions }}
+        shell: bash
+        run: |
+          echo "::error::Select at least one bundle: aspire-skills or aspire-extensions." >&2
+          exit 1
+
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -73,10 +89,18 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           SKILLS_ASSET: ${{ steps.version.outputs.skills_asset }}
           EXTENSIONS_ASSET: ${{ steps.version.outputs.extensions_asset }}
+          INCLUDE_SKILLS: ${{ github.event_name == 'push' || inputs.include_skills }}
+          INCLUDE_EXTENSIONS: ${{ github.event_name == 'workflow_dispatch' && inputs.include_extensions }}
         shell: bash
         run: |
           set -euo pipefail
-          assets=("$SKILLS_ASSET" "$EXTENSIONS_ASSET")
+          assets=()
+          if [[ "$INCLUDE_SKILLS" == "true" ]]; then
+            assets+=("$SKILLS_ASSET")
+          fi
+          if [[ "$INCLUDE_EXTENSIONS" == "true" ]]; then
+            assets+=("$EXTENSIONS_ASSET")
+          fi
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             gh release upload "$TAG_NAME" "${assets[@]}" --clobber
           else

@@ -153,6 +153,14 @@ directly instead of maintaining hook provenance separately.
 
 Use `npm run bundle:skills` or `npm run bundle:extensions` to build one bundle type.
 
+### Publishing releases
+
+The publish workflow builds and attests both bundles, but uploads only
+`aspire-skills` by default. Manual runs on an existing version tag can select
+`include_skills` (default `true`) and `include_extensions` (default `false`); at
+least one must be selected. Tag pushes use the defaults. The workflow does not
+create Git tags.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
