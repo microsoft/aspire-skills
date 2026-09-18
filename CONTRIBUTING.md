@@ -5,9 +5,16 @@ Thank you for your interest in contributing to the Aspire Skills plugin!
 ## Getting Started
 
 1. Fork the repository
-2. Create a feature branch
+2. Create a feature branch from `dev`
 3. Make your changes
-4. Submit a pull request
+4. Submit a pull request targeting `dev`
+
+`dev` contains development sources; `main` contains reviewed releases. Do not add
+root `opencode/` copies or `CHANGELOG.md` to development branches. Release preparation
+generates them from the selected source commit and preserves the released changelog.
+Release preparation keeps plugin/package and shipped skill versions aligned,
+bumping them together only when shipped content changes. Ordinary feature PRs
+do not need a release-version bump; repository-only updates retain main's version.
 
 ## Skill File Format
 

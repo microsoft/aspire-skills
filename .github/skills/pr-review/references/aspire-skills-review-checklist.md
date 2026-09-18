@@ -87,25 +87,31 @@ baseline exists so that cross-skill behavior is measured against the same projec
 
 ## 6. Plugin manifest version sync
 
-Four files carry the plugin version. Any user-visible change should bump all four to the
-same value:
+Six canonical JSON files and all shipped skill metadata share a version. Release
+preparation bumps them together only for shipped-content changes; ordinary feature
+PRs keep them synchronized without needing a bump:
 
 | File | Field |
 |------|-------|
+| `package.json` | `version` |
 | `.plugin/plugin.json` | `version` |
 | `.claude-plugin/plugin.json` | `version` |
-| `.claude-plugin/marketplace.json` | `plugins[0].version` |
+| `.claude-plugin/marketplace.json` | `version` of the plugin named `aspire` |
+| `.cursor-plugin/marketplace.json` | `version` of the plugin named `aspire` |
 | `gemini-extension.json` | `version` |
+| `skills/<name>/SKILL.md` | `metadata.version` |
 
-Also check that the per-skill `metadata.version` in each changed `SKILL.md` advances
-when that skill's behavior changes — independently of the plugin-wide version.
+The `.github/plugins/aspire-skills/` mirrors remain symlinks to these manifests.
+For shipped-content changes, release versions must advance both the selected
+source and main baseline. Repository-only changes must keep main's version.
+Only version scalar tokens may differ from selected JSON/skill sources.
 
-**Severity if any manifest is out of sync:** `blocking`. **Severity if all four match but
-the bump itself is missing on a behavior change:** `important`.
+**Severity if versions are out of sync or a product change lacks its bump:** `blocking`.
 
 ## 7. CHANGELOG
 
-User-visible changes need a `CHANGELOG.md` entry under the appropriate version heading:
+Development PRs target `dev` and must not add root `CHANGELOG.md` or `opencode/`.
+Use descriptive commit subjects and PR context for user-visible changes:
 
 - New skill, removed skill, renamed skill.
 - Safety-guardrail change (added, removed, or scope changed).
@@ -113,8 +119,9 @@ User-visible changes need a `CHANGELOG.md` entry under the appropriate version h
 - New deployment target.
 - New eval tag or new fixture.
 
-Pure refactors, doc fixes, and eval-only additions that don't change the shipped surface
-don't need a CHANGELOG entry — but call them out in the PR description.
+Release preparation generates the changelog from the selected dev commit range
+and preserves existing main history. Review release PRs for that provenance;
+do not ask development contributors for handwritten changelog entries.
 
 **Severity:** `important`.
 
@@ -163,7 +170,7 @@ adds a new reference file:
 
 ## 11. MCP
 
-- `.mcp.json` changes need a CHANGELOG note **and** a quick
+- `.mcp.json` changes need a descriptive commit subject **and** a quick
   scan for shell-injection or path-traversal risk in any new shell snippet.
 - New MCP commands must use `--non-interactive` on Aspire CLI calls and must not
   swallow errors.

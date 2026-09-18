@@ -14,7 +14,7 @@ test("shared test workflow has general names and runs for its own changes", () =
   assert.doesNotMatch(workflow, /paths:|paths-ignore:/);
 });
 
-test("all main/dev PR changes run tests without path filters", () => {
+test("all main/dev PR changes run tests and release validation without path filters", () => {
   assert.match(workflow, /pull_request:\n\s+branches:\n\s+- main\n\s+- dev/);
   assert.doesNotMatch(workflow, /paths:|paths-ignore:|branches-ignore:/);
   assert.doesNotMatch(workflow, /\.github\/workflows\/publish\.yml/);
@@ -34,7 +34,7 @@ test("general tests run on both main and dev pushes", () => {
   assert.doesNotMatch(push, /paths:|paths-ignore:/);
 });
 
-test("PR edits and ready-for-review events rerun tests", () => {
+test("PR edits and ready-for-review events rerun release validation", () => {
   const pr = workflow.split("  pull_request:\n")[1].split("  push:\n")[0];
   for (const event of ["opened", "synchronize", "reopened", "edited", "ready_for_review"]) {
     assert.ok(pr.includes(`- ${event}\n`), event);
@@ -55,15 +55,31 @@ test("tests run on Linux, macOS, and Windows", () => {
   assert.match(workflow, /runs-on: \$\{\{ matrix\.os \}\}/);
 });
 
-test("setup runs only the test matrix and defers steady-state policy enforcement", () => {
+test("Tests keeps Branch check PR-only while Release validation covers PRs and pushes", () => {
   const jobs = [...workflow.split("\njobs:\n")[1].matchAll(/^  ([\w-]+):$/gm)].map(match => match[1]);
-  assert.deepEqual(jobs, ["test"]);
+  assert.deepEqual(jobs, ["test", "branch-check", "release-validation"]);
   for (const name of ["branch-check.yml", "release-check.yml", "bundle-test.yml"]) {
     assert.equal(existsSync(join(repoRoot, ".github", "workflows", name)), false);
   }
-  assert.doesNotMatch(workflow, /continue-on-error:|bootstrap|release\.mjs" check/);
-  const header = job(workflow, "test").split("    steps:\n")[0];
-  assert.doesNotMatch(header, /needs:|if:/);
+  assert.doesNotMatch(workflow, /continue-on-error:|bootstrap/);
+  assert.doesNotMatch(job(workflow, "test").split("    steps:\n")[0], /needs:|if:/);
+  const routing = job(workflow, "branch-check").split("    steps:\n")[0];
+  assert.match(routing, /name: Branch check/);
+  assert.match(routing, /^    if: github\.event_name == 'pull_request'$/m);
+  assert.doesNotMatch(routing, /needs:/);
+  const validation = job(workflow, "release-validation").split("    steps:\n")[0];
+  assert.match(validation, /name: Release validation/);
+  assert.doesNotMatch(validation, /if:|needs:/);
+});
+
+test("release validation is a separate job that cannot be skipped by a matrix failure", () => {
+  const validation = job(workflow, "release-validation");
+  const header = validation.split("    steps:\n")[0];
+  assert.match(header, /name: Release validation/);
+  assert.match(header, /runs-on: ubuntu-latest/);
+  assert.doesNotMatch(header, /needs:|if:|matrix:|continue-on-error:/);
+  assert.match(validation, /node "\$GITHUB_WORKSPACE\/tooling\/scripts\/release\.mjs" check/);
+  assert.doesNotMatch(validation, /Validate branch combination|Require release branches/);
 });
 
 test("npm test includes unit suites while the Linux rehearsal runs afterward without duplicate suites", () => {
