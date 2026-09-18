@@ -52,20 +52,22 @@ Remove the temporary inventory afterward. Native Windows skips this rehearsal.
 
 ## Staged rollout
 
-This setup adds release tooling and normal CI, not steady-state branch-policy
-enforcement. It records `0.0.2` as released on September 18, 2026, preserves its
-bundle-support notes, and leaves all future changelog entries to the workflow.
-Product versions remain at `0.0.2` until release preparation. Setup does not
-create `dev`, a release branch, a catalog on `main`, or repository settings.
+The bootstrap PR adds release tooling and normal CI. This dependent policy
+follow-up adds the steady-state checks and disabled ruleset presets; it is not
+a generated release PR. Reviewing it against the setup branch does not mean the
+policy should be merged into that branch before the source-only dev rollout.
+The released `0.0.2` bundle-support history is unchanged from setup. The workflow,
+not this policy draft, creates the future `0.0.3` changelog entry. Product versions
+remain at `0.0.2` until release preparation.
+Neither change creates dev, a release branch, generated catalogs, or settings.
 
 1. Merge the setup PR into `main`.
 2. Create `dev` from that updated `main`. In a development commit, remove root
    `CHANGELOG.md` and any root `opencode/` copies so dev contains only sources.
-3. Add the **Branch check** and **Release validation** jobs and their regression
-   tests on `dev`, updating the setup-only workflow assertions there. Branch
-   routing should accept `release/*` into main and ordinary branches into dev.
-   Content validation should use trusted base tooling and exact PR head SHAs,
-   run independently on main/dev PRs and pushes, and have no path filters.
+3. Carry this follow-up's policy jobs, tests, ruleset presets, and contributor
+   guidance onto source-only `dev`. Keep root `CHANGELOG.md` absent there. The
+   workflow preserves main's released history and generates new entries from
+   the selected commit range and release metadata.
 4. Run [Release Aspire Skills](../.github/workflows/release-aspire-skills.yml) **from `main`**,
    with the full selected dev SHA in `source_commit`, `release_version=0.0.3`,
    and the default `dry_run=true`. The source must include the cleanup and policy
@@ -76,7 +78,7 @@ create `dev`, a release branch, a catalog on `main`, or repository settings.
    release tooling already on main. Do not manually add jobs or edit source on
    the generated branch: that breaks source provenance.
 6. After the first release passes its checks, have an administrator activate
-   the agreed branch protections. Merge release PRs with a **merge commit**,
+   the reviewed ruleset presets. Merge release PRs with a **merge commit**,
    not squash or rebase, to preserve dev ancestry. Catalog URLs become usable
    when the first generated release is merged into main.
 
@@ -89,6 +91,17 @@ changes already on main are outside that commit range and are not automatically
 listed again. There is no dev-less bootstrap
 bypass. After rollout, feature branches and PRs use dev; main receives prepared
 releases.
+
+## Release policy checks
+
+The **Branch check** job in [Tests](../.github/workflows/test.yml) runs on PRs
+without checking out repository code. It allows `release/*` into main and
+ordinary branches into dev; direct dev-to-main, main-to-dev, and release-to-dev
+PRs fail. The **Release validation** job runs independently on every main/dev
+PR and push, using trusted base tooling and the exact head commit. It verifies
+source-only dev, release ancestry, permitted version-only changes, both catalogs,
+and deterministic changelog provenance. There are no path-filter gaps or
+bootstrap bypasses.
 
 ## Release guarantees
 
@@ -121,7 +134,16 @@ Fix source on dev and prepare again if main advances or validation fails.
 
 Keep main as the default branch and retain merge commits for release PRs.
 Coordinate required checks and protections after the staged rollout, not as
-bootstrap exceptions. No ruleset preset or settings change is included here.
+bootstrap exceptions.
+
+Import the [main](rulesets/main.json) and [dev](rulesets/dev.json) presets under
+**Settings > Rules > Rulesets > Import a ruleset**. They start **Disabled** and
+have no bypass actors. Review them alongside existing policies and activate
+them after the first generated release passes its checks. They require PRs,
+up-to-date Branch check/Release validation/matrix results from GitHub Actions,
+block deletion and force pushes, and allow only merge commits into main.
+They add no named-reviewer or approval-count requirements and must not replace
+stronger existing policies. Committing these files does not apply any settings.
 
 Enable the existing Aspire bot for this repository through its owner; a new App
 is not required. Make `ASPIRE_BOT_APP_ID` and `ASPIRE_BOT_PRIVATE_KEY` available as

@@ -9,7 +9,7 @@ import { job, script, step, steps } from "./helpers/workflow-source.mjs";
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const readWorkflow = name => readFileSync(join(repoRoot, ".github", "workflows", name), "utf8").replaceAll("\r\n", "\n");
 const preparation = readWorkflow("release-aspire-skills.yml");
-const testWorkflow = readWorkflow("test.yml");
+const correctness = readWorkflow("test.yml");
 const bashOnly = { skip: process.platform === "win32" ? "Release workflow Bash is exercised on Linux." : false };
 
 function bash(source, env = {}, mock = "") {
@@ -29,16 +29,20 @@ function assertSuccess(result) {
 
 const prepare = job(preparation, "prepare");
 const publish = job(preparation, "publish");
-const matrix = job(testWorkflow, "test");
+const matrix = job(correctness, "test");
+const check = job(correctness, "release-validation");
+const routing = job(correctness, "branch-check");
 const headers = section => section.split("    steps:\n")[0];
 const authorization = script(prepare, "Check release permissions");
+const branchPolicy = script(routing, "Validate branch combination");
 const publication = script(publish, "Push release branch and open draft PR");
 const resolve = script(prepare, "Resolve source and base once");
 const receive = script(publish, "Receive and verify without executing candidate code");
+const invariants = script(check, "Check branch release invariants");
 
 test("the obsolete tar release-assets publisher is absent", () => {
   assert.equal(existsSync(join(repoRoot, ".github", "workflows", "publish.yml")), false);
-  for (const workflow of [preparation, testWorkflow]) {
+  for (const workflow of [preparation, correctness]) {
     assert.doesNotMatch(workflow, /\bgh release\b|npm run bundle\b|actions\/attest-build-provenance/);
   }
 });
@@ -83,10 +87,10 @@ test("both actors are reauthorized as the first step on each isolated runner", (
 });
 
 test("all workflow tokens stay read-only and no Pages or privileged event is introduced", () => {
-  for (const workflow of [preparation, testWorkflow]) {
+  for (const workflow of [preparation, correctness]) {
     const permissions = [...workflow.matchAll(/^ *permissions:\n((?: +[\w-]+: (?:read|write|none)\n)+)/gm)];
     assert.equal(permissions.length, [...workflow.matchAll(/^ *permissions:/gm)].length);
-    assert.equal(permissions.length, workflow === preparation ? 3 : 1);
+    assert.equal(permissions.length, 3);
     for (const [, block] of permissions) assert.equal(block.trim(), "contents: read");
     assert.doesNotMatch(workflow, /(?:^|\n) *pull-requests: write|pages:|id-token:|github-pages|publish-opencode-catalog/);
     assert.doesNotMatch(workflow, /actions\/(?:configure-pages|upload-pages-artifact|deploy-pages)|pull_request_target|workflow_run/);
@@ -102,13 +106,13 @@ test("every action is pinned and checkouts never persist credentials", () => {
     "actions/download-artifact": "d3f86a106a0bac45b974a628896c90dbdf5c8093",
     "actions/create-github-app-token": "1b10c78c7865c340bc4f6099eb2f838309f1e8c3"
   };
-  for (const workflow of [preparation, testWorkflow]) {
+  for (const workflow of [preparation, correctness]) {
     for (const [, action, revision] of workflow.matchAll(/uses: ([^@\s]+)@([^\s]+)/g)) {
       assert.ok(Object.hasOwn(pins, action), `Unexpected action ${action}`);
       assert.equal(revision, pins[action], action);
     }
   }
-  for (const section of [prepare, publish, matrix]) {
+  for (const section of [prepare, publish, matrix, check]) {
     const checkouts = steps(section).filter(content => content.includes("uses: actions/checkout@"));
     assert.equal(checkouts.length, section === matrix ? 1 : 2);
     for (const checkout of checkouts) {
@@ -233,14 +237,60 @@ test("publication uses a per-command credential helper, a version branch, and th
   assert.doesNotMatch(publication, /https?:\/\/|git config|remote set-url|--force(?:\s|$)|--mirror|--all|set -x|tee /);
 });
 
+test("release validation runs independently for every main/dev PR and push without path filters", () => {
+  const triggers = correctness.split("\npermissions:\n")[0];
+  assert.match(triggers, /pull_request:\n\s+branches:\n\s+- main\n\s+- dev/);
+  assert.match(triggers, /push:\n\s+branches:\n\s+- main\n\s+- dev/);
+  assert.match(triggers, /- edited/);
+  assert.doesNotMatch(correctness, /paths:|paths-ignore:|branches-ignore:|workflow_dispatch:|secrets\.|ASPIRE_BOT/);
+  assert.match(headers(check), /name: Release validation/);
+  assert.doesNotMatch(headers(check), /if:|needs:/);
+  assert.equal(steps(check).length, 4);
+  assert.doesNotMatch(check, /Require release branches|Validate branch combination/);
+});
+
+test("Tests contains PR-only Branch check without a separate workflow, checkout, or repository code", () => {
+  for (const name of ["branch-check.yml", "release-check.yml"]) {
+    assert.equal(existsSync(join(repoRoot, ".github", "workflows", name)), false);
+  }
+  assert.match(correctness, /^name: Tests$/m);
+  assert.match(headers(routing), /name: Branch check/);
+  assert.match(headers(routing), /^    if: github\.event_name == 'pull_request'$/m);
+  assert.doesNotMatch(headers(routing), /needs:/);
+  assert.doesNotMatch(routing, /uses:|checkout|\b(?:git|node|npm|gh)\b|scripts\/|secrets\.|GH_TOKEN|github\.token/);
+  assert.equal(steps(routing).length, 1);
+  const policy = step(routing, "Validate branch combination");
+  assert.match(policy, /shell: bash/);
+  assert.match(policy, /TARGET_BRANCH: \$\{\{ github\.event\.pull_request\.base\.ref \}\}/);
+  assert.match(policy, /HEAD_BRANCH: \$\{\{ github\.event\.pull_request\.head\.ref \}\}/);
+});
+
+test("the check uses trusted base tooling, exact PR head SHAs, and event values only through environment", () => {
+  assert.match(step(check, "Checkout trusted base tooling"),
+    /ref: \$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.sha \}\}\n\s+path: tooling/);
+  assert.match(step(check, "Checkout exact head, not the synthetic merge"),
+    /ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}\n\s+path: checked/);
+  const validation = step(check, "Check branch release invariants");
+  for (const line of [
+    "RELEASE_REPO: ${{ github.workspace }}/checked",
+    "TARGET_BRANCH: ${{ github.event.pull_request.base.ref || github.ref_name }}",
+    "HEAD_BRANCH: ${{ github.event.pull_request.head.ref || '' }}",
+    "HEAD_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}",
+    "BASE_COMMIT: ${{ github.event.pull_request.base.sha || '' }}",
+    "PR_BODY: ${{ github.event.pull_request.body || '' }}"
+  ]) assert.ok(validation.includes(line), line);
+  assert.match(invariants, /node "\$GITHUB_WORKSPACE\/tooling\/scripts\/release\.mjs" check/);
+  assert.doesNotMatch(check, /refs\/pull\/.*\/merge|\bnpm\b|node .*\/checked\//);
+});
+
 test("every shell step avoids GitHub expression interpolation and all required dev fetches are explicit", () => {
-  for (const section of [prepare, publish, matrix]) {
+  for (const section of [prepare, publish, matrix, check, routing]) {
     for (const content of steps(section).filter(value => value.includes("        run: "))) {
       const source = script(section, content.split("\n")[0]);
       assert.doesNotMatch(source, /\$\{\{|\beval\b/);
     }
   }
-  for (const source of [resolve, receive]) {
+  for (const source of [resolve, receive, invariants]) {
     assert.match(source, /fetch --no-tags origin \\\n\s+\+refs\/heads\/main:refs\/remotes\/origin\/main \\\n\s+\+refs\/heads\/dev:refs\/remotes\/origin\/dev/);
     assert.match(source, /::error::Cannot fetch origin\/main and origin\/dev; both branches must exist\./);
     assert.doesNotMatch(source, /\|\| true/);
@@ -311,6 +361,48 @@ for (const [jobName, section] of [["prepare", prepare], ["publish", publish]]) {
   }
 }
 
+for (const [target, head, allowed] of [
+  ["main", "release/0.0.2", true],
+  ["main", "release/1.2.3-rc.1+Build.42", true],
+  ["main", "dev", false],
+  ["main", "main", false],
+  ["main", "feature/changes", false],
+  ["main", "release-not-a-prefix", false],
+  ["main", "release/", false],
+  ["main", "", false],
+  ["main", "$(printf SHELL_INJECTION >&2)", false],
+  ["dev", "feature/changes", true],
+  ["dev", "fix/bug", true],
+  ["dev", "dev", true],
+  ["dev", "main", false],
+  ["dev", "release/0.0.2", false],
+  ["dev", "release/1.2.3-rc.1+Build.42", false],
+  ["dev", "release/nested/branch", false],
+  ["dev", "", false],
+  ["dev", " ", false],
+  ["dev", "feature\nbranch", false],
+  ["", "feature/changes", false],
+  ["unknown", "feature/changes", false],
+  ["feature/target", "release/0.0.2", false]
+]) {
+  test(`branch routing: ${JSON.stringify(head)} -> ${JSON.stringify(target)}`, bashOnly, () => {
+    const result = bash(branchPolicy, { TARGET_BRANCH: target, HEAD_BRANCH: head });
+    assert.equal(result.status === 0, allowed, result.stdout + result.stderr);
+    assert.doesNotMatch(result.stderr, /SHELL_INJECTION/);
+    if (!allowed) assert.match(result.stdout, /::error::/);
+  });
+}
+
+for (const missing of ["TARGET_BRANCH", "HEAD_BRANCH"]) {
+  test(`branch routing fails closed when ${missing} is unavailable`, bashOnly, () => {
+    const env = { TARGET_BRANCH: "dev", HEAD_BRANCH: "feature/changes" };
+    delete env[missing];
+    const result = bash(branchPolicy, env);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, /::error::/);
+  });
+}
+
 const validationEnv = {
   GITHUB_WORKSPACE: "/workspace with spaces",
   RELEASE_REPO: "/repository with spaces",
@@ -348,13 +440,13 @@ git() {
 }
 node() {
   if [[ "$#" != 2 || "$1" != "$GITHUB_WORKSPACE/tooling/scripts/release.mjs" ]]; then return 2; fi
-  if [[ "$RELEASE_VERSION" != "$EXPECTED_RELEASE_VERSION" ]]; then return 2; fi
+  if [[ "$2" != check && "$RELEASE_VERSION" != "$EXPECTED_RELEASE_VERSION" ]]; then return 2; fi
   printf 'NODE:%s\n' "$2"
   return "$NODE_EXIT"
 }
 `;
 
-for (const [operation, source] of [["resolve", resolve], ["receive", receive]]) {
+for (const [operation, source] of [["resolve", resolve], ["receive", receive], ["check", invariants]]) {
   test(`${operation} fetches explicit refs then invokes only the trusted script`, bashOnly, () => {
     const result = bash(source, validationEnv, validationMock);
     assertSuccess(result);
