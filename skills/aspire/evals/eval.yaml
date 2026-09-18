@@ -210,13 +210,15 @@ stimuli:
     prompt: >
       My old TypeScript AppHost still uses apphost.ts. Give read-only migration
       guidance: which workflow owns it, what does it change, and what approval
-      is needed? Do not migrate, update packages, run commands or edit files.
+      is needed? Also explain which workflow would handle any source authoring
+      still needed afterward. Do not migrate, update packages, run commands or
+      edit files.
     tags: { priority: p1, area: [routing, aspire-13-5, typescript-migration] }
     constraints: { max_agent_duration: 5m }
     rubric:
       - The response assigns aspire update --migrate to aspire-orchestration, not ordinary aspireify authoring or Project v2 resource migration.
       - It explains package, config, tsconfig, generated-import and entry-point changes and requires approval before --yes --non-interactive execution.
-      - Aspireify is a later handoff only if source authoring remains. No actual migration is needed or permitted for this assessment.
+      - The answer names aspireify as a later handoff only if separate source authoring remains. No actual migration is needed or permitted for this assessment.
     graders:
       - type: skill-invocation
         name: invokes-orchestration
@@ -231,12 +233,13 @@ stimuli:
   - name: should_trigger_01
     description: Direct Aspire CLI invocation
     prompt: >
-      How do I run my AppHost with aspire start? Give read-only guidance; do not
-      start anything, install tools or edit files.
+      How should an AI agent use aspire start for a selected AppHost in a git
+      worktree? Give read-only guidance covering exact AppHost selection and
+      unattended execution; do not start anything, install tools or edit files.
     tags: { priority: p1, area: routing }
     rubric:
       - The response recognizes an Aspire lifecycle task and explains aspire start through aspire-orchestration rather than plain dotnet run.
-      - AppHost identification and noninteractive/worktree-isolated execution are explained where applicable; missing local tools do not prevent giving guidance.
+      - For the stated AI-agent/git-worktree scenario, guidance uses an exact filesystem AppHost with --apphost, --non-interactive, and --isolated; missing local tools do not prevent giving guidance.
       - No actual start, install or edit is needed or permitted.
     graders:
       - type: skill-invocation
@@ -384,12 +387,14 @@ stimuli:
   - name: should_trigger_09
     description: Adding Aspire to a repository
     prompt: >
-      How do I run aspire init to add Aspire to this repo? Give read-only
-      guidance; do not scaffold, install tools or edit files.
+      In an existing repo with services but no AppHost, how should an AI agent
+      use aspire init? Give read-only guidance on the command, what it creates,
+      and which workflow handles resource wiring afterward. Do not scaffold,
+      install tools or edit files.
     tags: { priority: p1, area: routing }
     rubric:
       - The response routes first-run setup to aspire-init and explains aspire init for adding the skeleton to an existing repository.
-      - It distinguishes subsequent AppHost wiring through aspireify from the first-run operation.
+      - The answer names aspireify as the owner of subsequent resource wiring, separating that later handoff from creating the AppHost skeleton.
       - Actual scaffolding is not required or permitted.
     graders:
       - type: skill-invocation

@@ -5,6 +5,16 @@ import { parse } from "yaml";
 import { assertRoutingEntry } from "../evals/grade-routing-entry.mjs";
 
 const spec = parse(readFileSync(new URL("../skills/aspire/evals/eval.yaml", import.meta.url), "utf8"));
+function readSkill(name) {
+  const source = readFileSync(new URL(`../skills/${name}/SKILL.md`, import.meta.url), "utf8")
+    .replaceAll("\r\n", "\n");
+  const frontmatter = /^---\n([\s\S]*?)\n---/.exec(source);
+  assert.ok(frontmatter, `Missing ${name} frontmatter`);
+  const { description } = parse(frontmatter[1]);
+  assert.equal(typeof description, "string");
+  return { source, description };
+}
+
 const named = {
   "router-ordinary-wiring-preserves-136-001": ["aspire", "aspireify"],
   "router-init-001": ["aspire"],
@@ -85,4 +95,53 @@ test("ordinary wiring and legacy CLI migration retain resource-migration exclusi
       .find(grader => grader.type === "skill-invocation");
     assert.ok(activation.config.disallowed.includes("aspire-project-v2-migration"));
   }
+});
+
+test("standalone doctor discovery belongs to orchestration while init keeps its prerequisite check", () => {
+  const orchestration = readSkill("aspire-orchestration");
+  const init = readSkill("aspire-init");
+  const triggers = orchestration.description.split("WHEN:")[1].split("INVOKES:")[0];
+  const exclusions = init.description.split("DO NOT USE FOR:")[1].split("INVOKES:")[0];
+  const invocations = init.description.split("INVOKES:")[1].split("FOR SINGLE OPERATIONS:")[0];
+  assert.match(triggers, /"aspire doctor"/);
+  assert.match(triggers, /standalone environment diagnostics/);
+  assert.match(exclusions, /standalone aspire doctor diagnostics \(use aspire-orchestration\)/);
+  assert.doesNotMatch(invocations, /doctor/);
+  assert.match(init.source, /Confirm prerequisites with `aspire doctor`/);
+  assert.match(init.source, /even when no AppHost exists/);
+});
+
+test("start advice establishes the agent and worktree context before requiring automation flags", () => {
+  const stimulus = spec.stimuli.find(item => item.name === "should_trigger_01");
+  assert.match(stimulus.prompt, /AI agent/);
+  assert.match(stimulus.prompt, /git\s+worktree/);
+  const guidance = readSkill("aspire-orchestration").source
+    .split("## Read-only guidance\n")[1].split("\n## ")[0];
+  for (const flag of ["--apphost", "--non-interactive", "--isolated"]) {
+    assert.ok(stimulus.rubric.some(criterion => criterion.includes(flag)));
+    assert.ok(guidance.includes(flag));
+  }
+  assert.match(guidance, /flags are conditional/);
+});
+
+test("init advice requests the later wiring boundary without naming the expected handoff in the prompt", () => {
+  const stimulus = spec.stimuli.find(item => item.name === "should_trigger_09");
+  assert.match(stimulus.prompt, /existing repo with services but no AppHost/);
+  assert.match(stimulus.prompt, /workflow handles resource wiring afterward/);
+  assert.doesNotMatch(stimulus.prompt, /\baspireify\b/);
+  assert.ok(stimulus.rubric.some(criterion => criterion.includes("names aspireify")));
+  assert.match(readSkill("aspire-init").source,
+    /For read-only `aspire init` guidance,[\s\S]*?explicitly name `aspireify`/);
+});
+
+test("legacy migration advice requests a conditional authoring handoff without activating it", () => {
+  const stimulus = spec.stimuli.find(item => item.name === "router-legacy-ts-migrate-135-001");
+  assert.match(stimulus.prompt, /source authoring still needed afterward/);
+  assert.doesNotMatch(stimulus.prompt, /\baspireify\b/);
+  assert.ok(stimulus.rubric.some(criterion => /names aspireify.*only if/.test(criterion)));
+  const activation = stimulus.graders.find(grader => grader.type === "skill-invocation");
+  assert.deepEqual(activation.config.required, ["aspire-orchestration"]);
+  assert.ok(activation.config.disallowed.includes("aspireify"));
+  assert.match(readSkill("aspire-orchestration").source,
+    /Read-only answers must also name the conditional later handoff:[\s\S]*?without loading `aspireify`/);
 });

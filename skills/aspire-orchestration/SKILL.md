@@ -7,7 +7,8 @@ description: >-
   "aspire stop", "aspire wait", resource restart, file-lock errors (MSB3491 or
   CS2012), port conflicts, git worktrees, "--isolated", "aspire update --self",
   "aspire update --migrate", "aspire describe --include-hidden", "aspire stop --force",
-  "aspire terminal", integration discovery, default watch, or hot reload.
+  "aspire terminal", "aspire doctor", standalone environment diagnostics,
+  integration discovery, default watch, or hot reload.
   INVOKES: VS Code lifecycle tools first when exposed; Aspire CLI for readiness,
   inspection, resource operations, isolated worktree starts, and allowed fallbacks.
   DO NOT USE FOR: deploy/publish/destroy (aspire-deployment), logs/traces/metrics
@@ -136,6 +137,22 @@ its filesystem path first.
 
 See [safety-guardrails.md](references/safety-guardrails.md) for detailed rules and recovery patterns.
 
+## Read-only guidance
+
+A request for instructions is not approval to execute the workflow. Explain the
+commands without starting or stopping apps, running diagnostics, installing tools,
+or changing files just to answer.
+
+For AI-agent CLI start advice, include `--apphost <filesystem-path>` for the exact
+target and `--non-interactive` for unattended execution. In a git worktree, also
+include `--isolated`; retain the editor/worktree routing rules above. If the caller
+or workspace is unspecified, explain which flags are conditional rather than
+assuming an agent or a worktree.
+
+Standalone `aspire doctor` and environment diagnostics belong to this skill.
+First-run `aspire init` / `aspire new` requests belong to `aspire-init`, which may
+use doctor as a prerequisite check within that setup workflow.
+
 ## Default Workflow
 
 1. Confirm workspace is Aspire — identify the AppHost
@@ -257,8 +274,9 @@ imports, and the entry point (`apphost.ts` to `apphost.mts`). Read
 [the migration guidance](references/app-commands.md) before proposing the plan.
 Require approval for that complete scope before
 `aspire update --migrate --yes --non-interactive`; read-only advice must not run it.
-Do not load `aspireify` merely to assess the CLI-owned changes. Hand off to
-authoring only for separately identified source work remaining after migration.
+Read-only answers must also name the conditional later handoff: `aspireify` owns
+separately identified source authoring after migration, only if such work remains.
+Describe that boundary without loading `aspireify` merely to assess CLI-owned changes.
 Current rules to apply when handing off:
 
 | Rule | Why |
