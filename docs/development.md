@@ -24,7 +24,9 @@ npm run test:release-workflow
 ```
 
 Linux PR CI runs this after `npm test`, so the rehearsal's nested unit suite
-does not compete with another copy. The rehearsal snapshots the current worktree,
+does not compete with another copy. Nested test files run sequentially inside
+the isolated rehearsal; the production test command and hook timeout assertions
+are unchanged. The rehearsal snapshots the current worktree,
 including uncommitted changes, into disposable repositories. It executes the
 release workflow's actual shell steps: role checks, source resolution, trusted
 tests, candidate generation, artifact verification, and publication to a local
@@ -64,7 +66,7 @@ create `dev`, a release branch, a catalog on `main`, or repository settings.
    routing should accept `release/*` into main and ordinary branches into dev.
    Content validation should use trusted base tooling and exact PR head SHAs,
    run independently on main/dev PRs and pushes, and have no path filters.
-4. Run [Release Aspire Skills](../.github/workflows/prepare-release.yml) **from `main`**,
+4. Run [Release Aspire Skills](../.github/workflows/release-aspire-skills.yml) **from `main`**,
    with the full selected dev SHA in `source_commit`, `release_version=0.0.3`,
    and the default `dry_run=true`. The source must include the cleanup and policy
    commits; the workflow itself must not run from dev.

@@ -106,6 +106,13 @@ function logEntries(path) {
 function installFakes(root, realGit) {
   const bin = join(root, "bin");
   mkdirSync(bin);
+  writeFileSync(join(bin, "node"), `#!/bin/sh
+set -eu
+if [ "\${1-}" = --test ]; then
+  exec "$REHEARSAL_NODE" --test-concurrency=1 "$@"
+fi
+exec "$REHEARSAL_NODE" "$@"
+`, { mode: 0o755 });
   writeFileSync(join(bin, "git"), `#!/bin/sh
 set -eu
 export GIT_ALLOW_PROTOCOL=file
@@ -216,6 +223,25 @@ async function runStep(section, name, context, env, { fail = false } = {}) {
   return result;
 }
 
+test("rehearsal Node launcher serializes only nested test-runner invocations", {
+  skip: process.platform !== "linux" ? "The isolated rehearsal runs on Linux." : false
+}, t => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "aspire-workflow-node-")));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const env = installFakes(root, "unused-fixture-git");
+  const capture = join(root, "capture-node");
+  writeFileSync(capture, '#!/bin/sh\nprintf "%s\\n" "$@"\n', { mode: 0o755 });
+  for (const args of [
+    ["--test", "--test-skip-pattern=^local release workflow rehearsal", "tests/example.test.mjs"],
+    ["scripts/release.mjs", "prepare"],
+    ["--version"]
+  ]) {
+    const actual = command("node", args, root, { ...env, REHEARSAL_NODE: capture });
+    const expected = args[0] === "--test" ? ["--test-concurrency=1", ...args] : args;
+    assert.equal(actual, expected.join("\n"));
+  }
+});
+
 test("local release workflow rehearsal (Actions service steps are simulated)", { skip, timeout: 600_000 }, async t => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "aspire-workflow-e2e-")));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -254,7 +280,7 @@ test("local release workflow rehearsal (Actions service steps are simulated)", {
   git(seed, "switch", "main");
   git(root, "clone", "--bare", "--no-local", seed, env.REHEARSAL_ORIGIN);
   const originalRefs = git(env.REHEARSAL_ORIGIN, "show-ref", "--heads");
-  const workflow = read(join(seed, ".github", "workflows", "prepare-release.yml"));
+  const workflow = read(join(seed, ".github", "workflows", "release-aspire-skills.yml"));
   const prepare = job(workflow, "prepare");
   const publish = job(workflow, "publish");
   const contextFor = name => {

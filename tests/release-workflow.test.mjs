@@ -8,7 +8,7 @@ import { job, script, step, steps } from "./helpers/workflow-source.mjs";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const readWorkflow = name => readFileSync(join(repoRoot, ".github", "workflows", name), "utf8").replaceAll("\r\n", "\n");
-const preparation = readWorkflow("prepare-release.yml");
+const preparation = readWorkflow("release-aspire-skills.yml");
 const testWorkflow = readWorkflow("test.yml");
 const bashOnly = { skip: process.platform === "win32" ? "Release workflow Bash is exercised on Linux." : false };
 
