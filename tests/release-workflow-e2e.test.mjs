@@ -11,6 +11,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { job, script, step } from "./helpers/workflow-source.mjs";
 import { sourceInventory } from "./helpers/workflow-snapshot.mjs";
+import { parseVersion } from "../scripts/release-version.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const skip = process.env.RELEASE_WORKFLOW_E2E_CHILD === "1"
@@ -243,8 +244,9 @@ test("local release workflow rehearsal (Actions service steps are simulated)", {
   const base = save("Snapshot the current uncommitted implementation for rehearsal");
   const mainChangelog = read(join(seed, "CHANGELOG.md"));
   const sourceVersion = JSON.parse(read(join(seed, "package.json"))).version;
-  const pending = /^## \[([^\]]+)\] - Unreleased\n/.exec(mainChangelog.slice(mainChangelog.search(/^## /m)));
-  const version = pending?.[1] ?? sourceVersion;
+  const { core: [major, minor, patch] } = parseVersion(sourceVersion);
+  const version = existsSync(join(seed, "opencode")) ? sourceVersion : `${major}.${minor}.${patch + 1n}`;
+  assert.doesNotMatch(mainChangelog, /^## .*Unreleased$/m);
   git(seed, "switch", "-qc", "dev");
   rmSync(join(seed, "CHANGELOG.md"));
   rmSync(join(seed, "opencode"), { recursive: true, force: true });
@@ -328,14 +330,12 @@ test("local release workflow rehearsal (Actions service steps are simulated)", {
   assert.match(body, /merge commit, not squash or rebase/);
   const changelog = read(join(candidateRepo, "CHANGELOG.md"));
   assert.ok(changelog.includes(metadata));
-  if (pending?.[1] === version) {
-    const remainder = mainChangelog.slice(mainChangelog.search(/^## /m) + pending[0].length);
-    const nextEntry = remainder.search(/^## /m);
-    const notes = (nextEntry < 0 ? remainder : remainder.slice(0, nextEntry)).trim();
-    assert.ok(!changelog.includes(`## [${version}] - Unreleased`), "Pending release must be finalized, not duplicated");
-    assert.ok(notes && changelog.includes(notes), "Pending release notes must be preserved");
-    if (nextEntry >= 0) assert.ok(changelog.endsWith(remainder.slice(nextEntry)), "Released history must be preserved");
-  }
+  assert.ok(changelog.slice(changelog.search(/^## /m)).startsWith(`## v${version} - `));
+  assert.ok(changelog.includes("Keep release-owned changelog and catalogs on main"));
+  const historyStart = mainChangelog.search(/^## /m);
+  assert.ok(historyStart >= 0, "The baseline must contain released history");
+  assert.ok(changelog.endsWith(mainChangelog.slice(historyStart)), "Released history must be preserved");
+  assert.doesNotMatch(changelog, /^## .*Unreleased$/m);
   for (const path of canonicalManifests) {
     const json = JSON.parse(read(join(candidateRepo, path)));
     assert.equal(path.endsWith("/marketplace.json") ? json.plugins.find(plugin => plugin.name === "aspire").version : json.version, version);

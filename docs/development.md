@@ -52,7 +52,7 @@ Remove the temporary inventory afterward. Native Windows skips this rehearsal.
 
 This setup adds release tooling and normal CI, not steady-state branch-policy
 enforcement. It records `0.0.2` as released on September 18, 2026, preserves its
-bundle-support notes, and adds separate `0.0.3 - Unreleased` delivery changes.
+bundle-support notes, and leaves all future changelog entries to the workflow.
 Product versions remain at `0.0.2` until release preparation. Setup does not
 create `dev`, a release branch, a catalog on `main`, or repository settings.
 
@@ -64,7 +64,7 @@ create `dev`, a release branch, a catalog on `main`, or repository settings.
    routing should accept `release/*` into main and ordinary branches into dev.
    Content validation should use trusted base tooling and exact PR head SHAs,
    run independently on main/dev PRs and pushes, and have no path filters.
-4. Run [Prepare release](../.github/workflows/prepare-release.yml) **from `main`**,
+4. Run [Release Aspire Skills](../.github/workflows/prepare-release.yml) **from `main`**,
    with the full selected dev SHA in `source_commit`, `release_version=0.0.3`,
    and the default `dry_run=true`. The source must include the cleanup and policy
    commits; the workflow itself must not run from dev.
@@ -80,8 +80,11 @@ create `dev`, a release branch, a catalog on `main`, or repository settings.
 
 The published `0.0.2` release introduced bundle delivery. The first generated
 release is `0.0.3`: it removes that publication path and introduces source/catalog
-delivery through main. Preparation finalizes `[0.0.3] - Unreleased`, preserving
-the released `0.0.2` notes and older history. There is no dev-less bootstrap
+delivery through main. The workflow generates its new changelog entry from the
+selected dev commit range and release metadata, preserving the released `0.0.2`
+notes and older history. Do not prewrite future entries on main or dev. Setup
+changes already on main are outside that commit range and are not automatically
+listed again. There is no dev-less bootstrap
 bypass. After rollout, feature branches and PRs use dev; main receives prepared
 releases.
 

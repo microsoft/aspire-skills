@@ -45,7 +45,7 @@ test("the obsolete tar release-assets publisher is absent", () => {
 
 test("release preparation is manual and both jobs are restricted to trusted main", () => {
   const triggers = preparation.split("\npermissions:\n")[0];
-  assert.match(triggers, /^name: Prepare release$/m);
+  assert.match(triggers, /^name: Release Aspire Skills$/m);
   assert.match(triggers, /^  workflow_dispatch:$/m);
   assert.doesNotMatch(triggers, /^  (?:push|pull_request|schedule|workflow_call):/m);
   assert.match(triggers, /source_commit:\n[\s\S]*?required: false\n\s+type: string/);

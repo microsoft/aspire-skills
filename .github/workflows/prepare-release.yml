@@ -1,4 +1,4 @@
-name: Prepare release
+name: Release Aspire Skills
 
 on:
   workflow_dispatch:

@@ -353,7 +353,7 @@ export function checkRelease(root, { target, head, headCommit, baseCommit, prBod
     return;
   }
   if (target !== "main") throw new Error("Release checks require target main or dev.");
-  if (head === "dev") throw new Error("Direct dev -> main PRs are blocked. Use Prepare release.");
+  if (head === "dev") throw new Error("Direct dev -> main PRs are blocked. Use Release Aspire Skills.");
   if (head !== undefined && !/^release\/[A-Za-z0-9][A-Za-z0-9.+-]*$/.test(head)) {
     throw new Error("PRs to main must use a prepared release/ branch.");
   }

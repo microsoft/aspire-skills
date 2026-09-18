@@ -697,8 +697,7 @@ test("first catalog publication advances 0.0.2 to 0.0.3 and preserves released b
   git(root, "switch", "main");
   git(root, "merge", "--no-ff", "--no-edit", "dev");
   const history = "## [0.0.2] - 2026-09-18\n\n- Published bundle release assets.\n\n## [0.0.1] - 2026-05-27\n\n- Historical release notes.\n";
-  const notes = "### Changed\n- Deliver releases through main.\n\n### Added\n- OpenCode catalogs and canvas updates.\n";
-  put(root, "CHANGELOG.md", `# Changelog\n\nIntroductory text.\n\n## [0.0.3] - Unreleased\n\n${notes}\n${history}`);
+  put(root, "CHANGELOG.md", `# Changelog\n\nIntroductory text.\n\n${history}`);
   const base = save(root, "Install release automation on main");
   git(root, "update-ref", "refs/remotes/origin/main", base);
   git(root, "switch", "dev");
@@ -716,7 +715,7 @@ test("first catalog publication advances 0.0.2 to 0.0.3 and preserves released b
   assert.match(changelog, /^# Changelog\n\nIntroductory text\.\n\n## v0\.0\.3 - /);
   assert.equal(changelog.match(/^## v0\.0\.3 /gm)?.length, 1);
   assert.doesNotMatch(changelog, /Unreleased/);
-  assert.ok(changelog.includes(notes));
+  assert.ok(changelog.includes(`- Keep dev source-only ([${source.slice(0, 12)}]`));
   assert.ok(changelog.endsWith(history));
   assert.ok(changelog.includes(`source=${source} base=${base} version=0.0.3 source-version=0.0.2 base-version=0.0.2`));
   for (const path of [...releaseVersionFiles, "skills/aspire/SKILL.md"]) {
@@ -724,13 +723,13 @@ test("first catalog publication advances 0.0.2 to 0.0.3 and preserves released b
     assert.equal(manifestVersion(Buffer.from(git(root, "show", `${source}:${path}`)), path), "0.0.2");
   }
   const body = readFileSync(join(root, "dist", "release", "pr-body.md"), "utf8");
-  assert.ok(body.includes(notes));
-  assert.doesNotMatch(body, /Historical release notes/);
+  assert.ok(body.includes("Keep dev source-only"));
+  assert.doesNotMatch(body, /Published bundle release assets|Historical release notes/);
   assert.equal(body.match(/<!-- aspire-skills-release/g)?.length, 1);
   check(root, { prBody: body });
   const received = receiver(t, root, result);
   assert.deepEqual(receiveRelease(received.root, received.options), result);
-  put(root, "CHANGELOG.md", changelog.replace("OpenCode catalogs and canvas updates.", "Lost pending release notes."));
-  save(root, "Tamper initial release notes");
+  put(root, "CHANGELOG.md", changelog.replace("Published bundle release assets.", "Lost released bundle history."));
+  save(root, "Tamper released history");
   assert.throws(() => check(root), /preserved main history/);
 });

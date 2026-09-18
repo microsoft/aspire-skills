@@ -2,20 +2,6 @@
 
 All notable changes to the aspire-skills plugin will be documented in this file.
 
-## [0.0.3] - Unreleased
-
-### Changed
-- Deliver reviewed releases through `main`, with a main-based preparation
-  workflow that merges a selected dev commit and opens a verified release PR.
-- Add OpenCode V1 and V2 HTTP catalogs generated from the released sources.
-  Their raw GitHub URLs become available when the first generated release is merged.
-
-### Removed
-- Remove tag-driven publishing of the `aspire-skills-v<version>.tgz` and
-  `aspire-extensions-v<version>.tgz` GitHub release assets introduced in 0.0.2.
-  Existing 0.0.2 assets remain available. Local bundle builders remain only for
-  compatibility testing; new releases use reviewed source and catalogs on main.
-
 ## [0.0.2] - 2026-09-18
 
 ### Changed
