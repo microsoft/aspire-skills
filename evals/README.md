@@ -143,7 +143,7 @@ The `with-skills` − `no-skills` pass-rate delta is the measured lift. The expe
 | `--suite <name>` | Run only stimuli matching a suite declared in `.vally.yaml`. |
 | `--tag <key=values>` | Run only stimuli whose tag record matches. Comma-separate values; repeat for multiple keys. E.g. `--tag priority=p0,p1 --tag area=routing`. |
 | `--model <name>` | Executor model. Overrides `defaults.model` in the spec. |
-| `--judge-model <name>` | Overrides the judge used by `prompt` / `pairwise` graders. This repo explicitly sets `defaults.judge_model: gpt-5.6-sol-fast` rather than relying on Vally's fallback. |
+| `--judge-model <name>` | Overrides the judge used by `prompt` / `pairwise` graders. This repo explicitly sets `defaults.judge_model: gpt-5.6-sol` rather than relying on Vally's fallback. This does not select the executor or an end user's model. |
 | `--runs <n>` | Override `defaults.runs` (number of executions per stimulus). |
 | `--timeout <duration>` | Per-stimulus timeout (e.g. `120s`, `2m`). |
 | `--workers <n>` | Parallel stimulus workers. Default 1. |

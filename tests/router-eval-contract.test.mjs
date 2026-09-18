@@ -28,7 +28,7 @@ test("router evaluations retain all cases, executor, run count and threshold", (
   assert.deepEqual(spec.stimuli.map(stimulus => stimulus.name).sort(), names.sort());
   assert.equal(spec.defaults.model, "gpt-5-mini");
   assert.equal(spec.defaults.runs, 3);
-  assert.equal(spec.defaults.judge_model, "gpt-5.6-sol-fast");
+  assert.equal(spec.defaults.judge_model, "gpt-5.6-sol");
   assert.equal(spec.scoring.threshold, 0.7);
 });
 

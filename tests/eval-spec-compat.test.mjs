@@ -19,7 +19,7 @@ test("canonical evaluation specs are present", () => {
 for (const spec of specs) {
   test(`${spec}: the judge is explicit without changing executor coverage`, () => {
     const evaluation = parse(readFileSync(join(root, spec), "utf8"));
-    assert.equal(evaluation.defaults.judge_model, "gpt-5.6-sol-fast");
+    assert.equal(evaluation.defaults.judge_model, "gpt-5.6-sol");
     assert.equal(evaluation.defaults.model,
       spec.includes("aspire-project-v2-migration") ? "gpt-5.6-sol-fast" : "gpt-5-mini");
   });

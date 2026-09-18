@@ -11,7 +11,7 @@ npm ci --ignore-scripts
 npm test
 vally lint --eval-spec skills/aspire-project-v2-migration/evals/eval.yaml
 vally eval -e skills/aspire-project-v2-migration/evals/eval.yaml \
-  --model gpt-5.6-sol-fast --judge-model gpt-5.6-sol-fast \
+  --model gpt-5.6-sol-fast --judge-model gpt-5.6-sol \
   --runs 1 --workers 1 --max-retries 0 --require-pass \
   --workspace /absolute/new/workspaces --output-dir /absolute/new/results
 ```
