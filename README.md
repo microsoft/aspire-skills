@@ -156,10 +156,12 @@ Use `npm run bundle:skills` or `npm run bundle:extensions` to build one bundle t
 ### Publishing releases
 
 The publish workflow builds and attests both bundles, but uploads only
-`aspire-skills` by default. Manual runs on an existing version tag can select
-`include_skills` (default `true`) and `include_extensions` (default `false`); at
-least one must be selected. Tag pushes use the defaults. The workflow does not
-create Git tags.
+`aspire-skills` by default. Synchronized plugin version bumps on `main`
+automatically create the missing `v<version>` tag and GitHub release.
+Manual runs on `main` or an existing version tag can select `include_skills`
+(default `true`) and `include_extensions` (default `false`); at least one must
+be selected. Branch and tag pushes use the defaults. To add extensions to an
+existing release, run the workflow on its tag with `include_extensions` selected.
 
 ## Contributing
 

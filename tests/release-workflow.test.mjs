@@ -100,16 +100,17 @@ test("tag creation uses the resolved source commit without force", t => {
   assert.equal(result.commands, "git tag v0.0.2 current\ngit push origin refs/tags/v0.0.2\n");
 });
 
-test("publication creates or repairs the release with both bundle assets", t => {
+test("default publication creates or repairs the release with only the skills asset", t => {
   for (const exists of ["false", "true"]) {
     const result = runStep(t, "Publish GitHub release", { RELEASE_EXISTS: exists });
     assert.equal(result.status, 0, result.stderr);
-    const assets = "v0.0.2 dist/aspire-skills-v0.0.2.tgz dist/aspire-extensions-v0.0.2.tgz";
+    const assets = "v0.0.2 dist/aspire-skills-v0.0.2.tgz";
     assert.ok(result.commands.includes(
       exists === "true"
         ? `gh release upload ${assets} --clobber`
         : `gh release create ${assets} --verify-tag --title v0.0.2 --notes Aspire bundles 0.0.2`
     ), result.commands);
+    assert.doesNotMatch(result.commands, /aspire-extensions/);
   }
 });
 
@@ -131,6 +132,7 @@ function runStep(t, name, env = {}) {
       SOURCE_COMMIT: "current", TAG_COMMIT: "current",
       SKILLS_ASSET: "dist/aspire-skills-v0.0.2.tgz",
       EXTENSIONS_ASSET: "dist/aspire-extensions-v0.0.2.tgz",
+      INCLUDE_SKILLS: "true", INCLUDE_EXTENSIONS: "false",
       REMOTE_ERROR: "false", TAG_EXISTS: "false",
       RELEASE_EXISTS: "false", VERSION_CHANGED: "false",
       ...env
