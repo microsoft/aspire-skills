@@ -35,6 +35,7 @@ declarations alone are not capability evidence.
 | Direct `new ProjectResource(...)` | Manual design. `DotnetProjectResource` needs metadata, defaults, coordinated-build wiring, and publishing opt-in supplied by the builder API. |
 | `GetProjectResources()`, casts, concrete generic constraints | Identify every call site and request a design decision. Do not replace wholesale with `IDotnetProgramResource`. |
 | Custom publisher or image manager | Verify executable identity and `SupportsDotnetProgramPublishing()` capability; preserve or redesign only with approval. |
+| Blazor gateway with changed or unresolved publishing defaults | Require explicit approval of resolved framework, SDK/base image/OS, and process-user changes. Generic API or SDK-publishing approval is insufficient; unknown values require approved discovery, not assumed parity. |
 | File `.cs` app + build-only environment | Unsupported; do not invent an equivalent. |
 | File `.cs` app + EF CLI | Unsupported. |
 | EF + custom build properties | Warn that `dotnet-ef` does not receive those custom global properties. |
@@ -65,6 +66,19 @@ declarations alone are not capability evidence.
   are distinct from arbitrary custom publishers coupled to `ProjectResource`.
 - The Project v2 Blazor gateway uses .NET SDK publishing rather than the legacy
   custom Dockerfile. Treat this as an approval-required intentional difference.
+  Compare its effective target framework and SDK, runtime/base image and OS/platform,
+  process user, working directory, entrypoint and ports before approving the change.
+  The legacy image tag is selected from the AppHost runtime and the package's
+  stamped image version; the v2 file app can instead follow the publishing SDK.
+  A newer SDK can therefore change the gateway's runtime major version even when
+  the AppHost/client project frameworks remain unchanged. Do not assume root and
+  non-root images are interchangeable: writable paths, mounted files and privileged
+  ports can be affected.
+  If values or consequences are unresolved, retain the gateway pending a decision;
+  do not silently choose a base, force root, edit the packaged script, or retarget it.
+  A separately approved subset or owned Dockerfile publishing policy is a design
+  alternative, not an automatic fallback. Do not use `WithBuildEnvironment` to
+  control a file-based gateway: that API supports project files only.
   Its built-in gateway source already sets `PublishAot=false`; do not apply the
   generic file-app AOT warning to that gateway or change the user's client settings.
 - File-based apps retain .NET SDK Native AOT defaults. Cross-operating-system
@@ -90,6 +104,7 @@ expected hidden coordinated-build resources, but do not broadly scrub the model.
 | Scale and health | replicas, health checks, lifecycle relationships |
 | Build | clean initial build, shared-library build correctness, required SDK |
 | Publish | manifest inclusion, generated environment artifacts, selected pipeline, container options, and separately built image/archive |
+| Approved gateway image changes | exact accepted framework/runtime, base/OS/platform and process user; entrypoint, directory and ports; all unapproved image settings unchanged |
 | References | only proven-obsolete AppHost build edges removed |
 
 Compilation must cover overload changes, not just creation calls.
@@ -122,6 +137,12 @@ When publish validation is approved, separate these stages:
 Use `ASPIRE_CONTAINER_RUNTIME=podman` when Podman is the selected runtime; a
 Docker shim is not required for Aspire's native Podman path. Validate only
 task-owned resources and use distinct output directories/image tags.
+
+Keep raw before/after image evidence. Exact equivalent paths such as `/app` and
+`/app/` may be compared semantically, but never scrub runtime versions, image
+identity or USER to force equality. With explicit approval, validate and report
+the intended target image contract separately from unchanged behavior. A passing
+probe does not prove unchanged deployment policy or authorize additional changes.
 
 `--list-steps` avoids executing pipeline actions but still evaluates AppHost code,
 step factories, and hosted services. It is not a read-only assessment shortcut.

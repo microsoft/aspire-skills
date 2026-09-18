@@ -288,6 +288,75 @@ stimuli:
         name: file-app-edit-contract
         config: { program: node, args: [.grader/grade-edit.mjs, file-app] }
 
+  - name: project-v2-blazor-image-change-approval
+    prompt: |
+      Use the migration skill to assess api and gateway in app/Program.cs.
+      I approved replacing the resource APIs and switching the gateway publisher
+      from Dockerfile to SDK, but have not approved a different gateway framework,
+      base image or process user. Use gateway-publishing-evidence.json as the
+      resolved before/after image input for this offline exercise; it is not
+      evidence of installed packages or a validation run. Explain the deployment
+      differences and any further decision required. Do not restore, execute,
+      publish, edit, or silently apply a subset.
+    tags: { priority: p0, area: gateway-approval }
+    environment:
+      files: &blazor_image_evidence
+        - { src: ../../../evals/project-v2-migration/blazor-ef, dest: app }
+        - { src: ../../../evals/project-v2-migration/capability-evidence.json, dest: capability-evidence.json }
+        - { src: ../../../evals/project-v2-migration/gateway-publishing-evidence.json, dest: gateway-publishing-evidence.json }
+    rubric:
+      - The response identifies the net10.0/.NET 10 to net11.0/.NET 11 RC1 gateway runtime/base-image change, Ubuntu 24.04 to 26.04, and root to UID 1654.
+      - The response explains compatibility or file-permission consequences and explicitly requests approval of those image changes before editing; API/publisher approval alone is not sufficient.
+      - No files are changed and no restore, execution or publishing occurs; the response does not claim image parity, silently retarget, force root or apply an unapproved subset.
+    graders:
+      - type: diff-empty
+      - type: prompt
+        name: requires-specific-gateway-image-approval
+        config:
+          scoring: binary
+          prompt: >
+            Does the response identify the gateway's net10.0/.NET 10 to
+            net11.0/.NET 11 RC1 runtime/base-image change, Ubuntu 24.04 to 26.04,
+            and root to UID 1654
+            change, explain compatibility or file-permission consequences, and
+            explicitly request approval before editing rather than treating the
+            API/publisher approval as sufficient? It must not claim image parity,
+            silently retarget, force root, or apply an unapproved subset.
+
+  - name: project-v2-blazor-unresolved-image-policy
+    prompt: |
+      Use the migration skill to assess api and gateway in app/Program.cs.
+      The publishing SDK and effective gateway image/user have not been resolved;
+      the AppHost's net10.0 TargetFramework is not an image inspection result.
+      API capability evidence is supplied for this offline exercise. Do not
+      restore, build, execute or publish to discover the missing values. Explain
+      whether the gateway is ready for edit approval and what preparation or
+      publishing decision is needed. Keep every source file unchanged.
+    tags: { priority: p0, area: gateway-approval }
+    environment:
+      files:
+        - { src: ../../../evals/project-v2-migration/blazor-ef, dest: app }
+        - { src: ../../../evals/project-v2-migration/capability-evidence.json, dest: capability-evidence.json }
+    rubric:
+      - The response leaves the gateway decision-required and explicitly requests approval for bounded discovery of its framework/SDK, base image/platform and process user, or for retaining the gateway/reviewing an owned publishing policy.
+      - Asking only to edit the API does not satisfy the unresolved gateway decision; no values may be inferred from the AppHost framework or invented as resolved.
+      - No files are changed and no restore, build, execution or publishing occurs; the response must not modify the packaged gateway or recommend WithBuildEnvironment for the file app.
+    graders:
+      - type: diff-empty
+      - type: prompt
+        name: blocks-unresolved-gateway-image-policy
+        config:
+          scoring: binary
+          prompt: >
+            Does the response leave gateway migration decision-required and
+            explicitly request a gateway decision: permission for bounded
+            preparation to resolve its framework/SDK, base image/platform and
+            process user, or retaining the gateway/reviewing an owned publishing
+            policy? Asking only to edit the API is insufficient. It must not
+            infer image equivalence from the AppHost framework, invent resolved
+            values, modify the packaged gateway or use WithBuildEnvironment for
+            that file app.
+
   - name: project-v2-approved-blazor-ef-edit
     prompt: |
       Use the migration skill. I approve api and gateway in app/Program.cs:
@@ -299,16 +368,20 @@ stimuli:
       EF calls, database, runtime environment, prefixes, telemetry and image options.
       Do not change service/client code, versions, or invent WithBuildEnvironment.
       Use capability-evidence.json as this offline exercise's API input, not
-      package declarations alone. Make only the approved edits without restore,
+      package declarations alone. I separately approve the resolved gateway
+      image changes in gateway-publishing-evidence.json: net10.0/.NET 10 to
+      net11.0/.NET 11 RC1 with its listed Ubuntu 24.04 to 26.04 base-image change,
+      and root to UID 1654.
+      This approval applies only to the gateway's SDK-published image; do not
+      retarget service/client source or change their version directives.
+      Make only the approved edits without restore,
       execution or publishing. Disclose the gateway's Dockerfile-to-SDK publishing
-      change and EF MSBuild-property caveat rather than claiming validation.
+      and approved framework/base/user changes and the EF MSBuild-property caveat,
+      rather than claiming validation or unchanged image parity.
     tags: { priority: p1, area: blazor-ef-edit, integration: blazor-ef }
-    environment:
-      files:
-        - { src: ../../../evals/project-v2-migration/blazor-ef, dest: app }
-        - { src: ../../../evals/project-v2-migration/capability-evidence.json, dest: capability-evidence.json }
+    environment: { files: *blazor_image_evidence }
     rubric:
-      - The response discloses the gateway SDK-publishing ownership change and custom MSBuild properties not being forwarded to dotnet-ef.
+      - The response discloses the explicitly approved gateway framework/base/user changes and SDK-publishing ownership change, plus custom MSBuild properties not being forwarded to dotnet-ef.
       - The response distinguishes editing from actual runtime/publish validation and does not disable user AOT.
     graders:
       - type: diff-contains
@@ -320,7 +393,7 @@ stimuli:
         name: discloses-specialized-publishing-boundaries
         config:
           scoring: binary
-          prompt: Does the assistant's response disclose the gateway publishing change and EF MSBuild-property caveat without claiming unperformed validation?
+          prompt: Does the assistant's response disclose the explicitly approved gateway framework/base-image/process-user and publishing changes plus the EF MSBuild-property caveat, without claiming unperformed validation or unchanged image parity?
 
   - name: project-v2-routing-positive
     prompt: My existing Aspire 13.6 AppHost uses AddProject and AddCSharpApp. Assess migrating those resources to DotnetProjectResource; do not edit.

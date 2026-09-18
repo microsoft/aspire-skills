@@ -1,8 +1,9 @@
 ---
 name: aspire
 description: >-
-  **WORKFLOW SKILL** - Aspire 13.5/13.6 router. Detects AppHosts, enforces guardrails,
-  and selects the right sub-skill.
+  **WORKFLOW SKILL** - Entry router for Aspire 13.5/13.6. Load for Aspire requests,
+  including read-only CLI questions and better AI agent support, then invoke the
+  owning sub-skill. An explicitly selected sub-skill may be used directly.
   USE FOR: Aspire AppHost, Aspire CLI, distributed app, cloud-native .NET, aspire
   start/stop/resource/deploy/destroy/publish/init/new/add/wait/describe/ps/logs/otel,
   aspire agent init, WithBrowserLogs, WithTerminal, Interaction Service, apphost.mts,
@@ -11,7 +12,7 @@ description: >-
   DO NOT USE FOR: non-Aspire projects or ordinary build/test tasks.
   INVOKES: aspire-init, aspireify, aspire-project-v2-migration,
   aspire-orchestration, aspire-deployment, aspire-monitoring.
-  FOR SINGLE OPERATIONS: Route directly to the matching sub-skill.
+  FOR SINGLE OPERATIONS: Invoke the owning sub-skill; naming it is not a handoff.
 license: MIT
 metadata:
   author: Microsoft
@@ -30,14 +31,25 @@ The 13.5.3 references apply to the 13.5 family, not a version override for 13.6.
 Project v2 migration still requires an eligible 13.6+ AppHost, the required APIs,
 and separate approval of exact edits.
 
-For ordinary AppHost authoring, **invoke `aspireify` even when the AppHost is
-already wired or the user wants only read-only advice**. Adding another C# project
-with `AddProject` is ordinary wiring, not Project v2 migration. Do not answer a
-wiring request from the router alone.
+**A handoff requires loading the selected skill before answering**, not merely
+mentioning its name. Invoke it or read its `SKILL.md`, respecting project-local
+precedence. This applies to read-only advice, how-to questions and already-wired
+AppHosts too. Loading a skill does not authorize its commands or edits.
+
+For ordinary AppHost authoring, invoke `aspireify`. Adding another C# project with
+`AddProject` is ordinary wiring, not Project v2 migration. Broad CLI overviews and
+the `aspire agent init` recommendation can be answered by this router; a specific
+lifecycle, publishing, monitoring or authoring request needs its owning skill.
+
+For a read-only assessment, explain the route, relevant commands and approval
+boundaries without executing the proposed work. Missing local tools or an AppHost
+path can require clarification before execution, but do not prevent explaining a
+workflow identified by the user's question. Do not install, scaffold, start,
+deploy or query running resources just to answer a routing question.
 
 ## Triage first
 
-Two intents are commonly misread — resolve them before doing anything else:
+These intents are commonly misread — resolve them before doing anything else:
 
 - **"Better / improve AI agent support", "set up agent skills", "make Copilot smarter about
   my Aspire app"** → recommend running **`aspire agent init`**, which generates project-local
@@ -50,6 +62,11 @@ Two intents are commonly misread — resolve them before doing anything else:
   and use `aspire describe` for resource state, then `aspire logs` / `aspire otel logs` /
   `aspire otel traces`. Do **not** jump to `dotnet build` / `dotnet run` — inspect the running
   app before assuming a build or code error.
+- **"My old TypeScript AppHost uses apphost.ts; how do I migrate?"** → invoke
+  `aspire-orchestration` for `aspire update --migrate`. Package, config, tsconfig,
+  generated-import and entry-point changes need approval before noninteractive
+  migration. This is not ordinary `aspireify` authoring or Project v2 resource
+  migration; hand back to authoring only if source work remains afterward.
 
 ## Detection
 
@@ -70,7 +87,8 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 
 ## Default Workflow
 
-0. **Bootstrap branch** — if **no AppHost exists** in the repo, route to
+0. **Bootstrap branch** — if the user wants to add Aspire and **no AppHost exists**
+   in the repo, route to
    [`aspire-init`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-init/SKILL.md) for the skeleton drop. If an AppHost stub exists
    but is **unwired** (no resources declared), route to [`aspireify`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md).
    Only continue with the steps below once a wired AppHost is present.
@@ -87,6 +105,10 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
   `aspire-orchestration`. New 13.5 C# templates can make `dotnet run` delegate through the
   CLI bundle, but agents still use the editor lifecycle tool or `aspire start` for
   detached, noninteractive, exact-target, and worktree-isolated execution.
+- For deployed Azure diagnostics, route to `azure-diagnostics` or the appropriate
+  Azure platform tools. Aspire CLI diagnostics use a local AppHost backchannel,
+  not a connection to deployed resources. If the external skill is unavailable,
+  state the required handoff instead of claiming to invoke it.
 - When VS Code exposes `aspire_apphost_start` or `aspire_apphost_stop`, load deferred contracts and prefer the matching tool, subject to the orchestration skill's worktree and stop-result rules; use start mode `run` unless the user explicitly asks to attach a debugger
 - If several AppHosts are discovered and the target is unclear, ask which one before taking any lifecycle action
 - **Always** `aspire wait <resource>`, **never** manual HTTP polling
@@ -117,6 +139,7 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 | Task | Route To |
 |------|----------|
 | Start, stop, wait, restart, rebuild | → [aspire-orchestration](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-orchestration/SKILL.md) |
+| Environment/toolchain diagnosis (`aspire doctor`) and CLI updates | → [aspire-orchestration](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-orchestration/SKILL.md) |
 | Create a new Aspire project from a template (`aspire new`) | → [aspire-init](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-init/SKILL.md) (in-plugin) |
 | Add Aspire to an existing repo (`aspire init`, drop skeleton) | → [aspire-init](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-init/SKILL.md) (in-plugin) |
 | Wire or extend an AppHost, add a C# project/integration, or advise on ordinary wiring (new or existing graph) | → [aspireify](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md) (in-plugin); invoke it for read-only advice too |

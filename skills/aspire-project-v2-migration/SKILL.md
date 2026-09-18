@@ -86,6 +86,10 @@ Inspect the selected AppHost and every legacy candidate:
   specialized subclasses.
 - SDK selection, custom build properties, build-only requirements, file-app AOT
   settings, and existing local changes.
+- For Blazor gateway publishing, the effective before/after target framework,
+  SDK, runtime/base image and OS/platform, process user, working directory,
+  entrypoint, and port configuration. The AppHost's target framework does not
+  establish the packaged gateway file app's publishing framework.
 
 An already migrated app or an app with no matching resources is a no-op.
 
@@ -108,6 +112,18 @@ Explain:
 
 Ask for approval of that exact plan. Do not migrate a "safe-looking" subset until
 the subset and retained resources are explicitly approved.
+
+For a Blazor gateway, approval of the API replacement or "Dockerfile to SDK"
+switch alone is not approval of an implicit framework, base-image, or process-user
+change. List the resolved deployment differences and obtain explicit approval
+for them before editing. Briefly explain runtime/OS compatibility and non-root
+file/volume-permission implications; a list of changed values alone is not informed
+approval. If those values cannot be established read-only, classify
+the gateway as decision-required and request approval for the preparation needed
+to resolve them. Do not invent defaults or assume deployment equivalence.
+End that assessment with the gateway decision: request approval for specific
+bounded discovery, or ask whether to retain the gateway/review an owned publishing
+policy. Asking only about API edits does not resolve the gateway approval boundary.
 
 End the assessment with an actual approval request, not just a description of
 what approval would mean. Use the host's user-question tool when available;
@@ -185,6 +201,9 @@ After approved edits:
    evidence. `aspire publish` is not proof that an image was built. Run only the
    authorized validation stages; never push images or deploy as an implicit check.
    Do not claim unexecuted, skipped, or unavailable checks passed.
+   For approved gateway image changes, verify the exact accepted target contract
+   and unchanged behavior separately. Report the intentional differences, not
+   "image parity"; a smoke-test pass does not authorize new framework/user changes.
 6. Run the migration assessment again to prove idempotence: no duplicate package,
    resource, suppression, or configuration edits.
 

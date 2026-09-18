@@ -180,6 +180,13 @@ Use the generated `addDotnetProjectBlazorGateway` equivalent for TypeScript.
 Preserve clients, prefixes, telemetry forwarding, service references, and
 endpoints. Disclose before approval that the legacy gateway's explicit Dockerfile
 publishing changes to the .NET SDK publishing pipeline.
+Also disclose the resolved framework/SDK, runtime/base image/OS and process user,
+plus entrypoint, working-directory and port differences. Obtain specific approval
+for material image changes; an approved API rename or SDK-publishing switch is not
+blanket permission to upgrade the gateway runtime or change its user. If the
+effective image policy is unknown, stop and request approved discovery rather
+than assuming the AppHost/client framework or legacy Dockerfile defaults carry
+over. See the [publishing boundary](compatibility-and-validation.md#publishing-boundaries).
 
 ## EF Core
 

@@ -11,19 +11,30 @@ import {
 
 const fixturesRoot = fileURLToPath(new URL("../evals/project-v2-migration", import.meta.url));
 
-function fixture(t, caseName = "csharp") {
+function fixture(t, caseName = "csharp", lineEnding) {
   const root = mkdtempSync(join(tmpdir(), "project-v2-contract-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const before = join(root, "before");
   const after = join(root, "after");
   prepareFixture(before, caseName, fixturesRoot);
+  if (lineEnding) setLineEndings(before, editCases[caseName].files, lineEnding);
   cpSync(before, after, { recursive: true });
   return { root, before, after };
 }
 
+function setLineEndings(root, paths, lineEnding) {
+  for (const path of paths) {
+    const absolute = join(root, path);
+    writeFileSync(absolute, readFileSync(absolute, "utf8").replace(/\r?\n/g, lineEnding));
+  }
+}
+
 function edit(root, path, change) {
   const absolute = join(root, path);
-  writeFileSync(absolute, change(readFileSync(absolute, "utf8")));
+  const before = readFileSync(absolute, "utf8");
+  const after = change(before);
+  assert.notEqual(after, before, `Test mutation did not change ${path}`);
+  writeFileSync(absolute, after);
 }
 
 function mutateCsharp(root, subset = false) {
@@ -82,6 +93,32 @@ test("source mutation controls are not substituted agent outputs", () => {
   assert.match(grader, /input\.trajectory\?\.diff/);
   assert.match(grader, /"apply", "--reverse", "--check"/);
   assert.doesNotMatch(grader, /mutateCsharp|mutateBlazor|test-project-v2-migration/);
+});
+
+test("source mutation controls reject unchanged input", t => {
+  const { after } = fixture(t);
+  assert.throws(() => edit(after, editCases.csharp.source, source => source), /Test mutation did not change/);
+});
+
+test("gateway image decisions have read-only controls and a separately approved edit case", () => {
+  const spec = parse(readFileSync(new URL("../skills/aspire-project-v2-migration/evals/eval.yaml", import.meta.url), "utf8"));
+  for (const name of ["project-v2-blazor-image-change-approval", "project-v2-blazor-unresolved-image-policy"]) {
+    const stimulus = spec.stimuli.find(item => item.name === name);
+    assert.ok(stimulus, `Missing gateway approval control: ${name}`);
+    assert.ok(stimulus.graders.some(grader => grader.type === "diff-empty"));
+    assert.ok(stimulus.graders.some(grader => grader.type === "prompt" && grader.config.scoring === "binary"));
+    assert.equal(stimulus.tags.integration, undefined);
+  }
+  const approved = spec.stimuli.find(item => item.tags?.integration === "blazor-ef");
+  assert.match(approved.prompt, /separately approve the resolved gateway/);
+  assert.match(approved.prompt, /root to UID 1654/);
+  assert.match(approved.prompt, /do not\s+retarget service\/client source/);
+  const evidence = JSON.parse(readFileSync(join(fixturesRoot, "gateway-publishing-evidence.json"), "utf8"));
+  assert.match(evidence.purpose, /not proof of installed packages or completed validation/);
+  assert.equal(evidence.before.targetFramework, "net10.0");
+  assert.equal(evidence.after.targetFramework, "net11.0");
+  assert.equal(evidence.before.effectiveUser, "root");
+  assert.equal(evidence.after.effectiveUser, "1654");
 });
 
 test("file apps preserve AOT and the negative TypeScript input remains handle-only", () => {
@@ -163,17 +200,20 @@ test("TypeScript checks both resources and configuration ownership", t => {
   assert.throws(() => assertEditedFixture(before, after, "typescript"), /Wrong target for worker/);
 });
 
-for (const [name, mutate, error] of [
-  ["missing EF diagnostic", source => source.replace(/^#pragma warning (?:disable|restore) ASPIREPROJECTS001\n/gm, ""), /Missing or excessive ASPIREPROJECTS001/],
-  ["unpaired EF diagnostic", source => source.replace("#pragma warning restore ASPIREPROJECTS001", ""), /Missing or excessive ASPIREPROJECTS001/],
-  ["removed existing Blazor scope", source => source.replace(/^#pragma warning (?:disable|restore) ASPIREBLAZOR001\n/gm, ""), /fluent behavior/],
-  ["changed publishing identity", source => source.replace('LocalImageName = $"{imagePrefix}-api"', 'LocalImageName = $"{imagePrefix}-wrong"'), /fluent behavior/]
-]) {
-  test(`specialized contract rejects ${name}`, t => {
-    const { before, after } = fixture(t, "blazor-ef");
-    mutateBlazor(after);
-    assertEditedFixture(before, after, "blazor-ef");
-    edit(after, "Program.cs", mutate);
-    assert.throws(() => assertEditedFixture(before, after, "blazor-ef"), error);
-  });
+for (const [endingName, lineEnding] of [["LF", "\n"], ["CRLF", "\r\n"]]) {
+  for (const [name, mutate, error] of [
+    ["missing EF diagnostic", source => source.replace(/^#pragma warning (?:disable|restore) ASPIREPROJECTS001\r?\n/gm, ""), /Missing or excessive ASPIREPROJECTS001/],
+    ["unpaired EF diagnostic", source => source.replace("#pragma warning restore ASPIREPROJECTS001", ""), /Missing or excessive ASPIREPROJECTS001/],
+    ["removed existing Blazor scope", source => source.replace(/^#pragma warning (?:disable|restore) ASPIREBLAZOR001\r?\n/gm, ""), /fluent behavior/],
+    ["changed publishing identity", source => source.replace('LocalImageName = $"{imagePrefix}-api"', 'LocalImageName = $"{imagePrefix}-wrong"'), /fluent behavior/]
+  ]) {
+    test(`specialized contract rejects ${name} with ${endingName} line endings`, t => {
+      const { before, after } = fixture(t, "blazor-ef", lineEnding);
+      mutateBlazor(after);
+      setLineEndings(after, editCases["blazor-ef"].files, lineEnding);
+      assertEditedFixture(before, after, "blazor-ef");
+      edit(after, "Program.cs", mutate);
+      assert.throws(() => assertEditedFixture(before, after, "blazor-ef"), error);
+    });
+  }
 }

@@ -1,7 +1,7 @@
 # Project v2 migration evaluations
 
 These fixtures are **legacy inputs**, not hand-written successful agent outputs.
-The migration spec loads all seven sibling skills and contains 13 read-only cases
+The migration spec loads all seven sibling skills and contains 15 read-only cases
 and seven actual-edit cases.
 
 ## Source and approval gates
@@ -43,6 +43,13 @@ It does not establish which public release or installed package contains those
 APIs. Replace the `13.6.0-dev` fixture placeholder only in disposable validation
 copies, using the same independently qualified toolchain on both sides.
 
+`gateway-publishing-evidence.json` is a separate offline assessment input for
+resolved framework/base-image/user differences. It is not an installation check,
+agent output or image-build proof. The read-only cases require specific approval
+when those values differ and approved discovery when they are unknown. The
+positive edit case explicitly approves its resolved image changes without
+authorizing service/client retargeting or claiming unchanged image parity.
+
 | Case | Contract |
 |---|---|
 | C# full/subset | Named API profile, explicit-null worker exclusion, metadata override, replicas, references, waits, environment, arguments, image settings, and the shared code reference |
@@ -50,7 +57,7 @@ copies, using the same independently qualified toolchain on both sides.
 | TypeScript named | The actual legacy named wrapper becomes the flat `launchProfileName` DTO |
 | Publishing ownership | Preserve custom Dockerfile identity and publish-only prebuilt ownership; do not add prebuilt build/push steps |
 | File app | Preserve `PublishAot=true`, runtime environment, and publishing options |
-| EF/Blazor | Retain EF metadata/operation ownership and client configuration; handle the new EF overload's `ASPIREPROJECTS001`; disclose gateway SDK publishing |
+| EF/Blazor | Retain EF metadata/operation ownership and client configuration; handle the new EF overload's `ASPIREPROJECTS001`; require explicit approval of resolved gateway framework/base/user changes |
 | Assessment/routing | No implicit edits, upgrades, or missing-capability workarounds; ordinary wiring routes to `aspireify` |
 
 The generated TypeScript third argument is optional, not nullable.
@@ -90,14 +97,20 @@ otherwise includes this build-only companion as a deployable service. This test
 setup is not a migration fix to apply automatically to user applications.
 
 The built-in gateway disables its own AOT. Ordinary file apps keep AOT:
-macOS-to-Linux has an expected cross-OS rejection, while positive Linux images
-need a matching target-OS builder. The fixture's `MIGRATION_IMAGE_ARCHIVE` setting
+positive Linux images need a matching target-OS builder. Host-negative diagnostics
+depend on the selected SDK/platform and prerequisites; do not require a particular
+macOS-to-Linux error before attempting a Linux positive. The fixture's `MIGRATION_IMAGE_ARCHIVE` setting
 enables archive output without changing AOT. Custom MSBuild globals are not
 forwarded to `dotnet-ef`; successful ordinary EF migration does not prove otherwise.
 
 Use finite execution/process-cleanup bounds and record failed or unexecuted gates
 explicitly. Preserve publishing ownership and only normalize specific approved
-implementation differences. Do not broadly scrub configuration to force equality.
+implementation differences. For a gateway, distinguish validated intentional
+framework/base-image/user changes from unchanged behavior; functional probes do
+not authorize those changes or establish image parity. A common validation-only
+base-image pin needs explicit approval and scope disclosure; it does not prove
+that the SDK's unmodified image inference works. Do not broadly scrub configuration
+to force equality.
 Raw workspaces/caches/archives are not safe upload artifacts; apply credential
 review and the repository's redaction safeguards to curated evidence.
 
