@@ -89,10 +89,11 @@ test("gate and nightly evaluations fail closed while baseline remains informatio
 });
 
 test("workflow and redaction changes exercise regression coverage", () => {
-  const workflow = readWorkflow("bundle-test.yml");
-  for (const filter of [".github/workflows/skill-eval*.yml", ".github/workflows/skill-experiment.yml"]) {
-    assert.equal(workflow.split(`- "${filter}"`).length - 1, 2);
-  }
+  const workflow = readWorkflow("test.yml");
+  assert.match(workflow, /pull_request:\s+branches:\s+- main\s+- dev/);
+  assert.match(workflow, /push:\s+branches:\s+- main\s+- dev/);
+  assert.doesNotMatch(workflow, /paths:|paths-ignore:|branches-ignore:/);
+  assert.match(workflow, /run: npm test/);
   const gate = readWorkflow("skill-eval.yml");
   assert.match(gate, /- "scripts\/redact-eval-artifacts\.mjs"/);
   assert.match(gate, /scripts\/redact-eval-artifacts\\\.mjs/);

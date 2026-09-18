@@ -4,7 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/*.test.mjs tests/aspireify/*.test.mjs",
+    "test": "node --test --test-skip-pattern=\"^local release workflow rehearsal\" tests/*.test.mjs tests/aspireify/*.test.mjs",
+    "test:release-workflow": "node --test tests/release-workflow-e2e.test.mjs",
+    "catalog": "node scripts/build-opencode-catalog.mjs",
+    "catalog:check": "node scripts/build-opencode-catalog.mjs --check",
+    "release:prepare": "node scripts/release.mjs prepare",
+    "release:check": "node scripts/release.mjs check",
     "bundle": "node scripts/build-aspire-bundles.mjs",
     "bundle:skills": "node scripts/build-aspire-bundles.mjs --bundle skills",
     "bundle:extensions": "node scripts/build-aspire-bundles.mjs --bundle extensions"
