@@ -1,7 +1,7 @@
 name: aspire-router-eval
 description: Evaluates the top-level aspire router skill for correct sub-skill routing. Tests that
-  prompts are directed to aspire-orchestration, aspire-deployment, or aspire-monitoring based on
-  intent.
+  prompts are directed to aspire-project-v2-migration, aspire-orchestration,
+  aspire-deployment, or aspire-monitoring based on intent.
 version: "1.0"
 type: capability
 tags:
@@ -32,10 +32,39 @@ environment:
     - ../../aspire
     - ../../aspire-init
     - ../../aspireify
+    - ../../aspire-project-v2-migration
     - ../../aspire-orchestration
     - ../../aspire-deployment
     - ../../aspire-monitoring
 stimuli:
+  - name: router-ordinary-wiring-preserves-136-001
+    prompt: >
+      Use the aspire router skill. This existing C# AppHost centrally selects
+      AspireVersion 13.6.0-dev. Give read-only guidance for ordinary Redis wiring,
+      preserving that release family. Do not edit, restore, start, deploy, run
+      cloud commands, or migrate Project resources.
+    tags: { priority: p1, scenario: version-compatibility, area: version-preservation }
+    constraints: { max_agent_duration: 5m }
+    environment:
+      files:
+        - { src: ../../../evals/project-v2-migration/runnable-csharp, dest: app }
+    rubric:
+      - The assistant routes ordinary wiring through aspireify, retaining the aspire router.
+      - The assistant preserves 13.6.0-dev without pinning 13.5.3, implicitly upgrading/downgrading, or initiating Project v2 migration.
+      - The assistant keeps the workspace unchanged.
+    graders:
+      - type: prompt
+        name: preserves-selected-136-family
+        config:
+          scoring: binary
+          prompt: Does the assistant's response preserve the selected 13.6.0-dev family and keep ordinary wiring in aspireify rather than requiring migration?
+      - type: skill-invocation
+        name: invokes-router-not-project-v2-migration
+        config:
+          required: [aspire, aspireify]
+          disallowed: [aspire-project-v2-migration]
+      - type: diff-empty
+        name: keeps-read-only-workspace-unchanged
   - name: router-init-001
     prompt: I want better AI agent support for my Aspire project
     tags:

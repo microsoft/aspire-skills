@@ -14,6 +14,8 @@ stimuli:
     prompt: >                             # phrase like a real user, not a spec
       I'm done with this preview deployment — how do I tear down everything
       Aspire provisioned?
+    rubric:
+      - The assistant's response recommends Aspire-native teardown with aspire destroy.
     tags:                                 # record; merged over eval-level tags
       priority: p1
       area:
@@ -76,6 +78,11 @@ When supplied, grader names must match `[a-z0-9][a-z0-9-]{0,59}`: use lowercase 
 Other static graders exist (`file-exists`, `file-contains`, `file-matches`, `tool-call`, `run-command`, `program`, `metric-threshold`); run `vally lint --eval-spec <spec>` and see the [vally docs](https://www.npmjs.com/package/@microsoft/vally-cli) for the full set.
 
 `eval.yaml` can also declare **top-level graders** that run on every stimulus in the spec (used in this repo for the global `never-azd` rule on `aspire-deployment`).
+
+New `prompt` graders need a stimulus-level `rubric` containing the scored
+criteria. `config.prompt` adds judge instructions; without a rubric, Vally uses
+default criteria and emits a warning. Grader-only examples below assume an
+appropriate rubric on the containing stimulus.
 
 ## Grader patterns (do's and don'ts)
 
@@ -196,7 +203,7 @@ Routing is graded **inline** with the `skill-invocation` grader (there is no sep
 Rules:
 
 - **Routing stimuli must load the full skill set** so the decision is made against real siblings — add the siblings via stimulus-level `environment.skills` (union-merged on top of the eval-level list). See [README → Skills & baselines](./README.md#skills--baselines-vally-080).
-- **A skill cannot be in both `required` and `disallowed`** (vally errors). For an "any of these N is fine" intent, list them all in `required` only if all are acceptable, or fall back to a `prompt` grader on the response content.
+- **A skill cannot be in both `required` and `disallowed`** (vally errors). Every skill in `required` must be invoked. For an "any of these N is fine" intent, use a rubric-backed `prompt` grader rather than requiring them all.
 - **Pair routing with a content check.** `skill-invocation` proves *which* skill ran; add a `prompt` or `output-contains` grader if the *answer* also matters.
 - **Do not use `constraints.expect_skills` / `reject_skills`.** Vally 0.16.0 removed these fields. Express the same requirements with `skill-invocation` grader `config.required` / `config.disallowed`; extend an existing invocation grader instead of duplicating it.
 - **Phrase like a real user.** "I want to ship this" is more realistic than "Invoke aspire deploy."

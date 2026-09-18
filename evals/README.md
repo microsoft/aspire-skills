@@ -7,8 +7,8 @@ This plugin uses [vally](https://www.npmjs.com/package/@microsoft/vally-cli) to 
 ## Install vally
 
 ```bash
-# Requires Node.js 22+
-npm install -g @microsoft/vally-cli
+# Requires Node.js 22.12+
+npm install -g @microsoft/vally-cli@0.16.0
 
 # Verify
 vally --version
@@ -35,7 +35,8 @@ Shared fixtures live at the **repo-root** `evals/` directory and are referenced 
 evals/
 ├── csharp-apphost/      # Wired C# AppHost (Aspire.AppHost.Sdk + Program.cs)
 ├── ts-apphost/          # TypeScript AppHost (apphost.mts + .aspire/modules/)
-└── non-aspire/          # Non-Aspire .NET project (for "should not trigger" stimuli)
+├── non-aspire/          # Non-Aspire .NET project (for "should not trigger" stimuli)
+└── project-v2-migration/ # Legacy inputs, captured-edit contracts, and qualification guidance
 ```
 
 `src` is resolved relative to the eval spec file (so the canonical reference from `skills/<skill>/evals/eval.yaml` is `../../../evals/<fixture-path>`). `dest` is the workspace-relative path the executor sees.
@@ -56,7 +57,7 @@ Eval-level `environment.skills` is **union-merged** into every stimulus, so you 
 **Hybrid loading convention used here:**
 
 - **Capability specs** load the skill under test **plus its transitive in-repo dependencies** (whatever its `SKILL.md` `INVOKES:`). E.g. `aspireify` loads `aspireify` + `aspire-orchestration` because it validates wiring by running `aspire start`.
-- **Routing stimuli** (the `aspire` router spec, and `area: routing` stimuli) load the **full set** of six skills so routing decisions are made against the real siblings.
+- **Migration routing stimuli** load all **seven skills** so the new migration workflow competes with real siblings. Legacy specs retain their existing candidate sets; they have not all been expanded to seven.
 
 **Activation assertions:** use a `skill-invocation` grader with `config.required` / `config.disallowed` to assert which skills the agent actually invoked. Vally 0.16.0 no longer accepts `constraints.expect_skills` / `constraints.reject_skills`.
 
@@ -101,7 +102,8 @@ The `with-skills` − `no-skills` pass-rate delta is the measured lift. The expe
 | Persist runs to a SQLite store | `vally ingest ./results --store ./vally.sqlite` |
 | Lint all skills | `vally lint skills` |
 | Validate one eval spec | `vally lint --eval-spec skills/<skill>/evals/eval.yaml` |
-| Plan a run without grading | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --skip-grade` |
+| Execute agents without grading (not a dry run) | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --skip-grade` |
+| Validate actual Project v2 source edits | See the [migration fixture guide](./project-v2-migration/README.md#source-and-approval-gates) |
 
 ## Key flags
 
@@ -109,7 +111,7 @@ The `with-skills` − `no-skills` pass-rate delta is the measured lift. The expe
 |------|---------|
 | `-e, --eval-spec <path>` | Eval spec to run. Repeatable. |
 | `--skill-dir <dir>` | **(vally 0.8.0)** Discover skills from this directory. A spec's `environment.skills` takes precedence: when present it **replaces** `--skill-dir` discovery (it is not additive), so `--skill-dir` only applies to specs that omit `environment.skills`. With neither set, vally loads **no skills** (the baseline) — prefer declaring `environment.skills` in the spec. |
-| `--workspace <dir>` | Working directory for the executor (fixtures get copied here). Defaults to a per-stimulus temp dir. |
+| `--workspace <dir>` | Preserve per-stimulus executor workspaces beneath this root. Defaults to temporary workspaces; set this when later validation must use actual agent-edited files. |
 | `--suite <name>` | Run only stimuli matching a suite declared in `.vally.yaml`. |
 | `--tag <key=values>` | Run only stimuli whose tag record matches. Comma-separate values; repeat for multiple keys. E.g. `--tag priority=p0,p1 --tag area=routing`. |
 | `--model <name>` | Executor model. Overrides `defaults.model` in the spec. |
@@ -144,13 +146,29 @@ Use `--workers 4` to fan stimuli out and shave wall-clock time; expect higher co
 
 | Skill | Task stimuli | Routing stimuli | Focus |
 |-------|--------------|-----------------|-------|
-| `aspire` (router) | 7 | 16 | Routing precision to sub-skills |
-| `aspire-init` | 5 | 15 | Skeleton drop, `aspire new` / `aspire init` decision, aspireify handoff |
-| `aspireify` | 11 | 18 | AppHost wiring (C# / file-based C# / TS), package-manager resolution, validation, never edit `.aspire/modules/` |
-| `aspire-orchestration` | 28 | 24 | Lifecycle tools, file lock recovery, `--include-hidden`, `aspire update --self` |
-| `aspire-deployment` | 8 | 21 | Multi-target deploy, `aspire destroy`, JS publishing, pipeline previews |
-| `aspire-monitoring` | 11 | 19 | Diagnostics bridge, standalone dashboard, browser logs, `--include-hidden` |
-| **Total** | **70** | **113** | |
+| `aspire` (router) | 2 | 23 | Routing precision to sub-skills; preserve selected release family |
+| `aspire-init` | 6 | 15 | Skeleton drop, `aspire new` / `aspire init` decision, aspireify handoff |
+| `aspireify` | 14 | 19 | AppHost wiring (C# / file-based C# / TS), package-manager resolution, validation, never edit `.aspire/modules/` |
+| `aspire-orchestration` | 29 | 24 | Lifecycle tools, file lock recovery, `--include-hidden`, `aspire update --self` |
+| `aspire-deployment` | 11 | 22 | Multi-target deploy, `aspire destroy`, JS publishing, pipeline previews |
+| `aspire-monitoring` | 7 | 23 | Diagnostics bridge, standalone dashboard, browser logs, `--include-hidden` |
+| `aspire-project-v2-migration` | 14 | 6 | Approval/capability stops, bounded actual edits, idempotence, and explicit migration intent |
+| **Total** | **83** | **132** | **215 stimuli** |
+
+Routing counts include `routing` in either a scalar or array `area` tag.
+
+### Project v2 validation layers
+
+The [migration fixture guide](./project-v2-migration/README.md) separates offline
+regressions and model-backed source-edit gates from executable qualification:
+compilation, runtime probes, publishing artifacts, and local image builds/smokes.
+`npm test` never invokes models or starts containers. Runtime/publishing harness
+development is a separate follow-up, not a dependency of the source grader.
+
+Use the pinned Vally/Copilot runtime and existing authentication/redaction controls
+below. Integration evidence is not safe to upload merely because a test passed.
+Merged upstream source and a successful `aspire publish` are not, respectively,
+proof of a released package or a successfully built image.
 
 Run `vally lint --eval-spec skills/<skill>/evals/eval.yaml --verbose` to dump the per-spec stimulus list.
 

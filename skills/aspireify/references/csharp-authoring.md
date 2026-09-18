@@ -50,7 +50,9 @@ builder.AddProject("api", "../Api/Api.csproj")
 
 ## File-based AppHost (apphost.cs)
 
-Top of file uses `#:sdk` and `#:package` directives — no `.csproj` required:
+Top of file uses `#:sdk` and `#:package` directives — no `.csproj` required.
+This example targets 13.5.3. When adapting it, preserve the AppHost's resolved
+13.5 or 13.6 package family rather than copying these versions onto a 13.6 AppHost:
 
 ```csharp
 #:sdk Aspire.AppHost.Sdk

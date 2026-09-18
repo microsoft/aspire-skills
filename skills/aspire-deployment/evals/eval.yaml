@@ -27,6 +27,35 @@ environment:
   skills:
     - ../../aspire-deployment
 stimuli:
+  - name: deploy-preserves-package-family-136-001
+    prompt: >
+      Use aspire-deployment. This existing C# AppHost centrally selects
+      AspireVersion 13.6.0-dev. Give read-only deployment preflight guidance,
+      preserving that release family. Do not edit, restore, build, start,
+      publish, deploy, run cloud commands, or migrate Project resources.
+    tags: { priority: p1, scenario: version-compatibility, area: version-preservation }
+    constraints: { max_agent_duration: 5m }
+    environment:
+      skills: [../../aspire-deployment, ../../aspire-project-v2-migration]
+      files:
+        - { src: ../../../evals/project-v2-migration/runnable-csharp, dest: app }
+    rubric:
+      - The assistant keeps ordinary preflight guidance in aspire-deployment without requiring migration.
+      - The assistant preserves 13.6.0-dev rather than pinning 13.5.3 or implicitly changing versions.
+      - The assistant gives advisory guidance and leaves the workspace unchanged.
+    graders:
+      - type: prompt
+        name: preserves-selected-136-family
+        config:
+          scoring: binary
+          prompt: Does the assistant's response preserve the selected 13.6.0-dev package family and keep deployment preflight separate from Project v2 migration?
+      - type: skill-invocation
+        name: invokes-deployment-not-project-v2-migration
+        config:
+          required: [aspire-deployment]
+          disallowed: [aspire-project-v2-migration]
+      - type: diff-empty
+        name: keeps-read-only-workspace-unchanged
   - name: deploy-destroy-001
     prompt: I'm done with this preview deployment — how do I tear down everything Aspire provisioned?
     tags:
