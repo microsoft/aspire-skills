@@ -9,7 +9,8 @@ description: >-
   install aspireify, apphost.mts, generated .aspire/modules.
   DO NOT USE FOR: AppHost wiring on an existing AppHost (use aspireify), start/stop/wait
   (use aspire-orchestration), deploy/publish (use aspire-deployment), logs/traces (use
-  aspire-monitoring), repo that already has an AppHost.
+  aspire-monitoring), repo that already has an AppHost, or better AI agent support /
+  aspire agent init (use the aspire router).
   INVOKES: aspire CLI (init, new, doctor), aspireify (handoff after skeleton drop).
   FOR SINGLE OPERATIONS: Run `aspire init` or `aspire new TEMPLATE` directly.
 license: MIT
@@ -23,6 +24,10 @@ metadata:
 > **First-run only.** This skill owns the skeleton drop and template choice for repositories
 > that do not yet have an Aspire AppHost. Once the skeleton is in place, hand off to
 > [`aspireify`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md) for the actual resource wiring.
+
+`aspire agent init` is a different operation: it generates project-local agent
+guidance for an Aspire project, not an AppHost skeleton. Requests for better AI
+agent support belong to the `aspire` router; do not treat them as first-run setup.
 
 ## Prerequisites
 

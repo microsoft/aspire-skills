@@ -8,6 +8,8 @@ on:
       - ".vally.yaml"
       - ".github/workflows/skill-eval.yml"
       - "scripts/redact-eval-artifacts.mjs"
+      - "scripts/check-eval-results.mjs"
+      - "evals/grade-routing-entry.mjs"
 
 permissions:
   contents: read
@@ -75,7 +77,7 @@ jobs:
 
           workflow_changed=false
           if printf '%s\n' "$changed_files" \
-              | grep -Eq '^(\.github/workflows/skill-eval\.yml|scripts/redact-eval-artifacts\.mjs)$'; then
+              | grep -Eq '^(\.github/workflows/skill-eval\.yml|scripts/redact-eval-artifacts\.mjs|scripts/check-eval-results\.mjs|evals/grade-routing-entry\.mjs)$'; then
             workflow_changed=true
           fi
 
@@ -181,6 +183,11 @@ jobs:
             echo "this PR, so the model-backed ci-gate had nothing to evaluate. The full"
             echo "suite still runs in the scheduled **Skill Eval (nightly)** workflow."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check evaluation infrastructure
+        if: ${{ !cancelled() && (steps.changed.outputs.run_full == 'true' || steps.changed.outputs.has_specs == 'true') }}
+        run: |
+          node scripts/check-eval-results.mjs ./results
 
       - name: Redact evaluation artifacts
         id: redact

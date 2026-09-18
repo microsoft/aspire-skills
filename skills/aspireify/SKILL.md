@@ -1,9 +1,9 @@
 ---
 name: aspireify
 description: >-
-  **WORKFLOW SKILL** - Wire Aspire AppHosts or repair TypeScript AppHost toolchains.
-  Scans the repo, proposes a resource graph, edits C#, file-based C#, or TypeScript
-  AppHosts, wires ServiceDefaults + OTel, validates with `aspire start`, then stops.
+  **WORKFLOW SKILL** - Wire C#, file-based C#, or TypeScript Aspire AppHosts and
+  repair TS toolchains: propose resources, edit, wire ServiceDefaults/OTel,
+  validate with `aspire start`, then stop.
   USE FOR: wire/extend AppHost, AddProject, read-only wiring advice,
   add Postgres/Redis/Rabbit/Mongo, connect frontend
   to API, after `aspire init`, AddNextJsApp, AddViteApp, WithBrowserLogs, WithTerminal,
@@ -11,9 +11,10 @@ description: >-
   withEnvironment, .aspire/modules refusal, config/secrets,
   TS dependency restore, pnpm/yarn/bun, or Yarn Classic.
   DO NOT USE FOR: skeleton drop (aspire-init), lifecycle-only work or
-  `aspire update --migrate` (aspire-orchestration), ProjectResource migration
-  (aspire-project-v2-migration), deploy/publish (aspire-deployment), or monitoring.
-  INVOKES: aspire CLI, AppHost source edits, ServiceDefaults wiring.
+  legacy apphost.ts migration / `aspire update --migrate` (aspire-orchestration),
+  ProjectResource migration (aspire-project-v2-migration), better AI agent support /
+  generating agent guidance (aspire), deploy/publish (aspire-deployment), or monitoring.
+  INVOKES: aspire CLI.
   FOR SINGLE OPERATIONS: Run `aspire add PACKAGE` directly for a one-off integration.
 license: MIT
 metadata:

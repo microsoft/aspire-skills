@@ -1,9 +1,11 @@
 ---
 name: aspire
 description: >-
-  **WORKFLOW SKILL** - Entry router for Aspire 13.5/13.6. Load for Aspire requests,
-  including read-only CLI questions and better AI agent support, then invoke the
-  owning sub-skill. An explicitly selected sub-skill may be used directly.
+  **WORKFLOW SKILL** - Router for Aspire 13.5/13.6. Use for explicit router requests,
+  broad CLI questions, better AI agent support / project-local agent guidance,
+  or ambiguous and cross-domain work.
+  Clear single-domain requests may invoke the owning specialist directly,
+  including for read-only advice; the umbrella is not a prerequisite.
   USE FOR: Aspire AppHost, Aspire CLI, distributed app, cloud-native .NET, aspire
   start/stop/resource/deploy/destroy/publish/init/new/add/wait/describe/ps/logs/otel,
   aspire agent init, WithBrowserLogs, WithTerminal, Interaction Service, apphost.mts,
@@ -25,13 +27,26 @@ Use this skill when the task involves an Aspire distributed application — oper
 AppHost or its resources through the Aspire CLI rather than falling back to ad-hoc `dotnet`,
 `docker`, or shell workflows.
 
+## Entry-point contract
+
+Load this router when explicitly requested, for broad CLI or project-local agent
+guidance, or when ownership is ambiguous or spans multiple domains. For a clear
+single-domain request, invoking the owning specialist directly is equally valid:
+lifecycle and CLI maintenance use `aspire-orchestration`, deployment uses
+`aspire-deployment`, diagnostics use `aspire-monitoring`, ordinary authoring uses
+`aspireify`, and first-run scaffolding uses `aspire-init`.
+
+The correct specialist must actually be loaded; naming it or answering from
+general knowledge is not equivalent. Direct entry does not bypass that skill's
+approval, version-preservation, safety or project-local precedence rules.
+
 Preserve the AppHost's resolved Aspire 13.5 or 13.6 release family. Routing, wiring,
 and deployment are not requests to upgrade, downgrade, or migrate project resources.
 The 13.5.3 references apply to the 13.5 family, not a version override for 13.6.
 Project v2 migration still requires an eligible 13.6+ AppHost, the required APIs,
 and separate approval of exact edits.
 
-**A handoff requires loading the selected skill before answering**, not merely
+**When this router hands off, load the selected skill before answering**, not merely
 mentioning its name. Invoke it or read its `SKILL.md`, respecting project-local
 precedence. This applies to read-only advice, how-to questions and already-wired
 AppHosts too. Loading a skill does not authorize its commands or edits.
@@ -56,7 +71,8 @@ These intents are commonly misread — resolve them before doing anything else:
   Aspire agent skills with richer, scenario-based guidance (deeper coverage for C# AppHost
   editing, TypeScript AppHosts, and investigation workflows). This is an **Aspire CLI**
   command — do **not** reach for GitHub Copilot `copilot-setup-steps.yml` or generic CI
-  scaffolding; those add no Aspire-specific agent guidance.
+  scaffolding; those add no Aspire-specific agent guidance. This recommendation
+  belongs to this router, not the first-run `aspire-init` skill.
 - **"Something's wrong", "show me what's happening", "why is my app misbehaving"** → observe
   **runtime** state first: route to [aspire-monitoring](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/SKILL.md)
   and use `aspire describe` for resource state, then `aspire logs` / `aspire otel logs` /

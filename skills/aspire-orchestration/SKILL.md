@@ -249,10 +249,16 @@ The same rule applies to any "file in use", "cannot access the file", or
 
 Detection covers current `apphost.mts` and legacy `apphost.ts`, but **all TS AppHost
 authoring is delegated to `aspireify`**. The CLI-driven legacy migration is project
-maintenance owned by this orchestration skill, not authoring. Explain that it also updates
-Aspire packages, config, tsconfig, and imports; offer
-`aspire update --migrate --yes --non-interactive` only after approval for the full change,
-then hand back to aspireify only if source authoring remains.
+maintenance owned by this orchestration skill, not authoring.
+
+For a legacy `apphost.ts` migration assessment, stay in this skill and describe
+all five change surfaces: Aspire packages, configuration, `tsconfig`, generated
+imports, and the entry point (`apphost.ts` to `apphost.mts`). Read
+[the migration guidance](references/app-commands.md) before proposing the plan.
+Require approval for that complete scope before
+`aspire update --migrate --yes --non-interactive`; read-only advice must not run it.
+Do not load `aspireify` merely to assess the CLI-owned changes. Hand off to
+authoring only for separately identified source work remaining after migration.
 Current rules to apply when handing off:
 
 | Rule | Why |

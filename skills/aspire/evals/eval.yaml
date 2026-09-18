@@ -20,10 +20,14 @@ environment:
     - ../../aspire-orchestration
     - ../../aspire-deployment
     - ../../aspire-monitoring
+grading_environment:
+  files:
+    - { src: ../../../evals/grade-routing-entry.mjs, dest: .grader/grade-routing-entry.mjs }
 
 # These cases judge routing, not successful deployment, live diagnostics or edits.
-# Natural trigger prompts do not name the skill to invoke. The activation grader
-# still requires the real router/owner handoff; a plausible answer alone is not enough.
+# Natural trigger prompts do not name the skill to invoke. Clear requests require
+# the actual owning specialist; explicit/broad router requests still require aspire.
+# A plausible answer without an accepted skill activation is not enough.
 stimuli:
   - name: router-ordinary-wiring-preserves-136-001
     prompt: >
@@ -104,14 +108,17 @@ stimuli:
     tags: { priority: p0, area: routing }
     environment: { files: *csharp_apphost }
     rubric:
+      - Either the aspire router's deployed-diagnostics handoff or the aspire-monitoring bridge is a valid actual entry; naming a skill without activating one is insufficient.
       - The response routes deployed-app diagnostics to azure-diagnostics or appropriate Azure platform tools, requesting target details if needed.
       - It explains that Aspire CLI diagnostics use a local AppHost backchannel, not deployed Azure resources, and does not recommend local commands to query the deployment.
       - An unavailable external skill may be named as the required handoff, but must not be claimed as invoked. Explaining why local commands are unsuitable is allowed.
       - This is routing guidance; live queries or a completed incident diagnosis are neither required nor permitted.
     graders:
-      - type: skill-invocation
-        name: invokes-router-for-deployed-diagnostics
-        config: { required: [aspire] }
+      - type: program
+        name: accepts-deployed-diagnostic-entry
+        config:
+          program: node
+          args: [.grader/grade-routing-entry.mjs, aspire, aspire-monitoring]
       - type: prompt
         name: routes-to-azure-diagnostics
         config: { scoring: binary }
@@ -130,8 +137,8 @@ stimuli:
       - Read-only planning is the requested outcome. A deployed application is not required, and no deployment or provisioning is permitted.
     graders:
       - type: skill-invocation
-        name: invokes-router-and-deployment
-        config: { required: [aspire, aspire-deployment] }
+        name: invokes-deployment-owner
+        config: { required: [aspire-deployment] }
       - type: prompt
         name: routes-to-deployment
         config: { scoring: binary }
@@ -150,8 +157,8 @@ stimuli:
       - It explains the workflow without claiming to inspect actual resources; execution and a completed diagnosis are not required.
     graders:
       - type: skill-invocation
-        name: invokes-router-and-monitoring
-        config: { required: [aspire, aspire-monitoring] }
+        name: invokes-monitoring-owner
+        config: { required: [aspire-monitoring] }
       - type: prompt
         name: routes-to-monitoring
         config: { scoring: binary }
@@ -214,7 +221,7 @@ stimuli:
       - type: skill-invocation
         name: invokes-orchestration
         config:
-          required: [aspire, aspire-orchestration]
+          required: [aspire-orchestration]
           disallowed: [aspireify, aspire-project-v2-migration]
       - type: prompt
         name: routes-migration-to-orchestration
@@ -234,7 +241,7 @@ stimuli:
     graders:
       - type: skill-invocation
         name: required-skills-should-trigger-01
-        config: { required: [aspire, aspire-orchestration] }
+        config: { required: [aspire-orchestration] }
       - type: prompt
         name: engages-aspire-start
         config: { scoring: binary }
@@ -254,7 +261,7 @@ stimuli:
     graders:
       - type: skill-invocation
         name: required-skills-should-trigger-02
-        config: { required: [aspire, aspire-deployment] }
+        config: { required: [aspire-deployment] }
       - type: prompt
         name: engages-aspire-deploy
         config: { scoring: binary }
@@ -274,7 +281,7 @@ stimuli:
     graders:
       - type: skill-invocation
         name: required-skills-should-trigger-03
-        config: { required: [aspire, aspire-monitoring] }
+        config: { required: [aspire-monitoring] }
       - type: prompt
         name: engages-aspire-diagnostics
         config: { scoring: binary }
@@ -293,7 +300,7 @@ stimuli:
     graders:
       - type: skill-invocation
         name: required-skills-should-trigger-04
-        config: { required: [aspire, aspire-orchestration] }
+        config: { required: [aspire-orchestration] }
       - type: prompt
         name: engages-aspire-run
         config: { scoring: binary }
@@ -330,7 +337,7 @@ stimuli:
     graders:
       - type: skill-invocation
         name: required-skills-should-trigger-06
-        config: { required: [aspire, aspireify] }
+        config: { required: [aspireify] }
       - type: prompt
         name: engages-aspire-integration-wiring
         config: { scoring: binary }
@@ -350,7 +357,7 @@ stimuli:
     graders:
       - type: skill-invocation
         name: required-skills-should-trigger-07
-        config: { required: [aspire, aspireify] }
+        config: { required: [aspireify] }
       - type: prompt
         name: engages-typescript-apphost
         config: { scoring: binary }
@@ -368,7 +375,7 @@ stimuli:
     graders:
       - type: skill-invocation
         name: required-skills-should-trigger-08
-        config: { required: [aspire, aspire-orchestration] }
+        config: { required: [aspire-orchestration] }
       - type: prompt
         name: engages-aspire-doctor
         config: { scoring: binary }
@@ -387,7 +394,7 @@ stimuli:
     graders:
       - type: skill-invocation
         name: required-skills-should-trigger-09
-        config: { required: [aspire, aspire-init] }
+        config: { required: [aspire-init] }
       - type: prompt
         name: engages-aspire-init
         config: { scoring: binary }
@@ -407,7 +414,7 @@ stimuli:
     graders:
       - type: skill-invocation
         name: required-skills-should-trigger-10
-        config: { required: [aspire, aspire-deployment] }
+        config: { required: [aspire-deployment] }
       - type: prompt
         name: engages-aspire-destroy
         config: { scoring: binary }

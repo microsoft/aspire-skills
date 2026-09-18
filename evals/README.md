@@ -61,6 +61,34 @@ Eval-level `environment.skills` is **union-merged** into every stimulus, so you 
 
 **Activation assertions:** use a `skill-invocation` grader with `config.required` / `config.disallowed` to assert which skills the agent actually invoked. Vally 0.16.0 no longer accepts `constraints.expect_skills` / `constraints.reject_skills`.
 
+### Router entry and read-only assessments
+
+The router suite requires `aspire` for explicit router requests, broad CLI
+overviews and project-local agent guidance. Clear single-domain requests instead
+require the actual owning specialist; entering through `aspire` first is optional.
+Naming the right skill without loading it is not sufficient. Deployed diagnostics
+may enter through either the router's Azure handoff or the monitoring bridge;
+`grade-routing-entry.mjs` checks Vally's normalized `skill_activation` events for
+that alternative, not words in the response.
+
+These assessments are read-only: explicit rubrics judge the route and guidance,
+not successful live deployment or log retrieval, and `diff-empty` checks the
+captured workspace. Report individual activation, outcome and read-only results
+alongside the aggregate; a passing average does not mean every case passed.
+
+### Gated result integrity
+
+PR and nightly workflows run `node scripts/check-eval-results.mjs ./results`
+after attempted evaluations, including failures, but not after cancellation or
+intentional skips. Execution/grading errors and missing, malformed, incomplete or
+ungraded results fail the job even if Vally reported a passing aggregate.
+Legitimate negative grading verdicts remain subject to the existing
+`--require-pass` threshold; the checker does not replace or lower that threshold.
+
+The checker requires no token. Redaction still runs after a failed check, and
+artifact upload remains conditional on successful redaction. The comparative
+experiment below remains informational rather than adopting this gating policy.
+
 ### Comparative baselines (`vally experiment`)
 
 [`skill-lift.experiment.yaml`](../skill-lift.experiment.yaml) (repo root) runs every spec **twice** along a single axis — `/environment/skills` — to measure each skill's *lift* over a no-skill baseline:
@@ -115,7 +143,7 @@ The `with-skills` − `no-skills` pass-rate delta is the measured lift. The expe
 | `--suite <name>` | Run only stimuli matching a suite declared in `.vally.yaml`. |
 | `--tag <key=values>` | Run only stimuli whose tag record matches. Comma-separate values; repeat for multiple keys. E.g. `--tag priority=p0,p1 --tag area=routing`. |
 | `--model <name>` | Executor model. Overrides `defaults.model` in the spec. |
-| `--judge-model <name>` | Model used by `prompt` / `pairwise` graders. Defaults to `claude-sonnet-4.6`. |
+| `--judge-model <name>` | Overrides the judge used by `prompt` / `pairwise` graders. This repo explicitly sets `defaults.judge_model: gpt-5.6-sol-fast` rather than relying on Vally's fallback. |
 | `--runs <n>` | Override `defaults.runs` (number of executions per stimulus). |
 | `--timeout <duration>` | Per-stimulus timeout (e.g. `120s`, `2m`). |
 | `--workers <n>` | Parallel stimulus workers. Default 1. |
@@ -152,8 +180,8 @@ Use `--workers 4` to fan stimuli out and shave wall-clock time; expect higher co
 | `aspire-orchestration` | 29 | 24 | Lifecycle tools, file lock recovery, `--include-hidden`, `aspire update --self` |
 | `aspire-deployment` | 11 | 22 | Multi-target deploy, `aspire destroy`, JS publishing, pipeline previews |
 | `aspire-monitoring` | 7 | 23 | Diagnostics bridge, standalone dashboard, browser logs, `--include-hidden` |
-| `aspire-project-v2-migration` | 14 | 6 | Approval/capability stops, bounded actual edits, idempotence, and explicit migration intent |
-| **Total** | **83** | **132** | **215 stimuli** |
+| `aspire-project-v2-migration` | 16 | 6 | Approval/capability stops, bounded actual edits, idempotence, and explicit migration intent |
+| **Total** | **85** | **132** | **217 stimuli** |
 
 Routing counts include `routing` in either a scalar or array `area` tag.
 

@@ -10,7 +10,8 @@ description: >-
   AppHost ProjectReference edges.
   DO NOT USE FOR: upgrading Aspire versions, creating/wiring a new AppHost,
   Azure Functions migration, generic source modernization, ordinary C# resource
-  wiring, publishing, or build/lifecycle diagnostics.
+  wiring or adding a new AddProject resource (use aspireify), publishing,
+  or build/lifecycle diagnostics.
   INVOKES: Aspire docs/API lookup, aspire add/restore/start/wait, AppHost and package edits.
   FOR SINGLE OPERATIONS: Assess first; never edit from a generic migration request alone.
 license: MIT
