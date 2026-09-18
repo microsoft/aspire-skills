@@ -33,35 +33,35 @@ Choose the path that matches your agent host.
 
 Aspire's first-party agent setup installs Aspire skill files, extension files, and MCP configuration into detected agent environments.
 
+**Create a new Aspire app** and opt into agent guidance when prompted:
+
 ```bash
-# Create a new Aspire app and opt into agent guidance when prompted
 aspire new
+```
 
-# Or add Aspire to an existing repo and opt into agent guidance when prompted
+**Add Aspire to an existing repository** and opt into agent guidance when prompted:
+
+```bash
 aspire init
+```
 
-# Add, update, or reconfigure Aspire guidance in an existing workspace
+**Add, update, or reconfigure agent guidance** in an existing Aspire workspace:
+
+```bash
 aspire agent init
 ```
 
-### Agent plugins and extensions
-
-#### GitHub Copilot app
+### GitHub Copilot app
 
 The GitHub Copilot app plugin installs Aspire skills and canvas extensions for
 the current user.
 
-##### Prerequisites
-
-Before you install, make sure you have:
+**Prerequisites:**
 
 - [GitHub Copilot app](https://gh.io/app) installed.
 - A GitHub Copilot subscription (paid or free).
 
-##### Install
-
-Install the `microsoft/aspire-skills` marketplace through the GitHub Copilot
-app:
+**Install the plugin:**
 
 1. Click [this link](https://github.com/copilot/app/launch?entry_point=aspire_skills_docs&open=ghapp%3A%2F%2Fplugins%2Fmarketplace%2Fadd%3Fsource%3Dmicrosoft%2Faspire-skills)
    to automatically open the **Settings** > **Plugins** window in the GitHub
@@ -72,43 +72,143 @@ app:
 4. Expand the `aspire-skills` entry and select **Install** on the `aspire`
    plugin.
 
-#### Command-line hosts
+### GitHub Copilot CLI
+
+Start Copilot CLI with `copilot`, then run the following commands inside it.
+
+**Add the marketplace** (first time only):
+
+```text
+/plugin marketplace add microsoft/aspire-skills
+```
+
+**Install the plugin:**
+
+```text
+/plugin install aspire@aspire-skills
+```
+
+**Update the plugin:**
+
+```text
+/plugin update aspire@aspire-skills
+```
+
+### Claude Code
+
+Start Claude Code with `claude`, then run the following commands inside it.
+
+**Add the marketplace** (first time only):
+
+```text
+/plugin marketplace add microsoft/aspire-skills
+```
+
+**Install the plugin:**
+
+```text
+/plugin install aspire@aspire-skills
+```
+
+**Update the plugin:**
+
+```text
+/plugin update aspire@aspire-skills
+```
+
+### Gemini CLI
+
+**Install the extension:**
 
 ```bash
-# GitHub Copilot CLI
-copilot plugin marketplace add microsoft/aspire-skills
-copilot plugin install aspire@aspire-skills
-
-# Claude Code CLI
-claude
-/plugin marketplace add microsoft/aspire-skills
-/plugin install aspire@aspire-skills
-
-# Codex CLI
-codex plugin marketplace add microsoft/aspire-skills
-# then open /plugins and install aspire
-
-# Gemini CLI
 gemini extensions install https://github.com/microsoft/aspire-skills
+```
 
-# Cursor CLI
+### Cursor CLI
+
+**Install the skills:**
+
+```bash
 mkdir -p ~/.cursor/skills
 git clone https://github.com/microsoft/aspire-skills ~/.cursor/skills/aspire-skills
-agent
+```
 
-# OpenCode
+**Start Cursor CLI:**
+
+```bash
+agent
+```
+
+### Codex CLI
+
+**Add the marketplace** (first time only):
+
+```bash
+codex plugin marketplace add microsoft/aspire-skills
+```
+
+**Install the plugin:**
+
+Start Codex with `codex`, run `/plugins`, and install `aspire` from the
+`aspire-skills` marketplace.
+
+### OpenCode
+
+**Install using [APM](https://github.com/microsoft/apm), then start OpenCode:**
+
+```bash
 apm install microsoft/aspire-skills
 opencode
-
-# Ollama + Copilot CLI
-ollama launch copilot
-copilot plugin marketplace add microsoft/aspire-skills
-copilot plugin install aspire@aspire-skills
 ```
+
+#### HTTP skill catalog
+
+**Availability:** These URLs require a generated release on `main`. Adding the
+release workflow does not publish them; use APM until the first release PR
+containing `opencode/` is merged.
+
+Instead of APM, add the catalog to `opencode.json` or `opencode.jsonc` using the
+configuration for your OpenCode version.
+
+**OpenCode V2:**
+
+```json
+{
+  "skills": [
+    "https://raw.githubusercontent.com/microsoft/aspire-skills/main/opencode/v2/"
+  ]
+}
+```
+
+**OpenCode V1 (1.18.31+):**
+
+```json
+{
+  "skills": {
+    "urls": [
+      "https://raw.githubusercontent.com/microsoft/aspire-skills/main/opencode/v1/"
+    ]
+  }
+}
+```
+
+### Ollama + Copilot CLI
+
+**Launch Copilot with Ollama:**
+
+```bash
+ollama launch copilot
+```
+
+In the Copilot session that opens, run the `/plugin` commands from
+[GitHub Copilot CLI](#github-copilot-cli) above to add the marketplace and install
+or update `aspire`.
 
 ### skills.sh via NPX
 
 Use the Skills-compatible installer when your agent host supports skills.sh-managed skill locations.
+
+**Install the skills:**
 
 ```bash
 npx skills add microsoft/aspire-skills
@@ -128,42 +228,18 @@ In that command, `-a github-copilot` selects the target agent, `-g` installs glo
 | Path | Purpose |
 |------|---------|
 | `skills/` | Source skill files, references, and evals |
+| `docs/` | Documentation |
 | `extensions/` | Source GitHub Copilot app canvas extensions |
 | `hooks/scripts/` | Canonical Aspire CLI agent telemetry hooks |
 | `.plugin/`, `.claude-plugin/`, `.cursor-plugin/` | Plugin metadata for marketplaces |
 | `.github/plugins/aspire-skills/` | Published plugin mirror |
 | `evals/` | Shared evaluation fixtures and helpers |
 
-## Development
-
-```bash
-npm run bundle
-```
-
-`npm run bundle` builds both published release artifacts:
-
-| Artifact | Contents |
-|----------|----------|
-| `aspire-skills-v<version>.tgz` | Agent skill files, canonical telemetry hooks, and `skill-manifest.json` with hook commit/SHA-512 provenance |
-| `aspire-extensions-v<version>.tgz` | GitHub Copilot app canvas extension files and `extension-manifest.json` |
-
-The skills manifest records the release commit and LF-normalized SHA-512 hash for
-each file under `hooks/scripts/`. Downstream consumers can copy the `hooks` object
-directly instead of maintaining hook provenance separately.
-
-Use `npm run bundle:skills` or `npm run bundle:extensions` to build one bundle type.
-
-### Publishing releases
-
-The publish workflow builds and attests both bundles, but uploads only
-`aspire-skills` by default. Manual runs on an existing version tag can select
-`include_skills` (default `true`) and `include_extensions` (default `false`); at
-least one must be selected. Tag pushes use the defaults. The workflow does not
-create Git tags.
-
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
+See the [development guide](docs/development.md) for tests, the pre-merge release
+rehearsal, and the staged release rollout.
 
 ## License
 
