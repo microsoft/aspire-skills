@@ -242,7 +242,9 @@ test("local release workflow rehearsal (Actions service steps are simulated)", {
     "-m", "Co-authored-by: Copilot App <223556219+Copilot@users.noreply.github.com>");
   const base = save("Snapshot the current uncommitted implementation for rehearsal");
   const mainChangelog = read(join(seed, "CHANGELOG.md"));
-  const version = JSON.parse(read(join(seed, "package.json"))).version;
+  const sourceVersion = JSON.parse(read(join(seed, "package.json"))).version;
+  const pending = /^## \[([^\]]+)\] - Unreleased\n/.exec(mainChangelog.slice(mainChangelog.search(/^## /m)));
+  const version = pending?.[1] ?? sourceVersion;
   git(seed, "switch", "-qc", "dev");
   rmSync(join(seed, "CHANGELOG.md"));
   rmSync(join(seed, "opencode"), { recursive: true, force: true });
@@ -320,19 +322,19 @@ test("local release workflow rehearsal (Actions service steps are simulated)", {
   assert.equal(git(candidateRepo, "bundle", "list-heads", join(transport, "release.bundle")),
     `${candidate} refs/heads/release/candidate`);
   assert.equal(git(candidateRepo, "show", "-s", "--format=%P", candidate), `${base} ${source}`);
-  const metadata = `<!-- aspire-skills-release source=${source} base=${base} version=${version} source-version=${version} base-version=${version} -->`;
+  const metadata = `<!-- aspire-skills-release source=${source} base=${base} version=${version} source-version=${sourceVersion} base-version=${sourceVersion} -->`;
   const body = read(join(transport, "pr-body.md"));
   assert.equal(body.split(metadata).length, 2);
   assert.match(body, /merge commit, not squash or rebase/);
   const changelog = read(join(candidateRepo, "CHANGELOG.md"));
   assert.ok(changelog.includes(metadata));
-  const pending = /^## \[([^\]]+)\] - Unreleased\n/m.exec(mainChangelog);
   if (pending?.[1] === version) {
-    const remainder = mainChangelog.slice(pending.index + pending[0].length);
+    const remainder = mainChangelog.slice(mainChangelog.search(/^## /m) + pending[0].length);
     const nextEntry = remainder.search(/^## /m);
     const notes = (nextEntry < 0 ? remainder : remainder.slice(0, nextEntry)).trim();
     assert.ok(!changelog.includes(`## [${version}] - Unreleased`), "Pending release must be finalized, not duplicated");
     assert.ok(notes && changelog.includes(notes), "Pending release notes must be preserved");
+    if (nextEntry >= 0) assert.ok(changelog.endsWith(remainder.slice(nextEntry)), "Released history must be preserved");
   }
   for (const path of canonicalManifests) {
     const json = JSON.parse(read(join(candidateRepo, path)));
@@ -354,7 +356,7 @@ test("local release workflow rehearsal (Actions service steps are simulated)", {
   }
   assert.equal(enabled(publish, prepared), false);
   assertNoPublication();
-  t.diagnostic(`Dry run: ${count} current working-tree files snapshotted; source/base resolved once; version ${version} preserved; three checked artifacts, no publication.`);
+  t.diagnostic(`Dry run: ${count} current working-tree files snapshotted; source/base resolved once; release version ${version}, source/base version ${sourceVersion}; three checked artifacts, no publication.`);
 
   const publishContext = name => {
     const context = contextFor(name);

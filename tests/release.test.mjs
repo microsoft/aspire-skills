@@ -391,7 +391,7 @@ test("bundle receiver rejects modified PR artifacts and inconsistent preparation
   assert.throws(() => receiveRelease(first.root, first.options), /body artifact has been modified/);
   writeFileSync(first.options.prBodyPath, body);
   const second = receiver(t, result.root, result);
-  assert.throws(() => receiveRelease(second.root, { ...second.options, sourceCommit: result.base, releaseVersion: "0.0.1" }), /provenance/);
+  assert.throws(() => receiveRelease(second.root, { ...second.options, sourceCommit: result.base }), /provenance/);
 });
 
 test("bundle receiver rejects catalog tampering even when the supplied candidate SHA matches", t => {
@@ -676,35 +676,60 @@ test("canvas-only release advances every semantic version including unchanged sk
   check(root);
 });
 
-test("initial source-only cleanup finalizes 0.0.2 Unreleased notes without a bump or duplicate section", t => {
+test("first catalog publication must exceed both source and main versions", t => {
+  const root = emptyRepo(t);
+  putVersions(root, "0.0.2");
+  const base = save(root, "Baseline without published catalogs");
+  for (const [sourceVersion, attemptedVersion, error] of [
+    ["0.0.1", "0.0.2", /greater than the main baseline/],
+    ["0.0.3", "0.0.3", /greater than the selected source/]
+  ]) {
+    putVersions(root, sourceVersion);
+    const source = save(root, "Select source version");
+    assert.equal(hasProductChanges(root, source, base), true);
+    assert.throws(() => validateReleaseVersion(root, source, base, attemptedVersion), error);
+    assert.equal(validateReleaseVersion(root, source, base, "0.0.4"), "0.0.4");
+  }
+});
+
+test("first catalog publication advances 0.0.2 to 0.0.3 and preserves released bundle history", t => {
   const { root } = fixture(t);
   git(root, "switch", "main");
   git(root, "merge", "--no-ff", "--no-edit", "dev");
-  const history = "## [0.0.1] - 2026-05-27\n\n- Historical release notes.\n";
+  const history = "## [0.0.2] - 2026-09-18\n\n- Published bundle release assets.\n\n## [0.0.1] - 2026-05-27\n\n- Historical release notes.\n";
   const notes = "### Changed\n- Deliver releases through main.\n\n### Added\n- OpenCode catalogs and canvas updates.\n";
-  put(root, "CHANGELOG.md", `# Changelog\n\nIntroductory text.\n\n## [0.0.2] - Unreleased\n\n${notes}\n${history}`);
+  put(root, "CHANGELOG.md", `# Changelog\n\nIntroductory text.\n\n## [0.0.3] - Unreleased\n\n${notes}\n${history}`);
   const base = save(root, "Install release automation on main");
   git(root, "update-ref", "refs/remotes/origin/main", base);
-  git(root, "switch", "-c", "setup-dev");
+  git(root, "switch", "dev");
+  git(root, "merge", "--ff-only", "main");
   rmSync(join(root, "CHANGELOG.md"));
   const source = save(root, "Keep dev source-only");
   git(root, "update-ref", "refs/remotes/origin/dev", source);
-  const result = prepareVersionedRelease(root, { releaseVersion: "0.0.2" });
-  assert.equal(result.version, "0.0.2");
+  assert.equal(hasProductChanges(root, source, base), true);
+  assert.throws(() => prepareVersionedRelease(root, { releaseVersion: "0.0.2" }), /greater than the selected source/);
+  const result = prepareVersionedRelease(root, { releaseVersion: "0.0.3" });
+  assert.equal(result.version, "0.0.3");
   assert.equal(git(root, "rev-parse", "main"), base);
-  assert.equal(git(root, "rev-parse", "setup-dev"), source);
+  assert.equal(git(root, "rev-parse", "dev"), source);
   const changelog = readFileSync(join(root, "CHANGELOG.md"), "utf8");
-  assert.match(changelog, /^# Changelog\n\nIntroductory text\.\n\n## v0\.0\.2 - /);
-  assert.equal(changelog.match(/^## v0\.0\.2 /gm)?.length, 1);
+  assert.match(changelog, /^# Changelog\n\nIntroductory text\.\n\n## v0\.0\.3 - /);
+  assert.equal(changelog.match(/^## v0\.0\.3 /gm)?.length, 1);
   assert.doesNotMatch(changelog, /Unreleased/);
   assert.ok(changelog.includes(notes));
   assert.ok(changelog.endsWith(history));
-  assert.ok(changelog.includes(`source=${source} base=${base} version=0.0.2 source-version=0.0.2 base-version=0.0.2`));
+  assert.ok(changelog.includes(`source=${source} base=${base} version=0.0.3 source-version=0.0.2 base-version=0.0.2`));
+  for (const path of [...releaseVersionFiles, "skills/aspire/SKILL.md"]) {
+    assert.equal(manifestVersion(readFileSync(join(root, path)), path), "0.0.3");
+    assert.equal(manifestVersion(Buffer.from(git(root, "show", `${source}:${path}`)), path), "0.0.2");
+  }
   const body = readFileSync(join(root, "dist", "release", "pr-body.md"), "utf8");
   assert.ok(body.includes(notes));
   assert.doesNotMatch(body, /Historical release notes/);
   assert.equal(body.match(/<!-- aspire-skills-release/g)?.length, 1);
   check(root, { prBody: body });
+  const received = receiver(t, root, result);
+  assert.deepEqual(receiveRelease(received.root, received.options), result);
   put(root, "CHANGELOG.md", changelog.replace("OpenCode catalogs and canvas updates.", "Lost pending release notes."));
   save(root, "Tamper initial release notes");
   assert.throws(() => check(root), /preserved main history/);

@@ -28,7 +28,7 @@ does not compete with another copy. The rehearsal snapshots the current worktree
 including uncommitted changes, into disposable repositories. It executes the
 release workflow's actual shell steps: role checks, source resolution, trusted
 tests, candidate generation, artifact verification, and publication to a local
-bare origin. It checks the first `0.0.2` release, preserved changelog notes,
+bare origin. It checks the first catalog release, preserved changelog notes,
 versions, ancestry, catalog hashes, permission failures, tampering, and collisions.
 Pushes to GitHub and unexpected refs are blocked.
 
@@ -51,8 +51,10 @@ Remove the temporary inventory afterward. Native Windows skips this rehearsal.
 ## Staged rollout
 
 This setup adds release tooling and normal CI, not steady-state branch-policy
-enforcement. It leaves `CHANGELOG.md` and all product versions intact and does
-not create `dev`, a release branch, a catalog on `main`, or repository settings.
+enforcement. It records `0.0.2` as released on September 18, 2026, preserves its
+bundle-support notes, and adds separate `0.0.3 - Unreleased` delivery changes.
+Product versions remain at `0.0.2` until release preparation. Setup does not
+create `dev`, a release branch, a catalog on `main`, or repository settings.
 
 1. Merge the setup PR into `main`.
 2. Create `dev` from that updated `main`. In a development commit, remove root
@@ -63,12 +65,12 @@ not create `dev`, a release branch, a catalog on `main`, or repository settings.
    Content validation should use trusted base tooling and exact PR head SHAs,
    run independently on main/dev PRs and pushes, and have no path filters.
 4. Run [Prepare release](../.github/workflows/prepare-release.yml) **from `main`**,
-   with the full selected dev SHA in `source_commit`, `release_version=0.0.2`,
+   with the full selected dev SHA in `source_commit`, `release_version=0.0.3`,
    and the default `dry_run=true`. The source must include the cleanup and policy
    commits; the workflow itself must not run from dev.
 5. After reviewing the dry-run artifacts and configuring publication credentials,
    rerun from main with the same source/version and `dry_run=false`. Review the
-   generated `release/0.0.2` draft PR. Its new policy jobs can use the trusted
+   generated `release/0.0.3` draft PR. Its new policy jobs can use the trusted
    release tooling already on main. Do not manually add jobs or edit source on
    the generated branch: that breaks source provenance.
 6. After the first release passes its checks, have an administrator activate
@@ -76,18 +78,23 @@ not create `dev`, a release branch, a catalog on `main`, or repository settings.
    not squash or rebase, to preserve dev ancestry. Catalog URLs become usable
    when the first generated release is merged into main.
 
-With only cleanup, policy, test, and documentation changes since setup, the
-first release keeps `0.0.2`. It finalizes main's existing `[0.0.2] - Unreleased`
-section without losing notes or history. There is no dev-less bootstrap bypass.
-After rollout, feature branches and PRs use dev; main receives prepared releases.
+The published `0.0.2` release introduced bundle delivery. The first generated
+release is `0.0.3`: it removes that publication path and introduces source/catalog
+delivery through main. Preparation finalizes `[0.0.3] - Unreleased`, preserving
+the released `0.0.2` notes and older history. There is no dev-less bootstrap
+bypass. After rollout, feature branches and PRs use dev; main receives prepared
+releases.
 
 ## Release guarantees
 
 `release_version` is always required. Shipped-content changes require a SemVer
 greater than both selected source and main versions. Package metadata, the five
 canonical plugin/client manifests, and every canonical skill's `metadata.version`
-stay aligned; plugin mirror symlink objects do not change. Repository-only
-changes must explicitly supply main's existing version. Optional `source_commit`
+stay aligned; plugin mirror symlink objects do not change. First publication of
+the generated catalogs is a shipped-content change when main has no catalog tree,
+even if setup already added their generator. It requires a newer version, not
+reuse of `0.0.2`. Once catalogs are published, repository-only changes must
+explicitly supply main's existing version. Optional `source_commit`
 must be a full SHA reachable from dev; an older unreleased snapshot is allowed.
 Omitting it resolves dev's tip once.
 
@@ -128,5 +135,6 @@ roles fail closed.
 
 `npm run bundle`, `bundle:skills`, and `bundle:extensions` remain available for
 local compatibility testing, including telemetry-hook provenance; they require
-`tar`. The obsolete tag-driven tar-asset publisher is removed. Release delivery
+`tar`. Version `0.0.2` included tag-driven bundle publishing; `0.0.3` removes
+that publisher. Existing `0.0.2` release assets are unchanged. New release delivery
 uses reviewed source and generated catalogs on main, not GitHub release assets.

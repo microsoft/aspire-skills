@@ -162,6 +162,8 @@ function isProductPath(path) {
 }
 
 export function hasProductChanges(root, source, base) {
+  // Catalogs are a new shipped deliverable even if their generator already landed on main.
+  if (tree(root, base, ["opencode"]).size === 0) return true;
   const read = ref => {
     const entries = new Map([...tree(root, ref)].filter(([path]) => isProductPath(path)));
     const contents = blobs(root, entries.values());
