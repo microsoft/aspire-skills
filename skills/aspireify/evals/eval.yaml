@@ -16,6 +16,7 @@ defaults:
   timeout: 600s
   executor: copilot-sdk
   model: gpt-5-mini
+  judge_model: gpt-5.6-sol
 scoring:
   # CI-gate tolerance: a stimulus passes when the weighted majority of its graders
   # pass, rather than demanding every grader pass on every trial. This absorbs (a)
@@ -31,6 +32,35 @@ environment:
     - ../../aspireify
     - ../../aspire-orchestration
 stimuli:
+  - name: aspireify-preserves-package-family-136-001
+    prompt: >
+      Use aspireify. This existing C# AppHost centrally selects AspireVersion
+      13.6.0-dev. Give read-only guidance for adding another Redis resource and
+      referencing it from api. Preserve that release family. Do not edit,
+      restore, build, start, run cloud commands, or migrate Project resources.
+    tags: { priority: p1, scenario: version-compatibility, area: version-preservation }
+    constraints: { max_agent_duration: 5m }
+    environment:
+      skills: [../../aspireify, ../../aspire-orchestration, ../../aspire-project-v2-migration]
+      files:
+        - { src: ../../../evals/project-v2-migration/runnable-csharp, dest: app }
+    rubric:
+      - The assistant keeps ordinary AddRedis/WithReference authoring in aspireify.
+      - The assistant preserves 13.6.0-dev rather than pinning 13.5.3 or implicitly changing versions.
+      - The assistant does not initiate migration or edit the workspace.
+    graders:
+      - type: prompt
+        name: preserves-selected-136-family
+        config:
+          scoring: binary
+          prompt: Does the assistant's response preserve the selected 13.6.0-dev package family and give ordinary Redis wiring guidance without requiring migration?
+      - type: skill-invocation
+        name: invokes-aspireify-not-project-v2-migration
+        config:
+          required: [aspireify]
+          disallowed: [aspire-project-v2-migration]
+      - type: diff-empty
+        name: keeps-read-only-workspace-unchanged
   - name: aspireify-nextjs-001
     prompt: Add my Next.js frontend in ./web to my Aspire AppHost and wire it to talk to my API.
     tags:

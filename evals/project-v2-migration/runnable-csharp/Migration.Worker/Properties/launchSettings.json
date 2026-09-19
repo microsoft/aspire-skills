@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json.schemastore.org/launchsettings.json",
+  "profiles": {
+    "should-not-be-used": {
+      "commandName": "Project",
+      "launchBrowser": false,
+      "applicationUrl": "http://localhost:0",
+      "environmentVariables": {
+        "PROFILE_MARKER": "must-not-appear"
+      },
+      "commandLineArgs": "--wrong-profile-argument unexpected"
+    }
+  }
+}

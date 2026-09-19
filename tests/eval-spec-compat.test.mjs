@@ -3,6 +3,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { parse } from "yaml";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const specs = readdirSync(join(root, "skills"), { withFileTypes: true })
@@ -16,6 +17,13 @@ test("canonical evaluation specs are present", () => {
 });
 
 for (const spec of specs) {
+  test(`${spec}: the judge is explicit without changing executor coverage`, () => {
+    const evaluation = parse(readFileSync(join(root, spec), "utf8"));
+    assert.equal(evaluation.defaults.judge_model, "gpt-5.6-sol");
+    assert.equal(evaluation.defaults.model,
+      spec.includes("aspire-project-v2-migration") ? "gpt-5.6-sol-fast" : "gpt-5-mini");
+  });
+
   test(`${spec}: explicit grader names are compatible with Vally 0.16.0`, () => {
     const lines = readFileSync(join(root, spec), "utf8").split(/\r?\n/);
     let graderIndent;

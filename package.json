@@ -8,5 +8,8 @@
     "bundle": "node scripts/build-aspire-bundles.mjs",
     "bundle:skills": "node scripts/build-aspire-bundles.mjs --bundle skills",
     "bundle:extensions": "node scripts/build-aspire-bundles.mjs --bundle extensions"
+  },
+  "devDependencies": {
+    "yaml": "2.9.0"
   }
 }

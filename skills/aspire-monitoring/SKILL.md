@@ -106,6 +106,9 @@ aspire describe --apphost ./src/MyApp.AppHost/
 
 ## Version-Specific Diagnostics
 
+The 13.5.3 servicing fixes below apply to older 13.5 builds. On 13.6, investigate
+the current failure instead of downgrading to 13.5.3.
+
 | Symptom | 13.5.3 guidance |
 |---------|-----------------|
 | Resource missing from `aspire describe` | Re-run `aspire describe --include-hidden`; do not use removed `aspire ps --include-hidden`. |

@@ -1,18 +1,20 @@
 ---
 name: aspireify
 description: >-
-  **WORKFLOW SKILL** - Wire Aspire AppHosts or repair TypeScript AppHost toolchains.
-  Scans the repo, proposes a resource graph, edits C#, file-based C#, or TypeScript
-  AppHosts, wires ServiceDefaults + OTel, validates with `aspire start`, then stops.
-  USE FOR: wire/scaffold AppHost, add Postgres/Redis/Rabbit/Mongo, connect frontend
+  **WORKFLOW SKILL** - Wire C#, file-based C#, or TypeScript Aspire AppHosts and
+  repair TS toolchains: propose resources, edit, wire ServiceDefaults/OTel,
+  validate with `aspire start`, then stop.
+  USE FOR: wire/extend AppHost, AddProject, read-only wiring advice,
+  add Postgres/Redis/Rabbit/Mongo, connect frontend
   to API, after `aspire init`, AddNextJsApp, AddViteApp, WithBrowserLogs, WithTerminal,
   Interaction Service, command arguments, apphost.cs, apphost.mts, unified
   withEnvironment, .aspire/modules refusal, config/secrets,
   TS dependency restore, pnpm/yarn/bun, or Yarn Classic.
-  DO NOT USE FOR: skeleton drop (aspire-init), lifecycle-only start/stop/wait/restart
-  or `aspire update --migrate` (aspire-orchestration), publish/deploy/destroy
-  (aspire-deployment), logs/traces (aspire-monitoring).
-  INVOKES: aspire CLI, AppHost source edits, ServiceDefaults wiring.
+  DO NOT USE FOR: skeleton drop (aspire-init), lifecycle-only work or
+  legacy apphost.ts migration / `aspire update --migrate` (aspire-orchestration),
+  ProjectResource migration (aspire-project-v2-migration), better AI agent support /
+  generating agent guidance (aspire), deploy/publish (aspire-deployment), or monitoring.
+  INVOKES: aspire CLI.
   FOR SINGLE OPERATIONS: Run `aspire add PACKAGE` directly for a one-off integration.
 license: MIT
 metadata:
@@ -22,10 +24,18 @@ metadata:
 
 # Aspireify
 
-> **One-time wiring skill.** `aspire init` drops a skeleton; `aspireify` turns
+> **AppHost wiring skill.** `aspire init` drops a skeleton; `aspireify` turns
 > that skeleton into a working AppHost by scanning the repo, proposing a resource
 > graph, editing the AppHost, wiring `Aspire.ServiceDefaults`, and validating end
-> to end. Self-deactivates after a clean `aspire start`. Aligned with Aspire 13.5.3.
+> to end. Self-deactivates after a clean `aspire start`. Supports Aspire 13.5 and 13.6.
+
+Also use this skill to extend an already wired AppHost or give read-only authoring
+advice. An ordinary `AddProject` addition does not require Project v2 migration.
+
+Preserve the AppHost's resolved Aspire release family. Ordinary wiring is not approval
+to upgrade, downgrade, or migrate legacy project resources. The 13.5.3 examples are
+for 13.5 AppHosts, not package overrides for 13.6; verify APIs against the actual
+resolved packages before adapting an example.
 
 ## 🚫 Hard Refusal: Never Edit `.aspire/modules/`
 
@@ -136,6 +146,8 @@ declared beyond the stub):
 
 If the AppHost already has wired resources and the user wants to **start/stop**
 the app → `aspire-orchestration`. If the user wants to **deploy** → `aspire-deployment`.
+If the user wants to replace legacy `AddProject`, `AddCSharpApp`, or Blazor gateway
+resources with Project v2 `DotnetProjectResource` APIs → `aspire-project-v2-migration`.
 
 ## Language Support
 
@@ -283,7 +295,7 @@ catalog.
 | Use `AddConnectionString` for external connection strings | `PublishAsConnectionString` is obsolete |
 | Check `IInteractionService.IsAvailable` before prompting | CLI-invoked commands may be noninteractive; prefer command arguments for dashboard + CLI input |
 | Treat `WithTerminal()` as experimental | Suppress `ASPIRETERMINAL001`; do not generate removed `TerminalOptions.Shell` or TypeScript dimension options |
-| Keep all Aspire SDK and `Aspire.Hosting.*` packages on the same 13.5 family | Mixed 13.4/13.5 graphs can fail at startup |
+| Keep all Aspire SDK and `Aspire.Hosting.*` packages on the AppHost's existing 13.5 or 13.6 family | Mixed release-family graphs can fail at startup; do not upgrade or downgrade implicitly |
 | Migrate GitHub Models integrations to Azure AI Foundry | `Aspire.Hosting.GitHub.Models` is deprecated and absent from integration discovery |
 | Use `WithModule(RedisModules.*)` for Redis 8 modules | Prefer typed JSON, Search, Bloom Filter, and TimeSeries constants over raw module paths |
 | Use Foundry `AsHostedAgent(...)` for hosted executable/container agents | Current Azure AI Foundry path replaces deprecated GitHub Models |
