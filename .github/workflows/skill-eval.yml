@@ -86,6 +86,7 @@ jobs:
             echo "Global eval config changed — running the full ci-gate suite."
             echo "run_full=true" >> "$GITHUB_OUTPUT"
             echo "has_specs=false" >> "$GITHUB_OUTPUT"
+            echo "expected_runs=." >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "run_full=false" >> "$GITHUB_OUTPUT"
@@ -119,6 +120,7 @@ jobs:
           else
             echo "has_specs=true" >> "$GITHUB_OUTPUT"
             echo "matched=${matched# }" >> "$GITHUB_OUTPUT"
+            echo "expected_runs=${matched# }" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run full ci-gate suite (global change)
@@ -187,7 +189,9 @@ jobs:
       - name: Check evaluation infrastructure
         if: ${{ !cancelled() && (steps.changed.outputs.run_full == 'true' || steps.changed.outputs.has_specs == 'true') }}
         run: |
-          node scripts/check-eval-results.mjs ./results
+          expected_runs="${{ steps.changed.outputs.expected_runs }}"
+          read -r -a expected_run_args <<< "$expected_runs"
+          node scripts/check-eval-results.mjs ./results "${expected_run_args[@]}"
 
       - name: Redact evaluation artifacts
         id: redact

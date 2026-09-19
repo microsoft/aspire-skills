@@ -78,12 +78,16 @@ alongside the aggregate; a passing average does not mean every case passed.
 
 ### Gated result integrity
 
-PR and nightly workflows run `node scripts/check-eval-results.mjs ./results`
-after attempted evaluations, including failures, but not after cancellation or
-intentional skips. Execution/grading errors and missing, malformed, incomplete or
+PR and nightly workflows run
+`node scripts/check-eval-results.mjs <results> <expected-run>...` after attempted
+evaluations, including failures, but not after cancellation or intentional skips.
+Scoped PR runs pass every changed skill output root; single-process full/nightly
+suites pass `.`. Every expected run must produce exactly one `results.jsonl`, and
+the checker reconciles each summary's stimulus count plus every stimulus's complete
+trial-index range. Execution/grading errors and missing, malformed, incomplete or
 ungraded results fail the job even if Vally reported a passing aggregate.
-Legitimate negative grading verdicts remain subject to the existing
-`--require-pass` threshold; the checker does not replace or lower that threshold.
+Legitimate negative grading verdicts remain subject to the existing `--require-pass`
+threshold; the checker does not replace or lower that threshold.
 
 The checker requires no token. Redaction still runs after a failed check, and
 artifact upload remains conditional on successful redaction. The comparative

@@ -155,20 +155,35 @@ function removeMigrationPragmas(source, contract) {
   ]) {
     const pattern = new RegExp(`^\\s*#pragma warning (disable|restore) ${diagnostic}\\s*$`, "gm");
     const pragmas = [...source.matchAll(pattern)];
+    const coveredResources = new Set();
     assert.ok(pragmas.length >= minimum * 2 && pragmas.length <= maximum * 2,
       `Missing or excessive ${diagnostic} suppressions`);
     assert.equal(pragmas.length % 2, 0, "Unpaired experimental diagnostic suppression");
     for (let index = 0; index < pragmas.length; index += 2) {
       assert.equal(pragmas[index][1], "disable", "Expected a paired disable");
       assert.equal(pragmas[index + 1][1], "restore", "Expected a paired restore");
-      const body = compactCode(source.slice(pragmas[index].index + pragmas[index][0].length, pragmas[index + 1].index));
+      const rawBody = source.slice(pragmas[index].index + pragmas[index][0].length, pragmas[index + 1].index);
+      const body = compactCode(rawBody);
       assert.match(body, required, `${diagnostic} does not cover the required migration call`);
       assert.doesNotMatch(body, /DistributedApplication\.CreateBuilder\(|builder\.Build\(/,
         "Experimental suppression extends beyond resource declarations");
+      if (diagnostic === "ASPIREDOTNETPROJECT001") {
+        for (const call of registrations(rawBody).found) {
+          if (/^AddDotnetProject(?:BlazorGateway)?$/.test(call.method)) coveredResources.add(call.name);
+        }
+      }
       if (diagnostic === "ASPIREPROJECTS001") {
         assert.doesNotMatch(body, /\bAddDotnetProject|api\.WaitForCompletion\(/,
           "EF suppression extends beyond its migrations declaration");
       }
+    }
+    if (diagnostic === "ASPIREDOTNETPROJECT001") {
+      const uncovered = registrations(source).found
+        .filter(call => call.name in contract.migrate && /^AddDotnetProject(?:BlazorGateway)?$/.test(call.method))
+        .map(call => call.name)
+        .filter(name => !coveredResources.has(name));
+      assert.equal(uncovered.length, 0,
+        `${diagnostic} does not cover migrated resource${uncovered.length === 1 ? "" : "s"} ${uncovered.join(", ")}`);
     }
     result = result.replace(pattern, "");
   }

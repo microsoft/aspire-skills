@@ -14,6 +14,14 @@ const infrastructureConditions = {
   "skill-eval.yml": "${{ !cancelled() && (steps.changed.outputs.run_full == 'true' || steps.changed.outputs.has_specs == 'true') }}",
   "skill-eval-nightly.yml": "${{ !cancelled() && (steps.evals.outcome == 'success' || steps.evals.outcome == 'failure') }}"
 };
+const infrastructureCommands = {
+  "skill-eval.yml": [
+    'expected_runs="${{ steps.changed.outputs.expected_runs }}"',
+    'read -r -a expected_run_args <<< "$expected_runs"',
+    'node scripts/check-eval-results.mjs ./results "${expected_run_args[@]}"'
+  ].join("\n"),
+  "skill-eval-nightly.yml": "node scripts/check-eval-results.mjs ./results ."
+};
 
 function runBash(script, cwd, env = {}) {
   const gitBash = join(process.env.ProgramFiles ?? "C:\\Program Files", "Git", "bin", "bash.exe");
@@ -21,6 +29,49 @@ function runBash(script, cwd, env = {}) {
     input: script, cwd, encoding: "utf8",
     env: { ...process.env, ...env, BASH_ENV: "" }, timeout: 30_000
   });
+}
+
+function guardRecords(verdict) {
+  const passed = verdict !== "negative";
+  const grade = { passed, score: passed ? 1 : 0, details: [{ passed: true, score: 1 }] };
+  if (verdict === "judge-error") grade.details[0].status = "error";
+  const evalFilePath = "/repo/skills/router/evals/eval.yaml";
+  return [
+    {
+      type: "trial-result",
+      itemId: `${evalFilePath}::main::model::fixture::trial-0`,
+      evalName: "router-eval",
+      evalFilePath,
+      variant: "main",
+      model: "model",
+      stimulus: "fixture",
+      trialIndex: 0,
+      totalTrials: 1,
+      status: "success",
+      gradeResult: grade
+    },
+    {
+      type: "run-summary",
+      hadExecutionErrors: false,
+      passed,
+      evals: [{
+        name: "router-eval",
+        evalFilePath,
+        variant: "main",
+        model: "model",
+        passed,
+        scoringApplied: true,
+        stimuliRun: 1,
+        stimuliTotal: 1,
+        durationMs: 1
+      }]
+    }
+  ];
+}
+
+function infrastructureCommand(name, expectedRuns = "router") {
+  return getStepRun(readWorkflow(name), "Check evaluation infrastructure")
+    .replaceAll("${{ steps.changed.outputs.expected_runs }}", expectedRuns);
 }
 
 for (const name of workflows) {
@@ -116,7 +167,7 @@ for (const [name, condition] of Object.entries(infrastructureConditions)) {
     assert.match(redact, /if: \$\{\{ !cancelled\(\) &&/);
     assert.doesNotMatch(check, /env:|TOKEN|continue-on-error|\|\| true/);
     assert.equal(getStepRun(workflow, "Check evaluation infrastructure").trim(),
-      "node scripts/check-eval-results.mjs ./results");
+      infrastructureCommands[name]);
   });
 
   for (const [scenario, verdict, expectedStatus] of [
@@ -132,18 +183,12 @@ for (const [name, condition] of Object.entries(infrastructureConditions)) {
       writeFileSync(join(root, "scripts/check-eval-results.mjs"),
         readFileSync(join(repoRoot, "scripts/check-eval-results.mjs")));
       if (verdict !== "missing") {
-        const grade = { passed: verdict !== "negative", score: verdict === "negative" ? 0 : 1,
-          details: [{ passed: true, score: 1 }] };
-        if (verdict === "judge-error") grade.details[0].status = "error";
-        const records = [
-          { type: "trial-result", status: "success", gradeResult: grade },
-          { type: "run-summary", hadExecutionErrors: false, passed: verdict !== "negative" }
-        ];
         const directory = join(root, "results/router/run");
         mkdirSync(directory, { recursive: true });
-        writeFileSync(join(directory, "results.jsonl"), records.map(record => JSON.stringify(record)).join("\n"));
+        writeFileSync(join(directory, "results.jsonl"),
+          guardRecords(verdict).map(record => JSON.stringify(record)).join("\n"));
       }
-      const result = runBash(getStepRun(readWorkflow(name), "Check evaluation infrastructure"), root);
+      const result = runBash(infrastructureCommand(name), root);
       assert.ifError(result.error);
       assert.equal(result.status, expectedStatus, result.stderr);
       if (verdict === "judge-error") assert.match(result.stderr, /grading infrastructure error/);
@@ -151,6 +196,23 @@ for (const [name, condition] of Object.entries(infrastructureConditions)) {
     });
   }
 }
+
+test("skill-eval.yml: guard requires every expected scoped run", t => {
+  const root = mkdtempSync(join(tmpdir(), "aspire-ci-expected-runs-"));
+  t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 3 }));
+  mkdirSync(join(root, "scripts"));
+  writeFileSync(join(root, "scripts/check-eval-results.mjs"),
+    readFileSync(join(repoRoot, "scripts/check-eval-results.mjs")));
+  const directory = join(root, "results/router/run");
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(join(directory, "results.jsonl"),
+    guardRecords("valid").map(record => JSON.stringify(record)).join("\n"));
+
+  const result = runBash(infrastructureCommand("skill-eval.yml", "router migration"), root);
+  assert.ifError(result.error);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Missing expected evaluation run: migration/);
+});
 
 test("workflow and redaction changes exercise regression coverage", () => {
   const workflow = readWorkflow("bundle-test.yml");
@@ -190,9 +252,23 @@ for (const changedPath of ["scripts/check-eval-results.mjs", "evals/grade-routin
     assert.ifError(result.error);
     assert.equal(result.status, 0, result.stderr);
     assert.equal(readFileSync(output, "utf8").replaceAll("\r\n", "\n"),
-      "run_full=false\nhas_specs=true\nmatched=aspire\n");
+      "run_full=false\nhas_specs=true\nmatched=aspire\nexpected_runs=aspire\n");
   });
 }
+
+test("a global eval config change selects one full-suite expected run", t => {
+  const root = mkdtempSync(join(tmpdir(), "aspire-ci-full-selection-"));
+  t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 3 }));
+  const output = join(root, "outputs");
+  const script = getStepRun(readWorkflow("skill-eval.yml"), "Determine changed skill eval specs")
+    .replaceAll("${{ github.event.pull_request.number }}", "65")
+    .replaceAll("${{ github.repository }}", "microsoft/aspire-skills");
+  const result = runBash(`gh() { printf '%s\\n' '.vally.yaml'; }\n${script}`, root, { GITHUB_OUTPUT: output });
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(readFileSync(output, "utf8").replaceAll("\r\n", "\n"),
+    "run_full=true\nhas_specs=false\nexpected_runs=.\n");
+});
 
 test("skill lint uses the evaluation workflows' pinned Vally version", () => {
   const script = getStepRun(readWorkflow("skill-lint.yml"), "Install vally CLI");

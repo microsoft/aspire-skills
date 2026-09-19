@@ -204,6 +204,10 @@ for (const [endingName, lineEnding] of [["LF", "\n"], ["CRLF", "\r\n"]]) {
   for (const [name, mutate, error] of [
     ["missing EF diagnostic", source => source.replace(/^#pragma warning (?:disable|restore) ASPIREPROJECTS001\r?\n/gm, ""), /Missing or excessive ASPIREPROJECTS001/],
     ["unpaired EF diagnostic", source => source.replace("#pragma warning restore ASPIREPROJECTS001", ""), /Missing or excessive ASPIREPROJECTS001/],
+    ["unsuppressed gateway diagnostic", source => source
+      .replace(/^#pragma warning disable ASPIREDOTNETPROJECT001\r?\n(?=var gateway)/m, "")
+      .replace(/^#pragma warning restore ASPIREDOTNETPROJECT001\r?\n(?=gateway\.WithContainerBuildOptions)/m, ""),
+    /ASPIREDOTNETPROJECT001 does not cover migrated resource gateway/],
     ["removed existing Blazor scope", source => source.replace(/^#pragma warning (?:disable|restore) ASPIREBLAZOR001\r?\n/gm, ""), /fluent behavior/],
     ["changed publishing identity", source => source.replace('LocalImageName = $"{imagePrefix}-api"', 'LocalImageName = $"{imagePrefix}-wrong"'), /fluent behavior/]
   ]) {

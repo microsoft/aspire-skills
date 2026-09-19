@@ -59,7 +59,7 @@ jobs:
       - name: Check evaluation infrastructure
         if: ${{ !cancelled() && (steps.evals.outcome == 'success' || steps.evals.outcome == 'failure') }}
         run: |
-          node scripts/check-eval-results.mjs ./results
+          node scripts/check-eval-results.mjs ./results .
 
       - name: Redact evaluation artifacts
         id: redact
