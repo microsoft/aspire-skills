@@ -584,7 +584,10 @@ stimuli:
           required: [aspire-deployment]
   - name: should_trigger_01
     description: "Reason: Direct deployment request — matches 'deploy to Azure' keyword"
-    prompt: Deploy my Aspire app to Azure
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      Deploy my Aspire app to Azure
     tags:
       priority: p1
       area: routing
@@ -596,7 +599,10 @@ stimuli:
             - aspire-deployment
   - name: should_trigger_02
     description: "Reason: Direct CLI invocation of aspire publish"
-    prompt: Run aspire publish to generate deployment artifacts
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      Run aspire publish to generate deployment artifacts
     tags:
       priority: p1
       area: routing
@@ -608,7 +614,10 @@ stimuli:
             - aspire-deployment
   - name: should_trigger_03
     description: "Reason: Named pipeline step — aspire do is deployment"
-    prompt: Run the seed-data pipeline step with aspire do
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      Run the seed-data pipeline step with aspire do
     tags:
       priority: p1
       area: routing
@@ -620,7 +629,10 @@ stimuli:
             - aspire-deployment
   - name: should_trigger_04
     description: "Reason: K8s artifact generation routes to aspire-deployment"
-    prompt: Generate deployment artifacts for Kubernetes with Aspire
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      Generate deployment artifacts for Kubernetes with Aspire
     tags:
       priority: p1
       area: routing
@@ -632,7 +644,10 @@ stimuli:
             - aspire-deployment
   - name: should_trigger_05
     description: "Reason: Deployment troubleshooting routes to aspire-deployment"
-    prompt: My aspire deploy is stuck — how do I unstick or reset the deployment?
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      My aspire deploy is stuck — how do I unstick or reset the deployment?
     tags:
       priority: p1
       area: routing
@@ -644,7 +659,10 @@ stimuli:
             - aspire-deployment
   - name: should_trigger_06
     description: "Reason: Docker Compose is an Aspire deploy target"
-    prompt: Push my Aspire app to a Docker Compose target
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      Push my Aspire app to a Docker Compose target
     tags:
       priority: p1
       area: routing
@@ -656,7 +674,10 @@ stimuli:
             - aspire-deployment
   - name: should_trigger_07
     description: "Reason: aspire destroy is deployment lifecycle"
-    prompt: Tear down my Aspire deployment
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      Tear down my Aspire deployment
     tags:
       priority: p1
       area: routing
@@ -671,7 +692,10 @@ stimuli:
     # Question phrasing: an imperative makes the executor run `aspire destroy`, which
     # blocks on a confirmation prompt and times out the trial; the skill-invocation
     # grader only checks routing, so intent is unchanged.
-    prompt: How do I run aspire destroy to remove my preview environment?
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      How do I run aspire destroy to remove my preview environment?
     tags:
       priority: p1
       area: routing
@@ -683,7 +707,10 @@ stimuli:
             - aspire-deployment
   - name: should_trigger_09
     description: "Reason: AddNextJsApp + publish is deployment"
-    prompt: Publish my Next.js app via Aspire with AddNextJsApp
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      Publish my Next.js app via Aspire with AddNextJsApp
     tags:
       priority: p1
       area: routing
@@ -695,7 +722,10 @@ stimuli:
             - aspire-deployment
   - name: should_trigger_10
     description: "Reason: AKS is an Aspire deploy target via AddAzureKubernetesEnvironment"
-    prompt: Deploy my Aspire app to AKS
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      Deploy my Aspire app to AKS
     tags:
       priority: p1
       area: routing
@@ -707,7 +737,10 @@ stimuli:
             - aspire-deployment
   - name: should_trigger_11
     description: "Reason: AWS is an Aspire deploy target via `aspire add aws` + CDK environment"
-    prompt: Deploy my Aspire app to AWS
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      Deploy my Aspire app to AWS
     tags:
       priority: p1
       area: routing
@@ -719,7 +752,10 @@ stimuli:
             - aspire-deployment
   - name: should_trigger_12
     description: "Reason: Preflight / preview workflow is owned by aspire-deployment"
-    prompt: Validate my Aspire deployment plan before applying
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      Validate my Aspire deployment plan before applying
     tags:
       priority: p1
       area: routing
@@ -731,7 +767,10 @@ stimuli:
             - aspire-deployment
   - name: should_trigger_13
     description: "Reason: --list-steps is the canonical pipeline preview in aspire-deployment"
-    prompt: Inspect the deployment pipeline steps with aspire publish --list-steps
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      Inspect the deployment pipeline steps with aspire publish --list-steps
     tags:
       priority: p1
       area: routing
@@ -743,7 +782,10 @@ stimuli:
             - aspire-deployment
   - name: should_trigger_14
     description: "Reason: Radius is a preview Aspire 13.5 deployment target"
-    prompt: Deploy my Aspire app to a Radius environment
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      Deploy my Aspire app to a Radius environment
     tags:
       priority: p1
       area: routing

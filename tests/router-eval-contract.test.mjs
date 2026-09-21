@@ -5,6 +5,8 @@ import { parse } from "yaml";
 import { assertRoutingEntry } from "../evals/grade-routing-entry.mjs";
 
 const spec = parse(readFileSync(new URL("../skills/aspire/evals/eval.yaml", import.meta.url), "utf8"));
+const organicSpec = parse(readFileSync(new URL("../evals/organic-routing/eval.yaml", import.meta.url), "utf8"));
+const vallyConfig = parse(readFileSync(new URL("../.vally.yaml", import.meta.url), "utf8"));
 function readSkill(name) {
   const source = readFileSync(new URL(`../skills/${name}/SKILL.md`, import.meta.url), "utf8")
     .replaceAll("\r\n", "\n");
@@ -32,14 +34,81 @@ for (const [index, owner] of owners.entries()) {
   named[`should_trigger_${String(index + 1).padStart(2, "0")}`] = owner ? [owner] : ["aspire"];
 }
 
+const organicOwners = {
+  "organic-router-overview-001": ["aspire"],
+  "organic-init-001": ["aspire-init"],
+  "organic-wiring-001": ["aspireify"],
+  "organic-orchestration-001": ["aspire-orchestration"],
+  "organic-deployment-001": ["aspire-deployment"],
+  "organic-monitoring-001": ["aspire-monitoring"],
+  "organic-project-v2-migration-001": ["aspire-project-v2-migration"]
+};
+
 test("router evaluations retain all cases, executor, run count and threshold", () => {
   const names = [...Object.keys(named), "router-reject-001",
     ...Array.from({ length: 6 }, (_, index) => `should_not_trigger_${String(index + 1).padStart(2, "0")}`)];
   assert.deepEqual(spec.stimuli.map(stimulus => stimulus.name).sort(), names.sort());
   assert.equal(spec.defaults.model, "gpt-5-mini");
   assert.equal(spec.defaults.runs, 3);
+  assert.equal(spec.defaults.timeout, "180s");
   assert.equal(spec.defaults.judge_model, "gpt-5.6-sol");
   assert.equal(spec.scoring.threshold, 0.7);
+});
+
+test("organic routing measures spontaneous owner selection without a policy preamble", () => {
+  assert.equal(organicSpec.defaults.model, "gpt-5-mini");
+  assert.equal(organicSpec.defaults.runs, 3);
+  assert.equal(organicSpec.scoring.threshold, 1);
+  assert.deepEqual(
+    organicSpec.stimuli.map(stimulus => stimulus.name).sort(),
+    [...Object.keys(organicOwners), "organic-reject-001"].sort()
+  );
+
+  const allSkills = ["aspire", "aspire-init", "aspireify", "aspire-project-v2-migration",
+    "aspire-orchestration", "aspire-deployment", "aspire-monitoring"];
+  for (const stimulus of organicSpec.stimuli) {
+    assert.equal(stimulus.tags.priority, "p2");
+    assert.equal(stimulus.tags.activation, "organic");
+    assert.doesNotMatch(stimulus.prompt,
+      /Before answering, invoke the matching available Aspire skill or skills/);
+    assert.equal(stimulus.graders.length, 1);
+    assert.equal(stimulus.graders[0].type, "skill-invocation");
+    if (organicOwners[stimulus.name]) {
+      assert.deepEqual(stimulus.graders[0].config.required, organicOwners[stimulus.name]);
+    } else {
+      assert.deepEqual(stimulus.graders[0].config.disallowed, allSkills);
+    }
+  }
+});
+
+test("organic discovery is outside the gated eval search path and has its own suite", () => {
+  assert.equal(vallyConfig.paths.evals, "skills");
+  assert.deepEqual(vallyConfig.suites["organic-discovery"], {
+    description: "Informational nightly measurement of spontaneous skill activation",
+    evals: ["evals/organic-routing/eval.yaml"],
+    filter: { activation: "organic" }
+  });
+});
+
+test("skill metadata requires specialist activation for read-only guidance", () => {
+  const router = readSkill("aspire");
+  assert.match(router.description, /Use only for explicit Aspire-router requests/);
+  assert.match(router.description,
+    /Clear single-domain requests MUST load the owning specialist before answering/);
+  assert.match(router.description, /Do not answer a specialist-owned request from this router alone/);
+  assert.match(router.source, /## Mandatory routing action/);
+  assert.match(router.source, /One router skill call is not a handoff/);
+  assert.match(router.source,
+    /For a clear single-domain request, invoke the owning specialist immediately/);
+  assert.match(router.source,
+    /This applies equally to execution, planning, explanation, read-only, and how-to requests/);
+
+  for (const name of ["aspire-init", "aspireify", "aspire-orchestration",
+    "aspire-deployment", "aspire-monitoring"]) {
+    assert.match(readSkill(name).description,
+      /Load this skill before answering matching execution, planning, read-only, or how-to requests/,
+      `${name} must advertise read-only activation`);
+  }
 });
 
 for (const stimulus of spec.stimuli) {
@@ -57,6 +126,14 @@ for (const stimulus of spec.stimuli) {
       assert.deepEqual(activation.config.required, named[stimulus.name]);
     } else {
       assert.ok(activation.config.disallowed.includes("aspire"));
+    }
+    if (named[stimulus.name]) {
+      assert.match(stimulus.prompt,
+        /Before answering, invoke the matching available Aspire skill or skills/);
+      assert.match(stimulus.prompt, /do not answer from general knowledge/);
+    } else {
+      assert.doesNotMatch(stimulus.prompt,
+        /Before answering, invoke the matching available Aspire skill or skills/);
     }
     const judges = stimulus.graders.filter(grader => grader.type === "prompt");
     if (judges.length) {

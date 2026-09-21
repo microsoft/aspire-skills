@@ -3,7 +3,8 @@ name: aspire-monitoring
 description: >-
   **ANALYSIS SKILL** - Observe Aspire apps: logs, traces, metrics, resource state,
   telemetry export, browser telemetry, and the standalone dashboard. Routes between local
-  Aspire CLI, AKS workload diagnostics, and deployed Azure resource health.
+  Aspire CLI, AKS workload diagnostics, and deployed Azure resource health. Load this
+  skill before answering matching execution, planning, read-only, or how-to requests.
   USE FOR: aspire logs, aspire otel logs, aspire otel traces, aspire otel spans, aspire
   describe, aspire ps, aspire export, aspire dashboard run, describe --include-hidden,
   browser logs in dashboard, terminal view, DevTunnel URLs, WithBrowserLogs, App Insights

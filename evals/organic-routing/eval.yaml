@@ -1,0 +1,117 @@
+name: aspire-organic-routing-eval
+description: Informational nightly measurement of spontaneous Aspire skill activation without a host-policy preamble.
+version: "1.0"
+type: capability
+tags: { skill: aspire, activation: organic }
+defaults:
+  runs: 3
+  timeout: 180s
+  executor: copilot-sdk
+  model: gpt-5-mini
+  judge_model: gpt-5.6-sol
+scoring: { threshold: 1.0 }
+agent_environment:
+  skills:
+    - ../../skills/aspire
+    - ../../skills/aspire-init
+    - ../../skills/aspireify
+    - ../../skills/aspire-project-v2-migration
+    - ../../skills/aspire-orchestration
+    - ../../skills/aspire-deployment
+    - ../../skills/aspire-monitoring
+
+# These prompts intentionally omit the policy-conformance preamble used by gated
+# routing evals. The score is the spontaneous skill-selection rate: each stimulus
+# has only one skill-invocation grader, and the workflow never uses --require-pass.
+stimuli:
+  - name: organic-router-overview-001
+    prompt: >
+      Give me a read-only overview of the Aspire CLI and how its main workflows
+      fit together. Do not run commands, install tools or edit files.
+    tags: { priority: p2, area: routing, activation: organic, owner: aspire }
+    graders:
+      - type: skill-invocation
+        name: organic-invokes-router
+        config: { required: [aspire] }
+
+  - name: organic-init-001
+    prompt: >
+      I have an existing repository with services but no AppHost. Explain how to
+      add Aspire and what workflow takes over after the initial skeleton. Do not
+      scaffold, install tools or edit files.
+    tags: { priority: p2, area: routing, activation: organic, owner: aspire-init }
+    graders:
+      - type: skill-invocation
+        name: organic-invokes-init
+        config: { required: [aspire-init] }
+
+  - name: organic-wiring-001
+    prompt: >
+      My Aspire AppHost needs Redis wired to the API. Give read-only guidance on
+      the owning workflow and resource relationship; do not edit, restore or start
+      the app.
+    tags: { priority: p2, area: routing, activation: organic, owner: aspireify }
+    graders:
+      - type: skill-invocation
+        name: organic-invokes-aspireify
+        config: { required: [aspireify] }
+
+  - name: organic-orchestration-001
+    prompt: >
+      How should I start one selected Aspire AppHost from a git worktree and wait
+      for its database? Give read-only guidance; do not start anything or edit files.
+    tags: { priority: p2, area: routing, activation: organic, owner: aspire-orchestration }
+    graders:
+      - type: skill-invocation
+        name: organic-invokes-orchestration
+        config: { required: [aspire-orchestration] }
+
+  - name: organic-deployment-001
+    prompt: >
+      How should I deploy my Aspire app to Azure? Give read-only guidance on the
+      workflow and decisions required before execution; do not publish, deploy,
+      provision or edit.
+    tags: { priority: p2, area: routing, activation: organic, owner: aspire-deployment }
+    graders:
+      - type: skill-invocation
+        name: organic-invokes-deployment
+        config: { required: [aspire-deployment] }
+
+  - name: organic-monitoring-001
+    prompt: >
+      My locally running Aspire app is unhealthy. Explain how to inspect resource
+      state, logs and traces before changing code. Do not query resources or edit files.
+    tags: { priority: p2, area: routing, activation: organic, owner: aspire-monitoring }
+    graders:
+      - type: skill-invocation
+        name: organic-invokes-monitoring
+        config: { required: [aspire-monitoring] }
+
+  - name: organic-project-v2-migration-001
+    prompt: >
+      My Aspire 13.6 AppHost still uses AddProject resources. Give a read-only
+      assessment of whether Project v2 migration is appropriate; do not migrate,
+      restore, start or edit anything.
+    tags: { priority: p2, area: routing, activation: organic, owner: aspire-project-v2-migration }
+    graders:
+      - type: skill-invocation
+        name: organic-invokes-project-v2-migration
+        config: { required: [aspire-project-v2-migration] }
+
+  - name: organic-reject-001
+    prompt: >
+      Explain how to build my React frontend. Give read-only guidance; do not run
+      commands or edit files.
+    tags: { priority: p2, area: routing, activation: organic, owner: none }
+    graders:
+      - type: skill-invocation
+        name: organic-rejects-non-aspire
+        config:
+          disallowed:
+            - aspire
+            - aspire-init
+            - aspireify
+            - aspire-project-v2-migration
+            - aspire-orchestration
+            - aspire-deployment
+            - aspire-monitoring

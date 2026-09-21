@@ -5,7 +5,7 @@ type: capability
 tags: { skill: aspire }
 defaults:
   runs: 3
-  timeout: 600s
+  timeout: 180s
   executor: copilot-sdk
   model: gpt-5-mini
   judge_model: gpt-5.6-sol
@@ -25,18 +25,24 @@ grading_environment:
     - { src: ../../../evals/grade-routing-entry.mjs, dest: .grader/grade-routing-entry.mjs }
 
 # These cases judge routing, not successful deployment, live diagnostics or edits.
-# Natural trigger prompts do not name the skill to invoke. Clear requests require
-# the actual owning specialist; explicit/broad router requests still require aspire.
+# The Copilot SDK eval harness lists skills but does not inject the host runtime's
+# mandatory matching-skill policy. Positive cases therefore carry one neutral
+# activation instruction that never names the expected owner. Clear requests still
+# require the actual specialist; explicit/broad router requests still require aspire.
 # A plausible answer without an accepted skill activation is not enough.
 stimuli:
   - name: router-ordinary-wiring-preserves-136-001
     prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. If this request explicitly uses the
+      umbrella aspire router for specialist-owned work, invoke both the router
+      and the owner.
       Use the aspire router skill. This existing C# AppHost centrally selects
       AspireVersion 13.6.0-dev. Give read-only guidance for ordinary Redis wiring,
       preserving that release family. Do not edit, restore, start, deploy, run
       cloud commands, or migrate Project resources.
     tags: { priority: p1, scenario: version-compatibility, area: version-preservation }
-    constraints: { max_agent_duration: 5m }
+    constraints: { max_agent_duration: 150s }
     environment:
       files:
         - { src: ../../../evals/project-v2-migration/runnable-csharp, dest: app }
@@ -56,6 +62,10 @@ stimuli:
 
   - name: router-init-001
     prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. If this request explicitly uses the
+      umbrella aspire router for specialist-owned work, invoke both the router
+      and the owner.
       I want better AI agent support for my Aspire project. Give read-only
       advice: which project-local guidance should I generate, and what does it
       cover? Do not generate files, install tools or run setup commands.
@@ -102,6 +112,10 @@ stimuli:
 
   - name: router-azdiag-001
     prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. If this request explicitly uses the
+      umbrella aspire router for specialist-owned work, invoke both the router
+      and the owner.
       My Aspire app is deployed to Azure and users report errors. Give read-only
       guidance on the diagnostic route and the limitations of local Aspire
       tooling. Do not query Azure, start an AppHost or change files.
@@ -126,6 +140,10 @@ stimuli:
 
   - name: router-deploy-001
     prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. If this request explicitly uses the
+      umbrella aspire router for specialist-owned work, invoke both the router
+      and the owner.
       I'm ready to deploy my Aspire app to production on Azure. Give read-only
       guidance on the owning workflow, deployment command and decisions needed
       before execution. Do not publish, deploy, provision, install or edit.
@@ -146,6 +164,10 @@ stimuli:
 
   - name: router-mon-001
     prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. If this request explicitly uses the
+      umbrella aspire router for specialist-owned work, invoke both the router
+      and the owner.
       Something is wrong with my locally running Aspire app. Give read-only
       advice on how to see what is happening before changing code. Do not query
       running resources, start the app or edit files.
@@ -166,6 +188,10 @@ stimuli:
 
   - name: router-orch-001
     prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. If this request explicitly uses the
+      umbrella aspire router for specialist-owned work, invoke both the router
+      and the owner.
       Use the aspire router skill before answering. In VS Code,
       aspire_apphost_start is available as a deferred tool. I need to start my
       Aspire app without a debugger and then wait for the database. Give read-only
@@ -188,6 +214,10 @@ stimuli:
 
   - name: router-package-manager-001
     prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. If this request explicitly uses the
+      umbrella aspire router for specialist-owned work, invoke both the router
+      and the owner.
       Use the aspire router skill before answering. A generated TypeScript
       AppHost cannot restore dependencies, and its repository uses pnpm. Give
       read-only guidance on the skill that owns diagnosis and the lifecycle
@@ -208,13 +238,17 @@ stimuli:
 
   - name: router-legacy-ts-migrate-135-001
     prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. If this request explicitly uses the
+      umbrella aspire router for specialist-owned work, invoke both the router
+      and the owner.
       My old TypeScript AppHost still uses apphost.ts. Give read-only migration
       guidance: which workflow owns it, what does it change, and what approval
       is needed? Also explain which workflow would handle any source authoring
       still needed afterward. Do not migrate, update packages, run commands or
       edit files.
     tags: { priority: p1, area: [routing, aspire-13-5, typescript-migration] }
-    constraints: { max_agent_duration: 5m }
+    constraints: { max_agent_duration: 150s }
     rubric:
       - The response assigns aspire update --migrate to aspire-orchestration, not ordinary aspireify authoring or Project v2 resource migration.
       - It explains package, config, tsconfig, generated-import and entry-point changes and requires approval before --yes --non-interactive execution.
@@ -233,6 +267,8 @@ stimuli:
   - name: should_trigger_01
     description: Direct Aspire CLI invocation
     prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
       How should an AI agent use aspire start for a selected AppHost in a git
       worktree? Give read-only guidance covering exact AppHost selection and
       unattended execution; do not start anything, install tools or edit files.
@@ -253,6 +289,8 @@ stimuli:
   - name: should_trigger_02
     description: Aspire deployment lifecycle
     prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
       How should I deploy my Aspire distributed app? Give read-only guidance on
       the workflow and necessary target decisions; do not publish, deploy,
       provision, install tools or edit files.
@@ -273,6 +311,8 @@ stimuli:
   - name: should_trigger_03
     description: Aspire monitoring
     prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
       How should I check the aspire logs from my AppHost resources? Give
       read-only advice; do not inspect running resources, start anything,
       install tools or edit files.
@@ -293,6 +333,8 @@ stimuli:
   - name: should_trigger_04
     description: AppHost detection via SDK reference
     prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
       I have an Aspire.AppHost.Sdk project. How do I run it? Give read-only
       guidance; do not run, install or edit anything.
     tags: { priority: p1, area: routing }
@@ -312,6 +354,8 @@ stimuli:
   - name: should_trigger_05
     description: Aspire CLI overview
     prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
       How do I use the aspire CLI? Give a read-only overview; do not run commands,
       install tools or change files.
     tags: { priority: p1, area: routing }
@@ -330,6 +374,8 @@ stimuli:
   - name: should_trigger_06
     description: Aspire integration wiring
     prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
       How should I add Redis to my cloud-native Aspire app? Give read-only
       guidance; do not edit the AppHost, install packages, restore or start it.
     tags: { priority: p1, area: routing }
@@ -349,6 +395,8 @@ stimuli:
   - name: should_trigger_07
     description: TypeScript AppHost detection
     prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
       My apphost.mts file needs updating. Give read-only guidance on the owning
       workflow and what information is needed before edits; do not update,
       restore, install or run it.
@@ -369,6 +417,8 @@ stimuli:
   - name: should_trigger_08
     description: Aspire environment diagnostics
     prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
       How do I run aspire doctor to check my setup? Give read-only guidance;
       do not run diagnostics, install tools or change files.
     tags: { priority: p1, area: routing }
@@ -387,6 +437,8 @@ stimuli:
   - name: should_trigger_09
     description: Adding Aspire to a repository
     prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
       In an existing repo with services but no AppHost, how should an AI agent
       use aspire init? Give read-only guidance on the command, what it creates,
       and which workflow handles resource wiring afterward. Do not scaffold,
@@ -408,6 +460,8 @@ stimuli:
   - name: should_trigger_10
     description: Aspire deployment teardown
     prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
       How do I run aspire destroy to tear down my deployment? Give read-only
       guidance on the workflow and confirmation boundary; do not destroy
       resources, run deployment commands or change files.

@@ -36,7 +36,8 @@ jobs:
         run: vally lint skills
 
       - name: Validate eval specs
-        # Each skills/*/evals/eval.yaml is in the canonical vally schema.
+        # Each skills/*/evals/eval.yaml and the informational organic-routing
+        # spec use the canonical vally schema.
         # `vally lint --eval-spec` checks shape, stimulus structure, grader
         # config, and resolves environment.files against the working dir.
         # Schema errors fail the check; existing warnings remain visible.
@@ -57,4 +58,10 @@ jobs:
             fi
             echo "::endgroup::"
           done
+          organic_spec="evals/organic-routing/eval.yaml"
+          echo "::group::Validating $organic_spec"
+          if ! vally lint --eval-spec "$organic_spec"; then
+            status=1
+          fi
+          echo "::endgroup::"
           exit "$status"

@@ -2,8 +2,8 @@
 name: aspireify
 description: >-
   **WORKFLOW SKILL** - Wire C#, file-based C#, or TypeScript Aspire AppHosts and
-  repair TS toolchains: propose resources, edit, wire ServiceDefaults/OTel,
-  validate with `aspire start`, then stop.
+  repair TS toolchains. Load this skill before answering matching execution,
+  planning, read-only, or how-to requests.
   USE FOR: wire/extend AppHost, AddProject, read-only wiring advice,
   add Postgres/Redis/Rabbit/Mongo, connect frontend
   to API, after `aspire init`, AddNextJsApp, AddViteApp, WithBrowserLogs, WithTerminal,

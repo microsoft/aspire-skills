@@ -1,20 +1,20 @@
 ---
 name: aspire-orchestration
 description: >-
-  **WORKFLOW SKILL** — Manage Aspire lifecycle in VS Code or the CLI.
-  WHEN: "start or stop my Aspire app", "aspire_apphost_start",
-  "aspire_apphost_stop", "notEditorOwned", "ambiguousSession", "aspire start",
-  "aspire stop", "aspire wait", resource restart, file-lock errors (MSB3491 or
-  CS2012), port conflicts, git worktrees, "--isolated", "aspire update --self",
-  "aspire update --migrate", "aspire describe --include-hidden", "aspire stop --force",
-  "aspire terminal", "aspire doctor", standalone environment diagnostics,
-  integration discovery, default watch, or hot reload.
-  INVOKES: VS Code lifecycle tools first when exposed; Aspire CLI for readiness,
-  inspection, resource operations, isolated worktree starts, and allowed fallbacks.
+  **WORKFLOW SKILL** — Manage Aspire lifecycle in VS Code or the CLI. Load this
+  skill before answering matching execution, planning, read-only, or how-to requests.
+  WHEN: aspire start/stop/wait, aspire_apphost_start/stop, resource restart,
+  file-lock errors (MSB3491/CS2012), port conflicts, git worktrees/--isolated,
+  aspire update --self/--migrate, legacy apphost.ts or old TypeScript AppHost migration,
+  aspire stop --force, aspire terminal,
+  "aspire doctor", standalone environment diagnostics, integration discovery,
+  default watch, hot reload, notEditorOwned, or ambiguousSession.
+  INVOKES: VS Code lifecycle tools when exposed; Aspire CLI for readiness,
+  inspection, resources, isolated starts, and allowed fallbacks.
   DO NOT USE FOR: deploy/publish/destroy (aspire-deployment), logs/traces/metrics
   (aspire-monitoring), or AppHost code and resource wiring (aspireify).
-  FOR SINGLE OPERATIONS: Load the matching editor tool first, then obey the
-  exact-target, worktree-isolation, and stop-result rules below.
+  FOR SINGLE OPERATIONS: Load the matching editor tool first; obey exact-target,
+  worktree-isolation, and stop-result rules.
 license: MIT
 metadata:
   author: Microsoft

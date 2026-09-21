@@ -437,7 +437,10 @@ stimuli:
           substring: 13.5.3
   - name: should_trigger_01
     description: "Reason: aspire logs is monitoring"
-    prompt: Show me the aspire logs for the API service
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      Show me the aspire logs for the API service
     tags:
       priority: p1
       area: routing
@@ -449,7 +452,10 @@ stimuli:
             - aspire-monitoring
   - name: should_trigger_02
     description: "Reason: aspire otel traces is monitoring"
-    prompt: Run aspire otel traces to view distributed traces
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      Run aspire otel traces to view distributed traces
     tags:
       priority: p1
       area: routing
@@ -461,7 +467,10 @@ stimuli:
             - aspire-monitoring
   - name: should_trigger_03
     description: "Reason: Resource state via aspire describe is monitoring"
-    prompt: Run aspire describe to see resource state
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      Run aspire describe to see resource state
     tags:
       priority: p1
       area: routing
@@ -473,7 +482,10 @@ stimuli:
             - aspire-monitoring
   - name: should_trigger_04
     description: "Reason: Telemetry export is monitoring"
-    prompt: Run aspire export to bundle telemetry
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      Run aspire export to bundle telemetry
     tags:
       priority: p1
       area: routing
@@ -485,7 +497,10 @@ stimuli:
             - aspire-monitoring
   - name: should_trigger_05
     description: "Reason: App Insights query routes through monitoring bridge"
-    prompt: Query App Insights for my deployed Aspire app
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      Query App Insights for my deployed Aspire app
     tags:
       priority: p1
       area: routing
@@ -497,7 +512,10 @@ stimuli:
             - aspire-monitoring
   - name: should_trigger_06
     description: "Reason: OTEL spans are monitoring"
-    prompt: Show me the OpenTelemetry spans with aspire otel spans
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      Show me the OpenTelemetry spans with aspire otel spans
     tags:
       priority: p1
       area: routing
@@ -509,7 +527,10 @@ stimuli:
             - aspire-monitoring
   - name: should_trigger_07
     description: "Reason: Deployed container app logs route through monitoring bridge"
-    prompt: Tail the container app logs for my deployed Aspire service
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      Tail the container app logs for my deployed Aspire service
     tags:
       priority: p1
       area: routing
@@ -523,7 +544,10 @@ stimuli:
     description: "Reason: aspire dashboard run is a monitoring concern"
     # Phrased as a question: `aspire dashboard run` is a foreground daemon that
     # would never let the agent turn go idle. Monitoring must still activate.
-    prompt: How do I open a standalone Aspire dashboard with aspire dashboard run?
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      How do I open a standalone Aspire dashboard with aspire dashboard run?
     tags:
       priority: p1
       area: routing
@@ -535,7 +559,10 @@ stimuli:
             - aspire-monitoring
   - name: should_trigger_09
     description: "Reason: Aspire.Hosting.Browsers / WithBrowserLogs surfaces in dashboard"
-    prompt: View browser console logs in the Aspire dashboard
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      View browser console logs in the Aspire dashboard
     tags:
       priority: p1
       area: routing
@@ -547,7 +574,10 @@ stimuli:
             - aspire-monitoring
   - name: should_trigger_10
     description: "Reason: Aspire 13.5 hidden-resource inspection uses describe, not ps"
-    prompt: aspire ps shows my AppHost but not its hidden proxy resource
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      aspire ps shows my AppHost but not its hidden proxy resource
     tags:
       priority: p1
       area: routing
@@ -559,7 +589,10 @@ stimuli:
             - aspire-monitoring
   - name: should_trigger_11
     description: "Reason: AKS pod log routing lives in monitoring"
-    prompt: Tail AKS pod logs for my deployed Aspire service
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      Tail AKS pod logs for my deployed Aspire service
     tags:
       priority: p1
       area: routing

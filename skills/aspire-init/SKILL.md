@@ -1,12 +1,13 @@
 ---
 name: aspire-init
 description: >-
-  **WORKFLOW SKILL** - First-run flow for adding Aspire to a repo. Picks `aspire new`
-  (greenfield) or `aspire init` (existing repo), drops the AppHost skeleton, then hands
-  off to `aspireify` for resource wiring.
+  **WORKFLOW SKILL** - First-run flow for adding Aspire to a repo. Load this skill
+  before answering matching execution, planning, read-only, or how-to requests.
+  Picks `aspire new` (greenfield) or `aspire init` (existing repo), drops the AppHost
+  skeleton, then hands off to `aspireify` for resource wiring.
   USE FOR: aspire init, aspire new, aspire-starter, aspire-ts-starter, aspire-py-starter,
   add Aspire to existing repo, scaffold Aspire app, bootstrap Aspire, no AppHost detected,
-  install aspireify, apphost.mts, generated .aspire/modules.
+  or install aspireify after the skeleton is created.
   DO NOT USE FOR: AppHost wiring on an existing AppHost (use aspireify), start/stop/wait
   or standalone aspire doctor diagnostics (use aspire-orchestration), deploy/publish
   (use aspire-deployment), logs/traces (use aspire-monitoring), repo that already has

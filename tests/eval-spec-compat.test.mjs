@@ -6,10 +6,11 @@ import { test } from "node:test";
 import { parse } from "yaml";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const specs = readdirSync(join(root, "skills"), { withFileTypes: true })
+const skillSpecs = readdirSync(join(root, "skills"), { withFileTypes: true })
   .filter(entry => entry.isDirectory())
   .map(entry => join("skills", entry.name, "evals", "eval.yaml"))
   .filter(path => existsSync(join(root, path)));
+const specs = [...skillSpecs, join("evals", "organic-routing", "eval.yaml")];
 const validGraderName = /^[a-z0-9][a-z0-9-]{0,59}$/;
 
 test("canonical evaluation specs are present", () => {
@@ -55,5 +56,20 @@ test("grader names in the authoring examples use the supported spelling", () => 
   const guide = readFileSync(join(root, "evals", "AUTHORING.md"), "utf8");
   for (const match of guide.matchAll(/\bname: ([a-z0-9_-]+)/g)) {
     assert.match(match[1], validGraderName);
+  }
+});
+
+test("positive routing stimuli mirror the host matching-skill policy", () => {
+  const activation = /Before answering, invoke the matching available Aspire skill or skills/;
+  for (const spec of specs) {
+    const evaluation = parse(readFileSync(join(root, spec), "utf8"));
+    for (const stimulus of evaluation.stimuli) {
+      if (stimulus.name.startsWith("should_trigger_")) {
+        assert.match(stimulus.prompt, activation, `${spec}: ${stimulus.name}`);
+        assert.match(stimulus.prompt, /do not answer from general knowledge/);
+      } else if (stimulus.name.startsWith("should_not_trigger_")) {
+        assert.doesNotMatch(stimulus.prompt, activation, `${spec}: ${stimulus.name}`);
+      }
+    }
   }
 });

@@ -1,6 +1,6 @@
 ---
 name: aspire-deployment
-description: "**WORKFLOW SKILL** — Deploy Aspire apps from AppHost models to Docker Compose, Kubernetes, Azure, AWS, or preview Radius. WHEN: \"deploy Aspire app\", \"publish Aspire artifacts\", \"deploy to Azure Container Apps\", \"generate Kubernetes artifacts\", \"deploy to Radius\", \"tear down Aspire deployment\". INVOKES: aspire CLI, Aspire docs, target cloud/container CLIs. FOR SINGLE OPERATIONS: use generic Azure, Kubernetes, Docker, AWS, or Radius tools only when no Aspire AppHost exists."
+description: "**WORKFLOW SKILL** — Deploy Aspire apps from AppHost models to Docker Compose, Kubernetes, Azure, AWS, or preview Radius. Load this skill before answering matching execution, planning, read-only, or how-to requests. WHEN: \"deploy Aspire app\", \"publish Aspire artifacts\", \"deploy to Azure Container Apps\", \"generate Kubernetes artifacts\", \"deploy to Radius\", \"tear down Aspire deployment\". INVOKES: aspire CLI, Aspire docs, target cloud/container CLIs. FOR SINGLE OPERATIONS: use generic Azure, Kubernetes, Docker, AWS, or Radius tools only when no Aspire AppHost exists."
 license: MIT
 metadata:
   author: Microsoft

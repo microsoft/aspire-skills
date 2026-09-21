@@ -1244,7 +1244,10 @@ stimuli:
   # tripping `evalHadExecutionErrors` — a hard gate failure independent of score.
   - name: should_trigger_01
     description: "Reason: aspire start request routes to orchestration"
-    prompt: How do I run aspire start on my AppHost?
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      How do I run aspire start on my AppHost?
     tags:
       priority: p1
       area: routing
@@ -1256,7 +1259,10 @@ stimuli:
             - aspire-orchestration
   - name: should_trigger_02
     description: "Reason: Direct start request"
-    prompt: How do I start my Aspire app?
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      How do I start my Aspire app?
     tags:
       priority: p1
       area: routing
@@ -1268,7 +1274,10 @@ stimuli:
             - aspire-orchestration
   - name: should_trigger_03
     description: "Reason: aspire stop is orchestration"
-    prompt: How do I run aspire stop to clean up?
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      How do I run aspire stop to clean up?
     tags:
       priority: p1
       area: routing
@@ -1280,7 +1289,10 @@ stimuli:
             - aspire-orchestration
   - name: should_trigger_04
     description: "Reason: Exact MSB3491 error code — file-lock recovery scenario"
-    prompt: I'm getting MSB3491 file lock errors building my Aspire project
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      I'm getting MSB3491 file lock errors building my Aspire project
     tags:
       priority: p1
       area: routing
@@ -1292,7 +1304,10 @@ stimuli:
             - aspire-orchestration
   - name: should_trigger_05
     description: "Reason: Exact CS2012 error code — file-lock recovery"
-    prompt: CS2012 — Cannot open file for writing while Aspire is running
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      CS2012 — Cannot open file for writing while Aspire is running
     tags:
       priority: p1
       area: routing
@@ -1304,7 +1319,10 @@ stimuli:
             - aspire-orchestration
   - name: should_trigger_06
     description: "Reason: Single resource restart is orchestration"
-    prompt: How do I restart just the API service in Aspire?
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      How do I restart just the API service in Aspire?
     tags:
       priority: p1
       area: routing
@@ -1316,7 +1334,10 @@ stimuli:
             - aspire-orchestration
   - name: should_trigger_07
     description: "Reason: Port conflict = orphaned Aspire instance — orchestration"
-    prompt: Port 5000 is already in use after I ran aspire start
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      Port 5000 is already in use after I ran aspire start
     tags:
       priority: p1
       area: routing
@@ -1328,7 +1349,10 @@ stimuli:
             - aspire-orchestration
   - name: should_trigger_08
     description: "Reason: aspire wait is orchestration"
-    prompt: How do I run aspire wait on my postgres resource?
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      How do I run aspire wait on my postgres resource?
     tags:
       priority: p1
       area: routing
@@ -1340,7 +1364,10 @@ stimuli:
             - aspire-orchestration
   - name: should_trigger_09
     description: "Reason: aspire update --self is orchestration (CLI lifecycle)"
-    prompt: How do I upgrade my Aspire CLI with aspire update --self?
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      How do I upgrade my Aspire CLI with aspire update --self?
     tags:
       priority: p1
       area: routing
@@ -1352,7 +1379,10 @@ stimuli:
             - aspire-orchestration
   - name: should_trigger_10
     description: "Reason: Aspire 13.5 separates AppHost discovery from hidden-resource inspection"
-    prompt: aspire ps shows my AppHost but not its hidden proxy resource — how do I inspect it?
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      aspire ps shows my AppHost but not its hidden proxy resource — how do I inspect it?
     tags:
       priority: p1
       area: routing
@@ -1364,7 +1394,10 @@ stimuli:
             - aspire-orchestration
   - name: should_trigger_11
     description: "Reason: File-based C# AppHost should trigger orchestration (start/run lifecycle)"
-    prompt: How do I run my apphost.cs file?
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      How do I run my apphost.cs file?
     tags:
       priority: p1
       area: routing

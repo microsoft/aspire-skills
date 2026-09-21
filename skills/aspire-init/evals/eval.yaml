@@ -295,7 +295,10 @@ stimuli:
     description: "Reason: Existing repo without AppHost — first-run init flow"
     # Phrased as a question so the agent routes/advises instead of running a slow
     # `aspire new` template restore to completion (which can exceed the timeout).
-    prompt: What's the first thing I should do to add Aspire to this Express + .NET API repo?
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      What's the first thing I should do to add Aspire to this Express + .NET API repo?
     tags:
       priority: p1
       area: routing
@@ -310,7 +313,10 @@ stimuli:
     # Question phrasing: an imperative makes the executor run the interactive scaffolder
     # (`aspire new`), which blocks and times out the trial; the skill-invocation grader
     # only checks routing, so intent is unchanged.
-    prompt: How do I scaffold a new Aspire app from scratch?
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      How do I scaffold a new Aspire app from scratch?
     tags:
       priority: p1
       area: routing
@@ -322,7 +328,10 @@ stimuli:
             - aspire-init
   - name: should_trigger_03
     description: "Reason: Bootstrap = aspire init/new flow"
-    prompt: Bootstrap Aspire into this directory
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      Bootstrap Aspire into this directory
     tags:
       priority: p1
       area: routing
@@ -337,7 +346,10 @@ stimuli:
     # Question phrasing: an imperative makes the executor run the interactive scaffolder
     # (`aspire new`), which blocks and times out the trial; the skill-invocation grader
     # only checks routing, so intent is unchanged.
-    prompt: How do I run aspire new aspire-starter to create a new project?
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      How do I run aspire new aspire-starter to create a new project?
     tags:
       priority: p1
       area: routing
@@ -352,7 +364,10 @@ stimuli:
     # Question phrasing: an imperative makes the executor run interactive `aspire init`,
     # which blocks and times out the trial; the skill-invocation grader only checks
     # routing, so intent is unchanged.
-    prompt: How do I run aspire init in this repo?
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      How do I run aspire init in this repo?
     tags:
       priority: p1
       area: routing
@@ -364,7 +379,10 @@ stimuli:
             - aspire-init
   - name: should_trigger_06
     description: "Reason: Existing Python repo needing AppHost — aspire init or aspire-py-starter"
-    prompt: Bootstrap Aspire into my FastAPI project
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      Bootstrap Aspire into my FastAPI project
     tags:
       priority: p1
       area: routing
@@ -379,7 +397,10 @@ stimuli:
     # Question phrasing: an imperative makes the executor run the interactive scaffolder
     # (`aspire new`), which blocks and times out the trial; the skill-invocation grader
     # only checks routing, so intent is unchanged.
-    prompt: How do I create a new Aspire TypeScript starter app?
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      How do I create a new Aspire TypeScript starter app?
     tags:
       priority: p1
       area: routing
@@ -391,7 +412,10 @@ stimuli:
             - aspire-init
   - name: should_trigger_08
     description: "Reason: aspireify is installed via aspire init / aspire agent init — init flow owns it"
-    prompt: How do I install the aspireify skill via aspire init?
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      How do I install the aspireify skill via aspire init?
     tags:
       priority: p1
       area: routing

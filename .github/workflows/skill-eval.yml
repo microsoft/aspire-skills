@@ -128,7 +128,9 @@ jobs:
         # A `.vally.yaml` change landed us here. `--suite ci-gate` applies the
         # p0 + p1 priority filter across every skill. (`--suite` can't be
         # combined with `-e`, which is why the scoped path below expresses the
-        # same filter with `--tag` instead.)
+        # same filter with `--tag` instead.) PR runs use one trial so Vally can
+        # retry transient executor timeouts; nightly retains each spec's
+        # repeated-run sampling.
         env:
           COPILOT_GITHUB_TOKEN: ${{ github.token }}
         run: |
@@ -136,6 +138,8 @@ jobs:
           echo "Global eval config changed — evaluating the full ci-gate suite."
           vally eval \
             --require-pass \
+            --runs 1 \
+            --max-retries 2 \
             --suite ci-gate \
             --output-dir ./results
 
@@ -149,6 +153,9 @@ jobs:
         # while configuring it; one worker per process avoids that race while
         # the processes still run concurrently. Apply the ci-gate-equivalent
         # p0 + p1 filter so forward-looking p2 stimuli stay out of the PR gate.
+        # Vally disables per-stimulus retries for multi-trial plans, so the PR
+        # gate uses one trial plus bounded transient retries. Nightly keeps the
+        # eval specs' repeated-run defaults for variance measurement.
         env:
           COPILOT_GITHUB_TOKEN: ${{ github.token }}
         run: |
@@ -160,6 +167,8 @@ jobs:
             echo "Evaluating changed skill: $skill"
             vally eval \
               --require-pass \
+              --runs 1 \
+              --max-retries 2 \
               --eval-spec "skills/${skill}/evals/eval.yaml" \
               --tag priority=p0,p1 \
               --workers 1 \

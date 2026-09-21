@@ -71,6 +71,19 @@ may enter through either the router's Azure handoff or the monitoring bridge;
 `grade-routing-entry.mjs` checks Vally's normalized `skill_activation` events for
 that alternative, not words in the response.
 
+The Copilot SDK eval harness exposes the available skills but does not inject the
+host runtime's mandatory "invoke a matching skill before acting" policy. Positive
+routing stimuli therefore start with the same neutral instruction to invoke the
+matching available Aspire skill or skills. The instruction never names the expected
+owner, so the evaluation still measures owner selection and router handoff rather
+than parroting a requested skill name. Negative cases omit it.
+
+Automatic discovery remains a separate signal. The informational
+[`organic-routing`](./organic-routing/eval.yaml) spec repeats one representative
+prompt per owner without the policy preamble, plus a non-Aspire rejection control.
+It runs only in the weekly `organic-discovery` suite, reports spontaneous activation
+rate, and never participates in the PR gate.
+
 These assessments are read-only: explicit rubrics judge the route and guidance,
 not successful live deployment or log retrieval, and `diff-empty` checks the
 captured workspace. Report individual activation, outcome and read-only results
@@ -121,9 +134,10 @@ The `with-skills` − `no-skills` pass-rate delta is the measured lift. The expe
 
 | Goal | Command |
 |------|---------|
-| Reproduce the PR gate for one changed skill | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --tag priority=p0,p1` |
+| Reproduce the PR gate for one changed skill | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --tag priority=p0,p1 --runs 1 --max-retries 2` |
 | Run p0 + p1 across all skills | `vally eval --suite ci-gate` |
 | Run full nightly suite | `vally eval --suite nightly` |
+| Measure spontaneous skill activation | `vally eval --suite organic-discovery` |
 | Run one skill | `vally eval --eval-spec skills/aspire-deployment/evals/eval.yaml` |
 | Run one stimulus by tag | `vally eval --eval-spec skills/aspire/evals/eval.yaml --tag area=routing` |
 | Run the skill-lift baseline experiment | `vally experiment run skill-lift.experiment.yaml --output-dir ./results` |
@@ -151,7 +165,7 @@ The `with-skills` − `no-skills` pass-rate delta is the measured lift. The expe
 | `--runs <n>` | Override `defaults.runs` (number of executions per stimulus). |
 | `--timeout <duration>` | Per-stimulus timeout (e.g. `120s`, `2m`). |
 | `--workers <n>` | Parallel stimulus workers. Default 1. |
-| `--max-retries <n>` | Retries for transient executor errors. |
+| `--max-retries <n>` | Retries for transient executor errors on single-trial stimuli. Vally disables retries when the effective run count is 2 or more. |
 | `--output-dir <dir>` | Persist `results.jsonl` + `eval-results.md` to this directory. |
 | `--output jsonl` | Stream JSONL records to stdout. |
 | `--junit` | Write a JUnit XML report into `--output-dir` (boolean flag; default off). |
@@ -277,8 +291,8 @@ The repo ships four GitHub Actions workflows that drive `vally` automatically:
 | Workflow | Trigger | Command |
 |----------|---------|---------|
 | [`skill-lint.yml`](../.github/workflows/skill-lint.yml) | PR (`SKILL.md` / `*.yaml` / `.vally.yaml`) | `vally lint skills` + per-spec `vally lint --eval-spec <spec>` |
-| [`skill-eval.yml`](../.github/workflows/skill-eval.yml) | PR (`SKILL.md` / `eval.yaml` / `.vally.yaml`) | `vally eval -e <changed-spec> [...] --tag priority=p0,p1 --output-dir ./results` |
-| [`skill-eval-nightly.yml`](../.github/workflows/skill-eval-nightly.yml) | `cron: "0 6 * * 0"` (Sun 06:00 UTC) + `workflow_dispatch` | `vally eval --suite nightly --output-dir ./results` |
+| [`skill-eval.yml`](../.github/workflows/skill-eval.yml) | PR (`SKILL.md` / `eval.yaml` / `.vally.yaml`) | `vally eval -e <changed-spec> [...] --tag priority=p0,p1 --runs 1 --max-retries 2 --output-dir ./results` |
+| [`skill-eval-nightly.yml`](../.github/workflows/skill-eval-nightly.yml) | `cron: "0 6 * * 0"` (Sun 06:00 UTC) + `workflow_dispatch` | Gated `vally eval --suite nightly --output-dir ./results` plus informational `vally eval --suite organic-discovery --output-dir ./organic-results` |
 | [`skill-experiment.yml`](../.github/workflows/skill-experiment.yml) | `cron: "0 6 * * 6"` (Sat 06:00 UTC) + `workflow_dispatch` | `vally experiment run skill-lift.experiment.yaml --output-dir ./results` — informational baseline (skills vs no-skills), never gates |
 
 The all-skill suites are declared at the repo root in [`.vally.yaml`](../.vally.yaml) and filter on the `priority` tag every stimulus carries:
@@ -291,9 +305,24 @@ suites:
   nightly:
     filter:
       priority: [p0, p1, p2]
+  organic-discovery:
+    evals:
+      - evals/organic-routing/eval.yaml
+    filter:
+      activation: organic
 ```
 
-The PR gate and nightly workflows use `vally eval --require-pass` so failed evaluations, including authentication errors, fail the job. Because `--suite` cannot be combined with explicit `-e` specs, the PR workflow discovers changed skill specs and applies the `ci-gate`-equivalent `priority=p0,p1` filter only to them. The comprehensive `nightly` suite runs weekly and uploads the redacted `./results` directory as a workflow artifact for later dashboard inspection. The comparative baseline remains informational.
+The PR gate and main nightly suite use `vally eval --require-pass` so failed
+evaluations, including authentication errors, fail their gated run. Because `--suite`
+cannot be combined with explicit `-e` specs, the PR workflow discovers changed skill
+specs and applies the `ci-gate`-equivalent `priority=p0,p1` filter only to them. PR
+evaluations override the run count to one and allow two bounded retries so transient
+executor timeouts and rate limits can recover; Vally intentionally disables those
+retries for multi-trial plans. The comprehensive `nightly` suite keeps each spec's
+repeated-run defaults. A second nightly command runs `organic-discovery` without
+`--require-pass`: failed activation verdicts are reported in a separate job summary
+and artifact, while authentication, execution, grading, missing-result, and redaction
+failures still fail the workflow. The comparative baseline remains informational.
 
 ## CI authentication
 
@@ -348,4 +377,9 @@ Common failure modes to grep for:
 
 - **`skill-invocation` grader failed but the agent did invoke a skill** — the grader's `required: [...]` list is an exact match. If the agent picked a sibling skill (e.g. `aspire-orchestration` instead of `aspire`), that counts as a miss. Tune `required` to the set of acceptable skills, or switch to a `prompt` grader if "any of these N skills is fine" is the real intent.
 - **`output-contains` failed despite the substring being in the output** — vally's substring grader is case-sensitive by default. Either lowercase the expected substring or set `case_sensitive: false` in the grader config.
-- **`Timeout after Nms waiting for session.idle`** — bump `config.timeout` (e.g. `"180s"`) or the per-stimulus `timeout`. Long-form authoring stimuli routinely need 90–120 s.
+- **`Timeout after Nms waiting for session.idle` while the agent is still doing useful work** — raise `defaults.timeout` or the per-stimulus timeout. Long-form authoring stimuli routinely need 90–120 s.
+- **`Timeout after Nms waiting for session.idle` after the last tool already completed** — treat it as a transient executor stall, not evidence that the stimulus needs a longer timeout. Reproduce the PR policy with `--runs 1 --max-retries 2`; repeated-run nightly plans intentionally remain non-retryable.
+
+The read-only router suite uses a 180-second hard timeout and 150-second agent budget:
+225 successful historical router trials completed in under 90 seconds, so this leaves
+headroom while making a stalled session retry much sooner than the previous 600-second wait.

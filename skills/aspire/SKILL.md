@@ -1,16 +1,16 @@
 ---
 name: aspire
 description: >-
-  **WORKFLOW SKILL** - Router for Aspire 13.5/13.6. Use for explicit router requests,
-  broad CLI questions, better AI agent support / project-local agent guidance,
-  or ambiguous and cross-domain work.
-  Clear single-domain requests may invoke the owning specialist directly,
-  including for read-only advice; the umbrella is not a prerequisite.
-  USE FOR: Aspire AppHost, Aspire CLI, distributed app, cloud-native .NET, aspire
-  start/stop/resource/deploy/destroy/publish/init/new/add/wait/describe/ps/logs/otel,
-  aspire agent init, WithBrowserLogs, WithTerminal, Interaction Service, apphost.mts,
-  TS package managers, Yarn Classic, custom resource commands, .aspire/modules recovery,
-  or Playwright URL discovery.
+  **ROUTER SKILL** - Use only for explicit Aspire-router requests, broad CLI or
+  project-local agent guidance, and ambiguous or cross-domain Aspire work.
+  Clear single-domain requests MUST load the owning specialist before answering,
+  even for read-only/how-to guidance: lifecycle/toolchain uses aspire-orchestration;
+  deployment uses aspire-deployment; diagnostics use aspire-monitoring; authoring uses
+  aspireify; first-run uses aspire-init; Project v2 uses aspire-project-v2-migration.
+  USE FOR: broad Aspire CLI questions, aspire agent init,
+  better AI agent support, and multi-domain triage.
+  When loaded for specialist-owned work, immediately invoke the owner before
+  answering. Do not answer a specialist-owned request from this router alone.
   DO NOT USE FOR: non-Aspire projects or ordinary build/test tasks.
   INVOKES: aspire-init, aspireify, aspire-project-v2-migration,
   aspire-orchestration, aspire-deployment, aspire-monitoring.
@@ -26,6 +26,27 @@ metadata:
 Use this skill when the task involves an Aspire distributed application — operating the
 AppHost or its resources through the Aspire CLI rather than falling back to ad-hoc `dotnet`,
 `docker`, or shell workflows.
+
+## Mandatory routing action
+
+> **STOP before answering specialist-owned work:** your next action after loading
+> this router must be to invoke the owner. One router skill call is not a handoff.
+
+Before answering, classify the request:
+
+1. For a clear single-domain request, invoke the owning specialist immediately and let
+   that skill supply the guidance. Do not answer from this router alone.
+2. When the user explicitly requests this router for specialist-owned work, keep the
+   router active and also invoke the owner before answering.
+3. Answer directly only for broad Aspire CLI overviews, `aspire agent init` guidance,
+   ambiguous ownership, or cross-domain triage.
+
+This applies equally to execution, planning, explanation, read-only, and how-to requests.
+The routing table below is not a substitute for loading the owner.
+
+For better AI agent support or project-local Aspire guidance, answer from this router:
+recommend `aspire agent init`, which generates project-local skills covering richer C#
+AppHost editing, TypeScript AppHosts, and investigation/diagnostics workflows.
 
 ## Entry-point contract
 

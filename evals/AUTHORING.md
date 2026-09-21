@@ -206,6 +206,8 @@ Rules:
 - **A skill cannot be in both `required` and `disallowed`** (vally errors). Every skill in `required` must be invoked. For an "any of these N is fine" intent, use a rubric-backed `prompt` grader rather than requiring them all.
 - **Pair routing with a content check.** `skill-invocation` proves *which* skill ran; add a `prompt` or `output-contains` grader if the *answer* also matters.
 - **Do not use `constraints.expect_skills` / `reject_skills`.** Vally 0.16.0 removed these fields. Express the same requirements with `skill-invocation` grader `config.required` / `config.disallowed`; extend an existing invocation grader instead of duplicating it.
+- **Mirror the host activation policy without naming the owner.** The Copilot SDK eval harness lists skills but does not require matching-skill activation. Positive gated routing prompts use a neutral "invoke the matching available Aspire skill or skills" preamble; keep the scenario itself natural and never name the expected specialist.
+- **Measure automatic discovery separately.** Put no-preamble owner-selection probes in `evals/organic-routing/eval.yaml`, tag them `priority: p2` and `activation: organic`, and grade only the actual skill invocation. They are informational nightly measurements, not PR gates.
 - **Phrase like a real user.** "I want to ship this" is more realistic than "Invoke aspire deploy."
 
 ## Adding a new stimulus — checklist
@@ -234,7 +236,8 @@ Rules:
 | `output-not-contains` fires on legitimate guidance | Substring is too broad (e.g., `"azd"`) | Forbid full commands (`"azd up"`, `"azd deploy"`) |
 | Judge rejects response as outdated | Stale model knowledge of Aspire 13.x | State the fact in the grader prompt |
 | `skill-invocation` grader misses | Required skill wasn't loaded for that stimulus, or a sibling was picked | Ensure the routing stimulus loads the full set via `environment.skills`; tune `required`/`disallowed` |
-| Stimulus hangs / times out | `defaults.timeout` too low for slow models, or judge model unreachable | Raise `defaults.timeout` (e.g. `"180s"`) or the per-stimulus `timeout`; check `--judge-model` is available |
+| Stimulus times out while still making progress | `defaults.timeout` too low for slow models, or judge model unreachable | Raise `defaults.timeout` (e.g. `"180s"`) or the per-stimulus `timeout`; check `--judge-model` is available |
+| Stimulus times out after its last tool completed | Transient executor/session stall | Reproduce the PR policy with `--runs 1 --max-retries 2`; do not lengthen an already-idle 600-second wait |
 
 ## When to update `eval.yaml` defaults
 

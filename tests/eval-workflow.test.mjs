@@ -14,6 +14,8 @@ const infrastructureConditions = {
   "skill-eval.yml": "${{ !cancelled() && (steps.changed.outputs.run_full == 'true' || steps.changed.outputs.has_specs == 'true') }}",
   "skill-eval-nightly.yml": "${{ !cancelled() && (steps.evals.outcome == 'success' || steps.evals.outcome == 'failure') }}"
 };
+const organicInfrastructureCondition =
+  "${{ !cancelled() && (steps.organic.outcome == 'success' || steps.organic.outcome == 'failure') }}";
 const infrastructureCommands = {
   "skill-eval.yml": [
     'expected_runs="${{ steps.changed.outputs.expected_runs }}"',
@@ -143,15 +145,57 @@ test("scheduled and manual triggers remain unchanged", () => {
   }
 });
 
-test("gate and nightly evaluations fail closed while baseline remains informational", () => {
-  for (const name of ["skill-eval.yml", "skill-eval-nightly.yml"]) {
-    const workflow = readWorkflow(name);
-    assert.equal(workflow.match(/vally eval \\/g)?.length, workflow.match(/--require-pass/g)?.length);
-    assert.doesNotMatch(workflow, /\|\| true|continue-on-error/);
-  }
+test("gated evaluations fail closed while organic discovery and baseline remain informational", () => {
+  const gate = readWorkflow("skill-eval.yml");
+  assert.equal(gate.match(/vally eval \\/g)?.length, gate.match(/--require-pass/g)?.length);
+  assert.doesNotMatch(gate, /\|\| true|continue-on-error/);
+
+  const nightly = readWorkflow("skill-eval-nightly.yml");
+  const nightlySteps = nightly.split(/^      - name: /m).slice(1);
+  const gated = nightlySteps.find(step => step.startsWith("Run nightly evals"));
+  const organic = nightlySteps.find(step => step.startsWith("Run organic routing discovery"));
+  assert.match(gated, /--require-pass/);
+  assert.doesNotMatch(organic, /--require-pass|\|\| true|continue-on-error/);
+  assert.match(organic, /--suite organic-discovery/);
+  assert.match(organic, /--output-dir \.\/organic-results/);
+
   const baseline = readWorkflow("skill-experiment.yml");
   assert.match(baseline, /tee experiment-output\.txt \|\| true/);
   assert.doesNotMatch(baseline, /Check evaluation infrastructure/);
+});
+
+test("PR evals use retry-eligible single trials while nightly preserves spec sampling", () => {
+  const gate = readWorkflow("skill-eval.yml");
+  assert.equal(gate.match(/--runs 1/g)?.length, 2);
+  assert.equal(gate.match(/--max-retries 2/g)?.length, 2);
+  assert.match(gate, /Vally disables per-stimulus retries for multi-trial plans/);
+
+  const nightly = readWorkflow("skill-eval-nightly.yml");
+  assert.doesNotMatch(nightly, /--runs\b|--max-retries\b/);
+});
+
+test("nightly organic discovery is separately checked, redacted, summarized and uploaded", () => {
+  const workflow = readWorkflow("skill-eval-nightly.yml");
+  const steps = workflow.split(/^      - name: /m).slice(1);
+  const organic = steps.find(step => step.startsWith("Run organic routing discovery"));
+  const check = steps.find(step => step.startsWith("Check organic routing infrastructure"));
+  const redact = steps.find(step => step.startsWith("Redact evaluation artifacts"));
+  const summary = steps.find(step => step.startsWith("Summarize organic routing discovery"));
+  const upload = steps.find(step => step.startsWith("Upload organic routing trajectories"));
+
+  assert.ok(organic.includes(`if: ${infrastructureConditions["skill-eval-nightly.yml"]}`));
+  assert.ok(check.includes(`if: ${organicInfrastructureCondition}`));
+  assert.equal(getStepRun(workflow, "Check organic routing infrastructure").trim(),
+    "node scripts/check-eval-results.mjs ./organic-results .");
+  assert.ok(steps.indexOf(check) > steps.indexOf(organic));
+  assert.ok(steps.indexOf(check) < steps.indexOf(redact));
+  assert.match(redact,
+    /run: node scripts\/redact-eval-artifacts\.mjs \.\/results \.\/organic-results/);
+  assert.ok(summary.includes(publishCondition));
+  assert.match(summary, /eval-results\.md/);
+  assert.ok(upload.includes(publishCondition));
+  assert.match(upload, /name: organic-routing-nightly/);
+  assert.match(upload, /path: \.\/organic-results\//);
 });
 
 for (const [name, condition] of Object.entries(infrastructureConditions)) {
@@ -227,6 +271,7 @@ test("workflow and redaction changes exercise regression coverage", () => {
     assert.ok(gate.includes(path.replace(".mjs", "\\.mjs")));
   }
   assert.equal(workflow.split('- "evals/grade-routing-entry.mjs"').length - 1, 2);
+  assert.equal(workflow.split('- "evals/organic-routing/**"').length - 1, 2);
 });
 
 function getStepRun(workflow, name) {
@@ -290,6 +335,9 @@ for (const [name, skills, expectedStatus] of [
         mkdirSync(directory, { recursive: true });
         writeFileSync(join(directory, "eval.yaml"), "");
       }
+      const organicDirectory = join(root, "evals", "organic-routing");
+      mkdirSync(organicDirectory, { recursive: true });
+      writeFileSync(join(organicDirectory, "eval.yaml"), "");
       const result = runBash(`
 cd -- "${basename(root)}" || exit 1
 vally() {
@@ -304,12 +352,16 @@ ${getStepRun(readWorkflow("skill-lint.yml"), "Validate eval specs")}
 `, dirname(root));
       assert.ifError(result.error);
       assert.equal(result.status, expectedStatus, result.stderr);
+      const expectedSpecs = skills.length === 0
+        ? []
+        : [...skills.map(skill => `skills/${skill}/evals/eval.yaml`),
+          "evals/organic-routing/eval.yaml"];
       assert.deepEqual(
         [...result.stdout.matchAll(/^checked:(.*)$/gm)].map(match => match[1]),
-        skills.map(skill => `skills/${skill}/evals/eval.yaml`)
+        expectedSpecs
       );
-      assert.equal(result.stdout.match(/::group::Validating /g)?.length ?? 0, skills.length);
-      assert.equal(result.stdout.match(/::endgroup::/g)?.length ?? 0, skills.length);
+      assert.equal(result.stdout.match(/::group::Validating /g)?.length ?? 0, expectedSpecs.length);
+      assert.equal(result.stdout.match(/::endgroup::/g)?.length ?? 0, expectedSpecs.length);
       if (skills.length === 0) assert.match(result.stderr, /No eval specs found/);
     }
     finally {
