@@ -154,7 +154,7 @@ specific** — adjust the focus column to what the file actually demands.
 | Trigger tests | `skills/<skill>/evals/trigger_tests.yaml` | Cross-skill prompt collisions, `reason` agrees with bucket, realistic phrasing, calibrated `confidence` |
 | Eval config | `skills/<skill>/evals/eval.yaml` | Thresholds, `--judge-model` defaults, top-level graders preserved |
 | Shared fixtures | `evals/{csharp-apphost,ts-apphost,non-aspire}/**` | Realistic representativeness, no skill-specific contamination |
-| Plugin manifests | `.plugin/plugin.json`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `gemini-extension.json` | Version sync across all four, identical metadata, valid JSON, `skills` glob unchanged at `./skills/` |
+| Plugin manifests | `package.json`, `.plugin/plugin.json`, `.claude-plugin/*.json`, `.cursor-plugin/marketplace.json`, `gemini-extension.json` | Version sync across all six; workflow-prepared version bumps; valid JSON; `skills` glob unchanged at `./skills/` |
 | MCP | `.mcp.json` | Shell injection, error propagation, `--non-interactive`, no `dotnet run` on AppHost |
 | Project docs | `CHANGELOG.md`, `README.md`, `CONTRIBUTING.md` | Accuracy only; consistency with shipped behavior |
 | Author skills | `.github/skills/**` | Must not leak into shipped `skills/`; must stay invisible to the plugin glob |
@@ -190,12 +190,15 @@ Only flag concrete, high-confidence problems. Categories:
    `prompt` grader missing the "the assistant's response" anchor, combined
    positive/negative grader, over-broad `not_contains` (e.g., bare `"azd"`,
    `"docker"`).
-5. **Plugin-manifest drift** — `version` field skew across the four manifests; `skills`
+5. **Plugin-manifest drift** — `version` field skew across the six manifests; `skills`
    glob silently changed; `repository` / `homepage` / `license` divergence.
 6. **Bugs** — invalid YAML/JSON, broken cross-skill links (`../<wrong-name>/SKILL.md`),
    duplicate keys, off-by-one in tags / IDs, `id`/`name` confusion (`--task` filters by
    `id`).
-7. **CHANGELOG gap** — user-visible change with no entry.
+7. **Release history** — catalog copies or ordinary PR changelog edits on dev,
+   preparation edits beyond its generated versions/changelog and permitted root
+   README changes, or promotion that changes the prepared snapshot or bypasses
+   required main PR review.
 8. **13.5 staleness** — treating legacy `apphost.ts` as current, inspecting resources
    through `aspire ps`, using obsolete `.ServiceProvider` / `PublishAsConnectionString`,
    mixing 13.4/13.5 package families, or omitting experimental qualifications.
@@ -305,7 +308,7 @@ Only three:
 | Label | When | Recommendation |
 |-------|------|----------------|
 | `blocking` | Concrete harm if merged: removed safety guardrail, manifests out of sync, override-deference removed, unsafe hook, broken JSON/YAML in a manifest or eval file, routing change that drops eval threshold. | `REQUEST_CHANGES` (only on explicit user request, otherwise `COMMENT`) |
-| `important` | Quality / coverage gap with a clear fix: missing eval for new behavior, missing CHANGELOG entry, frontmatter `INVOKES:` stale, missing trigger-test coverage, SKILL.md over 5000 tokens. | `COMMENT` |
+| `important` | Quality / coverage gap with a clear fix: missing eval for new behavior, unclear commit subjects for generated release notes, frontmatter `INVOKES:` stale, missing trigger-test coverage, SKILL.md over 5000 tokens. | `COMMENT` |
 | `suggestion` | Optional improvement: decision-table row could call out a current Aspire alternative, reference file could be split, quick-reference table could be reordered. | `COMMENT` or `APPROVE` |
 
 No `nit`, `learning`, or `praise`. Rationale and more examples:
