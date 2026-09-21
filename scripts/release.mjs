@@ -429,8 +429,8 @@ function createPreparationBody(root, source, base, version) {
     "## After this PR merges", "",
     "**Promote Release runs automatically** after this PR merges into dev, without waiting for the post-merge CI run.",
     "It pins that exact merge SHA, preserves these versions and changelog, and generates the OpenCode catalogs.",
-    "Approve the `release-main` deployment in GitHub Actions to publish the verified merge commit directly to main.",
-    "There is no main-targeted release PR or manual promotion trigger. Main is updated only with a normal fast-forward push.", "",
+    "It opens a draft release PR targeting main. Review and merge that PR with a merge commit to publish the release.",
+    "Promotion has no manual trigger. Neither workflow merges a PR or pushes directly to main.", "",
     latestEntry.replace(`${releaseMetadata(root, source, base, version)}\n`, ""), ""
   ].join("\n");
 }
@@ -438,15 +438,15 @@ function createPreparationBody(root, source, base, version) {
 function createPromotionSummary(root, prepared) {
   const { source, base, version } = checkPreparedMerge(root, prepared);
   return [
-    `## Publish v${version} to main`, "", releaseMetadata(root, source, base, version),
+    `## Release v${version}`, "", releaseMetadata(root, source, base, version),
     `<!-- aspire-skills-promotion prepared=${prepared} -->`, "",
     `- Release version: \`${version}\``,
     `- Prepared dev merge: [\`${prepared}\`](${repositoryUrl}/commit/${prepared})`,
     `- Main baseline: [\`${base}\`](${repositoryUrl}/commit/${base})`, "",
     "Promotes exactly the reviewed dev snapshot, preserving its versions and changelog and adding generated OpenCode V1/V2 catalogs.",
     "Later dev commits are not included. Fix source on dev and prepare again rather than editing this candidate.", "",
-    `**Approve the release-main deployment in GitHub Actions** to publish the merge commit \`Update to v${version}\`.`,
-    "There is no main-targeted PR. Publication uses a normal fast-forward push and stops if main has advanced.", ""
+    "**Merge into main with a merge commit, not squash or rebase**, to preserve the prepared dev history.",
+    "The catalogs become available when this PR merges. The workflow does not update main directly.", ""
   ].join("\n");
 }
 
@@ -673,18 +673,31 @@ function checkRelease(root, { target, head, headCommit, baseCommit, prBody } = {
     return;
   }
   if (target !== "main") throw new Error("Release checks require target main or dev.");
-  if (head !== undefined) {
-    throw new Error("Pull requests to main are blocked. Publish a prepared release through the approved workflow.");
+  if (head !== undefined && !/^release\/[A-Za-z0-9][A-Za-z0-9.+-]*$/.test(head)) {
+    throw new Error("Pull requests to main must use a generated release/ branch.");
   }
   const { source: original, base, version } = metadataFromChangelog(readChangelog(root, ref));
   requireAncestor(root, base, "origin/main");
-  if (baseCommit && (base !== commit(root, "origin/main")
-      || base !== selectedCommit(root, baseCommit, "base_commit"))) {
+  if (((head !== undefined || baseCommit) && base !== commit(root, "origin/main"))
+      || (baseCommit && base !== selectedCommit(root, baseCommit, "base_commit"))) {
     throw new Error("The main baseline changed. Prepare a new release to preserve main's history.");
   }
-  const source = preparedCommitTrailer(root, ref);
+  if (head !== undefined && head !== `release/${version}`) {
+    throw new Error("The release branch must match its release version.");
+  }
+  let promotion = ref;
+  let source = preparedCommitTrailer(root, promotion);
+  if (source === undefined && head === undefined) {
+    const lineage = parents(root, ref);
+    if (lineage.length !== 2 || lineage[0] !== base) {
+      throw new Error("Main must receive the release PR with a merge commit.");
+    }
+    promotion = lineage[1];
+    requireSameTree(root, promotion, ref);
+    source = preparedCommitTrailer(root, promotion);
+  }
   if (source === undefined) throw new Error("The promotion commit must identify its prepared dev merge.");
-  requireParents(root, ref, [base, source]);
+  requireParents(root, promotion, [base, source]);
   const preparation = checkPreparedMerge(root, source);
   if (preparation.source !== original || preparation.base !== base || preparation.version !== version) {
     throw new Error("Promotion provenance does not match the reviewed preparation.");

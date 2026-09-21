@@ -81,23 +81,6 @@ jobs:
             esac
           done
 
-      - name: Require configured main approval
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          if ! reviewers="$(gh api "repos/$REPOSITORY/environments/release-main" \
-            --jq '[.protection_rules[]? | select(.type == "required_reviewers") | .reviewers[]?] | length > 0')"; then
-            echo "::error::Configure the release-main environment with required reviewers before publishing."
-            exit 1
-          fi
-          if [[ "$reviewers" != true ]]; then
-            echo "::error::The release-main environment must require manual reviewer approval."
-            exit 1
-          fi
-
       - name: Checkout trusted tooling
         # actions/checkout@v6.0.2
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -181,18 +164,13 @@ jobs:
           retention-days: 7
 
   publish:
-    name: Publish approved release to main
+    name: Open draft release PR into main
     needs: promote
     if: github.repository == 'microsoft/aspire-skills' && github.ref == 'refs/heads/ellahathaway-one-off-release-validation' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    environment:
-      name: release-main
-      url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     concurrency:
-      group: publish-main
+      group: promote-release-${{ needs.promote.outputs.version }}
       cancel-in-progress: false
-    outputs:
-      commit: ${{ steps.push.outputs.commit }}
     steps:
       - name: Check release permissions
         shell: bash
@@ -294,48 +272,6 @@ jobs:
             echo "workflows=write" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Confirm main approval policy
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          if ! reviewers="$(gh api "repos/$REPOSITORY/environments/release-main" \
-            --jq '[.protection_rules[]? | select(.type == "required_reviewers") | .reviewers[]?] | length > 0')"; then
-            echo "::error::Cannot verify required approval for main publication."
-            exit 1
-          fi
-          if [[ "$reviewers" != true ]]; then
-            echo "::error::The release-main environment must require manual reviewer approval."
-            exit 1
-          fi
-
-      - name: Confirm fast-forward baseline
-        shell: bash
-        env:
-          RELEASE_REPO: ${{ github.workspace }}/receiver
-          BASE_COMMIT: ${{ needs.promote.outputs.base }}
-          CANDIDATE_COMMIT: ${{ needs.promote.outputs.candidate }}
-        run: |
-          set -euo pipefail
-          if [[ ! "$BASE_COMMIT" =~ ^[0-9a-f]{40}$ || ! "$CANDIDATE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::Publication requires full verified commit SHAs."
-            exit 1
-          fi
-          candidate="$(git -C "$RELEASE_REPO" rev-parse --verify 'refs/heads/release/candidate^{commit}')"
-          parents="$(git -C "$RELEASE_REPO" show -s --format=%P "$candidate")"
-          read -r first second extra <<< "$parents"
-          if [[ "$candidate" != "$CANDIDATE_COMMIT" || "$first" != "$BASE_COMMIT" || -z "$second" || -n "$extra" ]]; then
-            echo "::error::The verified candidate must be a merge commit directly based on main."
-            exit 1
-          fi
-          remote="$(git -C "$RELEASE_REPO" ls-remote --heads origin refs/heads/main)"
-          if [[ "$remote" != "$BASE_COMMIT"$'\trefs/heads/main' ]]; then
-            echo "::error::Main has advanced. Prepare a new release; main will not be overwritten."
-            exit 1
-          fi
-
       - name: Check GitHub App prerequisites
         shell: bash
         env:
@@ -348,7 +284,7 @@ jobs:
             exit 1
           fi
 
-      - name: Create short-lived main publication token
+      - name: Create short-lived repository publication token
         id: app-token
         # actions/create-github-app-token@v3.1.1
         uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3
@@ -358,26 +294,32 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
           permission-contents: write
+          permission-pull-requests: write
           permission-workflows: ${{ steps.permissions.outputs.workflows }}
 
-      - name: Fast-forward main
-        if: ${{ false }}
-        id: push
+      - name: Push release branch and open draft PR
         shell: bash
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RELEASE_REPO: ${{ github.workspace }}/receiver
-          CANDIDATE_COMMIT: ${{ needs.promote.outputs.candidate }}
+          REPOSITORY: ${{ github.repository }}
+          CANDIDATE_REF: refs/heads/release/candidate
+          BRANCH: release/${{ steps.verify.outputs.version }}
+          PR_TITLE: "[ONE-OFF VALIDATION] Release v${{ steps.verify.outputs.version }} - DO NOT MERGE"
+          PR_BODY_PATH: ${{ runner.temp }}/release-artifact/release-summary.md
         run: |
           set -euo pipefail
+          git check-ref-format "refs/heads/$BRANCH"
+          git check-ref-format "$CANDIDATE_REF"
+          existing="$(git -C "$RELEASE_REPO" ls-remote --heads origin "refs/heads/$BRANCH")"
+          if [[ -n "$existing" ]]; then
+            echo "::error::Release branch $BRANCH already exists; refusing to overwrite a reviewed release."
+            exit 1
+          fi
           git -C "$RELEASE_REPO" \
             -c core.hooksPath=/dev/null \
             -c credential.helper= \
             -c 'credential.helper=!f() { if [ "$1" = get ]; then printf "%s\n" "username=x-access-token" "password=$GH_TOKEN"; fi; }; f' \
-            push origin refs/heads/release/candidate:refs/heads/main
-          remote="$(git -C "$RELEASE_REPO" ls-remote --heads origin refs/heads/main)"
-          if [[ "$remote" != "$CANDIDATE_COMMIT"$'\trefs/heads/main' ]]; then
-            echo "::error::Main does not match the approved release commit."
-            exit 1
-          fi
-          echo "commit=$CANDIDATE_COMMIT" >> "$GITHUB_OUTPUT"
+            push origin "$CANDIDATE_REF:refs/heads/$BRANCH"
+          gh pr create --repo "$REPOSITORY" --draft --base main --head "$BRANCH" \
+            --title "$PR_TITLE" --body-file "$PR_BODY_PATH"
