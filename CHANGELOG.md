@@ -2,6 +2,14 @@
 
 All notable changes to the aspire-skills plugin will be documented in this file.
 
+## [0.0.3] - Unreleased
+
+### Changed
+- Bumped the plugin and all six shipped skills to `0.0.3`.
+- Clarified agent installation and update instructions in `README.md`.
+- Aligned PR review guidance with supported agent hosts, release versioning, and
+  the published plugin mirror.
+
 ## [0.0.2] - 2026-09-18
 
 ### Changed

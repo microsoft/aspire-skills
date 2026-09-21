@@ -14,7 +14,7 @@ description: >-
 license: MIT
 metadata:
   author: Microsoft
-  version: "0.0.2"
+  version: "0.0.3"
 ---
 
 # Aspire
