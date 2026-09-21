@@ -218,42 +218,20 @@ In that command, `-a github-copilot` selects the target agent, `-g` installs glo
 
 ## Development
 
+Install test dependencies without lifecycle scripts, then run the repository checks:
+
 ```bash
-npm run bundle
+npm ci --ignore-scripts
+npm test
+npm run catalog
 ```
 
-`npm run bundle` builds both published release artifacts:
-
-| Artifact | Contents |
-|----------|----------|
-| `aspire-skills-v<version>.tgz` | Agent skill files, canonical telemetry hooks, and `skill-manifest.json` with hook commit/SHA-512 provenance |
-| `aspire-extensions-v<version>.tgz` | GitHub Copilot app canvas extension files and `extension-manifest.json` |
-
-The skills manifest records the release commit and LF-normalized SHA-512 hash for
-each file under `hooks/scripts/`. Downstream consumers can copy the `hooks` object
-directly instead of maintaining hook provenance separately.
-
-Use `npm run bundle:skills` or `npm run bundle:extensions` to build one bundle type.
-
-Both archives declare Aspire CLI/SDK compatibility with `>=13.5.0 <13.7.0`.
-Individual features can have narrower requirements: `aspire-project-v2-migration`
-remains discoverable on 13.5 but refuses edits unless the actual AppHost targets
-13.6+ and exposes the required APIs. Bundle compatibility never authorizes an
-implicit application upgrade, downgrade, or migration. Guidance and examples
-labeled 13.5.3 remain specific to the 13.5 family.
-
-For a separately validated release target, the bundle generator accepts
-`--supports-aspire-cli` and `--supports-aspire-sdk` overrides for both archives.
-Current Aspire consumers check the skills archive's range as a whole; the manifest
-does not provide per-skill installation-time version filtering.
-
-### Publishing releases
-
-The publish workflow builds and attests both bundles, but uploads only
-`aspire-skills` by default. Manual runs on an existing version tag can select
-`include_skills` (default `true`) and `include_extensions` (default `false`); at
-least one must be selected. Tag pushes use the defaults. The workflow does not
-create Git tags.
+Catalog generation should leave the checked-in `opencode/` output unchanged for
+a clean tree. Releases are source-only:
+[the release workflow](.github/workflows/release.yml) uses trusted `main` tooling
+to prepare and verify a draft release PR, then tags and publishes the exact
+reviewed `main` merge. See the [development guide](docs/development.md) for the
+release flow.
 
 ## Contributing
 
