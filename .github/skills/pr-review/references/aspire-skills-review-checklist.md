@@ -87,21 +87,32 @@ baseline exists so that cross-skill behavior is measured against the same projec
 
 ## 6. Plugin manifest version sync
 
-Four files carry the plugin version. Any user-visible change should bump all four to the
-same value:
+Six canonical JSON files and all six shipped skills carry the release version.
+Check them together whenever release versions change:
 
 | File | Field |
 |------|-------|
+| `package.json` | `version` |
 | `.plugin/plugin.json` | `version` |
 | `.claude-plugin/plugin.json` | `version` |
-| `.claude-plugin/marketplace.json` | `plugins[0].version` |
+| `.claude-plugin/marketplace.json` | `version` of the plugin named `aspire` |
+| `.cursor-plugin/marketplace.json` | `version` of the plugin named `aspire` |
 | `gemini-extension.json` | `version` |
+| `skills/<name>/SKILL.md` | `metadata.version` |
 
-Also check that the per-skill `metadata.version` in each changed `SKILL.md` advances
-when that skill's behavior changes — independently of the plugin-wide version.
+The shipped skills are `aspire`, `aspire-init`, `aspireify`,
+`aspire-orchestration`, `aspire-deployment`, and `aspire-monitoring`. Their versions
+match the plugin release; do not require independent per-skill bumps. Release
+`v0.0.2` uses `0.0.2` throughout. Documentation-only corrections do not require a
+new release version.
 
-**Severity if any manifest is out of sync:** `blocking`. **Severity if all four match but
-the bump itself is missing on a behavior change:** `important`.
+Plugin manifests and runtime skill/extension files under
+`.github/plugins/aspire-skills/` remain relative symlinks to the root sources.
+Review changes against those sources rather than treating the mirror as another
+version authority. Internal author skills under `.github/skills/` are not part of
+the shipped skill set.
+
+**Severity if release versions are out of sync:** `blocking`.
 
 ## 7. CHANGELOG
 
@@ -115,6 +126,9 @@ User-visible changes need a `CHANGELOG.md` entry under the appropriate version h
 
 Pure refactors, doc fixes, and eval-only additions that don't change the shipped surface
 don't need a CHANGELOG entry — but call them out in the PR description.
+
+Published versions use their actual release dates, not `Unreleased`. Preserve
+historical release entries when correcting the current release's status or references.
 
 **Severity:** `important`.
 
