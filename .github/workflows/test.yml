@@ -52,3 +52,97 @@ jobs:
 
       - name: Check OpenCode catalog
         run: npm run catalog:check
+
+  branch-check:
+    name: Branch check
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Validate branch combination
+        shell: bash
+        env:
+          TARGET_BRANCH: ${{ github.event.pull_request.base.ref }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${HEAD_BRANCH:-}" || "${HEAD_BRANCH:-}" == *[[:space:]]* ]]; then
+            echo "::error::A nonempty, valid PR head branch is required."
+            exit 1
+          fi
+          case "${TARGET_BRANCH:-}" in
+            main)
+              if [[ "$HEAD_BRANCH" != release/?* ]]; then
+                echo "::error::PRs to main must come from generated release/* branches."
+                exit 1
+              fi
+              ;;
+            dev)
+              if [[ "$HEAD_BRANCH" == main || "$HEAD_BRANCH" == release/* ]]; then
+                echo "::error::PRs to dev must not come from main or release/*."
+                exit 1
+              fi
+              ;;
+            *)
+              echo "::error::PRs must target main or dev."
+              exit 1
+              ;;
+          esac
+
+  release-validation:
+    name: Release validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout trusted base tooling
+        # PR workflows themselves still require branch protection and trusted review.
+        # actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: tooling
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout exact head, not the synthetic merge
+        # actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: checked
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node
+        # actions/setup-node@v6.4.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "22"
+
+      - name: Fetch release branches
+        shell: bash
+        env:
+          RELEASE_REPO: ${{ github.workspace }}/checked
+        run: |
+          set -euo pipefail
+          if ! git -C "$RELEASE_REPO" fetch --no-tags origin \
+            +refs/heads/main:refs/remotes/origin/main \
+            +refs/heads/dev:refs/remotes/origin/dev; then
+            echo "::error::Cannot fetch origin/main and origin/dev; both branches must exist."
+            exit 1
+          fi
+
+      - name: Check branch release invariants
+        shell: bash
+        env:
+          RELEASE_REPO: ${{ github.workspace }}/checked
+          TARGET_BRANCH: ${{ github.event.pull_request.base.ref || github.ref_name }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref || '' }}
+          HEAD_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+          BASE_COMMIT: ${{ github.event.pull_request.base.sha || '' }}
+          PR_BODY: ${{ github.event.pull_request.body || '' }}
+        run: |
+          set -euo pipefail
+          node "$GITHUB_WORKSPACE/tooling/scripts/release.mjs" check

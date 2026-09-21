@@ -87,25 +87,35 @@ baseline exists so that cross-skill behavior is measured against the same projec
 
 ## 6. Plugin manifest version sync
 
-Four files carry the plugin version. Any user-visible change should bump all four to the
-same value:
+Six canonical JSON files and all shipped skill metadata share a version. Release
+preparation bumps them together only for shipped-content changes; ordinary feature
+PRs keep them synchronized without needing a bump:
 
 | File | Field |
 |------|-------|
+| `package.json` | `version` |
 | `.plugin/plugin.json` | `version` |
 | `.claude-plugin/plugin.json` | `version` |
-| `.claude-plugin/marketplace.json` | `plugins[0].version` |
+| `.claude-plugin/marketplace.json` | `version` of the plugin named `aspire` |
+| `.cursor-plugin/marketplace.json` | `version` of the plugin named `aspire` |
 | `gemini-extension.json` | `version` |
+| `skills/<name>/SKILL.md` | `metadata.version` |
 
-Also check that the per-skill `metadata.version` in each changed `SKILL.md` advances
-when that skill's behavior changes — independently of the plugin-wide version.
+The `.github/plugins/aspire-skills/` mirrors remain symlinks to these manifests.
+For shipped-content changes, preparation versions must advance main's released
+version and must not lower dev's version. A corrected preparation may reuse an
+unpromoted version on dev. Repository-only releases keep main's version.
+Preparation changes only version scalar tokens in selected JSON/skill sources;
+promotion preserves the prepared versions and all other source bytes.
 
-**Severity if any manifest is out of sync:** `blocking`. **Severity if all four match but
-the bump itself is missing on a behavior change:** `important`.
+**Severity if versions are out of sync or preparation omits a required product
+version bump:** `blocking`. Ordinary feature PRs do not need a bump.
 
 ## 7. CHANGELOG
 
-User-visible changes need a `CHANGELOG.md` entry under the appropriate version heading:
+Development PRs target `dev`, which retains `CHANGELOG.md` but excludes root
+`opencode/`. Ordinary PRs leave the changelog unchanged from their dev base.
+Use descriptive commit subjects and PR context for user-visible changes:
 
 - New skill, removed skill, renamed skill.
 - Safety-guardrail change (added, removed, or scope changed).
@@ -113,10 +123,24 @@ User-visible changes need a `CHANGELOG.md` entry under the appropriate version h
 - New deployment target.
 - New eval tag or new fixture.
 
-Pure refactors, doc fixes, and eval-only additions that don't change the shipped surface
-don't need a CHANGELOG entry — but call them out in the PR description.
+`prepare-release/<version>` PRs into dev update aligned versions and the generated
+changelog, preserving main's released history. Require exact validation against
+the selected dev baseline and current main. Maintainers may add commits editing
+the regular root `README.md` on the preparation branch. Other source edits belong
+on dev and require new preparation; versions and changelog remain workflow-owned.
 
-**Severity:** `important`.
+Merge preparation with a merge commit. Promote Release starts automatically for
+that exact reviewed merge without waiting for post-merge CI. It uses trusted main
+tooling and preserves every prepared source byte, including README, versions,
+and changelog, while adding catalogs.
+
+Promotion opens a generated `release/<version>` draft PR into main. Require
+review and passing checks, then merge with a merge commit to preserve ancestry.
+The bot publishes branches and opens PRs; it does not bypass main protections,
+update main directly, force-push, or auto-merge either PR.
+
+**Severity for invalid release provenance or changes outside the stage's
+permitted files:** `blocking`. Unclear release-note source text is `important`.
 
 ## 8. Project-local override pattern
 
@@ -163,7 +187,7 @@ adds a new reference file:
 
 ## 11. MCP
 
-- `.mcp.json` changes need a CHANGELOG note **and** a quick
+- `.mcp.json` changes need a descriptive commit subject **and** a quick
   scan for shell-injection or path-traversal risk in any new shell snippet.
 - New MCP commands must use `--non-interactive` on Aspire CLI calls and must not
   swallow errors.
