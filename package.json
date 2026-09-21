@@ -6,9 +6,6 @@
   "scripts": {
     "test": "node --test tests/*.test.mjs tests/aspireify/*.test.mjs",
     "catalog": "node scripts/build-opencode-catalog.mjs",
-    "catalog:check": "node scripts/build-opencode-catalog.mjs --check",
-    "bundle": "node scripts/build-aspire-bundles.mjs",
-    "bundle:skills": "node scripts/build-aspire-bundles.mjs --bundle skills",
-    "bundle:extensions": "node scripts/build-aspire-bundles.mjs --bundle extensions"
+    "catalog:check": "node scripts/build-opencode-catalog.mjs --check"
   }
 }
