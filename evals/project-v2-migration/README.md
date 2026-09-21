@@ -48,7 +48,11 @@ resolved framework/base-image/user differences. It is not an installation check,
 agent output or image-build proof. The read-only cases require specific approval
 when those values differ and approved discovery when they are unknown. The
 positive edit case explicitly approves its resolved image changes without
-authorizing service/client retargeting or claiming unchanged image parity.
+authorizing service/client retargeting or claiming unchanged image parity. It
+also requires removal of the legacy gateway-only `DockerfileBuildAnnotation`
+image mutation: the Project v2 gateway uses SDK publishing, while the existing
+`WithContainerBuildOptions` retains its image name, tag, and target platform.
+The separate `clientpublish` Dockerfile annotation remains unchanged.
 
 | Case | Contract |
 |---|---|
@@ -57,7 +61,7 @@ authorizing service/client retargeting or claiming unchanged image parity.
 | TypeScript named | The actual legacy named wrapper becomes the flat `launchProfileName` DTO |
 | Publishing ownership | Preserve custom Dockerfile identity and publish-only prebuilt ownership; do not add prebuilt build/push steps |
 | File app | Preserve `PublishAot=true`, runtime environment, and publishing options |
-| EF/Blazor | Retain EF metadata/operation ownership and client configuration; handle the new EF overload's `ASPIREPROJECTS001`; require explicit approval of resolved gateway framework/base/user changes |
+| EF/Blazor | Retain EF metadata/operation ownership and client configuration; handle the new EF overload's `ASPIREPROJECTS001`; require explicit approval of resolved gateway framework/base/user changes; remove only the obsolete gateway Dockerfile-image mutation while preserving SDK container options |
 | Assessment/routing | No implicit edits, upgrades, or missing-capability workarounds; ordinary wiring routes to `aspireify` |
 
 The generated TypeScript third argument is optional, not nullable.

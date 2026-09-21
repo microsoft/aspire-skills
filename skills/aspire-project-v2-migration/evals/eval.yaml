@@ -374,6 +374,10 @@ stimuli:
       and root to UID 1654.
       This approval applies only to the gateway's SDK-published image; do not
       retarget service/client source or change their version directives.
+      Remove only the obsolete publish-mode gateway DockerfileBuildAnnotation
+      mutation, because the Project v2 gateway no longer creates that annotation.
+      Preserve its image name, tag and target platform through the existing
+      gateway.WithContainerBuildOptions configuration.
       Make only the approved edits without restore,
       execution or publishing. Disclose the gateway's Dockerfile-to-SDK publishing
       and approved framework/base/user changes and the EF MSBuild-property caveat,

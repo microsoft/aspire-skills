@@ -55,18 +55,34 @@ function mutateCsharp(root, subset = false) {
     '<ItemGroup><PackageVersion Version = "$(AspireVersion)" Include = "Aspire.Hosting.Dotnet" /></ItemGroup></Project>'));
 }
 
-function mutateBlazor(root) {
-  edit(root, "Program.cs", source => source
-    .replace('var api = builder.AddProject<Projects.Api>("api")',
+function removeLegacyGatewayDockerfileMutation(source) {
+  const marker = "var gatewayBuild = gateway.Resource.Annotations";
+  const markerIndex = source.indexOf(marker);
+  assert.notEqual(markerIndex, -1, "Missing test gateway Dockerfile mutation");
+  const start = source.lastIndexOf("#pragma warning disable ASPIREPIPELINES003", markerIndex);
+  const restore = "#pragma warning restore ASPIREPIPELINES003";
+  const restoreIndex = source.indexOf(restore, markerIndex);
+  assert.notEqual(start, -1, "Missing test gateway Dockerfile suppression");
+  assert.notEqual(restoreIndex, -1, "Missing test gateway Dockerfile restore");
+  const lineEnd = source.indexOf("\n", restoreIndex + restore.length);
+  const end = lineEnd === -1 ? source.length : lineEnd + 1;
+  return source.slice(0, start) + source.slice(end);
+}
+
+function mutateBlazor(root, removeLegacyMutation = true) {
+  edit(root, "Program.cs", source => {
+    const result = source.replace('var api = builder.AddProject<Projects.Api>("api")',
       '#pragma warning disable ASPIREDOTNETPROJECT001\nvar api = builder.AddDotnetProject("api", "Api/Api.csproj")')
-    .replace("api.WithContainerBuildOptions", "#pragma warning restore ASPIREDOTNETPROJECT001\napi.WithContainerBuildOptions")
-    .replace('var gateway = builder.AddBlazorGateway("gateway")',
-      '#pragma warning disable ASPIREDOTNETPROJECT001\nvar gateway = builder.AddDotnetProjectBlazorGateway("gateway")')
-    .replace("gateway.WithContainerBuildOptions", "#pragma warning restore ASPIREDOTNETPROJECT001\ngateway.WithContainerBuildOptions")
-    .replace("var migrations = api.AddEFMigrations",
-      "#pragma warning disable ASPIREPROJECTS001\nvar migrations = api.AddEFMigrations")
-    .replace("migrations.WithContainerBuildOptions",
-      "#pragma warning restore ASPIREPROJECTS001\nmigrations.WithContainerBuildOptions"));
+      .replace("api.WithContainerBuildOptions", "#pragma warning restore ASPIREDOTNETPROJECT001\napi.WithContainerBuildOptions")
+      .replace('var gateway = builder.AddBlazorGateway("gateway")',
+        '#pragma warning disable ASPIREDOTNETPROJECT001\nvar gateway = builder.AddDotnetProjectBlazorGateway("gateway")')
+      .replace("gateway.WithContainerBuildOptions", "#pragma warning restore ASPIREDOTNETPROJECT001\ngateway.WithContainerBuildOptions")
+      .replace("var migrations = api.AddEFMigrations",
+        "#pragma warning disable ASPIREPROJECTS001\nvar migrations = api.AddEFMigrations")
+      .replace("migrations.WithContainerBuildOptions",
+        "#pragma warning restore ASPIREPROJECTS001\nmigrations.WithContainerBuildOptions");
+    return removeLegacyMutation ? removeLegacyGatewayDockerfileMutation(result) : result;
+  });
   edit(root, "AppHost.csproj", source => source.replace("</Project>",
     '<ItemGroup><PackageReference Include="Aspire.Hosting.Dotnet" Version="$(AspireVersion)" /></ItemGroup></Project>'));
 }
@@ -113,6 +129,8 @@ test("gateway image decisions have read-only controls and a separately approved 
   assert.match(approved.prompt, /separately approve the resolved gateway/);
   assert.match(approved.prompt, /root to UID 1654/);
   assert.match(approved.prompt, /do not\s+retarget service\/client source/);
+  assert.match(approved.prompt, /Remove only the obsolete publish-mode gateway DockerfileBuildAnnotation/);
+  assert.match(approved.prompt, /gateway\.WithContainerBuildOptions/);
   const evidence = JSON.parse(readFileSync(join(fixturesRoot, "gateway-publishing-evidence.json"), "utf8"));
   assert.match(evidence.purpose, /not proof of installed packages or completed validation/);
   assert.equal(evidence.before.targetFramework, "net10.0");
@@ -201,6 +219,14 @@ test("TypeScript checks both resources and configuration ownership", t => {
 });
 
 for (const [endingName, lineEnding] of [["LF", "\n"], ["CRLF", "\r\n"]]) {
+  test(`specialized contract requires obsolete gateway Dockerfile cleanup with ${endingName} line endings`, t => {
+    const { before, after } = fixture(t, "blazor-ef", lineEnding);
+    mutateBlazor(after, false);
+    setLineEndings(after, editCases["blazor-ef"].files, lineEnding);
+    assert.throws(() => assertEditedFixture(before, after, "blazor-ef"),
+      /Obsolete gateway Dockerfile image mutation must be removed/);
+  });
+
   for (const [name, mutate, error] of [
     ["missing EF diagnostic", source => source.replace(/^#pragma warning (?:disable|restore) ASPIREPROJECTS001\r?\n/gm, ""), /Missing or excessive ASPIREPROJECTS001/],
     ["unpaired EF diagnostic", source => source.replace("#pragma warning restore ASPIREPROJECTS001", ""), /Missing or excessive ASPIREPROJECTS001/],
@@ -209,7 +235,9 @@ for (const [endingName, lineEnding] of [["LF", "\n"], ["CRLF", "\r\n"]]) {
       .replace(/^#pragma warning restore ASPIREDOTNETPROJECT001\r?\n(?=gateway\.WithContainerBuildOptions)/m, ""),
     /ASPIREDOTNETPROJECT001 does not cover migrated resource gateway/],
     ["removed existing Blazor scope", source => source.replace(/^#pragma warning (?:disable|restore) ASPIREBLAZOR001\r?\n/gm, ""), /fluent behavior/],
-    ["changed publishing identity", source => source.replace('LocalImageName = $"{imagePrefix}-api"', 'LocalImageName = $"{imagePrefix}-wrong"'), /fluent behavior/]
+    ["changed gateway publishing identity", source => source.replace('LocalImageName = $"{imagePrefix}-gateway"', 'LocalImageName = $"{imagePrefix}-wrong"'), /fluent behavior/],
+    ["removed client-publish behavior", source => source.replace("clientPublishBuild.HasEntrypoint = false;", ""), /fluent behavior/],
+    ["removed gateway target-port behavior", source => source.replace("httpEndpoint.TargetPort = 8080;", ""), /fluent behavior/]
   ]) {
     test(`specialized contract rejects ${name} with ${endingName} line endings`, t => {
       const { before, after } = fixture(t, "blazor-ef", lineEnding);

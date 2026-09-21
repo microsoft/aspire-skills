@@ -180,6 +180,11 @@ Use the generated `addDotnetProjectBlazorGateway` equivalent for TypeScript.
 Preserve clients, prefixes, telemetry forwarding, service references, and
 endpoints. Disclose before approval that the legacy gateway's explicit Dockerfile
 publishing changes to the .NET SDK publishing pipeline.
+Remove a block that only mutates the legacy gateway's
+`DockerfileBuildAnnotation`; the Project v2 gateway does not create that
+annotation. Preserve SDK image name, tag, and platform settings through the
+existing `WithContainerBuildOptions`, and leave unrelated Dockerfile annotations
+such as client-publish companions unchanged.
 Also disclose the resolved framework/SDK, runtime/base image/OS and process user,
 plus entrypoint, working-directory and port differences. Obtain specific approval
 for material image changes; an approved API rename or SDK-publishing switch is not

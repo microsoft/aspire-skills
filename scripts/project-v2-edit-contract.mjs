@@ -50,7 +50,7 @@ export const editCases = {
     fixture: "blazor-ef", appHost: "AppHost.csproj", source: "Program.cs",
     files: ["Program.cs", "AppHost.csproj"],
     migrate: { api: "Api/Api.csproj", gateway: null }, profiles: {},
-    removeReferences: [], efDiagnostic: true
+    removeReferences: [], efDiagnostic: true, removeLegacyGatewayDockerfileMutation: true
   }
 };
 
@@ -147,6 +147,29 @@ function normalizedPath(value) {
   return value.replaceAll("\\", "/").replaceAll("//", "/").replace(/^\.\//, "");
 }
 
+function removeLegacyGatewayDockerfileMutation(source) {
+  const marker = "var gatewayBuild = gateway.Resource.Annotations";
+  const markerIndex = source.indexOf(marker);
+  assert.notEqual(markerIndex, -1, "Missing legacy gateway Dockerfile image mutation");
+  assert.equal(source.indexOf(marker, markerIndex + marker.length), -1,
+    "Expected exactly one legacy gateway Dockerfile image mutation");
+
+  const disable = "#pragma warning disable ASPIREPIPELINES003";
+  const restore = "#pragma warning restore ASPIREPIPELINES003";
+  const start = source.lastIndexOf(disable, markerIndex);
+  const restoreIndex = source.indexOf(restore, markerIndex);
+  assert.notEqual(start, -1, "Missing legacy gateway Dockerfile mutation suppression");
+  assert.notEqual(restoreIndex, -1, "Missing legacy gateway Dockerfile mutation restore");
+
+  const lineEnd = source.indexOf("\n", restoreIndex + restore.length);
+  const end = lineEnd === -1 ? source.length : lineEnd + 1;
+  const block = source.slice(start, end);
+  assert.equal(compactCode(block),
+    '#pragmawarningdisableASPIREPIPELINES003vargatewayBuild=gateway.Resource.Annotations.OfType<DockerfileBuildAnnotation>().SingleOrDefault();if(gatewayBuildisnotnull){gatewayBuild.ImageName=$"{imagePrefix}-gateway";gatewayBuild.ImageTag="validation";}#pragmawarningrestoreASPIREPIPELINES003',
+    "Unexpected legacy gateway Dockerfile image mutation");
+  return source.slice(0, start) + source.slice(end);
+}
+
 function removeMigrationPragmas(source, contract) {
   let result = source;
   for (const [diagnostic, minimum, maximum, required] of [
@@ -194,6 +217,12 @@ function assertSource(before, after, contract) {
   let baseline = before;
   let candidate = after;
   const ts = contract.source.endsWith(".mts");
+  if (contract.removeLegacyGatewayDockerfileMutation) {
+    baseline = removeLegacyGatewayDockerfileMutation(baseline);
+    assert.doesNotMatch(compactCode(candidate),
+      /vargatewayBuild=gateway\.Resource\.Annotations\.OfType<DockerfileBuildAnnotation>\(\)\.SingleOrDefault\(\);/,
+      "Obsolete gateway Dockerfile image mutation must be removed");
+  }
   if (contract.appHost === "apphost.cs") {
     const directives = candidate.match(/^#:package Aspire\.Hosting\.Dotnet@[^\r\n]+/gm) ?? [];
     assert.equal(directives.length, 1, "Expected one matching Dotnet package directive");
