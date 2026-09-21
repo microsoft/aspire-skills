@@ -1,6 +1,10 @@
+# ONE-OFF VALIDATION ONLY: never merge this branch into main or dev.
 name: Promote Release
 
 on:
+  push:
+    branches:
+      - ellahathaway-one-off-release-validation
   # Start with the merge's dev push, without waiting for CI, using the workflow on main.
   workflow_run:
     workflows:
@@ -363,6 +367,7 @@ jobs:
           permission-workflows: ${{ steps.permissions.outputs.workflows }}
 
       - name: Fast-forward main
+        if: ${{ false }}
         id: push
         shell: bash
         env:

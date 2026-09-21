@@ -1,6 +1,10 @@
+# ONE-OFF VALIDATION ONLY: never merge this branch into main or dev.
 name: Prepare Release
 
 on:
+  push:
+    branches:
+      - ellahathaway-one-off-release-validation
   workflow_dispatch:
     inputs:
       release_version:
