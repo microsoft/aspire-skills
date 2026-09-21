@@ -2,7 +2,7 @@
 
 All notable changes to the aspire-skills plugin will be documented in this file.
 
-## [0.0.2] - Unreleased
+## [0.0.2] - 2026-09-18
 
 ### Changed
 - Aligned the shipped skill family and bundle compatibility metadata with Aspire 13.5.3.
