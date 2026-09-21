@@ -2,17 +2,12 @@
 name: Promote Release
 
 on:
-  push:
-    branches:
-      - ellahathaway-one-off-release-validation
-  # Start with the merge's dev push, without waiting for CI, using the workflow on main.
-  workflow_run:
-    workflows:
-      - Tests
-    branches:
-      - dev
-    types:
-      - requested
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: Full SHA of an explicitly reviewed preparation merge into dev
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -51,8 +46,7 @@ jobs:
 
   promote:
     name: Build promotion candidate
-    needs: select
-    if: github.repository == 'microsoft/aspire-skills' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_run' && needs.select.outputs.source != ''
+    if: github.repository == 'microsoft/aspire-skills' && github.ref == 'refs/heads/ellahathaway-one-off-release-validation' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
       source: ${{ steps.build.outputs.source }}
@@ -146,7 +140,7 @@ jobs:
         shell: bash
         env:
           RELEASE_REPO: ${{ github.workspace }}/candidate
-          SOURCE_COMMIT: ${{ needs.select.outputs.source }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
         run: |
           set -euo pipefail
           node "$GITHUB_WORKSPACE/tooling/scripts/release.mjs" resolve-promote
@@ -189,7 +183,7 @@ jobs:
   publish:
     name: Publish approved release to main
     needs: promote
-    if: github.repository == 'microsoft/aspire-skills' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_run'
+    if: github.repository == 'microsoft/aspire-skills' && github.ref == 'refs/heads/ellahathaway-one-off-release-validation' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment:
       name: release-main

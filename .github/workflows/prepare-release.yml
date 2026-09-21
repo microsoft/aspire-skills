@@ -2,9 +2,6 @@
 name: Prepare Release
 
 on:
-  push:
-    branches:
-      - ellahathaway-one-off-release-validation
   workflow_dispatch:
     inputs:
       release_version:
@@ -31,7 +28,7 @@ concurrency:
 jobs:
   prepare:
     name: Build preparation candidate
-    if: github.repository == 'microsoft/aspire-skills' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    if: github.repository == 'microsoft/aspire-skills' && github.ref == 'refs/heads/ellahathaway-one-off-release-validation' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
       source: ${{ steps.build.outputs.source }}
@@ -152,7 +149,7 @@ jobs:
   publish:
     name: Open draft preparation PR into dev
     needs: prepare
-    if: github.repository == 'microsoft/aspire-skills' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && !inputs.dry_run
+    if: github.repository == 'microsoft/aspire-skills' && github.ref == 'refs/heads/ellahathaway-one-off-release-validation' && github.event_name == 'workflow_dispatch' && !inputs.dry_run
     runs-on: ubuntu-latest
     steps:
       - name: Check release permissions
@@ -289,7 +286,7 @@ jobs:
           CANDIDATE_REF: refs/heads/prepare-release/candidate
           BRANCH: prepare-release/${{ steps.verify.outputs.version }}
           TARGET_BRANCH: dev
-          PR_TITLE: Prepare v${{ steps.verify.outputs.version }}
+          PR_TITLE: "[ONE-OFF VALIDATION] Prepare v${{ steps.verify.outputs.version }} - NOT A PRODUCTION RELEASE"
           PR_BODY_PATH: ${{ runner.temp }}/release-artifact/release-summary.md
         run: |
           set -euo pipefail
