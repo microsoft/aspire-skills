@@ -12,6 +12,10 @@ on:
       - "extensions/**"
       - "hooks/**"
       - "package.json"
+      - "package-lock.json"
+      - "evals/project-v2-migration/**"
+      - "evals/grade-routing-entry.mjs"
+      - "skills/aspire-project-v2-migration/**"
       - "scripts/**"
       - "tests/**"
   push:
@@ -27,6 +31,10 @@ on:
       - "extensions/**"
       - "hooks/**"
       - "package.json"
+      - "package-lock.json"
+      - "evals/project-v2-migration/**"
+      - "evals/grade-routing-entry.mjs"
+      - "skills/aspire-project-v2-migration/**"
       - "scripts/**"
       - "tests/**"
 
@@ -56,6 +64,9 @@ jobs:
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: "22"
+
+      - name: Install test dependencies
+        run: npm ci --ignore-scripts
 
       - name: Test
         run: npm test

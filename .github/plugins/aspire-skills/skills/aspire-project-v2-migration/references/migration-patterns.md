@@ -1,0 +1,1 @@
+../../../../../../skills/aspire-project-v2-migration/references/migration-patterns.md

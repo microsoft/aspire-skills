@@ -16,8 +16,7 @@ test("published plugin mirrors every non-eval skill file with a relative symlink
     sourceRoot: skillsRoot,
     mirrorRoot: mirrorSkillsRoot,
     indexRoot: ".github/plugins/aspire-skills/skills",
-    kind: "skill",
-    verifyIndexTarget: false
+    kind: "skill"
   });
 });
 
@@ -26,12 +25,11 @@ test("published plugin mirrors every extension file with a relative symlink", ()
     sourceRoot: extensionsRoot,
     mirrorRoot: mirrorExtensionsRoot,
     indexRoot: ".github/plugins/aspire-skills/extensions",
-    kind: "extension",
-    verifyIndexTarget: true
+    kind: "extension"
   });
 });
 
-function assertMirror({ sourceRoot, mirrorRoot, indexRoot, kind, verifyIndexTarget }) {
+function assertMirror({ sourceRoot, mirrorRoot, indexRoot, kind }) {
   const sourceFiles = listNonEvalFiles(sourceRoot);
   const mirrorFiles = listNonEvalFiles(mirrorRoot);
   const indexEntries = readMirrorIndexEntries(indexRoot);
@@ -47,7 +45,7 @@ function assertMirror({ sourceRoot, mirrorRoot, indexRoot, kind, verifyIndexTarg
       ? readlinkSync(mirrorPath)
       : readFileSync(mirrorPath, "utf8");
 
-    const normalizedTarget = actualTarget.replaceAll("\\", "/").trimEnd();
+    const normalizedTarget = normalizeMirrorTarget(actualTarget, stat.isSymbolicLink());
     assert.equal(normalizedTarget, expectedTarget, `${relativePath} must link to its root ${kind} source`);
 
     const indexPath = `${indexRoot}/${relativePath}`;
@@ -57,15 +55,30 @@ function assertMirror({ sourceRoot, mirrorRoot, indexRoot, kind, verifyIndexTarg
       "120000",
       `${relativePath} must be committed as a Git symlink`
     );
-    if (verifyIndexTarget) {
-      assert.equal(
-        readGitBlob(indexEntry.object).replaceAll("\\", "/"),
-        expectedTarget,
-        `${relativePath} Git symlink target must not contain trailing bytes`
-      );
-    }
+    assert.equal(
+      readGitBlob(indexEntry.object),
+      expectedTarget,
+      `${relativePath} Git symlink target must not contain trailing bytes`
+    );
   }
 }
+
+function normalizeMirrorTarget(target, symbolicLink, separator = sep) {
+  return symbolicLink ? target.split(separator).join("/") : target;
+}
+
+test("mirror targets normalize native links but preserve exact placeholder and Git bytes", () => {
+  const target = "../../../../../skills/aspire-project-v2-migration/SKILL.md";
+  const windowsTarget = target.replaceAll("/", "\\");
+  assert.equal(normalizeMirrorTarget(windowsTarget, true, "\\"), target);
+  assert.equal(normalizeMirrorTarget(target, true, "/"), target);
+  assert.equal(normalizeMirrorTarget(target, false), target);
+  assert.notEqual(normalizeMirrorTarget(windowsTarget, false), target);
+  for (const suffix of ["\n", "\r\n", " ", "\0", "/extra"]) {
+    assert.notEqual(normalizeMirrorTarget(target + suffix, false), target);
+    assert.notEqual(normalizeMirrorTarget(windowsTarget + suffix, true, "\\"), target);
+  }
+});
 
 function readMirrorIndexEntries(indexRoot) {
   const result = spawnSync(

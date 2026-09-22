@@ -1,590 +1,560 @@
 name: aspire-router-eval
-description: Evaluates the top-level aspire router skill for correct sub-skill routing. Tests that
-  prompts are directed to aspire-orchestration, aspire-deployment, or aspire-monitoring based on
-  intent.
+description: Read-only Aspire routing assessments with actual skill activation, explicit outcome rubrics, and unchanged-workspace checks. Execution belongs to the owning skill's capability evaluations.
 version: "1.0"
 type: capability
-tags:
-  skill: aspire
+tags: { skill: aspire }
 defaults:
   runs: 3
-  # Per-trial wall-clock budget. Kept generous because runs >= 2 disables
-  # vally's timeout/rate-limit retries, so one slow trial would hard-fail the
-  # whole eval (evalHadExecutionErrors) even when the aggregate score passes.
-  timeout: 600s
+  timeout: 180s
   executor: copilot-sdk
-  model: gpt-5-mini
+  model: gpt-5.6-sol-fast
+  judge_model: gpt-5.6-sol
 scoring:
-  # Routing is a yes/no decision, so every prompt grader here uses
-  # `scoring: binary` (0 or 1) rather than vally's default scale_1_5. Under
-  # scale_1_5 an "adequate" 3/5 answer normalises to 0.5 — below this eval's
-  # 0.7 per-trial gate — so a correctly routed response could still fail the
-  # trial. Binary scoring makes the grader verdict ("did it route correctly?")
-  # match the trial gate. Each stimulus is then scored by the weighted share of
-  # graders that pass and gated on the aggregate (>= threshold); genuine
-  # regressions still drag the aggregate below the bar.
   threshold: 0.7
 environment:
-  # vally 0.8.0 loads no skills unless declared here (paths resolve relative to
-  # this eval file). The router fans out to every sub-skill (see SKILL.md
-  # INVOKES:), so routing stimuli need the full set present to choose among them.
   skills:
     - ../../aspire
     - ../../aspire-init
     - ../../aspireify
+    - ../../aspire-project-v2-migration
     - ../../aspire-orchestration
     - ../../aspire-deployment
     - ../../aspire-monitoring
+grading_environment:
+  files:
+    - { src: ../../../evals/grade-routing-entry.mjs, dest: .grader/grade-routing-entry.mjs }
+
+# These cases judge routing, not successful deployment, live diagnostics or edits.
+# The Copilot SDK eval harness lists skills but does not inject the host runtime's
+# mandatory matching-skill policy. Positive cases therefore carry one neutral
+# activation instruction that never names the expected owner. Explicit router requests
+# require the router and any specialist owner; clear single-domain requests require the
+# owner while allowing the router as an optional entry point.
+# A plausible answer without an accepted skill activation is not enough.
 stimuli:
-  - name: router-init-001
-    prompt: I want better AI agent support for my Aspire project
-    tags:
-      priority: p1
-      area: recommendation
+  - name: router-ordinary-wiring-preserves-136-001
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. If this request explicitly uses the
+      umbrella aspire router for specialist-owned work, invoke both the router
+      and the owner.
+      Use the aspire router skill. This existing C# AppHost centrally selects
+      AspireVersion 13.6.0-dev. Give read-only guidance for ordinary Redis wiring,
+      preserving that release family. Do not edit, restore, start, deploy, run
+      cloud commands, or migrate Project resources.
+    tags: { priority: p1, scenario: version-compatibility, area: version-preservation }
+    constraints: { max_agent_duration: 150s }
     environment:
       files:
-        - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
-          dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
-        - src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs
-          dest: csharp-apphost/MyApp.AppHost/Program.cs
-        - src: ../../../evals/csharp-apphost/aspire.config.json
-          dest: csharp-apphost/aspire.config.json
+        - { src: ../../../evals/project-v2-migration/runnable-csharp, dest: app }
+    rubric:
+      - The assistant keeps ordinary wiring in the aspire/aspireify path rather than initiating Project v2 migration; the router may provide the read-only guidance directly or hand off.
+      - The assistant preserves 13.6.0-dev without pinning 13.5.3, implicitly upgrading/downgrading, or initiating Project v2 migration.
+      - The assistant provides read-only guidance without claiming unperformed validation.
     graders:
+      - type: prompt
+        name: preserves-selected-136-family
+        config: { scoring: binary }
+      - type: skill-invocation
+        name: invokes-router-not-project-v2-migration
+        config: { required: [aspire], disallowed: [aspire-project-v2-migration] }
+      - type: diff-empty
+        name: keeps-read-only-workspace-unchanged
+
+  - name: router-init-001
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. If this request explicitly uses the
+      umbrella aspire router for specialist-owned work, invoke both the router
+      and the owner.
+      Should I use aspire agent init for better AI agent support in this Aspire
+      project? Give read-only advice on what project-local guidance that command
+      generates and covers. This is Aspire-specific project guidance, not Copilot
+      cloud-agent, CI runner, or copilot-setup-steps.yml configuration. Do not
+      generate files, install tools or run setup commands.
+    tags: { priority: p1, area: recommendation }
+    environment:
+      files: &csharp_apphost
+        - { src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj, dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj }
+        - { src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs, dest: csharp-apphost/MyApp.AppHost/Program.cs }
+        - { src: ../../../evals/csharp-apphost/aspire.config.json, dest: csharp-apphost/aspire.config.json }
+    rubric:
+      - The response recommends aspire agent init for project-local Aspire skills, not generic Copilot CI or cloud-agent setup.
+      - The response explains richer C# AppHost editing, TypeScript AppHost and investigation/diagnostics guidance.
+      - Guidance is sufficient; generating files or executing setup is neither required nor permitted.
+    graders:
+      - type: skill-invocation
+        name: invokes-router-for-agent-guidance
+        config: { required: [aspire], disallowed: [customize-cloud-agent] }
       - type: prompt
         name: recommends-agent-init
-        config:
-          scoring: binary
-          prompt: Does the assistant's response recommend running 'aspire agent init' (or an equivalent
-            command to generate project-local Aspire agent skills)? Answer based on the intent, not
-            exact string matching.
-      - type: prompt
-        name: explains-value
-        config:
-          scoring: binary
-          prompt: The assistant's response should recommend running 'aspire agent init' to generate
-            project-local skills with richer, scenario-based guidance. It should mention that this
-            provides deeper coverage for C# AppHost editing, TypeScript AppHosts, and investigation
-            workflows.
-      - type: output-contains
-        config:
-          substring: aspire agent init
+        config: { scoring: binary }
+      - type: diff-empty
+
   - name: router-reject-001
-    prompt: How do I run my .NET console app?
-    tags:
-      priority: p1
-      area: routing
+    prompt: >
+      How do I run this .NET console app? Give read-only guidance; do not build,
+      run, install tools or change files.
+    tags: { priority: p1, area: routing }
     environment:
       files:
-        - src: ../../../evals/non-aspire/MyApp/MyApp.csproj
-          dest: non-aspire/MyApp/MyApp.csproj
-        - src: ../../../evals/non-aspire/MyApp/Program.cs
-          dest: non-aspire/MyApp/Program.cs
+        - { src: ../../../evals/non-aspire/MyApp/MyApp.csproj, dest: non-aspire/MyApp/MyApp.csproj }
+        - { src: ../../../evals/non-aspire/MyApp/Program.cs, dest: non-aspire/MyApp/Program.cs }
+    rubric:
+      - The response recognizes a normal .NET project without Aspire.AppHost.Sdk and recommends dotnet run.
+      - It does not apply Aspire lifecycle requirements or recommend Aspire commands for this project; explaining why Aspire is inapplicable is allowed.
+      - No execution is needed to answer this read-only question.
     graders:
+      - type: skill-invocation
+        name: does-not-route-console-app-to-aspire
+        config: { disallowed: [aspire] }
       - type: prompt
         name: uses-dotnet-not-aspire
-        config:
-          scoring: binary
-          prompt: The assistant's response should recognize this is a standard .NET project (no
-            Aspire.AppHost.Sdk) and suggest 'dotnet run' rather than 'aspire start'. Aspire-specific
-            guardrails should not be applied to a non-Aspire project. Answer based on intent.
-      - type: output-contains
-        config:
-          substring: dotnet run
-        name: allows-dotnet-run
-      - type: output-not-contains
-        config:
-          substring: aspire start
-        name: no-aspire-commands
-      - type: output-not-contains
-        config:
-          substring: aspire run
+        config: { scoring: binary }
+      - type: diff-empty
+
   - name: router-azdiag-001
-    prompt: My Aspire app is deployed to Azure and users are reporting errors. Help me investigate.
-    tags:
-      priority: p0
-      area: routing
-    environment:
-      files:
-        - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
-          dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
-        - src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs
-          dest: csharp-apphost/MyApp.AppHost/Program.cs
-        - src: ../../../evals/csharp-apphost/aspire.config.json
-          dest: csharp-apphost/aspire.config.json
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. If this request explicitly uses the
+      umbrella aspire router for specialist-owned work, invoke both the router
+      and the owner.
+      My Aspire app is deployed to Azure and users report errors. Give read-only
+      guidance on the diagnostic route and the limitations of local Aspire
+      tooling. Do not query Azure, start an AppHost or change files.
+    tags: { priority: p0, area: routing }
+    environment: { files: *csharp_apphost }
+    rubric:
+      - Either the aspire router's deployed-diagnostics handoff or the aspire-monitoring bridge is a valid actual entry; naming a skill without activating one is insufficient.
+      - The response routes deployed-app diagnostics to azure-diagnostics or appropriate Azure platform tools, requesting target details if needed.
+      - It explains that Aspire CLI diagnostics use a local AppHost backchannel, not deployed Azure resources, and does not recommend local commands to query the deployment.
+      - An unavailable external skill may be named as the required handoff, but must not be claimed as invoked. Explaining why local commands are unsuitable is allowed.
+      - This is routing guidance; live queries or a completed incident diagnosis are neither required nor permitted.
     graders:
+      - type: program
+        name: accepts-deployed-diagnostic-entry
+        config:
+          program: node
+          args: [.grader/grade-routing-entry.mjs, aspire, aspire-monitoring]
       - type: prompt
         name: routes-to-azure-diagnostics
-        config:
-          scoring: binary
-          prompt: The assistant's response should recognize this is a deployed app and route to
-            azure-diagnostics or platform-specific tools. It should explain that Aspire CLI cannot
-            connect to deployed apps (local backchannel only). Answer based on intent.
-      - type: output-not-contains
-        config:
-          substring: aspire logs
-        name: no-local-aspire-for-deployed
-      - type: output-not-contains
-        config:
-          substring: aspire describe
+        config: { scoring: binary }
+      - type: diff-empty
+
   - name: router-deploy-001
-    prompt: I'm ready to push my Aspire app to production on Azure
-    tags:
-      priority: p0
-      area: routing
-    environment:
-      files:
-        - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
-          dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
-        - src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs
-          dest: csharp-apphost/MyApp.AppHost/Program.cs
-        - src: ../../../evals/csharp-apphost/aspire.config.json
-          dest: csharp-apphost/aspire.config.json
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. If this request explicitly uses the
+      umbrella aspire router for specialist-owned work, invoke both the router
+      and the owner.
+      I'm ready to deploy my Aspire app to production on Azure. Give read-only
+      guidance on the owning workflow, deployment command and decisions needed
+      before execution. Do not publish, deploy, provision, install or edit.
+    tags: { priority: p0, area: routing }
+    environment: { files: *csharp_apphost }
+    rubric:
+      - The response routes to aspire-deployment and identifies aspire deploy as the deployment workflow.
+      - It requests missing target/scope information or approvals as needed; it does not replace the Aspire workflow with azd or generic Azure provisioning.
+      - Read-only planning is the requested outcome. A deployed application is not required, and no deployment or provisioning is permitted.
     graders:
+      - type: skill-invocation
+        name: invokes-deployment-owner
+        config: { required: [aspire-deployment] }
       - type: prompt
         name: routes-to-deployment
-        config:
-          scoring: binary
-          prompt: "The assistant's response should route this to aspire-deployment concerns: using 'aspire
-            deploy' for production deployment. Answer based on intent."
-      - type: prompt
-        name: uses-aspire-deploy
-        config:
-          scoring: binary
-          prompt: Does the assistant's response recommend using 'aspire deploy' (or an equivalent Aspire CLI
-            deployment command) for production deployment? Answer based on the intent, not exact
-            string matching.
-      - type: output-not-contains
-        config:
-          substring: azd up
-        name: no-azd
-      - type: output-not-contains
-        config:
-          substring: azd deploy
-      - type: output-not-contains
-        config:
-          substring: azd init
-      - type: output-not-contains
-        config:
-          substring: azd provision
-      - type: output-not-contains
-        config:
-          substring: azure-prepare
-        name: no-azure-skills
-      - type: output-not-contains
-        config:
-          substring: azure-deploy
-      - type: output-contains
-        config:
-          substring: aspire deploy
+        config: { scoring: binary }
+      - type: diff-empty
+
   - name: router-mon-001
-    # Question phrasing for the routing check: the prior "show me what's happening" wording led
-    # the executor to actually run the AppHost and probe live, timing out the trial. The grader
-    # only checks that the response routes to aspire-monitoring, so asking how to see what's
-    # happening preserves the routing signal without launching the app.
-    prompt: Something is wrong with my app. How do I see what's happening?
-    tags:
-      priority: p0
-      area: routing
-    environment:
-      files:
-        - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
-          dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
-        - src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs
-          dest: csharp-apphost/MyApp.AppHost/Program.cs
-        - src: ../../../evals/csharp-apphost/aspire.config.json
-          dest: csharp-apphost/aspire.config.json
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. If this request explicitly uses the
+      umbrella aspire router for specialist-owned work, invoke both the router
+      and the owner.
+      Something is wrong with my locally running Aspire app. Give read-only
+      advice on how to see what is happening before changing code. Do not query
+      running resources, start the app or edit files.
+    tags: { priority: p0, area: routing }
+    environment: { files: *csharp_apphost }
+    rubric:
+      - The response routes to aspire-monitoring and recommends aspire describe for resource state, followed by aspire logs or structured OTEL diagnostics.
+      - It prioritizes runtime investigation over dotnet build, dotnet run or speculative edits.
+      - It explains the workflow without claiming to inspect actual resources; execution and a completed diagnosis are not required.
     graders:
+      - type: skill-invocation
+        name: invokes-monitoring-owner
+        config: { required: [aspire-monitoring] }
       - type: prompt
         name: routes-to-monitoring
-        config:
-          scoring: binary
-          prompt: "The assistant's response should route this to aspire-monitoring concerns: suggesting
-            'aspire describe' for state, 'aspire otel logs' or 'aspire logs' for diagnostics. It
-            should suggest investigation before code changes."
-      - type: output-contains
-        config:
-          substring: aspire
+        config: { scoring: binary }
+      - type: diff-empty
+
   - name: router-orch-001
     prompt: >
-      Use the `aspire` router skill before answering. In VS Code,
-      `aspire_apphost_start` is available as a deferred tool. I need to start my
-      Aspire app without a debugger and then wait for the database to be ready.
-      Do not perform either action; state the routing decision, exact lifecycle
-      tool and mode, and readiness command.
-    tags:
-      priority: p0
-      area: routing
-      scenario: lifecycle-tools
-    environment:
-      files:
-        - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
-          dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
-        - src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs
-          dest: csharp-apphost/MyApp.AppHost/Program.cs
-        - src: ../../../evals/csharp-apphost/aspire.config.json
-          dest: csharp-apphost/aspire.config.json
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. If this request explicitly uses the
+      umbrella aspire router for specialist-owned work, invoke both the router
+      and the owner.
+      Use the aspire router skill before answering. In VS Code, this workspace
+      is not a git worktree, and
+      aspire_apphost_start is available as a deferred tool. I need to start my
+      Aspire app without a debugger and then wait for the database. Give read-only,
+      editor-first guidance: state the route and recommend aspire_apphost_start
+      with mode run, then give the readiness command. Do not present direct CLI
+      startup as the primary mechanism; mention it only as a documented fallback.
+      Do not perform either action or edit files.
+    tags: { priority: p0, area: routing, scenario: lifecycle-tools }
+    environment: { files: *csharp_apphost }
+    rubric:
+      - The response routes lifecycle work to aspire-orchestration.
+      - For the stated VS Code context, it recommends aspire_apphost_start in run mode, followed by aspire wait for database readiness rather than manual HTTP polling.
+      - Any aspire start guidance is explicitly limited to a documented fallback such as an unavailable editor tool or an isolated git worktree. Actual lifecycle-tool invocation is neither required nor permitted in this read-only assessment.
     graders:
       - type: skill-invocation
         name: required-skills-router-orch-001
-        config:
-          required: [aspire, aspire-orchestration]
+        config: { required: [aspire, aspire-orchestration] }
       - type: prompt
         name: routes-correctly
-        config:
-          scoring: binary
-          prompt: "The assistant's response should route this to aspire-orchestration concerns: loading
-            and using `aspire_apphost_start` in run mode before using `aspire wait` for resource
-            readiness. This is a routing-only prompt, so it should not be graded on actually invoking
-            an unavailable lifecycle tool. Answer based on action ordering and intent."
-      - type: prompt
-        name: correct-commands
-        config:
-          scoring: binary
-          prompt: Does the assistant's response recommend using `aspire_apphost_start` in run mode to launch
-            the application and `aspire wait` for resource readiness? Answer based on intent.
-      - type: output-contains
-        config:
-          substring: aspire_apphost_start
-      - type: output-contains
-        config:
-          substring: aspire wait
+        config: { scoring: binary }
+      - type: diff-empty
+
   - name: router-package-manager-001
     prompt: >
-      Use the `aspire` router skill before answering. A generated TypeScript AppHost
-      cannot restore dependencies, and its repository uses pnpm. Do not run commands;
-      state which sub-skill owns the package-manager diagnosis and which lifecycle
-      command should start the AppHost afterward.
-    tags:
-      priority: p1
-      area:
-        - routing
-        - package-manager-routing
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. If this request explicitly uses the
+      umbrella aspire router for specialist-owned work, invoke both the router
+      and the owner.
+      Use the aspire router skill before answering. A generated TypeScript
+      AppHost cannot restore dependencies, and its repository uses pnpm. Give
+      read-only guidance on the skill that owns this package-manager/toolchain
+      diagnosis and the lifecycle command to start it afterward. This is not a
+      runtime monitoring request. Do not restore, install, launch or edit.
+    tags: { priority: p1, area: [routing, package-manager-routing] }
     rubric:
-      - The assistant routes TypeScript AppHost package-manager diagnosis to aspireify and keeps normal AppHost execution on aspire start.
+      - The response assigns TypeScript AppHost package-manager diagnosis to aspireify and keeps normal AppHost execution on aspire start.
+      - It preserves the repository's pnpm ownership and does not substitute a raw package-manager launcher for the Aspire lifecycle.
+      - Explaining the handoff is sufficient; an actual restore or launch is not required or permitted.
     graders:
       - type: skill-invocation
         name: required-skills-router-package-manager-001
-        config:
-          required: [aspire, aspireify]
+        config: { required: [aspire] }
       - type: prompt
         name: routes-package-manager-repair
-        config:
-          scoring: binary
+        config: { scoring: binary }
+      - type: diff-empty
+
   - name: router-legacy-ts-migrate-135-001
     prompt: >
-      My old TypeScript AppHost still uses apphost.ts. How should I migrate it?
-    tags:
-      priority: p1
-      area:
-        - routing
-        - aspire-13-5
-        - typescript-migration
-    constraints:
-      max_agent_duration: 5m
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. If this request explicitly uses the
+      umbrella aspire router for specialist-owned work, invoke both the router
+      and the owner.
+      This is a clear single-domain command: invoke the skill that owns the
+      command, and do not invoke a workflow mentioned only as a later conditional
+      handoff. Use only the owning workflow's Aspire 13.5 legacy-entry-point
+      migration guidance; do not substitute unrelated release breaking changes.
+      My old TypeScript AppHost still uses apphost.ts. This is the legacy
+      AppHost entry-point migration, not a ProjectResource API migration. The
+      command under review is `aspire update --migrate --yes --non-interactive`.
+      The operation performs package, Aspire config, tsconfig, generated-import,
+      and entry-point changes: it updates the project's Aspire packages first,
+      then migrates apphost.ts to apphost.mts together with the config, tsconfig,
+      and generated imports. It requires approval for both the package update and migration.
+      Give read-only guidance that identifies the owner, explains that exact scope
+      and approval, and names the workflow for any source authoring still needed
+      afterward. Do not migrate, update packages, run commands or edit files.
+    tags: { priority: p1, area: [routing, aspire-13-5, typescript-migration] }
+    constraints: { max_agent_duration: 150s }
     rubric:
-      - The assistant routes the CLI-driven package and apphost.ts migration to aspire-orchestration, not aspireify.
-      - The assistant explains that package, config, tsconfig, import, and entry-point changes require approval before noninteractive migration.
+      - The response assigns aspire update --migrate to aspire-orchestration, not ordinary aspireify authoring or Project v2 resource migration.
+      - It explains package, config, tsconfig, generated-import and entry-point changes and requires approval before --yes --non-interactive execution.
+      - The answer names aspireify as a later handoff only if separate source authoring remains. No actual migration is needed or permitted for this assessment.
     graders:
+      - type: skill-invocation
+        name: invokes-orchestration-for-legacy-ts-migration
+        config:
+          required: [aspire-orchestration]
+          disallowed: [aspire-project-v2-migration]
       - type: prompt
         name: routes-migration-to-orchestration
-        config:
-          scoring: binary
-          prompt: >
-            Does the assistant's response assign `aspire update --migrate` to
-            aspire-orchestration and reserve aspireify for source authoring after the
-            migration? Answer based on intent.
-      - type: prompt
-        name: explains-migration-scope
-        config:
-          scoring: binary
-          prompt: >
-            Does the assistant's response explain that migration updates Aspire packages,
-            config, tsconfig, generated imports, and the entry point, and require approval
-            before `--yes --non-interactive` execution? Answer based on intent.
-      - type: skill-invocation
-        name: invokes-orchestration
-        config:
-          required:
-            - aspire-orchestration
-            - aspire
-          disallowed:
-            - aspireify
-  # Positive-routing stimuli assert both activation and outcome. Because this
-  # spec tests the top-level router, model knowledge that merely produces an
-  # Aspire-flavored answer is insufficient: the skill-invocation grader requires
-  # an actual `aspire` activation, while the prompt grader checks the workflow.
-  # The complementary should_not_trigger stimuli use skill-invocation
-  # `disallowed` to guard against over-triggering.
+        config: { scoring: binary }
+      - type: diff-empty
+
   - name: should_trigger_01
-    description: "Reason: Direct aspire CLI invocation"
-    # Phrased as a "how do I" question: an imperative "Run aspire start" makes the
-    # agent execute `aspire start` — a foreground daemon that never returns — so the
-    # eval executor times out waiting for session.idle (an errored trial hard-fails
-    # the eval). The grader accepts explaining the command, so the engagement intent
-    # is unchanged.
-    prompt: How do I run my AppHost with aspire start?
-    tags:
-      priority: p1
-      area: routing
+    description: Direct Aspire CLI invocation
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      How should an AI agent use aspire start for a selected AppHost in a git
+      worktree? Give read-only guidance covering exact AppHost selection and
+      unattended execution; do not start anything, install tools or edit files.
+    tags: { priority: p1, area: routing }
+    rubric:
+      - The response recognizes an Aspire lifecycle task and explains aspire start through aspire-orchestration rather than plain dotnet run.
+      - For the stated AI-agent/git-worktree scenario, guidance uses an exact filesystem AppHost with --apphost, --non-interactive, and --isolated; missing local tools do not prevent giving guidance.
+      - No actual start, install or edit is needed or permitted.
     graders:
-      - type: skill-invocation
+      - type: program
         name: required-skills-should-trigger-01
         config:
-          required: [aspire]
+          program: node
+          args: [.grader/grade-routing-entry.mjs, aspire, aspire-orchestration]
       - type: prompt
         name: engages-aspire-start
-        config:
-          scoring: binary
-          prompt: The user asked to run 'aspire start' on their AppHost. A correct response recognizes
-            this as an Aspire task and engages the aspire start workflow — running or explaining the
-            `aspire start` command against the AppHost (for example detecting the AppHost and using a
-            non-interactive flag). It should not treat this as a generic 'dotnet run' task or refuse.
-            Answer based on intent.
+        config: { scoring: binary }
+      - type: diff-empty
+
   - name: should_trigger_02
-    description: "Reason: Aspire deployment lifecycle"
-    prompt: Deploy my Aspire distributed app
-    tags:
-      priority: p1
-      area: routing
+    description: Aspire deployment lifecycle
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      How should I deploy my Aspire distributed app? Give read-only guidance on
+      the workflow and necessary target decisions; do not publish, deploy,
+      provision, install tools or edit files.
+    tags: { priority: p1, area: routing }
+    rubric:
+      - The response engages aspire-deployment and explains aspire deploy, rather than replacing it with raw azd or a non-Aspire workflow.
+      - Missing AppHost or target details may require clarification before execution, but the response still identifies the deployment route.
+      - Actual deployment is not required and must not be attempted.
     graders:
       - type: skill-invocation
         name: required-skills-should-trigger-02
-        config:
-          required: [aspire]
+        config: { required: [aspire-deployment] }
       - type: prompt
         name: engages-aspire-deploy
-        config:
-          scoring: binary
-          prompt: The user asked to deploy their Aspire distributed app. A correct response engages the
-            Aspire deployment workflow — explaining or running `aspire deploy` (and related publish
-            steps) rather than reaching for raw azd or treating it as a non-Aspire deployment. Answer
-            based on intent.
+        config: { scoring: binary }
+      - type: diff-empty
+
   - name: should_trigger_03
-    description: "Reason: Aspire monitoring"
-    prompt: Check the aspire logs from my AppHost resources
-    tags:
-      priority: p1
-      area: routing
+    description: Aspire monitoring
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      How should I check the aspire logs from my AppHost resources? Give
+      read-only advice. You may name the commands involved, but do not execute
+      them, inspect running resources, start anything, install tools or edit files.
+    tags: { priority: p1, area: routing }
+    rubric:
+      - The response engages aspire-monitoring and explains Aspire logs/resource-state or structured OTEL diagnostics, not generic logging alone.
+      - Missing local CLI or running resources does not make a routing explanation incomplete; do not require actual log retrieval.
+      - Naming diagnostic commands is expected and is not execution; no live inspection, installation, process start or edit is permitted.
     graders:
       - type: skill-invocation
         name: required-skills-should-trigger-03
-        config:
-          required: [aspire]
+        config: { required: [aspire-monitoring] }
       - type: prompt
         name: engages-aspire-diagnostics
-        config:
-          scoring: binary
-          prompt: The user asked to check the aspire logs for their AppHost resources. A correct response
-            engages Aspire diagnostics — using `aspire logs`, `aspire describe`, or OTEL/structured logs
-            to inspect resource state and output — rather than treating it as a generic logging task.
-            Answer based on intent.
+        config: { scoring: binary }
+      - type: diff-empty
+
   - name: should_trigger_04
-    description: "Reason: AppHost detection via SDK reference"
-    prompt: I have an Aspire.AppHost.Sdk project — how do I run it?
-    tags:
-      priority: p1
-      area: routing
+    description: AppHost detection via SDK reference
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      I have an Aspire.AppHost.Sdk project. How do I run it? Give read-only
+      guidance; do not run, install or edit anything.
+    tags: { priority: p1, area: routing }
+    rubric:
+      - The response recognizes Aspire.AppHost.Sdk as an AppHost and routes lifecycle guidance to aspire-orchestration.
+      - It recommends the Aspire lifecycle, such as aspire start or the appropriate editor tool, not a generic dotnet run fallback.
+      - Guidance is sufficient; actual execution is neither required nor permitted.
     graders:
       - type: skill-invocation
         name: required-skills-should-trigger-04
-        config:
-          required: [aspire]
+        config: { required: [aspire-orchestration] }
       - type: prompt
         name: engages-aspire-run
-        config:
-          scoring: binary
-          prompt: The user has an Aspire.AppHost.Sdk project and asks how to run it. A correct response
-            recognizes this as an Aspire AppHost and explains running it with the aspire CLI (`aspire run`
-            or `aspire start`) rather than recommending a plain `dotnet run`. Answer based on intent.
+        config: { scoring: binary }
+      - type: diff-empty
+
   - name: should_trigger_05
-    description: "Reason: Direct aspire CLI reference"
-    prompt: How do I use the aspire CLI?
-    tags:
-      priority: p1
-      area: routing
+    description: Aspire CLI overview
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      How do I use the aspire CLI? Give a read-only overview; do not run commands,
+      install tools or change files.
+    tags: { priority: p1, area: routing }
+    rubric:
+      - The response identifies Aspire and provides a coherent CLI overview using relevant commands such as aspire start, aspire new/init, aspire add, aspire describe or aspire deploy.
+      - This broad overview may be answered by the router; it must not install tools, scaffold a project or execute the suggested commands.
     graders:
       - type: skill-invocation
         name: required-skills-should-trigger-05
-        config:
-          required: [aspire]
+        config: { required: [aspire] }
       - type: prompt
         name: provides-aspire-cli-guidance
-        config:
-          scoring: binary
-          prompt: The user asked how to use the aspire CLI. A correct response provides Aspire CLI guidance
-            (commands such as `aspire start`, `aspire run`, `aspire add`, or `aspire deploy`) rather than
-            treating the request as unrelated to Aspire. Answer based on intent.
+        config: { scoring: binary }
+      - type: diff-empty
+
   - name: should_trigger_06
-    description: "Reason: Cloud-native integration is the Aspire workflow"
-    prompt: Add Redis to my cloud-native Aspire app
-    tags:
-      priority: p1
-      area: routing
+    description: Aspire integration wiring
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      Which Aspire workflow owns adding Redis to my cloud-native app, and at a
+      high level which AppHost resource references the Redis dependency? Give
+      read-only guidance; do not edit the AppHost, install packages, restore,
+      start or validate it.
+    tags: { priority: p1, area: routing }
+    rubric:
+      - The response routes ordinary integration wiring to aspireify and explains that the consuming application resource references the AppHost Redis resource, not the reverse.
+      - It does not substitute only a raw Redis client or require Project v2 migration. Missing language/path details may be requested before authoring.
+      - Brief API names or wiring examples are allowed, but no edits or commands are executed; completed source changes and a running Redis instance are not required or permitted.
     graders:
       - type: skill-invocation
         name: required-skills-should-trigger-06
-        config:
-          required: [aspire]
+        config: { required: [aspireify] }
       - type: prompt
         name: engages-aspire-integration-wiring
-        config:
-          scoring: binary
-          prompt: The user asked to add Redis to their cloud-native Aspire app. A correct response engages
-            the Aspire integration-wiring workflow — adding a Redis resource to the AppHost model (for
-            example AddRedis and referencing it from a project) rather than hand-rolling a raw Redis client
-            with no AppHost wiring. Answer based on intent.
+        config: { scoring: binary }
+      - type: diff-empty
+
   - name: should_trigger_07
-    description: "Reason: TypeScript AppHost detection"
-    prompt: My apphost.mts file needs updating
-    tags:
-      priority: p1
-      area: routing
+    description: TypeScript AppHost detection
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      My apphost.mts file needs updating. Give read-only guidance on the owning
+      workflow and what information is needed before edits; do not update,
+      restore, install or run it.
+    tags: { priority: p1, area: routing }
+    rubric:
+      - The response recognizes a current TypeScript Aspire AppHost and routes ordinary source authoring to aspireify.
+      - Asking for its path, contents or desired change is appropriate when missing; the filename alone does not request Project v2 migration.
+      - No actual update is required or permitted.
     graders:
       - type: skill-invocation
         name: required-skills-should-trigger-07
-        config:
-          required: [aspire]
+        config: { required: [aspireify] }
       - type: prompt
         name: engages-typescript-apphost
-        config:
-          scoring: binary
-          prompt: The user said their apphost.mts file needs updating. A correct response recognizes apphost.mts
-            as a current TypeScript Aspire AppHost and engages with editing it — opening or locating the file, or
-            asking for its path/contents when it is not present — rather than treating apphost.mts as a
-            generic TypeScript file unrelated to Aspire. Answer based on intent.
+        config: { scoring: binary }
+      - type: diff-empty
+
   - name: should_trigger_08
-    description: "Reason: Direct aspire CLI command"
-    # Question phrasing: an imperative makes the executor install then run `aspire
-    # doctor`, blocking the trial to timeout; the grader accepts explaining, so
-    # routing intent is unchanged.
-    prompt: How do I run aspire doctor to check my setup?
-    tags:
-      priority: p1
-      area: routing
+    description: Aspire environment diagnostics
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      How do I run aspire doctor to check my setup? Give read-only guidance;
+      do not run diagnostics, install tools or change files.
+    tags: { priority: p1, area: routing }
+    rubric:
+      - The response engages aspire-orchestration and explains aspire doctor as Aspire environment/toolchain diagnostics.
+      - It does not treat this as unrelated to Aspire or require executing diagnostics to answer; no diagnostic run or installation is permitted.
     graders:
       - type: skill-invocation
         name: required-skills-should-trigger-08
-        config:
-          required: [aspire]
+        config: { required: [aspire-orchestration] }
       - type: prompt
         name: engages-aspire-doctor
-        config:
-          scoring: binary
-          prompt: The user asked to run 'aspire doctor' to check their setup. A correct response engages that
-            Aspire workflow — running or explaining `aspire doctor` to diagnose the environment — rather
-            than refusing or treating it as unrelated to Aspire. Answer based on intent.
+        config: { scoring: binary }
+      - type: diff-empty
+
   - name: should_trigger_09
-    description: "Reason: aspire init is part of the Aspire workflow"
-    # Question phrasing: an imperative makes the executor run interactive `aspire
-    # init`, which blocks and times out the trial; the grader accepts explaining, so
-    # routing intent is unchanged.
-    prompt: How do I run aspire init to add Aspire to this repo?
-    tags:
-      priority: p1
-      area: routing
+    description: Adding Aspire to a repository
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      In an existing repo with services but no AppHost, how should an AI agent
+      use aspire init? Give read-only guidance on the command, what it creates,
+      and which workflow handles resource wiring afterward. Do not scaffold,
+      install tools or edit files.
+    tags: { priority: p1, area: routing }
+    rubric:
+      - The response routes first-run setup to aspire-init and explains aspire init for adding the skeleton to an existing repository.
+      - The answer names aspireify as the owner of subsequent resource wiring, separating that later handoff from creating the AppHost skeleton.
+      - Actual scaffolding is not required or permitted.
     graders:
       - type: skill-invocation
         name: required-skills-should-trigger-09
-        config:
-          required: [aspire]
+        config: { required: [aspire-init] }
       - type: prompt
         name: engages-aspire-init
-        config:
-          scoring: binary
-          prompt: The user asked to run 'aspire init' to add Aspire to the repo. A correct response engages
-            that Aspire workflow — running or explaining `aspire init` to scaffold Aspire into the
-            repository — rather than refusing or treating it as unrelated to Aspire. Answer based on intent.
+        config: { scoring: binary }
+      - type: diff-empty
+
   - name: should_trigger_10
-    description: "Reason: aspire destroy is part of the Aspire workflow"
-    # Phrased as a "how do I" question: an imperative "Run aspire destroy" makes the
-    # agent execute an interactive command that blocks on a confirmation prompt and
-    # times out (an errored trial hard-fails the eval). The grader accepts explaining
-    # the command, so the engagement intent is unchanged.
-    prompt: How do I run aspire destroy to tear down my deployment?
-    tags:
-      priority: p1
-      area: routing
+    description: Aspire deployment teardown
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      How do I run aspire destroy to tear down my deployment? Give read-only
+      guidance on the workflow and confirmation boundary; do not destroy
+      resources, run deployment commands or change files.
+    tags: { priority: p1, area: routing }
+    rubric:
+      - The response routes teardown to aspire-deployment and explains aspire destroy as the Aspire deployment teardown workflow.
+      - It requires confirmation of the destructive scope before execution and does not substitute local AppHost stop or an unrelated container teardown.
+      - No resources may be destroyed in this routing assessment.
     graders:
       - type: skill-invocation
         name: required-skills-should-trigger-10
-        config:
-          required: [aspire]
+        config: { required: [aspire-deployment] }
       - type: prompt
         name: engages-aspire-destroy
-        config:
-          scoring: binary
-          prompt: The user asked to run 'aspire destroy' to tear down their deployment. A correct response
-            engages that Aspire workflow — running or explaining `aspire destroy` to tear down the deployed
-            resources — rather than refusing or treating it as unrelated to Aspire. Answer based on intent.
+        config: { scoring: binary }
+      - type: diff-empty
+
   - name: should_not_trigger_01
-    description: "Reason: Non-Aspire project"
-    prompt: Build my React frontend
-    tags:
-      priority: p1
-      area: routing
+    description: Non-Aspire project
+    prompt: Give read-only guidance for building my React frontend. Do not run commands or edit files.
+    tags: { priority: p1, area: routing }
     graders:
       - type: skill-invocation
         name: does-not-invoke-aspire
-        config:
-          disallowed:
-            - aspire
+        config: { disallowed: [aspire] }
+      - type: diff-empty
+
   - name: should_not_trigger_02
-    description: "Reason: Azure infra without Aspire"
-    prompt: Create an Azure VM
-    tags:
-      priority: p1
-      area: routing
+    description: Azure infrastructure without Aspire
+    prompt: Explain how to create an Azure VM. Give read-only guidance; do not provision resources or change files.
+    tags: { priority: p1, area: routing }
     graders:
       - type: skill-invocation
         name: does-not-invoke-aspire-2
-        config:
-          disallowed:
-            - aspire
+        config: { disallowed: [aspire] }
+      - type: diff-empty
+
   - name: should_not_trigger_03
-    description: "Reason: Unrelated technology"
-    prompt: Write Python unit tests
-    tags:
-      priority: p1
-      area: routing
+    description: Unrelated technology
+    prompt: Give read-only advice for writing Python unit tests. Do not create files, install packages or run tests.
+    tags: { priority: p1, area: routing }
     graders:
       - type: skill-invocation
         name: does-not-invoke-aspire-3
-        config:
-          disallowed:
-            - aspire
+        config: { disallowed: [aspire] }
+      - type: diff-empty
+
   - name: should_not_trigger_04
-    description: "Reason: K8s without Aspire context"
-    prompt: Set up a Kubernetes cluster from scratch
-    tags:
-      priority: p1
-      area: routing
+    description: Kubernetes without Aspire context
+    prompt: Explain how to set up a Kubernetes cluster from scratch. Give read-only guidance; do not provision or change files.
+    tags: { priority: p1, area: routing }
     graders:
       - type: skill-invocation
         name: does-not-invoke-aspire-4
-        config:
-          disallowed:
-            - aspire
+        config: { disallowed: [aspire] }
+      - type: diff-empty
+
   - name: should_not_trigger_05
-    description: "Reason: Completely unrelated"
-    prompt: What's the weather like?
-    tags:
-      priority: p1
-      area: routing
+    description: Unrelated question
+    prompt: What's the weather like? Answer read-only; do not install anything or change files.
+    tags: { priority: p1, area: routing }
     graders:
       - type: skill-invocation
         name: does-not-invoke-aspire-5
-        config:
-          disallowed:
-            - aspire
+        config: { disallowed: [aspire] }
+      - type: diff-empty
+
   - name: should_not_trigger_06
-    description: "Reason: Docker without Aspire context"
-    prompt: Help me with my Docker Compose file
-    tags:
-      priority: p1
-      area: routing
+    description: Docker without Aspire context
+    prompt: Give read-only guidance for my Docker Compose file. Do not start containers, install tools or edit files.
+    tags: { priority: p1, area: routing }
     graders:
       - type: skill-invocation
         name: does-not-invoke-aspire-6
-        config:
-          disallowed:
-            - aspire
+        config: { disallowed: [aspire] }
+      - type: diff-empty

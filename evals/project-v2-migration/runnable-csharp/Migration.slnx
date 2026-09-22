@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Migration.AppHost/Migration.AppHost.csproj" />
+  <Project Path="Migration.Api/Migration.Api.csproj" />
+  <Project Path="Migration.Worker/Migration.Worker.csproj" />
+  <Project Path="Migration.Shared/Migration.Shared.csproj" />
+</Solution>

@@ -56,6 +56,11 @@ jobs:
             --suite nightly \
             --output-dir ./results
 
+      - name: Check evaluation infrastructure
+        if: ${{ !cancelled() && (steps.evals.outcome == 'success' || steps.evals.outcome == 'failure') }}
+        run: |
+          node scripts/check-eval-results.mjs ./results .
+
       - name: Redact evaluation artifacts
         id: redact
         if: ${{ !cancelled() && (steps.evals.outcome == 'success' || steps.evals.outcome == 'failure') }}

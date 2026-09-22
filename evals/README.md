@@ -7,8 +7,8 @@ This plugin uses [vally](https://www.npmjs.com/package/@microsoft/vally-cli) to 
 ## Install vally
 
 ```bash
-# Requires Node.js 22+
-npm install -g @microsoft/vally-cli
+# Requires Node.js 22.12+
+npm install -g @microsoft/vally-cli@0.16.0
 
 # Verify
 vally --version
@@ -35,7 +35,8 @@ Shared fixtures live at the **repo-root** `evals/` directory and are referenced 
 evals/
 ├── csharp-apphost/      # Wired C# AppHost (Aspire.AppHost.Sdk + Program.cs)
 ├── ts-apphost/          # TypeScript AppHost (apphost.mts + .aspire/modules/)
-└── non-aspire/          # Non-Aspire .NET project (for "should not trigger" stimuli)
+├── non-aspire/          # Non-Aspire .NET project (for "should not trigger" stimuli)
+└── project-v2-migration/ # Legacy inputs, captured-edit contracts, and qualification guidance
 ```
 
 `src` is resolved relative to the eval spec file (so the canonical reference from `skills/<skill>/evals/eval.yaml` is `../../../evals/<fixture-path>`). `dest` is the workspace-relative path the executor sees.
@@ -56,9 +57,53 @@ Eval-level `environment.skills` is **union-merged** into every stimulus, so you 
 **Hybrid loading convention used here:**
 
 - **Capability specs** load the skill under test **plus its transitive in-repo dependencies** (whatever its `SKILL.md` `INVOKES:`). E.g. `aspireify` loads `aspireify` + `aspire-orchestration` because it validates wiring by running `aspire start`.
-- **Routing stimuli** (the `aspire` router spec, and `area: routing` stimuli) load the **full set** of six skills so routing decisions are made against the real siblings.
+- **Migration routing stimuli** load all **seven skills** so the new migration workflow competes with real siblings. Legacy specs retain their existing candidate sets; they have not all been expanded to seven.
 
 **Activation assertions:** use a `skill-invocation` grader with `config.required` / `config.disallowed` to assert which skills the agent actually invoked. Vally 0.16.0 no longer accepts `constraints.expect_skills` / `constraints.reject_skills`.
+
+### Router entry and read-only assessments
+
+The router suite requires `aspire` for explicit router requests, broad CLI
+overviews and project-local agent guidance. Clear single-domain requests instead
+require the actual owning specialist; entering through `aspire` first is optional.
+Naming the right skill without loading it is not sufficient. Deployed diagnostics
+may enter through either the router's Azure handoff or the monitoring bridge;
+`grade-routing-entry.mjs` checks Vally's normalized `skill_activation` events for
+that alternative, not words in the response.
+
+The Copilot SDK eval harness exposes the available skills but does not inject the
+host runtime's mandatory "invoke a matching skill before acting" policy. Positive
+routing stimuli therefore start with the same neutral instruction to invoke the
+matching available Aspire skill or skills. The instruction never names the expected
+owner, so the evaluation still measures owner selection and router handoff rather
+than parroting a requested skill name. Negative cases omit it.
+
+The router spec deliberately uses `gpt-5.6-sol-fast` instead of the repository's
+usual `gpt-5-mini` executor so single-trial PR gates can enforce owner activation
+without naming the owner in prompts. This increases router-suite cost, but avoids
+weakening policy checks to accommodate small-model routing variance.
+
+These assessments are read-only: explicit rubrics judge the route and guidance,
+not successful live deployment or log retrieval, and `diff-empty` checks the
+captured workspace. Report individual activation, outcome and read-only results
+alongside the aggregate; a passing average does not mean every case passed.
+
+### Gated result integrity
+
+PR and nightly workflows run
+`node scripts/check-eval-results.mjs <results> <expected-run>...` after attempted
+evaluations, including failures, but not after cancellation or intentional skips.
+Scoped PR runs pass every changed skill output root; single-process full/nightly
+suites pass `.`. Every expected run must produce exactly one `results.jsonl`, and
+the checker reconciles each summary's stimulus count plus every stimulus's complete
+trial-index range. Execution/grading errors and missing, malformed, incomplete or
+ungraded results fail the job even if Vally reported a passing aggregate.
+Legitimate negative grading verdicts remain subject to the existing `--require-pass`
+threshold; the checker does not replace or lower that threshold.
+
+The checker requires no token. Redaction still runs after a failed check, and
+artifact upload remains conditional on successful redaction. The comparative
+experiment below remains informational rather than adopting this gating policy.
 
 ### Comparative baselines (`vally experiment`)
 
@@ -88,7 +133,7 @@ The `with-skills` − `no-skills` pass-rate delta is the measured lift. The expe
 
 | Goal | Command |
 |------|---------|
-| Reproduce the PR gate for one changed skill | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --tag priority=p0,p1` |
+| Reproduce the PR gate for one changed skill | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --tag priority=p0,p1 --runs 1 --max-retries 2` |
 | Run p0 + p1 across all skills | `vally eval --suite ci-gate` |
 | Run full nightly suite | `vally eval --suite nightly` |
 | Run one skill | `vally eval --eval-spec skills/aspire-deployment/evals/eval.yaml` |
@@ -101,7 +146,8 @@ The `with-skills` − `no-skills` pass-rate delta is the measured lift. The expe
 | Persist runs to a SQLite store | `vally ingest ./results --store ./vally.sqlite` |
 | Lint all skills | `vally lint skills` |
 | Validate one eval spec | `vally lint --eval-spec skills/<skill>/evals/eval.yaml` |
-| Plan a run without grading | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --skip-grade` |
+| Execute agents without grading (not a dry run) | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --skip-grade` |
+| Validate actual Project v2 source edits | See the [migration fixture guide](./project-v2-migration/README.md#source-and-approval-gates) |
 
 ## Key flags
 
@@ -109,15 +155,15 @@ The `with-skills` − `no-skills` pass-rate delta is the measured lift. The expe
 |------|---------|
 | `-e, --eval-spec <path>` | Eval spec to run. Repeatable. |
 | `--skill-dir <dir>` | **(vally 0.8.0)** Discover skills from this directory. A spec's `environment.skills` takes precedence: when present it **replaces** `--skill-dir` discovery (it is not additive), so `--skill-dir` only applies to specs that omit `environment.skills`. With neither set, vally loads **no skills** (the baseline) — prefer declaring `environment.skills` in the spec. |
-| `--workspace <dir>` | Working directory for the executor (fixtures get copied here). Defaults to a per-stimulus temp dir. |
+| `--workspace <dir>` | Preserve per-stimulus executor workspaces beneath this root. Defaults to temporary workspaces; set this when later validation must use actual agent-edited files. |
 | `--suite <name>` | Run only stimuli matching a suite declared in `.vally.yaml`. |
 | `--tag <key=values>` | Run only stimuli whose tag record matches. Comma-separate values; repeat for multiple keys. E.g. `--tag priority=p0,p1 --tag area=routing`. |
 | `--model <name>` | Executor model. Overrides `defaults.model` in the spec. |
-| `--judge-model <name>` | Model used by `prompt` / `pairwise` graders. Defaults to `claude-sonnet-4.6`. |
+| `--judge-model <name>` | Overrides the judge used by `prompt` / `pairwise` graders. This repo explicitly sets `defaults.judge_model: gpt-5.6-sol` rather than relying on Vally's fallback. This does not select the executor or an end user's model. |
 | `--runs <n>` | Override `defaults.runs` (number of executions per stimulus). |
 | `--timeout <duration>` | Per-stimulus timeout (e.g. `120s`, `2m`). |
 | `--workers <n>` | Parallel stimulus workers. Default 1. |
-| `--max-retries <n>` | Retries for transient executor errors. |
+| `--max-retries <n>` | Retries for transient executor errors on single-trial stimuli. Vally disables retries when the effective run count is 2 or more. |
 | `--output-dir <dir>` | Persist `results.jsonl` + `eval-results.md` to this directory. |
 | `--output jsonl` | Stream JSONL records to stdout. |
 | `--junit` | Write a JUnit XML report into `--output-dir` (boolean flag; default off). |
@@ -144,13 +190,29 @@ Use `--workers 4` to fan stimuli out and shave wall-clock time; expect higher co
 
 | Skill | Task stimuli | Routing stimuli | Focus |
 |-------|--------------|-----------------|-------|
-| `aspire` (router) | 7 | 16 | Routing precision to sub-skills |
-| `aspire-init` | 5 | 15 | Skeleton drop, `aspire new` / `aspire init` decision, aspireify handoff |
-| `aspireify` | 11 | 18 | AppHost wiring (C# / file-based C# / TS), package-manager resolution, validation, never edit `.aspire/modules/` |
-| `aspire-orchestration` | 28 | 24 | Lifecycle tools, file lock recovery, `--include-hidden`, `aspire update --self` |
-| `aspire-deployment` | 8 | 21 | Multi-target deploy, `aspire destroy`, JS publishing, pipeline previews |
-| `aspire-monitoring` | 11 | 19 | Diagnostics bridge, standalone dashboard, browser logs, `--include-hidden` |
-| **Total** | **70** | **113** | |
+| `aspire` (router) | 2 | 23 | Routing precision to sub-skills; preserve selected release family |
+| `aspire-init` | 6 | 15 | Skeleton drop, `aspire new` / `aspire init` decision, aspireify handoff |
+| `aspireify` | 14 | 19 | AppHost wiring (C# / file-based C# / TS), package-manager resolution, validation, never edit `.aspire/modules/` |
+| `aspire-orchestration` | 29 | 24 | Lifecycle tools, file lock recovery, `--include-hidden`, `aspire update --self` |
+| `aspire-deployment` | 11 | 22 | Multi-target deploy, `aspire destroy`, JS publishing, pipeline previews |
+| `aspire-monitoring` | 7 | 23 | Diagnostics bridge, standalone dashboard, browser logs, `--include-hidden` |
+| `aspire-project-v2-migration` | 16 | 6 | Approval/capability stops, bounded actual edits, idempotence, and explicit migration intent |
+| **Total** | **85** | **132** | **217 stimuli** |
+
+Routing counts include `routing` in either a scalar or array `area` tag.
+
+### Project v2 validation layers
+
+The [migration fixture guide](./project-v2-migration/README.md) separates offline
+regressions and model-backed source-edit gates from executable qualification:
+compilation, runtime probes, publishing artifacts, and local image builds/smokes.
+`npm test` never invokes models or starts containers. Runtime/publishing harness
+development is a separate follow-up, not a dependency of the source grader.
+
+Use the pinned Vally/Copilot runtime and existing authentication/redaction controls
+below. Integration evidence is not safe to upload merely because a test passed.
+Merged upstream source and a successful `aspire publish` are not, respectively,
+proof of a released package or a successfully built image.
 
 Run `vally lint --eval-spec skills/<skill>/evals/eval.yaml --verbose` to dump the per-spec stimulus list.
 
@@ -227,7 +289,7 @@ The repo ships four GitHub Actions workflows that drive `vally` automatically:
 | Workflow | Trigger | Command |
 |----------|---------|---------|
 | [`skill-lint.yml`](../.github/workflows/skill-lint.yml) | PR (`SKILL.md` / `*.yaml` / `.vally.yaml`) | `vally lint skills` + per-spec `vally lint --eval-spec <spec>` |
-| [`skill-eval.yml`](../.github/workflows/skill-eval.yml) | PR (`SKILL.md` / `eval.yaml` / `.vally.yaml`) | `vally eval -e <changed-spec> [...] --tag priority=p0,p1 --output-dir ./results` |
+| [`skill-eval.yml`](../.github/workflows/skill-eval.yml) | PR (`SKILL.md` / `eval.yaml` / `.vally.yaml`) | `vally eval -e <changed-spec> [...] --tag priority=p0,p1 --runs 1 --max-retries 2 --output-dir ./results` |
 | [`skill-eval-nightly.yml`](../.github/workflows/skill-eval-nightly.yml) | `cron: "0 6 * * 0"` (Sun 06:00 UTC) + `workflow_dispatch` | `vally eval --suite nightly --output-dir ./results` |
 | [`skill-experiment.yml`](../.github/workflows/skill-experiment.yml) | `cron: "0 6 * * 6"` (Sat 06:00 UTC) + `workflow_dispatch` | `vally experiment run skill-lift.experiment.yaml --output-dir ./results` — informational baseline (skills vs no-skills), never gates |
 
@@ -243,7 +305,14 @@ suites:
       priority: [p0, p1, p2]
 ```
 
-The PR gate and nightly workflows use `vally eval --require-pass` so failed evaluations, including authentication errors, fail the job. Because `--suite` cannot be combined with explicit `-e` specs, the PR workflow discovers changed skill specs and applies the `ci-gate`-equivalent `priority=p0,p1` filter only to them. The comprehensive `nightly` suite runs weekly and uploads the redacted `./results` directory as a workflow artifact for later dashboard inspection. The comparative baseline remains informational.
+The PR gate and main nightly suite use `vally eval --require-pass` so failed
+evaluations, including authentication errors, fail their gated run. Because `--suite`
+cannot be combined with explicit `-e` specs, the PR workflow discovers changed skill
+specs and applies the `ci-gate`-equivalent `priority=p0,p1` filter only to them. PR
+evaluations override the run count to one and allow two bounded retries so transient
+executor timeouts and rate limits can recover; Vally intentionally disables those
+retries for multi-trial plans. The comprehensive `nightly` suite keeps each spec's
+repeated-run defaults. The comparative baseline remains informational.
 
 ## CI authentication
 
@@ -298,4 +367,9 @@ Common failure modes to grep for:
 
 - **`skill-invocation` grader failed but the agent did invoke a skill** — the grader's `required: [...]` list is an exact match. If the agent picked a sibling skill (e.g. `aspire-orchestration` instead of `aspire`), that counts as a miss. Tune `required` to the set of acceptable skills, or switch to a `prompt` grader if "any of these N skills is fine" is the real intent.
 - **`output-contains` failed despite the substring being in the output** — vally's substring grader is case-sensitive by default. Either lowercase the expected substring or set `case_sensitive: false` in the grader config.
-- **`Timeout after Nms waiting for session.idle`** — bump `config.timeout` (e.g. `"180s"`) or the per-stimulus `timeout`. Long-form authoring stimuli routinely need 90–120 s.
+- **`Timeout after Nms waiting for session.idle` while the agent is still doing useful work** — raise `defaults.timeout` or the per-stimulus timeout. Long-form authoring stimuli routinely need 90–120 s.
+- **`Timeout after Nms waiting for session.idle` after the last tool already completed** — treat it as a transient executor stall, not evidence that the stimulus needs a longer timeout. Reproduce the PR policy with `--runs 1 --max-retries 2`; repeated-run nightly plans intentionally remain non-retryable.
+
+The read-only router suite uses a 180-second hard timeout and 150-second agent budget:
+225 successful historical router trials completed in under 90 seconds, so this leaves
+headroom while making a stalled session retry much sooner than the previous 600-second wait.

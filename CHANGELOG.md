@@ -5,10 +5,25 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [0.0.3] - Unreleased
 
 ### Changed
-- Bumped the plugin and all six shipped skills to `0.0.3`.
+- Bumped the plugin and all seven shipped skills to `0.0.3`.
 - Clarified agent installation and update instructions in `README.md`.
 - Aligned PR review guidance with supported agent hosts, release versioning, and
   the published plugin mirror.
+- Clarified routing between Project v2 migration, legacy TypeScript AppHost
+  migration, and ordinary AppHost wiring.
+- Updated evaluation CI with bounded retries and result-integrity checks.
+
+### Added
+- Added the approval-first `aspire-project-v2-migration` skill for eligible Aspire
+  13.6+ AppHosts and experimental Project v2 APIs, with explicit per-file/resource
+  approval, capability checks, conservative reference cleanup, routing and telemetry
+  registration, and no-edit/actual-edit evaluation fixtures. Its narrower eligibility
+  gate remains in force when the bundle is installed on Aspire 13.5.
+- Added captured actual-edit migration contracts and offline mutation controls,
+  keeping runtime/publishing harness development in a separate follow-up.
+  Qualified API evidence covers the merged publishing and flat TypeScript options
+  contracts; EF overload diagnostics, Dockerfile/prebuilt ownership, file-app AOT,
+  and Blazor publishing differences have explicit validation boundaries.
 
 ## [0.0.2] - 2026-09-18
 

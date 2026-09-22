@@ -43,6 +43,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install test dependencies
+        run: npm ci --ignore-scripts
+
       - name: Read version from tag
         id: version
         shell: bash

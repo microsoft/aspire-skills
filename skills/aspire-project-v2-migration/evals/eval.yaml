@@ -1,0 +1,454 @@
+name: aspire-project-v2-migration-eval
+description: Approval-first migration, actual bounded edits, capability stops, idempotence, and intent-based routing.
+version: "1.0"
+type: capability
+tags: { skill: aspire-project-v2-migration }
+defaults:
+  runs: 1
+  timeout: 10m
+  executor: copilot-sdk
+  model: gpt-5.6-sol-fast
+  judge_model: gpt-5.6-sol
+scoring: { threshold: 1.0 }
+environment:
+  skills:
+    - ../../aspire
+    - ../../aspire-init
+    - ../../aspireify
+    - ../../aspire-project-v2-migration
+    - ../../aspire-orchestration
+    - ../../aspire-deployment
+    - ../../aspire-monitoring
+grading_environment:
+  files:
+    - { src: ../../../evals/project-v2-migration/grade-edit.mjs, dest: .grader/grade-edit.mjs }
+    - { src: ../../../scripts/project-v2-edit-contract.mjs, dest: .grader/project-v2-edit-contract.mjs }
+
+stimuli:
+  - name: project-v2-assessment-before-edits
+    prompt: |
+      Assess migrating app/Migration.AppHost to Project v2 using the appropriate
+      Aspire skill. Show the exact per-resource/file plan before asking for approval.
+      I have not approved edits. Treat capability-evidence.json as the source-backed
+      API input for this offline exercise, not as proof of installed/public packages.
+      Do not restore, run, or publish.
+    tags: { priority: p0, area: approval }
+    environment:
+      files: &runnable
+        - { src: ../../../evals/project-v2-migration/runnable-csharp, dest: app }
+        - { src: ../../../evals/project-v2-migration/capability-evidence.json, dest: capability-evidence.json }
+    rubric:
+      - The response assesses exact resources/paths, the CatalogApi metadata override, named-http API profile, and worker explicit-null exclusion.
+      - The response retains the shared code reference, proposes only safe resource-reference cleanup, distinguishes source/package availability, and asks approval without editing.
+    graders:
+      - type: diff-empty
+      - type: prompt
+        name: exact-assessment
+        config:
+          scoring: binary
+          prompt: Does the assistant's response satisfy the exact resource/file assessment and approval boundary, including C# null exclusion and experimental API/package evidence?
+
+  - name: project-v2-approved-csharp-edit
+    turns:
+      - |
+        Use the Project v2 migration skill. I approve exactly this source-only
+        migration of app/Migration.AppHost: migrate api and worker, preserving
+        api's named http profile and worker's explicit-null profile exclusion.
+        Add a versionless Aspire.Hosting.Dotnet PackageReference and central
+        PackageVersion using $(AspireVersion). Add narrowly paired
+        ASPIREDOTNETPROJECT001 pragmas. Remove only API/worker resource references,
+        retaining the shared code reference. Preserve every other call, image
+        option, file, package version, and application behavior.
+        Use capability-evidence.json as this offline exercise's API input; it is
+        not proof of installed packages. Make the approved edits, without
+        restoring, running, publishing, or generating modules.
+      - |
+        Reassess the same AppHost after your migration. It should already be
+        migrated. Do not rewrite or change any file, restore, run, or publish.
+    tags: { priority: p0, area: csharp-edit, integration: csharp }
+    environment: { files: *runnable }
+    graders:
+      - type: diff-contains
+        config: { value: AddDotnetProject }
+      - type: program
+        name: full-csharp-edit-contract
+        config: { program: node, args: [.grader/grade-edit.mjs, csharp] }
+      - type: diff-empty
+        name: second-assessment-is-idempotent
+        turn: 1
+
+  - name: project-v2-approved-csharp-subset
+    prompt: |
+      Use the Project v2 migration skill. I approve only api in app/Migration.AppHost:
+      migrate its resolved path and named http profile, add a versionless Dotnet
+      PackageReference and central PackageVersion via $(AspireVersion), with
+      narrowly paired ASPIREDOTNETPROJECT001 pragmas. Remove only API's resource
+      ProjectReference; retain worker's AddProject/null semantics and reference,
+      plus the shared code reference. Preserve all other calls, image options,
+      files and versions. Use capability-evidence.json as this offline exercise's
+      API input. Edit now; do not restore, run, publish, or generate modules.
+    tags: { priority: p1, area: subset, integration: subset }
+    environment: { files: *runnable }
+    graders:
+      - type: diff-contains
+        config: { value: AddDotnetProject }
+      - type: program
+        name: subset-edit-contract
+        config: { program: node, args: [.grader/grade-edit.mjs, subset] }
+
+  - name: project-v2-ineligible-13-5
+    prompt: I installed the newest CLI. Assess migrating this AppHost to Project v2. Do not upgrade its packages.
+    tags: { priority: p0, area: eligibility }
+    environment:
+      files:
+        - { src: ../../../evals/project-v2-migration/eligibility/aspire-13.5, dest: app }
+    rubric:
+      - The response stops without edits because the AppHost selects 13.5.3; a newer CLI is not hosting capability evidence.
+    graders:
+      - type: diff-empty
+      - type: prompt
+        config:
+          scoring: binary
+          prompt: Does the assistant's response stop at the 13.5 AppHost boundary without proposing an implicit upgrade?
+
+  - name: project-v2-conflicting-version
+    prompt: Assess migration to Project v2; do not change conflicting versions without approval.
+    tags: { priority: p1, area: eligibility }
+    environment:
+      files:
+        - { src: ../../../evals/project-v2-migration/eligibility/conflicting, dest: app }
+    rubric:
+      - The response identifies conflicting 13.6.0-dev SDK and 13.5.3 hosting versions and stops without edits.
+    graders:
+      - type: diff-empty
+      - type: prompt
+        config:
+          scoring: binary
+          prompt: Does the assistant's response identify the version conflict and stop rather than silently repair or migrate?
+
+  - name: project-v2-unresolved-version
+    prompt: Assess and migrate this AppHost to Project v2 only if its actual version and capability are established.
+    tags: { priority: p1, area: eligibility }
+    environment:
+      files:
+        - { src: ../../../evals/project-v2-migration/eligibility/unresolved, dest: app }
+    rubric:
+      - The response identifies unresolved version inputs and stops without guessing or editing.
+    graders:
+      - type: diff-empty
+      - type: prompt
+        config:
+          scoring: binary
+          prompt: Does the assistant's response explain the unresolved version/capability stop?
+
+  - name: project-v2-typescript-options-blocked
+    prompt: |
+      Use the migration skill. I approve migrating both TypeScript resources,
+      but the actual generated target API is supplied in app/handle-only-api.mts:
+      it is the older handle-only build, without DotnetProjectOptions. Assess
+      whether approval is sufficient. Do not change packages, regenerate modules,
+      or treat merged upstream source as proof that this target has the new DTO.
+    tags: { priority: p0, area: typescript-options }
+    environment:
+      files:
+        - { src: ../../../evals/project-v2-migration/typescript, dest: app }
+    rubric:
+      - The response stops the entire target migration, including default calls, because the required DTO is absent despite approval.
+      - The response preserves source/config/modules and neither invents a plain object for an RPC handle nor maintains an older-target fallback.
+    graders:
+      - type: diff-empty
+      - type: prompt
+        config:
+          scoring: binary
+          prompt: Does the assistant's response require the new target capability and stop without edits despite approval, while leaving legacy handle semantics unchanged?
+
+  - name: project-v2-approved-runnable-typescript-edit
+    prompt: |
+      Use the migration skill. I approve converting only the api and worker
+      addProject calls in app/Migration.TypeScriptAppHost to addDotnetProject,
+      adding the matching Aspire.Hosting.Dotnet version to aspire.config.json.
+      Both calls omit options: preserve the DEFAULT profiles, not exclusion.
+      Preserve all other calls, image options, files and versions. Use the
+      supplied capability-evidence.json as the offline API input; the target is
+      the final flat DTO API. Do not edit or generate .aspire/modules, install,
+      restore, or run. Make only these source/config edits.
+    tags: { priority: p0, area: typescript-runnable-edit, integration: typescript }
+    environment: { files: *runnable }
+    graders:
+      - type: diff-contains
+        config: { value: addDotnetProject }
+      - type: program
+        name: typescript-per-resource-contract
+        config: { program: node, args: [.grader/grade-edit.mjs, typescript] }
+
+  - name: project-v2-approved-typescript-named-profile-edit
+    prompt: |
+      Use the migration skill. I approve migrating named-api in
+      app/Migration.TypeScriptAppHost from the legacy named-profile wrapper to
+      addDotnetProject with the final flat DTO, and adding the matching Dotnet
+      package. Preserve its path, http profile, replicas, image options and every
+      other file/call. The source-backed capability-evidence.json is this
+      offline exercise's API input. Edit only source/config; do not generate
+      modules, install, restore or run.
+    tags: { priority: p0, area: typescript-named-edit, integration: named }
+    environment:
+      files:
+        - { src: ../../../evals/project-v2-migration/runnable-csharp, dest: app }
+        - { src: ../../../evals/project-v2-migration/typescript-named/apphost.mts, dest: app/Migration.TypeScriptAppHost/apphost.mts }
+        - { src: ../../../evals/project-v2-migration/capability-evidence.json, dest: capability-evidence.json }
+    graders:
+      - type: diff-contains
+        config: { value: addDotnetProject }
+      - type: program
+        name: named-profile-dto-contract
+        config: { program: node, args: [.grader/grade-edit.mjs, named] }
+
+  - name: project-v2-approved-publishing-ownership-edit
+    prompt: |
+      Use the Project v2 migration skill. I approve only dockerfile-api and
+      prebuilt-api in app/Migration.AppHost. Both resolve to Migration.Api and
+      explicitly exclude launch profiles. Migrate their creation calls, add
+      versionless Dotnet PackageReference plus central PackageVersion through
+      $(AspireVersion), and narrowly paired ASPIREDOTNETPROJECT001 pragmas.
+      Preserve the custom PublishAsDockerFile callback and its Dockerfile/image
+      settings, and preserve the prebuilt ContainerImageAnnotation without
+      introducing build or push ownership. Remove only the API resource
+      ProjectReference; keep the shared code reference. Do not change any
+      application or Dockerfile. Use capability-evidence.json as this offline
+      exercise's API input. Make only source/project/package edits; do not
+      install, restore, run, build images, or publish.
+    tags: { priority: p1, area: publishing-ownership, integration: ownership }
+    environment:
+      files:
+        - { src: ../../../evals/project-v2-migration/runnable-csharp, dest: app }
+        - { src: ../../../evals/project-v2-migration/ownership, dest: app }
+        - { src: ../../../evals/project-v2-migration/capability-evidence.json, dest: capability-evidence.json }
+    graders:
+      - type: diff-contains
+        config: { value: AddDotnetProject }
+      - type: program
+        name: publishing-ownership-edit-contract
+        config: { program: node, args: [.grader/grade-edit.mjs, ownership] }
+
+  - name: project-v2-unsupported-assessment
+    prompt: |
+      Assess this AppHost for migration without edits. Classify automatic,
+      manual/owner-decision, unsupported and already-migrated resources. Explain
+      how custom publishing and concrete ProjectResource consumers affect scope.
+    tags: { priority: p0, area: compatibility }
+    environment:
+      files:
+        - { src: ../../../evals/project-v2-migration/unsupported/AppHost.csproj, dest: app/AppHost.csproj }
+        - { src: ../../../evals/project-v2-migration/unsupported/Program.cs, dest: app/Program.cs }
+        - { src: ../../../evals/project-v2-migration/unsupported/FSharpService.fsproj, dest: FSharpService/FSharpService.fsproj }
+    rubric:
+      - The response leaves Functions/F# unsupported, direct construction/custom publishing/concrete constraints for owner decisions, and existing AddDotnetProject already migrated.
+      - The response distinguishes IDotnetProgramResource from actual publish opt-in and does not blindly substitute interfaces or remove references.
+    graders:
+      - type: diff-empty
+      - type: prompt
+        config:
+          scoring: binary
+          prompt: Does the assistant's response classify all compatibility boundaries accurately without automatic custom-consumer rewrites?
+
+  - name: project-v2-file-app-aot-assessment
+    prompt: |
+      Assess this Windows-authored file AppHost for Project v2 and Linux
+      publishing. I have not approved edits. Explain .NET prerequisites,
+      build-environment/EF limitations, and the AOT decision.
+    tags: { priority: p1, area: file-app }
+    environment:
+      files: &file_app
+        - { src: ../../../evals/project-v2-migration/file-app, dest: app }
+        - { src: ../../../evals/project-v2-migration/capability-evidence.json, dest: capability-evidence.json }
+    rubric:
+      - The response preserves runtime settings and PublishAot=true, explains .NET 10+, and distinguishes target-OS building from a separately approved AOT opt-out.
+      - The response does not recommend project-only WithBuildEnvironment or EF CLI support for the .cs service.
+    graders:
+      - type: diff-empty
+      - type: prompt
+        config:
+          scoring: binary
+          prompt: Does the assistant's response explain the file-app/AOT boundaries accurately without edits?
+
+  - name: project-v2-approved-file-app-edit
+    prompt: |
+      Use the migration skill. I approve only replacing AddCSharpApp with
+      AddDotnetProject for file-api in app/apphost.cs, keeping the same path,
+      adding the matching Dotnet package directive and paired narrow experimental
+      pragmas. Preserve all runtime, endpoint, image and AOT settings and other
+      files. Use capability-evidence.json as this offline exercise's API input.
+      Edit now; do not restore, build, run or publish.
+    tags: { priority: p1, area: file-app-edit, integration: file-app }
+    environment: { files: *file_app }
+    graders:
+      - type: diff-contains
+        config: { value: AddDotnetProject }
+      - type: program
+        name: file-app-edit-contract
+        config: { program: node, args: [.grader/grade-edit.mjs, file-app] }
+
+  - name: project-v2-blazor-image-change-approval
+    prompt: |
+      Use the migration skill to assess api and gateway in app/Program.cs.
+      I approved replacing the resource APIs and switching the gateway publisher
+      from Dockerfile to SDK, but have not approved a different gateway framework,
+      base image or process user. Use gateway-publishing-evidence.json as the
+      resolved before/after image input for this offline exercise; it is not
+      evidence of installed packages or a validation run. Explain the deployment
+      differences and any further decision required. Do not restore, execute,
+      publish, edit, or silently apply a subset.
+    tags: { priority: p0, area: gateway-approval }
+    environment:
+      files: &blazor_image_evidence
+        - { src: ../../../evals/project-v2-migration/blazor-ef, dest: app }
+        - { src: ../../../evals/project-v2-migration/capability-evidence.json, dest: capability-evidence.json }
+        - { src: ../../../evals/project-v2-migration/gateway-publishing-evidence.json, dest: gateway-publishing-evidence.json }
+    rubric:
+      - The response identifies the net10.0/.NET 10 to net11.0/.NET 11 RC1 gateway runtime/base-image change, Ubuntu 24.04 to 26.04, and root to UID 1654.
+      - The response explains compatibility or file-permission consequences and explicitly requests approval of those image changes before editing; API/publisher approval alone is not sufficient.
+      - No files are changed and no restore, execution or publishing occurs; the response does not claim image parity, silently retarget, force root or apply an unapproved subset.
+    graders:
+      - type: diff-empty
+      - type: prompt
+        name: requires-specific-gateway-image-approval
+        config:
+          scoring: binary
+          prompt: >
+            Does the response identify the gateway's net10.0/.NET 10 to
+            net11.0/.NET 11 RC1 runtime/base-image change, Ubuntu 24.04 to 26.04,
+            and root to UID 1654
+            change, explain compatibility or file-permission consequences, and
+            explicitly request approval before editing rather than treating the
+            API/publisher approval as sufficient? It must not claim image parity,
+            silently retarget, force root, or apply an unapproved subset.
+
+  - name: project-v2-blazor-unresolved-image-policy
+    prompt: |
+      Use the migration skill to assess api and gateway in app/Program.cs.
+      The publishing SDK and effective gateway image/user have not been resolved;
+      the AppHost's net10.0 TargetFramework is not an image inspection result.
+      API capability evidence is supplied for this offline exercise. Do not
+      restore, build, execute or publish to discover the missing values. Explain
+      whether the gateway is ready for edit approval and what preparation or
+      publishing decision is needed. Keep every source file unchanged.
+    tags: { priority: p0, area: gateway-approval }
+    environment:
+      files:
+        - { src: ../../../evals/project-v2-migration/blazor-ef, dest: app }
+        - { src: ../../../evals/project-v2-migration/capability-evidence.json, dest: capability-evidence.json }
+    rubric:
+      - The response leaves the gateway decision-required and explicitly requests approval for bounded discovery of its framework/SDK, base image/platform and process user, or for retaining the gateway/reviewing an owned publishing policy.
+      - Asking only to edit the API does not satisfy the unresolved gateway decision; no values may be inferred from the AppHost framework or invented as resolved.
+      - No files are changed and no restore, build, execution or publishing occurs; the response must not modify the packaged gateway or recommend WithBuildEnvironment for the file app.
+    graders:
+      - type: diff-empty
+      - type: prompt
+        name: blocks-unresolved-gateway-image-policy
+        config:
+          scoring: binary
+          prompt: >
+            Does the response leave gateway migration decision-required and
+            explicitly request a gateway decision: permission for bounded
+            preparation to resolve its framework/SDK, base image/platform and
+            process user, or retaining the gateway/reviewing an owned publishing
+            policy? Asking only to edit the API is insufficient. It must not
+            infer image equivalence from the AppHost framework, invent resolved
+            values, modify the packaged gateway or use WithBuildEnvironment for
+            that file app.
+
+  - name: project-v2-approved-blazor-ef-edit
+    prompt: |
+      Use the migration skill. I approve api and gateway in app/Program.cs:
+      use AddDotnetProject and AddDotnetProjectBlazorGateway, adding the
+      matching Aspire.Hosting.Dotnet PackageReference via $(AspireVersion)
+      and paired narrow experimental diagnostic pragmas required by the selected
+      APIs (including the EF overload). Retain ALL existing
+      ProjectReferences, including API, migrations and client metadata; preserve
+      EF calls, database, runtime environment, prefixes, telemetry and image options.
+      Do not change service/client code, versions, or invent WithBuildEnvironment.
+      Use capability-evidence.json as this offline exercise's API input, not
+      package declarations alone. I separately approve the resolved gateway
+      image changes in gateway-publishing-evidence.json: net10.0/.NET 10 to
+      net11.0/.NET 11 RC1 with its listed Ubuntu 24.04 to 26.04 base-image change,
+      and root to UID 1654.
+      This approval applies only to the gateway's SDK-published image; do not
+      retarget service/client source or change their version directives.
+      Remove only the obsolete publish-mode gateway DockerfileBuildAnnotation
+      mutation, because the Project v2 gateway no longer creates that annotation.
+      Preserve its image name, tag and target platform through the existing
+      gateway.WithContainerBuildOptions configuration.
+      Make only the approved edits without restore,
+      execution or publishing. Disclose the gateway's Dockerfile-to-SDK publishing
+      and approved framework/base/user changes and the EF MSBuild-property caveat,
+      rather than claiming validation or unchanged image parity.
+    tags: { priority: p1, area: blazor-ef-edit, integration: blazor-ef }
+    environment: { files: *blazor_image_evidence }
+    rubric:
+      - The response discloses the explicitly approved gateway framework/base/user changes and SDK-publishing ownership change, plus custom MSBuild properties not being forwarded to dotnet-ef.
+      - The response distinguishes editing from actual runtime/publish validation and does not disable user AOT.
+    graders:
+      - type: diff-contains
+        config: { value: AddDotnetProjectBlazorGateway }
+      - type: program
+        name: blazor-ef-edit-contract
+        config: { program: node, args: [.grader/grade-edit.mjs, blazor-ef] }
+      - type: prompt
+        name: discloses-specialized-publishing-boundaries
+        config:
+          scoring: binary
+          prompt: Does the assistant's response disclose the explicitly approved gateway framework/base-image/process-user and publishing changes plus the EF MSBuild-property caveat, without claiming unperformed validation or unchanged image parity?
+
+  - name: project-v2-routing-positive
+    prompt: My existing Aspire 13.6 AppHost uses AddProject and AddCSharpApp. Assess migrating those resources to DotnetProjectResource; do not edit.
+    tags: { priority: p0, area: routing }
+    graders:
+      - type: diff-empty
+      - type: skill-invocation
+        config: { required: [aspire-project-v2-migration], disallowed: [aspireify, aspire-orchestration] }
+
+  - name: project-v2-routing-negative-new-apphost
+    prompt: I just ran aspire init for app/Migration.AppHost. Inspect the services and give read-only guidance for wiring this empty C# AppHost. Do not edit or run.
+    tags: { priority: p1, area: routing, scenario: ordinary-wiring }
+    environment:
+      files:
+        - { src: ../../../evals/project-v2-migration/runnable-csharp, dest: app }
+        - { src: ../../../evals/project-v2-migration/routing-empty/Program.cs, dest: app/Migration.AppHost/Program.cs }
+    graders:
+      - type: diff-empty
+      - type: skill-invocation
+        config: { required: [aspireify], disallowed: [aspire-project-v2-migration] }
+
+  - name: project-v2-routing-negative-version-upgrade
+    prompt: Give read-only guidance for upgrading my Aspire CLI and AppHost packages to the latest supported release. Do not install, update, execute commands, or change files.
+    tags: { priority: p1, area: routing }
+    graders:
+      - type: diff-empty
+      - type: skill-invocation
+        config: { required: [aspire-orchestration], disallowed: [aspire-project-v2-migration] }
+
+  - name: project-v2-routing-negative-ordinary-project
+    prompt: Give read-only guidance for adding another C# service with AddProject to app/Migration.AppHost. I do not want to migrate its existing resources.
+    tags: { priority: p1, area: routing, scenario: ordinary-wiring }
+    environment: { files: *runnable }
+    graders:
+      - type: diff-empty
+      - type: skill-invocation
+        config: { required: [aspireify], disallowed: [aspire-project-v2-migration] }
+
+  - name: project-v2-routing-negative-publishing
+    prompt: Explain how to publish this existing Aspire AppHost as Docker Compose artifacts. Do not edit, execute, deploy, or migrate any resources.
+    tags: { priority: p1, area: routing }
+    environment: { files: *runnable }
+    graders:
+      - type: diff-empty
+      - type: skill-invocation
+        config: { required: [aspire-deployment], disallowed: [aspire-project-v2-migration] }
+
+  - name: project-v2-routing-negative-build-diagnostics
+    prompt: Give read-only advice for an MSB3491 file lock during coordinated builds in an existing DotnetProjectResource AppHost. Do not migrate or edit it.
+    tags: { priority: p1, area: routing }
+    graders:
+      - type: diff-empty
+      - type: skill-invocation
+        config: { required: [aspire-orchestration], disallowed: [aspire-project-v2-migration] }

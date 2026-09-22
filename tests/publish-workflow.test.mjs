@@ -42,6 +42,14 @@ test("an empty manual selection fails before checkout", () => {
   assert.match(result.stderr, /::error::Select at least one bundle/);
 });
 
+test("release dependencies are installed before tests and bundle creation", () => {
+  assert.match(stepSource("Install test dependencies"), /run: npm ci --ignore-scripts/);
+  const steps = ["Setup Node", "Install test dependencies", "Test bundles", "Build bundles"]
+    .map(name => workflow.indexOf(`- name: ${name}`));
+  assert.ok(steps.every(index => index !== -1));
+  assert.deepEqual(steps, steps.toSorted((left, right) => left - right));
+});
+
 for (const selection of [
   { name: "skills only", skills: "true", extensions: "false", assets: [skillsAsset] },
   { name: "extensions only", skills: "false", extensions: "true", assets: [extensionsAsset] },

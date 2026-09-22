@@ -7,9 +7,10 @@ description: >-
   start/stop/resource/deploy/destroy/publish/init/new/add/wait/describe/ps/logs/otel,
   aspire agent init, WithBrowserLogs, WithTerminal, Interaction Service, apphost.mts,
   TS package managers, Yarn Classic, custom resource commands, .aspire/modules recovery,
-  or Playwright URL discovery.
+  ProjectResource to DotnetProjectResource migration, or Playwright URL discovery.
   DO NOT USE FOR: non-Aspire projects or ordinary build/test tasks.
-  INVOKES: aspire-init, aspireify, aspire-orchestration, aspire-deployment, aspire-monitoring.
+  INVOKES: aspire-init, aspireify, aspire-project-v2-migration,
+  aspire-orchestration, aspire-deployment, aspire-monitoring.
   FOR SINGLE OPERATIONS: Route directly to the matching sub-skill.
 license: MIT
 metadata:
@@ -25,7 +26,7 @@ AppHost or its resources through the Aspire CLI rather than falling back to ad-h
 
 ## Triage first
 
-Two intents are commonly misread — resolve them before doing anything else:
+Three intents are commonly misread — resolve them before doing anything else:
 
 - **"Better / improve AI agent support", "set up agent skills", "make Copilot smarter about
   my Aspire app"** → recommend running **`aspire agent init`**, which generates project-local
@@ -38,6 +39,12 @@ Two intents are commonly misread — resolve them before doing anything else:
   and use `aspire describe` for resource state, then `aspire logs` / `aspire otel logs` /
   `aspire otel traces`. Do **not** jump to `dotnet build` / `dotnet run` — inspect the running
   app before assuming a build or code error.
+- **"My old TypeScript AppHost uses apphost.ts; how do I migrate?"** → route to
+  `aspire-orchestration` for `aspire update --migrate`. This entry-point/package
+  migration is not Project v2 resource migration. Its package, config, tsconfig,
+  generated-import, and entry-point changes require approval before
+  `aspire update --migrate --yes --non-interactive`; use `aspireify` only if
+  separate source authoring remains afterward.
 
 ## Detection
 
@@ -99,6 +106,11 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
   [`aspireify`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md)
   and its package-manager rules; do not substitute a raw package-manager launcher for
   `aspire start`.
+- Adding a new project or integration is ordinary `aspireify` wiring. Route to
+  `aspire-project-v2-migration` only when the user wants to replace existing
+  `AddProject`, `addProject`, `AddCSharpApp`, or Blazor gateway resources with
+  Project v2 APIs. That migration requires an eligible 13.6+ AppHost and approval
+  of the exact per-resource edits.
 
 ## Routing
 
@@ -108,6 +120,7 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 | Create a new Aspire project from a template (`aspire new`) | → [aspire-init](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-init/SKILL.md) (in-plugin) |
 | Add Aspire to an existing repo (`aspire init`, drop skeleton) | → [aspire-init](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-init/SKILL.md) (in-plugin) |
 | Wire AppHost / scaffold resource graph / add integrations after `aspire init` | → [aspireify](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md) (in-plugin) |
+| Migrate existing legacy project resources to Project v2 | → [aspire-project-v2-migration](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-project-v2-migration/SKILL.md); assess and obtain approval before edits |
 | Migrate legacy TypeScript `apphost.ts` (`aspire update --migrate`) | → [aspire-orchestration](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-orchestration/SKILL.md); hand back to aspireify only if source authoring remains |
 | Deploy, publish, destroy, pipeline steps | → [aspire-deployment](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-deployment/SKILL.md) |
 | Logs, traces, metrics, dashboard, browser logs | → [aspire-monitoring](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/SKILL.md) |
@@ -139,6 +152,11 @@ self-deactivates. Owns current AppHost authoring patterns (`AddNextJsApp`, `AddV
 `WithBrowserLogs()`, command arguments, Interaction Service availability, experimental
 `WithTerminal()`, generated `.aspire/modules/`, unified TS `withEnvironment`, endpoint
 references, and config/secret migration).
+
+### aspire-project-v2-migration
+Approval-first migration for eligible Aspire 13.6+ AppHosts that replaces existing
+legacy `ProjectResource` APIs with experimental `DotnetProjectResource` APIs while
+preserving supported behavior and removing only proven-obsolete AppHost references.
 
 ### aspire-orchestration
 Lifecycle management: start, stop, wait, resource commands, default watch/HMR guidance, and file-lock recovery.
@@ -173,6 +191,7 @@ guidance there should not be overridden by the in-plugin sibling:
 | `.agents/skills/aspire/SKILL.md` | This file (top-level router) defers to it for deeper C# / TS AppHost editing, Playwright handoff, investigation workflows. |
 | `.agents/skills/aspireify/SKILL.md` | The in-plugin `aspireify` sibling defers to it for AppHost wiring. |
 | `.agents/skills/aspire-init/SKILL.md` | The in-plugin `aspire-init` sibling defers to it for the skeleton/first-run flow. |
+| `.agents/skills/aspire-project-v2-migration/SKILL.md` | The in-plugin migration sibling defers to it for Project v2 assessment and edits. |
 
 **Safety guardrails from this plugin always apply** even when project-local skills are
 active.

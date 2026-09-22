@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Sdk Name="Aspire.AppHost.Sdk" Version="13.6.0-dev" />
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AspireVersion>13.6.0-dev</AspireVersion>
+    <AspireUseCliBundle>true</AspireUseCliBundle>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.AppHost" Version="$(AspireVersion)" />
+    <PackageReference Include="Aspire.Hosting.Blazor" Version="$(AspireVersion)" />
+    <PackageReference Include="Aspire.Hosting.Docker" Version="$(AspireVersion)" />
+    <PackageReference Include="Aspire.Hosting.EntityFrameworkCore" Version="$(AspireVersion)" />
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="$(AspireVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Api\**\*.cs;Client\**\*.cs;Migrations\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="Api\Api.csproj"
+                      AspireProjectMetadataTypeName="Api"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="Migrations\Migrations.csproj"
+                      AspireProjectMetadataTypeName="Migrations"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="Client\Client.csproj"
+                      AspireProjectMetadataTypeName="Client"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+</Project>
