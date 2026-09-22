@@ -268,24 +268,50 @@ function getStepRun(workflow, name) {
   return body.replace(/^ {10}/gm, "");
 }
 
+function runChangedSpecSelection(t, changedPaths, skills) {
+  const root = mkdtempSync(join(tmpdir(), "aspire-ci-selection-"));
+  t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 3 }));
+  for (const skill of skills) {
+    mkdirSync(join(root, "skills", skill, "evals"), { recursive: true });
+    writeFileSync(join(root, "skills", skill, "evals", "eval.yaml"), "");
+  }
+  const output = join(root, "outputs");
+  const script = getStepRun(readWorkflow("skill-eval.yml"), "Determine changed skill eval specs")
+    .replaceAll("${{ github.event.pull_request.number }}", "65")
+    .replaceAll("${{ github.repository }}", "microsoft/aspire-skills");
+  const changed = changedPaths.map(path => `'${path}'`).join(" ");
+  const result = runBash(`gh() { printf '%s\\n' ${changed}; }\n${script}`, root,
+    { GITHUB_OUTPUT: output.replaceAll("\\", "/") });
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, result.stderr);
+  return readFileSync(output, "utf8").replaceAll("\r\n", "\n");
+}
+
 for (const changedPath of ["scripts/check-eval-results.mjs", "evals/grade-routing-entry.mjs"]) {
   test(`${changedPath}: a helper-only PR selects the router smoke evaluation`, t => {
-    const root = mkdtempSync(join(tmpdir(), "aspire-ci-selection-"));
-    t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 3 }));
-    mkdirSync(join(root, "skills/aspire/evals"), { recursive: true });
-    writeFileSync(join(root, "skills/aspire/evals/eval.yaml"), "");
-    const output = join(root, "outputs");
-    const script = getStepRun(readWorkflow("skill-eval.yml"), "Determine changed skill eval specs")
-      .replaceAll("${{ github.event.pull_request.number }}", "65")
-      .replaceAll("${{ github.repository }}", "microsoft/aspire-skills");
-    const result = runBash(`gh() { printf '%s\\n' '${changedPath}'; }\n${script}`, root,
-      { GITHUB_OUTPUT: output.replaceAll("\\", "/") });
-    assert.ifError(result.error);
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(readFileSync(output, "utf8").replaceAll("\r\n", "\n"),
+    assert.equal(runChangedSpecSelection(t, [changedPath], ["aspire"]),
       "run_full=false\nhas_specs=true\nmatched=aspire\nexpected_runs=aspire\n");
   });
 }
+
+test("routing helper changes add the router smoke eval to another changed skill", t => {
+  assert.equal(runChangedSpecSelection(t,
+    ["evals/grade-routing-entry.mjs", "skills/aspire-init/SKILL.md"],
+    ["aspire", "aspire-init"]),
+  "run_full=false\nhas_specs=true\nmatched=aspire-init aspire\nexpected_runs=aspire-init aspire\n");
+});
+
+test("routing helper changes de-duplicate an explicitly changed router spec", t => {
+  assert.equal(runChangedSpecSelection(t,
+    ["evals/grade-routing-entry.mjs", "skills/aspire/SKILL.md"],
+    ["aspire"]),
+  "run_full=false\nhas_specs=true\nmatched=aspire\nexpected_runs=aspire\n");
+});
+
+test("an ordinary skill-only change selects only that skill", t => {
+  assert.equal(runChangedSpecSelection(t, ["skills/aspire-init/SKILL.md"], ["aspire-init"]),
+    "run_full=false\nhas_specs=true\nmatched=aspire-init\nexpected_runs=aspire-init\n");
+});
 
 test("a global eval config change selects one full-suite expected run", t => {
   const root = mkdtempSync(join(tmpdir(), "aspire-ci-full-selection-"));

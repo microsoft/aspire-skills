@@ -20,8 +20,10 @@ test("canonical evaluation specs are present", () => {
 for (const spec of specs) {
   test(`${spec}: executor coverage remains stable`, () => {
     const evaluation = parse(readFileSync(join(root, spec), "utf8"));
+    const usesSolFast = spec === join("skills", "aspire", "evals", "eval.yaml") ||
+      spec.includes("aspire-project-v2-migration");
     assert.equal(evaluation.defaults.model,
-      spec.includes("aspire-project-v2-migration") ? "gpt-5.6-sol-fast" : "gpt-5-mini");
+      usesSolFast ? "gpt-5.6-sol-fast" : "gpt-5-mini");
     if (spec === join("skills", "aspire", "evals", "eval.yaml") ||
         spec.includes("aspire-project-v2-migration")) {
       assert.equal(evaluation.defaults.judge_model, "gpt-5.6-sol");

@@ -78,6 +78,11 @@ matching available Aspire skill or skills. The instruction never names the expec
 owner, so the evaluation still measures owner selection and router handoff rather
 than parroting a requested skill name. Negative cases omit it.
 
+The router spec deliberately uses `gpt-5.6-sol-fast` instead of the repository's
+usual `gpt-5-mini` executor so single-trial PR gates can enforce owner activation
+without naming the owner in prompts. This increases router-suite cost, but avoids
+weakening policy checks to accommodate small-model routing variance.
+
 These assessments are read-only: explicit rubrics judge the route and guidance,
 not successful live deployment or log retrieval, and `diff-empty` checks the
 captured workspace. Report individual activation, outcome and read-only results

@@ -55,6 +55,18 @@ function mutateCsharp(root, subset = false) {
     '<ItemGroup><PackageVersion Version = "$(AspireVersion)" Include = "Aspire.Hosting.Dotnet" /></ItemGroup></Project>'));
 }
 
+function combineCsharpMigrationPragmas(root, diagnostics) {
+  edit(root, editCases.csharp.source, source => source
+    .replace(
+      "#pragma warning disable ASPIREPIPELINES003\n#pragma warning disable ASPIREDOTNETPROJECT001",
+      `#pragma warning disable ${diagnostics}`
+    )
+    .replace(
+      /#pragma warning restore ASPIREPIPELINES003\r?\n\r?\n#pragma warning restore ASPIREDOTNETPROJECT001/,
+      `#pragma warning restore ${diagnostics}`
+    ));
+}
+
 function removeLegacyGatewayDockerfileMutation(source) {
   const marker = "var gatewayBuild = gateway.Resource.Annotations";
   const markerIndex = source.indexOf(marker);
@@ -155,6 +167,87 @@ test("source contract tolerates layout/attribute order/lambda naming without wea
   const { before, after } = fixture(t);
   mutateCsharp(after);
   assert.deepEqual(assertEditedFixture(before, after, "csharp"), editCases.csharp.files.toSorted());
+});
+
+test("project package entries accept self-closing and explicitly empty forms", t => {
+  const { before, after } = fixture(t);
+  mutateCsharp(after);
+  edit(after, editCases.csharp.appHost, source => source.replace(
+    "<PackageReference Include = 'Aspire.Hosting.Dotnet'></PackageReference>",
+    '<PackageReference Include="Aspire.Hosting.Dotnet" />'
+  ));
+  edit(after, "Directory.Packages.props", source => source.replace(
+    '<PackageVersion Version = "$(AspireVersion)" Include = "Aspire.Hosting.Dotnet" />',
+    '<PackageVersion Include="Aspire.Hosting.Dotnet" Version="$(AspireVersion)">\n  \n</PackageVersion>'
+  ));
+  assertEditedFixture(before, after, "csharp");
+});
+
+for (const [name, path, mutate] of [
+  ["PackageReference", editCases.csharp.appHost, source => source.replace(
+    "<PackageReference Include = 'Aspire.Hosting.Dotnet'></PackageReference>",
+    '<PackageReference Include="Aspire.Hosting.Dotnet"><Version>13.5.3</Version></PackageReference>'
+  )],
+  ["PackageVersion", "Directory.Packages.props", source => source.replace(
+    '<PackageVersion Version = "$(AspireVersion)" Include = "Aspire.Hosting.Dotnet" />',
+    '<PackageVersion Include="Aspire.Hosting.Dotnet" Version="$(AspireVersion)"><Version>13.5.3</Version></PackageVersion>'
+  )]
+]) {
+  test(`project package contract rejects nested ${name} metadata`, t => {
+    const { before, after } = fixture(t);
+    mutateCsharp(after);
+    edit(after, path, mutate);
+    assert.throws(() => assertEditedFixture(before, after, "csharp"), /package child content/);
+  });
+}
+
+for (const diagnostics of [
+  "ASPIREPIPELINES003, ASPIREDOTNETPROJECT001",
+  "ASPIREDOTNETPROJECT001, ASPIREPIPELINES003"
+]) {
+  test(`source contract preserves combined warning pragmas: ${diagnostics}`, t => {
+    const { before, after } = fixture(t);
+    mutateCsharp(after);
+    combineCsharpMigrationPragmas(after, diagnostics);
+    assertEditedFixture(before, after, "csharp");
+  });
+}
+
+test("source contract rejects an unpaired combined migration diagnostic", t => {
+  const { before, after } = fixture(t);
+  mutateCsharp(after);
+  combineCsharpMigrationPragmas(after, "ASPIREPIPELINES003, ASPIREDOTNETPROJECT001");
+  edit(after, editCases.csharp.source, source => source.replace(
+    "#pragma warning restore ASPIREPIPELINES003, ASPIREDOTNETPROJECT001",
+    "#pragma warning restore ASPIREPIPELINES003"
+  ));
+  assert.throws(() => assertEditedFixture(before, after, "csharp"),
+    /Missing or excessive ASPIREDOTNETPROJECT001/);
+});
+
+test("source contract rejects a migration diagnostic that covers no migration call", t => {
+  const { before, after } = fixture(t);
+  mutateCsharp(after);
+  edit(after, editCases.csharp.source, source => source
+    .replace("#pragma warning disable ASPIREDOTNETPROJECT001\n", "")
+    .replace("#pragma warning restore ASPIREDOTNETPROJECT001\n", "")
+    .replace(
+      'var cache = builder.AddRedis("cache");',
+      '#pragma warning disable ASPIREDOTNETPROJECT001\nvar cache = builder.AddRedis("cache");\n#pragma warning restore ASPIREDOTNETPROJECT001'
+    ));
+  assert.throws(() => assertEditedFixture(before, after, "csharp"),
+    /ASPIREDOTNETPROJECT001 does not cover the required migration call/);
+});
+
+test("source contract rejects a migration diagnostic extending through build", t => {
+  const { before, after } = fixture(t);
+  mutateCsharp(after);
+  edit(after, editCases.csharp.source, source => source.replace(
+    "#pragma warning restore ASPIREDOTNETPROJECT001\nbuilder.Build().Run();",
+    "builder.Build().Run();\n#pragma warning restore ASPIREDOTNETPROJECT001"
+  ));
+  assert.throws(() => assertEditedFixture(before, after, "csharp"),
+    /Experimental suppression extends beyond resource declarations/);
 });
 
 test("subset keeps worker registration and build edge", t => {

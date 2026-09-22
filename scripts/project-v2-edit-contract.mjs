@@ -180,22 +180,51 @@ function removeLegacyGatewayDockerfileMutation(source) {
   return source.slice(0, start) + source.slice(end);
 }
 
+const migrationDiagnostics = new Set(["ASPIREDOTNETPROJECT001", "ASPIREPROJECTS001"]);
+
+function warningPragmaPattern() {
+  return /^([ \t]*#pragma[ \t]+warning[ \t]+)(disable|restore)([ \t]+)([^\r\n]+?)([ \t]*)(\r?)$/gm;
+}
+
+function warningIds(value) {
+  return value.split(",").map(id => id.trim()).filter(Boolean);
+}
+
+function warningPragmas(source) {
+  return [...source.matchAll(warningPragmaPattern())].map(match => ({
+    text: match[0],
+    index: match.index,
+    action: match[2],
+    ids: warningIds(match[4])
+  }));
+}
+
+function removeMigrationDiagnostics(source) {
+  return source.replace(warningPragmaPattern(),
+    (text, prefix, action, separator, list, trailing, carriageReturn) => {
+      const ids = warningIds(list);
+      const remaining = ids.filter(id => !migrationDiagnostics.has(id));
+      if (remaining.length === ids.length) return text;
+      if (remaining.length === 0) return carriageReturn;
+      return `${prefix}${action}${separator}${remaining.join(", ")}${trailing}${carriageReturn}`;
+    });
+}
+
 function removeMigrationPragmas(source, contract) {
-  let result = source;
+  const parsedPragmas = warningPragmas(source);
   for (const [diagnostic, minimum, maximum, required] of [
     ["ASPIREDOTNETPROJECT001", 1, Object.keys(contract.migrate).length, /\bAddDotnetProject(?:BlazorGateway)?\(/],
     ["ASPIREPROJECTS001", contract.efDiagnostic ? 1 : 0, contract.efDiagnostic ? 1 : 0, /\bapi\.AddEFMigrations\(/]
   ]) {
-    const pattern = new RegExp(`^\\s*#pragma warning (disable|restore) ${diagnostic}\\s*$`, "gm");
-    const pragmas = [...source.matchAll(pattern)];
+    const pragmas = parsedPragmas.filter(pragma => pragma.ids.includes(diagnostic));
     const coveredResources = new Set();
     assert.ok(pragmas.length >= minimum * 2 && pragmas.length <= maximum * 2,
       `Missing or excessive ${diagnostic} suppressions`);
     assert.equal(pragmas.length % 2, 0, "Unpaired experimental diagnostic suppression");
     for (let index = 0; index < pragmas.length; index += 2) {
-      assert.equal(pragmas[index][1], "disable", "Expected a paired disable");
-      assert.equal(pragmas[index + 1][1], "restore", "Expected a paired restore");
-      const rawBody = source.slice(pragmas[index].index + pragmas[index][0].length, pragmas[index + 1].index);
+      assert.equal(pragmas[index].action, "disable", "Expected a paired disable");
+      assert.equal(pragmas[index + 1].action, "restore", "Expected a paired restore");
+      const rawBody = source.slice(pragmas[index].index + pragmas[index].text.length, pragmas[index + 1].index);
       const body = compactCode(rawBody);
       assert.match(body, required, `${diagnostic} does not cover the required migration call`);
       assert.doesNotMatch(body, /DistributedApplication\.CreateBuilder\(|builder\.Build\(/,
@@ -218,9 +247,8 @@ function removeMigrationPragmas(source, contract) {
       assert.equal(uncovered.length, 0,
         `${diagnostic} does not cover migrated resource${uncovered.length === 1 ? "" : "s"} ${uncovered.join(", ")}`);
     }
-    result = result.replace(pattern, "");
   }
-  return result;
+  return removeMigrationDiagnostics(source);
 }
 
 function assertSource(before, after, contract) {
@@ -293,7 +321,15 @@ function attributes(tag) {
 
 function xmlElements(xml, name) {
   return [...xml.matchAll(new RegExp(`<${name}\\b[^>]*?(?:\\/>|>[\\s\\S]*?<\\/${name}>)`, "g"))]
-    .map(match => ({ text: match[0], attributes: attributes(match[0].slice(0, match[0].indexOf(">"))) }));
+    .map(match => {
+      const text = match[0];
+      const openingEnd = text.indexOf(">");
+      const opening = text.slice(0, openingEnd + 1);
+      const innerContent = /\/\s*>$/.test(opening)
+        ? ""
+        : text.slice(openingEnd + 1, text.lastIndexOf(`</${name}>`));
+      return { text, innerContent, attributes: attributes(text.slice(0, openingEnd)) };
+    });
 }
 
 function compactXml(xml) {
@@ -310,6 +346,7 @@ function assertProject(before, after, removed = [], central = false) {
   const expected = { Include: "Aspire.Hosting.Dotnet" };
   if (central || /<AspireVersion>/.test(before)) expected.Version = "$(AspireVersion)";
   assert.deepEqual(additions[0].attributes, expected, "Package version ownership changed");
+  assert.match(additions[0].innerContent, /^\s*$/, "Unexpected Dotnet package child content");
   let previous = before;
   for (const path of removed) {
     const reference = xmlElements(previous, "ProjectReference")

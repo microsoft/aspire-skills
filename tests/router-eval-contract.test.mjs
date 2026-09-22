@@ -23,7 +23,7 @@ const named = {
   "router-mon-001": ["aspire-monitoring"],
   "router-orch-001": ["aspire", "aspire-orchestration"],
   "router-package-manager-001": ["aspire"],
-  "router-legacy-ts-migrate-135-001": ["aspire"]
+  "router-legacy-ts-migrate-135-001": ["aspire-orchestration"]
 };
 const owners = [["aspire", "aspire-orchestration"], "aspire-deployment", "aspire-monitoring",
   "aspire-orchestration", undefined, "aspireify", "aspireify", "aspire-orchestration",
@@ -37,7 +37,7 @@ test("router evaluations retain all cases, executor, run count and threshold", (
   const names = [...Object.keys(named), "router-reject-001",
     ...Array.from({ length: 6 }, (_, index) => `should_not_trigger_${String(index + 1).padStart(2, "0")}`)];
   assert.deepEqual(spec.stimuli.map(stimulus => stimulus.name).sort(), names.sort());
-  assert.equal(spec.defaults.model, "gpt-5-mini");
+  assert.equal(spec.defaults.model, "gpt-5.6-sol-fast");
   assert.equal(spec.defaults.runs, 3);
   assert.equal(spec.defaults.timeout, "180s");
   assert.equal(spec.defaults.judge_model, "gpt-5.6-sol");
@@ -50,6 +50,18 @@ test("skill metadata requires specialist activation for read-only guidance", () 
   assert.match(router.description, /aspire-project-v2-migration/);
   assert.match(router.source, /Adding a new project or integration is ordinary `aspireify` wiring/);
   assert.match(router.source, /eligible 13\.6\+ AppHost/);
+});
+
+test("editor lifecycle guidance requires the available editor tool before CLI fallback", () => {
+  const stimulus = spec.stimuli.find(item => item.name === "router-orch-001");
+  const rubric = stimulus.rubric.join("\n");
+  assert.match(stimulus.prompt, /not a git worktree/);
+  assert.match(stimulus.prompt, /editor-first guidance/);
+  assert.match(stimulus.prompt, /aspire_apphost_start\s+with mode run/);
+  assert.match(stimulus.prompt, /Do not present direct\s+CLI startup as the primary mechanism/);
+  assert.match(rubric, /aspire_apphost_start in run mode[\s\S]*aspire wait/);
+  assert.match(rubric, /aspire start guidance is explicitly limited to a documented fallback/);
+  assert.doesNotMatch(rubric, /aspire_apphost_start in run mode or aspire start/);
 });
 
 for (const stimulus of spec.stimuli) {
@@ -115,10 +127,17 @@ test("ordinary wiring and legacy CLI migration retain resource-migration exclusi
   }
 });
 
-test("legacy migration advice requests a conditional authoring handoff without activating it", () => {
+test("legacy migration requires its owner and requests a conditional authoring handoff", () => {
   const stimulus = spec.stimuli.find(item => item.name === "router-legacy-ts-migrate-135-001");
   assert.match(stimulus.prompt, /not a ProjectResource API migration/);
   assert.match(stimulus.prompt, /aspire update --migrate --yes --non-interactive/);
+  assert.match(stimulus.prompt, /clear single-domain command/);
+  assert.match(stimulus.prompt, /later conditional handoff/);
+  assert.match(stimulus.prompt, /Aspire 13\.5 legacy-entry-point\s+migration guidance/);
+  assert.match(stimulus.prompt, /do not substitute unrelated release breaking changes/);
+  assert.match(stimulus.prompt, /updates the project's Aspire packages first/);
+  assert.match(stimulus.prompt, /migrates\s+apphost\.ts to apphost\.mts/);
+  assert.match(stimulus.prompt, /requires approval for both the package update and migration/);
   for (const change of ["package", "Aspire config", "tsconfig", "generated-import", "entry-point"]) {
     assert.ok(stimulus.prompt.includes(change));
   }
@@ -127,8 +146,13 @@ test("legacy migration advice requests a conditional authoring handoff without a
   assert.ok(stimulus.rubric.some(criterion => /names aspireify.*only if/.test(criterion)));
   assert.ok(stimulus.rubric.some(criterion => criterion.includes("--yes --non-interactive")));
   const activation = stimulus.graders.find(grader => grader.type === "skill-invocation");
-  assert.deepEqual(activation.config.required, ["aspire"]);
+  assert.deepEqual(activation.config.required, ["aspire-orchestration"]);
   assert.ok(activation.config.disallowed.includes("aspire-project-v2-migration"));
+  const accepts = invoked => activation.config.required.every(name => invoked.includes(name))
+    && !activation.config.disallowed.some(name => invoked.includes(name));
+  assert.equal(accepts(["aspire-orchestration"]), true);
+  assert.equal(accepts(["aspire", "aspire-orchestration"]), true);
+  assert.equal(accepts(["aspire"]), false);
   assert.match(readSkill("aspire").source,
     /aspire update --migrate --yes --non-interactive/);
 });
