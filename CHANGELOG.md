@@ -9,6 +9,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Clarified agent installation and update instructions in `README.md`.
 - Aligned PR review guidance with supported agent hosts, release versioning, and
   the published plugin mirror.
+- Clarified routing between Project v2 migration, legacy TypeScript AppHost
+  migration, and ordinary AppHost wiring.
+- Updated evaluation CI with bounded retries and result-integrity checks.
 
 ### Added
 - Added the approval-first `aspire-project-v2-migration` skill for eligible Aspire
