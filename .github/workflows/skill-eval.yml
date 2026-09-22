@@ -130,7 +130,8 @@ jobs:
         # combined with `-e`, which is why the scoped path below expresses the
         # same filter with `--tag` instead.) PR runs use one trial so Vally can
         # retry transient executor timeouts; nightly retains each spec's
-        # repeated-run sampling.
+        # repeated-run sampling. Keep one worker because the Copilot session
+        # filesystem provider is process-global.
         env:
           COPILOT_GITHUB_TOKEN: ${{ github.token }}
         run: |
@@ -141,6 +142,7 @@ jobs:
             --runs 1 \
             --max-retries 2 \
             --suite ci-gate \
+            --workers 1 \
             --output-dir ./results
 
       - name: Run CI gate evals

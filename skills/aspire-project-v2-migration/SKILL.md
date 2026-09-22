@@ -126,6 +126,11 @@ End that assessment with the gateway decision: request approval for specific
 bounded discovery, or ask whether to retain the gateway/review an owned publishing
 policy. Asking only about API edits does not resolve the gateway approval boundary.
 
+Before sending an assessment with an unresolved gateway, check the final question:
+it must explicitly ask the user to choose gateway bounded discovery or gateway
+retention plus owned publishing-policy review. Never end with only API-edit
+approval while the gateway is still decision-required.
+
 End the assessment with an actual approval request, not just a description of
 what approval would mean. Use the host's user-question tool when available;
 otherwise ask explicitly whether the user approves the listed resource and file

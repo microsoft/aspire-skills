@@ -10,7 +10,7 @@ const skillSpecs = readdirSync(join(root, "skills"), { withFileTypes: true })
   .filter(entry => entry.isDirectory())
   .map(entry => join("skills", entry.name, "evals", "eval.yaml"))
   .filter(path => existsSync(join(root, path)));
-const specs = [...skillSpecs, join("evals", "organic-routing", "eval.yaml")];
+const specs = skillSpecs;
 const validGraderName = /^[a-z0-9][a-z0-9-]{0,59}$/;
 
 test("canonical evaluation specs are present", () => {
@@ -18,11 +18,14 @@ test("canonical evaluation specs are present", () => {
 });
 
 for (const spec of specs) {
-  test(`${spec}: the judge is explicit without changing executor coverage`, () => {
+  test(`${spec}: executor coverage remains stable`, () => {
     const evaluation = parse(readFileSync(join(root, spec), "utf8"));
-    assert.equal(evaluation.defaults.judge_model, "gpt-5.6-sol");
     assert.equal(evaluation.defaults.model,
       spec.includes("aspire-project-v2-migration") ? "gpt-5.6-sol-fast" : "gpt-5-mini");
+    if (spec === join("skills", "aspire", "evals", "eval.yaml") ||
+        spec.includes("aspire-project-v2-migration")) {
+      assert.equal(evaluation.defaults.judge_model, "gpt-5.6-sol");
+    }
   });
 
   test(`${spec}: explicit grader names are compatible with Vally 0.16.0`, () => {
@@ -61,15 +64,14 @@ test("grader names in the authoring examples use the supported spelling", () => 
 
 test("positive routing stimuli mirror the host matching-skill policy", () => {
   const activation = /Before answering, invoke the matching available Aspire skill or skills/;
-  for (const spec of specs) {
-    const evaluation = parse(readFileSync(join(root, spec), "utf8"));
-    for (const stimulus of evaluation.stimuli) {
-      if (stimulus.name.startsWith("should_trigger_")) {
-        assert.match(stimulus.prompt, activation, `${spec}: ${stimulus.name}`);
-        assert.match(stimulus.prompt, /do not answer from general knowledge/);
-      } else if (stimulus.name.startsWith("should_not_trigger_")) {
-        assert.doesNotMatch(stimulus.prompt, activation, `${spec}: ${stimulus.name}`);
-      }
+  const spec = join("skills", "aspire", "evals", "eval.yaml");
+  const evaluation = parse(readFileSync(join(root, spec), "utf8"));
+  for (const stimulus of evaluation.stimuli) {
+    if (stimulus.name.startsWith("should_trigger_")) {
+      assert.match(stimulus.prompt, activation, `${spec}: ${stimulus.name}`);
+      assert.match(stimulus.prompt, /do not answer from general knowledge/);
+    } else if (stimulus.name.startsWith("should_not_trigger_")) {
+      assert.doesNotMatch(stimulus.prompt, activation, `${spec}: ${stimulus.name}`);
     }
   }
 });

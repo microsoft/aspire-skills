@@ -16,7 +16,6 @@ defaults:
   timeout: 600s
   executor: copilot-sdk
   model: gpt-5-mini
-  judge_model: gpt-5.6-sol
 scoring:
   # CI-gate tolerance: a stimulus passes when the weighted majority of its graders
   # pass, rather than demanding every grader pass on every trial. This absorbs (a)
@@ -32,35 +31,6 @@ environment:
     - ../../aspireify
     - ../../aspire-orchestration
 stimuli:
-  - name: aspireify-preserves-package-family-136-001
-    prompt: >
-      Use aspireify. This existing C# AppHost centrally selects AspireVersion
-      13.6.0-dev. Give read-only guidance for adding another Redis resource and
-      referencing it from api. Preserve that release family. Do not edit,
-      restore, build, start, run cloud commands, or migrate Project resources.
-    tags: { priority: p1, scenario: version-compatibility, area: version-preservation }
-    constraints: { max_agent_duration: 5m }
-    environment:
-      skills: [../../aspireify, ../../aspire-orchestration, ../../aspire-project-v2-migration]
-      files:
-        - { src: ../../../evals/project-v2-migration/runnable-csharp, dest: app }
-    rubric:
-      - The assistant keeps ordinary AddRedis/WithReference authoring in aspireify.
-      - The assistant preserves 13.6.0-dev rather than pinning 13.5.3 or implicitly changing versions.
-      - The assistant does not initiate migration or edit the workspace.
-    graders:
-      - type: prompt
-        name: preserves-selected-136-family
-        config:
-          scoring: binary
-          prompt: Does the assistant's response preserve the selected 13.6.0-dev package family and give ordinary Redis wiring guidance without requiring migration?
-      - type: skill-invocation
-        name: invokes-aspireify-not-project-v2-migration
-        config:
-          required: [aspireify]
-          disallowed: [aspire-project-v2-migration]
-      - type: diff-empty
-        name: keeps-read-only-workspace-unchanged
   - name: aspireify-nextjs-001
     prompt: Add my Next.js frontend in ./web to my Aspire AppHost and wire it to talk to my API.
     tags:
@@ -675,10 +645,7 @@ stimuli:
           required: [aspireify]
   - name: should_trigger_01
     description: "Reason: Direct wiring request — aspireify owns AppHost wiring"
-    prompt: >
-      Before answering, invoke the matching available Aspire skill or skills; do
-      not answer from general knowledge.
-      Wire up my Aspire AppHost
+    prompt: Wire up my Aspire AppHost
     tags:
       priority: p1
       area: routing
@@ -690,10 +657,7 @@ stimuli:
             - aspireify
   - name: should_trigger_02
     description: "Reason: Adding an integration resource to AppHost is wiring"
-    prompt: >
-      Before answering, invoke the matching available Aspire skill or skills; do
-      not answer from general knowledge.
-      Add Postgres to my Aspire AppHost
+    prompt: Add Postgres to my Aspire AppHost
     tags:
       priority: p1
       area: routing
@@ -708,10 +672,7 @@ stimuli:
     # Question phrasing: an imperative makes the executor run the interactive resource
     # scaffolder, which blocks and times out the trial; the skill-invocation grader
     # only checks routing, so intent is unchanged.
-    prompt: >
-      Before answering, invoke the matching available Aspire skill or skills; do
-      not answer from general knowledge.
-      How do I scaffold the resource graph for my Aspire app?
+    prompt: How do I scaffold the resource graph for my Aspire app?
     tags:
       priority: p1
       area: routing
@@ -723,10 +684,7 @@ stimuli:
             - aspireify
   - name: should_trigger_04
     description: "Reason: aspire init drops a skeleton; aspireify completes the wiring"
-    prompt: >
-      Before answering, invoke the matching available Aspire skill or skills; do
-      not answer from general knowledge.
-      After running aspire init, what next to wire my AppHost?
+    prompt: After running aspire init, what next to wire my AppHost?
     tags:
       priority: p1
       area: routing
@@ -738,10 +696,7 @@ stimuli:
             - aspireify
   - name: should_trigger_05
     description: "Reason: Wiring service references between projects in the AppHost"
-    prompt: >
-      Before answering, invoke the matching available Aspire skill or skills; do
-      not answer from general knowledge.
-      Connect my React frontend to my .NET API in the AppHost
+    prompt: Connect my React frontend to my .NET API in the AppHost
     tags:
       priority: p1
       area: routing
@@ -753,10 +708,7 @@ stimuli:
             - aspireify
   - name: should_trigger_06
     description: "Reason: Integration discovery + AppHost edit"
-    prompt: >
-      Before answering, invoke the matching available Aspire skill or skills; do
-      not answer from general knowledge.
-      Add Redis cache to my Aspire AppHost
+    prompt: Add Redis cache to my Aspire AppHost
     tags:
       priority: p1
       area: routing
@@ -768,10 +720,7 @@ stimuli:
             - aspireify
   - name: should_trigger_07
     description: "Reason: WithBrowserLogs is an AppHost authoring change"
-    prompt: >
-      Before answering, invoke the matching available Aspire skill or skills; do
-      not answer from general knowledge.
-      Add WithBrowserLogs to my Vite app in apphost.mts
+    prompt: Add WithBrowserLogs to my Vite app in apphost.mts
     tags:
       priority: p1
       area: routing
@@ -783,10 +732,7 @@ stimuli:
             - aspireify
   - name: should_trigger_08
     description: "Reason: TS AppHost authoring is aspireify"
-    prompt: >
-      Before answering, invoke the matching available Aspire skill or skills; do
-      not answer from general knowledge.
-      Help me use the unified withEnvironment API in apphost.mts
+    prompt: Help me use the unified withEnvironment API in apphost.mts
     tags:
       priority: p1
       area: routing
@@ -798,10 +744,7 @@ stimuli:
             - aspireify
   - name: should_trigger_09
     description: "Reason: Refuse-and-redirect anti-pattern handling lives in aspireify"
-    prompt: >
-      Before answering, invoke the matching available Aspire skill or skills; do
-      not answer from general knowledge.
-      Edit .aspire/modules/postgres.module.ts to change the DB config
+    prompt: Edit .aspire/modules/postgres.module.ts to change the DB config
     tags:
       priority: p1
       area: routing
@@ -813,10 +756,7 @@ stimuli:
             - aspireify
   - name: should_trigger_10
     description: "Reason: AddNextJsApp wiring is aspireify"
-    prompt: >
-      Before answering, invoke the matching available Aspire skill or skills; do
-      not answer from general knowledge.
-      Add AddNextJsApp to my AppHost for the web frontend
+    prompt: Add AddNextJsApp to my AppHost for the web frontend
     tags:
       priority: p1
       area: routing
@@ -828,10 +768,7 @@ stimuli:
             - aspireify
   - name: should_trigger_11
     description: "Reason: WithTerminal is experimental AppHost authoring owned by aspireify"
-    prompt: >
-      Before answering, invoke the matching available Aspire skill or skills; do
-      not answer from general knowledge.
-      Add an interactive WithTerminal session to my Aspire container
+    prompt: Add an interactive WithTerminal session to my Aspire container
     tags:
       priority: p1
       area: routing

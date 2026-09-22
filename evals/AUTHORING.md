@@ -207,7 +207,6 @@ Rules:
 - **Pair routing with a content check.** `skill-invocation` proves *which* skill ran; add a `prompt` or `output-contains` grader if the *answer* also matters.
 - **Do not use `constraints.expect_skills` / `reject_skills`.** Vally 0.16.0 removed these fields. Express the same requirements with `skill-invocation` grader `config.required` / `config.disallowed`; extend an existing invocation grader instead of duplicating it.
 - **Mirror the host activation policy without naming the owner.** The Copilot SDK eval harness lists skills but does not require matching-skill activation. Positive gated routing prompts use a neutral "invoke the matching available Aspire skill or skills" preamble; keep the scenario itself natural and never name the expected specialist.
-- **Measure automatic discovery separately.** Put no-preamble owner-selection probes in `evals/organic-routing/eval.yaml`, tag them `priority: p2` and `activation: organic`, and grade only the actual skill invocation. They are informational nightly measurements, not PR gates.
 - **Phrase like a real user.** "I want to ship this" is more realistic than "Invoke aspire deploy."
 
 ## Adding a new stimulus — checklist

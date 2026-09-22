@@ -3,8 +3,7 @@ name: aspire-monitoring
 description: >-
   **ANALYSIS SKILL** - Observe Aspire apps: logs, traces, metrics, resource state,
   telemetry export, browser telemetry, and the standalone dashboard. Routes between local
-  Aspire CLI, AKS workload diagnostics, and deployed Azure resource health. Load this
-  skill before answering matching execution, planning, read-only, or how-to requests.
+  Aspire CLI, AKS workload diagnostics, and deployed Azure resource health.
   USE FOR: aspire logs, aspire otel logs, aspire otel traces, aspire otel spans, aspire
   describe, aspire ps, aspire export, aspire dashboard run, describe --include-hidden,
   browser logs in dashboard, terminal view, DevTunnel URLs, WithBrowserLogs, App Insights
@@ -106,9 +105,6 @@ aspire describe --apphost ./src/MyApp.AppHost/
 ```
 
 ## Version-Specific Diagnostics
-
-The 13.5.3 servicing fixes below apply to older 13.5 builds. On 13.6, investigate
-the current failure instead of downgrading to 13.5.3.
 
 | Symptom | 13.5.3 guidance |
 |---------|-----------------|

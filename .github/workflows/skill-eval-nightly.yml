@@ -56,49 +56,17 @@ jobs:
             --suite nightly \
             --output-dir ./results
 
-      - name: Run organic routing discovery
-        id: organic
-        # Informational: failed activation verdicts are the measurement, not a
-        # workflow failure. Execution/authentication errors still exit non-zero
-        # and are checked below.
-        if: ${{ !cancelled() && (steps.evals.outcome == 'success' || steps.evals.outcome == 'failure') }}
-        env:
-          COPILOT_GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          unset GITHUB_TOKEN GH_TOKEN GITHUB_COPILOT_API_TOKEN
-          vally eval \
-            --suite organic-discovery \
-            --output-dir ./organic-results
-
       - name: Check evaluation infrastructure
         if: ${{ !cancelled() && (steps.evals.outcome == 'success' || steps.evals.outcome == 'failure') }}
         run: |
           node scripts/check-eval-results.mjs ./results .
-
-      - name: Check organic routing infrastructure
-        if: ${{ !cancelled() && (steps.organic.outcome == 'success' || steps.organic.outcome == 'failure') }}
-        run: |
-          node scripts/check-eval-results.mjs ./organic-results .
 
       - name: Redact evaluation artifacts
         id: redact
         if: ${{ !cancelled() && (steps.evals.outcome == 'success' || steps.evals.outcome == 'failure') }}
         env:
           COPILOT_GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/redact-eval-artifacts.mjs ./results ./organic-results
-
-      - name: Summarize organic routing discovery
-        if: ${{ !cancelled() && steps.redact.outcome == 'success' }}
-        shell: bash
-        run: |
-          report="$(find ./organic-results -type f -name eval-results.md -print -quit)"
-          if [[ -n "$report" ]]; then
-            {
-              echo "## Informational organic skill discovery"
-              echo ""
-              cat "$report"
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
+        run: node scripts/redact-eval-artifacts.mjs ./results
 
       - name: Upload trajectories
         if: ${{ !cancelled() && steps.redact.outcome == 'success' }}
@@ -106,12 +74,4 @@ jobs:
         with:
           name: eval-results-nightly
           path: ./results/
-          if-no-files-found: warn
-
-      - name: Upload organic routing trajectories
-        if: ${{ !cancelled() && steps.redact.outcome == 'success' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: organic-routing-nightly
-          path: ./organic-results/
           if-no-files-found: warn

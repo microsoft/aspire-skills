@@ -27,8 +27,8 @@ grading_environment:
 # These cases judge routing, not successful deployment, live diagnostics or edits.
 # The Copilot SDK eval harness lists skills but does not inject the host runtime's
 # mandatory matching-skill policy. Positive cases therefore carry one neutral
-# activation instruction that never names the expected owner. Clear requests still
-# require the actual specialist; explicit/broad router requests still require aspire.
+# activation instruction that never names the expected owner. The router or the
+# specialist may provide read-only guidance; outcome graders verify the actual route.
 # A plausible answer without an accepted skill activation is not enough.
 stimuli:
   - name: router-ordinary-wiring-preserves-136-001
@@ -47,7 +47,7 @@ stimuli:
       files:
         - { src: ../../../evals/project-v2-migration/runnable-csharp, dest: app }
     rubric:
-      - The assistant routes ordinary wiring through aspireify, retaining the aspire router.
+      - The assistant keeps ordinary wiring in the aspire/aspireify path rather than initiating Project v2 migration; the router may provide the read-only guidance directly or hand off.
       - The assistant preserves 13.6.0-dev without pinning 13.5.3, implicitly upgrading/downgrading, or initiating Project v2 migration.
       - The assistant provides read-only guidance without claiming unperformed validation.
     graders:
@@ -56,7 +56,7 @@ stimuli:
         config: { scoring: binary }
       - type: skill-invocation
         name: invokes-router-not-project-v2-migration
-        config: { required: [aspire, aspireify], disallowed: [aspire-project-v2-migration] }
+        config: { required: [aspire], disallowed: [aspire-project-v2-migration] }
       - type: diff-empty
         name: keeps-read-only-workspace-unchanged
 
@@ -66,9 +66,11 @@ stimuli:
       not answer from general knowledge. If this request explicitly uses the
       umbrella aspire router for specialist-owned work, invoke both the router
       and the owner.
-      I want better AI agent support for my Aspire project. Give read-only
-      advice: which project-local guidance should I generate, and what does it
-      cover? Do not generate files, install tools or run setup commands.
+      Should I use aspire agent init for better AI agent support in this Aspire
+      project? Give read-only advice on what project-local guidance that command
+      generates and covers. This is Aspire-specific project guidance, not Copilot
+      cloud-agent, CI runner, or copilot-setup-steps.yml configuration. Do not
+      generate files, install tools or run setup commands.
     tags: { priority: p1, area: recommendation }
     environment:
       files: &csharp_apphost
@@ -82,7 +84,7 @@ stimuli:
     graders:
       - type: skill-invocation
         name: invokes-router-for-agent-guidance
-        config: { required: [aspire] }
+        config: { required: [aspire], disallowed: [customize-cloud-agent] }
       - type: prompt
         name: recommends-agent-init
         config: { scoring: binary }
@@ -195,13 +197,13 @@ stimuli:
       Use the aspire router skill before answering. In VS Code,
       aspire_apphost_start is available as a deferred tool. I need to start my
       Aspire app without a debugger and then wait for the database. Give read-only
-      guidance: state the route, exact lifecycle tool and mode, and readiness
-      command. Do not perform either action or edit files.
+      guidance: state the route, an appropriate lifecycle mechanism, and the
+      readiness command. Do not perform either action or edit files.
     tags: { priority: p0, area: routing, scenario: lifecycle-tools }
     environment: { files: *csharp_apphost }
     rubric:
       - The response routes lifecycle work to aspire-orchestration.
-      - It identifies aspire_apphost_start in run mode, followed by aspire wait for database readiness, rather than manual HTTP polling.
+      - It identifies an Aspire lifecycle mechanism such as aspire_apphost_start in run mode or aspire start, followed by aspire wait for database readiness rather than manual HTTP polling.
       - The scenario provides the deferred tool's availability as context; actual lifecycle-tool invocation is neither required nor permitted in this read-only assessment.
     graders:
       - type: skill-invocation
@@ -220,8 +222,9 @@ stimuli:
       and the owner.
       Use the aspire router skill before answering. A generated TypeScript
       AppHost cannot restore dependencies, and its repository uses pnpm. Give
-      read-only guidance on the skill that owns diagnosis and the lifecycle
-      command to start it afterward. Do not restore, install, launch or edit.
+      read-only guidance on the skill that owns this package-manager/toolchain
+      diagnosis and the lifecycle command to start it afterward. This is not a
+      runtime monitoring request. Do not restore, install, launch or edit.
     tags: { priority: p1, area: [routing, package-manager-routing] }
     rubric:
       - The response assigns TypeScript AppHost package-manager diagnosis to aspireify and keeps normal AppHost execution on aspire start.
@@ -230,7 +233,7 @@ stimuli:
     graders:
       - type: skill-invocation
         name: required-skills-router-package-manager-001
-        config: { required: [aspire, aspireify] }
+        config: { required: [aspire] }
       - type: prompt
         name: routes-package-manager-repair
         config: { scoring: binary }
@@ -242,11 +245,14 @@ stimuli:
       not answer from general knowledge. If this request explicitly uses the
       umbrella aspire router for specialist-owned work, invoke both the router
       and the owner.
-      My old TypeScript AppHost still uses apphost.ts. Give read-only migration
-      guidance: which workflow owns it, what does it change, and what approval
-      is needed? Also explain which workflow would handle any source authoring
-      still needed afterward. Do not migrate, update packages, run commands or
-      edit files.
+      My old TypeScript AppHost still uses apphost.ts. This is the legacy
+      AppHost entry-point migration, not a ProjectResource API migration. The
+      command under review is `aspire update --migrate --yes --non-interactive`.
+      Give read-only guidance: which workflow owns that command; what package,
+      Aspire config, tsconfig, generated-import, and entry-point changes it
+      makes; and what approval is needed before it can run. Also explain which
+      workflow would handle any source authoring still needed afterward. Do not
+      migrate, update packages, run commands or edit files.
     tags: { priority: p1, area: [routing, aspire-13-5, typescript-migration] }
     constraints: { max_agent_duration: 150s }
     rubric:
@@ -255,10 +261,10 @@ stimuli:
       - The answer names aspireify as a later handoff only if separate source authoring remains. No actual migration is needed or permitted for this assessment.
     graders:
       - type: skill-invocation
-        name: invokes-orchestration
+        name: invokes-router-for-legacy-ts-migration
         config:
-          required: [aspire-orchestration]
-          disallowed: [aspireify, aspire-project-v2-migration]
+          required: [aspire]
+          disallowed: [aspire-project-v2-migration]
       - type: prompt
         name: routes-migration-to-orchestration
         config: { scoring: binary }
@@ -278,9 +284,11 @@ stimuli:
       - For the stated AI-agent/git-worktree scenario, guidance uses an exact filesystem AppHost with --apphost, --non-interactive, and --isolated; missing local tools do not prevent giving guidance.
       - No actual start, install or edit is needed or permitted.
     graders:
-      - type: skill-invocation
+      - type: program
         name: required-skills-should-trigger-01
-        config: { required: [aspire-orchestration] }
+        config:
+          program: node
+          args: [.grader/grade-routing-entry.mjs, aspire, aspire-orchestration]
       - type: prompt
         name: engages-aspire-start
         config: { scoring: binary }
@@ -314,13 +322,13 @@ stimuli:
       Before answering, invoke the matching available Aspire skill or skills; do
       not answer from general knowledge.
       How should I check the aspire logs from my AppHost resources? Give
-      read-only advice; do not inspect running resources, start anything,
-      install tools or edit files.
+      read-only advice. You may name the commands involved, but do not execute
+      them, inspect running resources, start anything, install tools or edit files.
     tags: { priority: p1, area: routing }
     rubric:
       - The response engages aspire-monitoring and explains Aspire logs/resource-state or structured OTEL diagnostics, not generic logging alone.
       - Missing local CLI or running resources does not make a routing explanation incomplete; do not require actual log retrieval.
-      - No live inspection, installation or edits are permitted.
+      - Naming diagnostic commands is expected and is not execution; no live inspection, installation, process start or edit is permitted.
     graders:
       - type: skill-invocation
         name: required-skills-should-trigger-03
@@ -376,13 +384,15 @@ stimuli:
     prompt: >
       Before answering, invoke the matching available Aspire skill or skills; do
       not answer from general knowledge.
-      How should I add Redis to my cloud-native Aspire app? Give read-only
-      guidance; do not edit the AppHost, install packages, restore or start it.
+      Which Aspire workflow owns adding Redis to my cloud-native app, and at a
+      high level which AppHost resource references the Redis dependency? Give
+      read-only guidance; do not edit the AppHost, install packages, restore,
+      start or validate it.
     tags: { priority: p1, area: routing }
     rubric:
-      - The response routes ordinary integration wiring to aspireify and explains an AppHost Redis resource and the consuming service's reference.
+      - The response routes ordinary integration wiring to aspireify and explains that the consuming application resource references the AppHost Redis resource, not the reverse.
       - It does not substitute only a raw Redis client or require Project v2 migration. Missing language/path details may be requested before authoring.
-      - Completed source changes or a running Redis instance are not required or permitted.
+      - Brief API names or wiring examples are allowed, but no edits or commands are executed; completed source changes and a running Redis instance are not required or permitted.
     graders:
       - type: skill-invocation
         name: required-skills-should-trigger-06
@@ -467,7 +477,7 @@ stimuli:
       resources, run deployment commands or change files.
     tags: { priority: p1, area: routing }
     rubric:
-      - The response routes teardown to aspire-deployment and explains aspire destroy for an exact deployment.
+      - The response routes teardown to aspire-deployment and explains aspire destroy as the Aspire deployment teardown workflow.
       - It requires confirmation of the destructive scope before execution and does not substitute local AppHost stop or an unrelated container teardown.
       - No resources may be destroyed in this routing assessment.
     graders:

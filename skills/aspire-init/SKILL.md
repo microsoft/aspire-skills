@@ -1,19 +1,16 @@
 ---
 name: aspire-init
 description: >-
-  **WORKFLOW SKILL** - First-run flow for adding Aspire to a repo. Load this skill
-  before answering matching execution, planning, read-only, or how-to requests.
-  Picks `aspire new` (greenfield) or `aspire init` (existing repo), drops the AppHost
-  skeleton, then hands off to `aspireify` for resource wiring.
+  **WORKFLOW SKILL** - First-run flow for adding Aspire to a repo. Picks `aspire new`
+  (greenfield) or `aspire init` (existing repo), drops the AppHost skeleton, then hands
+  off to `aspireify` for resource wiring.
   USE FOR: aspire init, aspire new, aspire-starter, aspire-ts-starter, aspire-py-starter,
   add Aspire to existing repo, scaffold Aspire app, bootstrap Aspire, no AppHost detected,
-  or install aspireify after the skeleton is created.
+  install aspireify, apphost.mts, generated .aspire/modules.
   DO NOT USE FOR: AppHost wiring on an existing AppHost (use aspireify), start/stop/wait
-  or standalone aspire doctor diagnostics (use aspire-orchestration), deploy/publish
-  (use aspire-deployment), logs/traces (use aspire-monitoring), repo that already has
-  an AppHost, or better AI agent support /
-  aspire agent init (use the aspire router).
-  INVOKES: aspire CLI (init, new), aspireify (handoff after skeleton drop).
+  (use aspire-orchestration), deploy/publish (use aspire-deployment), logs/traces (use
+  aspire-monitoring), repo that already has an AppHost.
+  INVOKES: aspire CLI (init, new, doctor), aspireify (handoff after skeleton drop).
   FOR SINGLE OPERATIONS: Run `aspire init` or `aspire new TEMPLATE` directly.
 license: MIT
 metadata:
@@ -26,14 +23,6 @@ metadata:
 > **First-run only.** This skill owns the skeleton drop and template choice for repositories
 > that do not yet have an Aspire AppHost. Once the skeleton is in place, hand off to
 > [`aspireify`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md) for the actual resource wiring.
-
-`aspire agent init` is a different operation: it generates project-local agent
-guidance for an Aspire project, not an AppHost skeleton. Requests for better AI
-agent support belong to the `aspire` router; do not treat them as first-run setup.
-
-Standalone `aspire doctor` questions and environment diagnostics belong to
-`aspire-orchestration`, even when no AppHost exists. Use doctor here only as a
-prerequisite check within an explicitly requested `aspire init` / `aspire new` flow.
 
 ## Prerequisites
 
@@ -97,11 +86,6 @@ For brand-new projects in an empty or non-existent directory:
 
 For repositories that already contain services (Express API, .NET API, Python service, etc.)
 and need an AppHost added alongside them:
-
-For read-only `aspire init` guidance, explain the command and resulting AppHost
-skeleton/configuration, then explicitly name `aspireify` as the owner of subsequent
-resource wiring. Describe that later handoff; do not scaffold or wire resources
-just to answer.
 
 1. Verify the [Detection](#detection) table — confirm **no** AppHost is present.
 2. Run `aspire init`, choosing language explicitly for non-interactive flows:

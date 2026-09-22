@@ -78,12 +78,6 @@ matching available Aspire skill or skills. The instruction never names the expec
 owner, so the evaluation still measures owner selection and router handoff rather
 than parroting a requested skill name. Negative cases omit it.
 
-Automatic discovery remains a separate signal. The informational
-[`organic-routing`](./organic-routing/eval.yaml) spec repeats one representative
-prompt per owner without the policy preamble, plus a non-Aspire rejection control.
-It runs only in the weekly `organic-discovery` suite, reports spontaneous activation
-rate, and never participates in the PR gate.
-
 These assessments are read-only: explicit rubrics judge the route and guidance,
 not successful live deployment or log retrieval, and `diff-empty` checks the
 captured workspace. Report individual activation, outcome and read-only results
@@ -137,7 +131,6 @@ The `with-skills` − `no-skills` pass-rate delta is the measured lift. The expe
 | Reproduce the PR gate for one changed skill | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --tag priority=p0,p1 --runs 1 --max-retries 2` |
 | Run p0 + p1 across all skills | `vally eval --suite ci-gate` |
 | Run full nightly suite | `vally eval --suite nightly` |
-| Measure spontaneous skill activation | `vally eval --suite organic-discovery` |
 | Run one skill | `vally eval --eval-spec skills/aspire-deployment/evals/eval.yaml` |
 | Run one stimulus by tag | `vally eval --eval-spec skills/aspire/evals/eval.yaml --tag area=routing` |
 | Run the skill-lift baseline experiment | `vally experiment run skill-lift.experiment.yaml --output-dir ./results` |
@@ -292,7 +285,7 @@ The repo ships four GitHub Actions workflows that drive `vally` automatically:
 |----------|---------|---------|
 | [`skill-lint.yml`](../.github/workflows/skill-lint.yml) | PR (`SKILL.md` / `*.yaml` / `.vally.yaml`) | `vally lint skills` + per-spec `vally lint --eval-spec <spec>` |
 | [`skill-eval.yml`](../.github/workflows/skill-eval.yml) | PR (`SKILL.md` / `eval.yaml` / `.vally.yaml`) | `vally eval -e <changed-spec> [...] --tag priority=p0,p1 --runs 1 --max-retries 2 --output-dir ./results` |
-| [`skill-eval-nightly.yml`](../.github/workflows/skill-eval-nightly.yml) | `cron: "0 6 * * 0"` (Sun 06:00 UTC) + `workflow_dispatch` | Gated `vally eval --suite nightly --output-dir ./results` plus informational `vally eval --suite organic-discovery --output-dir ./organic-results` |
+| [`skill-eval-nightly.yml`](../.github/workflows/skill-eval-nightly.yml) | `cron: "0 6 * * 0"` (Sun 06:00 UTC) + `workflow_dispatch` | `vally eval --suite nightly --output-dir ./results` |
 | [`skill-experiment.yml`](../.github/workflows/skill-experiment.yml) | `cron: "0 6 * * 6"` (Sat 06:00 UTC) + `workflow_dispatch` | `vally experiment run skill-lift.experiment.yaml --output-dir ./results` — informational baseline (skills vs no-skills), never gates |
 
 The all-skill suites are declared at the repo root in [`.vally.yaml`](../.vally.yaml) and filter on the `priority` tag every stimulus carries:
@@ -305,11 +298,6 @@ suites:
   nightly:
     filter:
       priority: [p0, p1, p2]
-  organic-discovery:
-    evals:
-      - evals/organic-routing/eval.yaml
-    filter:
-      activation: organic
 ```
 
 The PR gate and main nightly suite use `vally eval --require-pass` so failed
@@ -319,10 +307,7 @@ specs and applies the `ci-gate`-equivalent `priority=p0,p1` filter only to them.
 evaluations override the run count to one and allow two bounded retries so transient
 executor timeouts and rate limits can recover; Vally intentionally disables those
 retries for multi-trial plans. The comprehensive `nightly` suite keeps each spec's
-repeated-run defaults. A second nightly command runs `organic-discovery` without
-`--require-pass`: failed activation verdicts are reported in a separate job summary
-and artifact, while authentication, execution, grading, missing-result, and redaction
-failures still fail the workflow. The comparative baseline remains informational.
+repeated-run defaults. The comparative baseline remains informational.
 
 ## CI authentication
 

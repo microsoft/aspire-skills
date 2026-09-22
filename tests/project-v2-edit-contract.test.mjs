@@ -118,6 +118,7 @@ test("source mutation controls reject unchanged input", t => {
 
 test("gateway image decisions have read-only controls and a separately approved edit case", () => {
   const spec = parse(readFileSync(new URL("../skills/aspire-project-v2-migration/evals/eval.yaml", import.meta.url), "utf8"));
+  const skill = readFileSync(new URL("../skills/aspire-project-v2-migration/SKILL.md", import.meta.url), "utf8");
   for (const name of ["project-v2-blazor-image-change-approval", "project-v2-blazor-unresolved-image-policy"]) {
     const stimulus = spec.stimuli.find(item => item.name === name);
     assert.ok(stimulus, `Missing gateway approval control: ${name}`);
@@ -131,6 +132,8 @@ test("gateway image decisions have read-only controls and a separately approved 
   assert.match(approved.prompt, /do not\s+retarget service\/client source/);
   assert.match(approved.prompt, /Remove only the obsolete publish-mode gateway DockerfileBuildAnnotation/);
   assert.match(approved.prompt, /gateway\.WithContainerBuildOptions/);
+  assert.match(skill, /final question:[\s\S]*?gateway bounded discovery/);
+  assert.match(skill, /Never end with only API-edit[\s\S]*?gateway is still decision-required/);
   const evidence = JSON.parse(readFileSync(join(fixturesRoot, "gateway-publishing-evidence.json"), "utf8"));
   assert.match(evidence.purpose, /not proof of installed packages or completed validation/);
   assert.equal(evidence.before.targetFramework, "net10.0");

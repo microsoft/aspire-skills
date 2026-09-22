@@ -1,20 +1,19 @@
 ---
 name: aspire-orchestration
 description: >-
-  **WORKFLOW SKILL** — Manage Aspire lifecycle in VS Code or the CLI. Load this
-  skill before answering matching execution, planning, read-only, or how-to requests.
-  WHEN: aspire start/stop/wait, aspire_apphost_start/stop, resource restart,
-  file-lock errors (MSB3491/CS2012), port conflicts, git worktrees/--isolated,
-  aspire update --self/--migrate, legacy apphost.ts or old TypeScript AppHost migration,
-  aspire stop --force, aspire terminal,
-  "aspire doctor", standalone environment diagnostics, integration discovery,
-  default watch, hot reload, notEditorOwned, or ambiguousSession.
-  INVOKES: VS Code lifecycle tools when exposed; Aspire CLI for readiness,
-  inspection, resources, isolated starts, and allowed fallbacks.
+  **WORKFLOW SKILL** — Manage Aspire lifecycle in VS Code or the CLI.
+  WHEN: "start or stop my Aspire app", "aspire_apphost_start",
+  "aspire_apphost_stop", "notEditorOwned", "ambiguousSession", "aspire start",
+  "aspire stop", "aspire wait", resource restart, file-lock errors (MSB3491 or
+  CS2012), port conflicts, git worktrees, "--isolated", "aspire update --self",
+  "aspire update --migrate", "aspire describe --include-hidden", "aspire stop --force",
+  "aspire terminal", integration discovery, default watch, or hot reload.
+  INVOKES: VS Code lifecycle tools first when exposed; Aspire CLI for readiness,
+  inspection, resource operations, isolated worktree starts, and allowed fallbacks.
   DO NOT USE FOR: deploy/publish/destroy (aspire-deployment), logs/traces/metrics
   (aspire-monitoring), or AppHost code and resource wiring (aspireify).
-  FOR SINGLE OPERATIONS: Load the matching editor tool first; obey exact-target,
-  worktree-isolation, and stop-result rules.
+  FOR SINGLE OPERATIONS: Load the matching editor tool first, then obey the
+  exact-target, worktree-isolation, and stop-result rules below.
 license: MIT
 metadata:
   author: Microsoft
@@ -137,22 +136,6 @@ its filesystem path first.
 
 See [safety-guardrails.md](references/safety-guardrails.md) for detailed rules and recovery patterns.
 
-## Read-only guidance
-
-A request for instructions is not approval to execute the workflow. Explain the
-commands without starting or stopping apps, running diagnostics, installing tools,
-or changing files just to answer.
-
-For AI-agent CLI start advice, include `--apphost <filesystem-path>` for the exact
-target and `--non-interactive` for unattended execution. In a git worktree, also
-include `--isolated`; retain the editor/worktree routing rules above. If the caller
-or workspace is unspecified, explain which flags are conditional rather than
-assuming an agent or a worktree.
-
-Standalone `aspire doctor` and environment diagnostics belong to this skill.
-First-run `aspire init` / `aspire new` requests belong to `aspire-init`, which may
-use doctor as a prerequisite check within that setup workflow.
-
 ## Default Workflow
 
 1. Confirm workspace is Aspire — identify the AppHost
@@ -266,17 +249,10 @@ The same rule applies to any "file in use", "cannot access the file", or
 
 Detection covers current `apphost.mts` and legacy `apphost.ts`, but **all TS AppHost
 authoring is delegated to `aspireify`**. The CLI-driven legacy migration is project
-maintenance owned by this orchestration skill, not authoring.
-
-For a legacy `apphost.ts` migration assessment, stay in this skill and describe
-all five change surfaces: Aspire packages, configuration, `tsconfig`, generated
-imports, and the entry point (`apphost.ts` to `apphost.mts`). Read
-[the migration guidance](references/app-commands.md) before proposing the plan.
-Require approval for that complete scope before
-`aspire update --migrate --yes --non-interactive`; read-only advice must not run it.
-Read-only answers must also name the conditional later handoff: `aspireify` owns
-separately identified source authoring after migration, only if such work remains.
-Describe that boundary without loading `aspireify` merely to assess CLI-owned changes.
+maintenance owned by this orchestration skill, not authoring. Explain that it also updates
+Aspire packages, config, tsconfig, and imports; offer
+`aspire update --migrate --yes --non-interactive` only after approval for the full change,
+then hand back to aspireify only if source authoring remains.
 Current rules to apply when handing off:
 
 | Rule | Why |
