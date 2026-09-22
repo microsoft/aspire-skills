@@ -11,9 +11,14 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   the published plugin mirror.
 - Clarified routing between Project v2 migration, legacy TypeScript AppHost
   migration, and ordinary AppHost wiring.
+- Clarified Aspire skill descriptions and package guidance to avoid exact-release
+  restrictions while retaining prerequisites and version-specific migration notes.
+  Historical fixes no longer imply that newer projects should downgrade.
 - Updated evaluation CI with bounded retries and result-integrity checks.
 
 ### Added
+- Added regression coverage for version-preserving wiring, deployment, and dashboard
+  diagnostics, plus a version-neutral router description check.
 - Added the approval-first `aspire-project-v2-migration` skill for eligible Aspire
   13.6+ AppHosts and experimental Project v2 APIs, with explicit per-file/resource
   approval, capability checks, conservative reference cleanup, routing and telemetry

@@ -106,11 +106,13 @@ aspire describe --apphost ./src/MyApp.AppHost/
 
 ## Version-Specific Diagnostics
 
-| Symptom | 13.5.3 guidance |
+Apply historical fixes to affected versions, not as downgrade targets for newer releases.
+
+| Symptom | Guidance |
 |---------|-----------------|
 | Resource missing from `aspire describe` | Re-run `aspire describe --include-hidden`; do not use removed `aspire ps --include-hidden`. |
-| DevTunnel is healthy but has no public URL on 13.5.0-13.5.2 | Upgrade the CLI/SDK to 13.5.3 before changing endpoint configuration; 13.5.3 restores the URL. |
-| Dashboard Graph crashes for a resource such as Azure Blob | Upgrade to 13.5.3; multi-path resource icons are fixed there. |
+| DevTunnel is healthy but has no public URL on 13.5.0-13.5.2 | Fixed in 13.5.3. Use a compatible release containing the fix before changing endpoint configuration. |
+| Dashboard Graph crashes for a resource such as Azure Blob | The known multi-path icon bug was fixed in 13.5.3. On newer versions, investigate the error rather than downgrade. |
 
 > **Resolved in 13.3**: The standalone-dashboard workaround for [#16236](https://github.com/microsoft/aspire/issues/16236) is obsolete — use `aspire dashboard run` (see below).
 

@@ -63,10 +63,10 @@ Use `aspire docs search` / `aspire docs get` to find the right builder methods, 
 
 **Don't invent APIs** — if docs search and integration list don't return it, it doesn't exist. Fall back to Tier 3 and note the limitation to the user. **API shapes differ between C# and TypeScript** — always check the correct language docs.
 
-## Aspire 13.5 migration and interaction rules
+## Package compatibility and interaction rules
 
 Before changing an existing AppHost, verify that its SDK and every `Aspire.Hosting.*`
-package use the same 13.5 package family. Do not mix 13.4 and 13.5 packages.
+package use the same release family. Do not mix incompatible package versions.
 
 | Area | Current rule |
 |------|--------------|

@@ -138,8 +138,9 @@ Commands like `aspire describe`, `aspire otel logs`, `aspire otel traces`, and `
 
 When a dashboard link is returned alongside a resource or telemetry entry, make the resource name, trace ID, or span ID a clickable markdown link using the returned URL.
 
-On Aspire 13.5.0-13.5.2, a healthy DevTunnel could omit its public URL. Upgrade to 13.5.3
-before treating a missing URL as an AppHost endpoint-modeling error.
+On Aspire 13.5.0-13.5.2, a healthy DevTunnel could omit its public URL. This was fixed
+in 13.5.3; use a compatible release containing the fix before treating the missing
+URL as an AppHost endpoint-modeling error.
 
 ## Displaying Resources
 

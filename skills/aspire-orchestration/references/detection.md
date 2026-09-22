@@ -6,7 +6,8 @@
 
 ### 1. C# AppHost (Definitive — Strongest Signal)
 
-Look for `.csproj` files containing the Aspire AppHost SDK reference:
+Look for `.csproj` files containing the Aspire AppHost SDK reference, regardless of
+its version:
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">

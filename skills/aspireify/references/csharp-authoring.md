@@ -52,12 +52,15 @@ builder.AddProject("api", "../Api/Api.csproj")
 
 Top of file uses `#:sdk` and `#:package` directives — no `.csproj` required:
 
+Replace the version placeholders with package versions compatible with the AppHost's
+selected Aspire release.
+
 ```csharp
 #:sdk Aspire.AppHost.Sdk
 #:property AspireUseCliBundle=true
-#:package Aspire.Hosting.PostgreSQL@13.5.3
-#:package Aspire.Hosting.Redis@13.5.3
-#:package Aspire.Hosting.JavaScript@13.5.3
+#:package Aspire.Hosting.PostgreSQL@<postgres-package-version>
+#:package Aspire.Hosting.Redis@<redis-package-version>
+#:package Aspire.Hosting.JavaScript@<javascript-package-version>
 
 var builder = DistributedApplication.CreateBuilder(args);
 
