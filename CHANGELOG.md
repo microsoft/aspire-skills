@@ -2,7 +2,15 @@
 
 All notable changes to the aspire-skills plugin will be documented in this file.
 
-## [0.0.2] - Unreleased
+## [0.0.3] - Unreleased
+
+### Changed
+- Bumped the plugin and all six shipped skills to `0.0.3`.
+- Clarified agent installation and update instructions in `README.md`.
+- Aligned PR review guidance with supported agent hosts, release versioning, and
+  the published plugin mirror.
+
+## [0.0.2] - 2026-09-18
 
 ### Changed
 - Aligned Aspire 13.5 guidance with Aspire 13.5.3. Bundle compatibility covers
@@ -18,7 +26,7 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   resolved to exact CLI filesystem paths for CLI fallbacks, bounded recovery
   for unknown controllers, explicit multi-AppHost disambiguation, and isolated
   CLI starts in worktrees.
-- Reset all skill `metadata.version` values to `0.0.1` ahead of the initial release.
+- Aligned all skill `metadata.version` values with plugin version `0.0.2`.
 - Synced `aspire-deployment` skill routing description with
   [microsoft/aspire#17209](https://github.com/microsoft/aspire/pull/17209).
   Replaced the verbose `USE FOR:` / `DO NOT USE FOR:` folded-scalar description with the
