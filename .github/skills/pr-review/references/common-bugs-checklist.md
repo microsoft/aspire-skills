@@ -104,18 +104,27 @@ routing failures and silently degraded agent behavior.
 
 ## JSON — manifests and MCP
 
-Files: `.plugin/plugin.json`, `.claude-plugin/plugin.json`,
-`.claude-plugin/marketplace.json`, `gemini-extension.json`, `.mcp.json`.
+Files: `package.json`, `.plugin/plugin.json`, `.claude-plugin/plugin.json`,
+`.claude-plugin/marketplace.json`, `.cursor-plugin/marketplace.json`,
+`gemini-extension.json`, `.mcp.json`.
 
 - [ ] Valid JSON (no trailing commas, no comments — these silently break some loaders).
-- [ ] `version` fields are consistent across all four plugin manifests (see
+- [ ] Release versions are consistent across all six canonical JSON files and
+      `metadata.version` in all six shipped skills (see
       `aspire-skills-review-checklist.md` §6).
-- [ ] `name`, `description`, `repository`, `homepage`, `license` match across manifests.
-- [ ] `keywords` and `tags` lists don't diverge — divergence confuses marketplace
-      indexing.
+- [ ] Plugin entries are named `aspire`; the package and marketplaces are named
+      `aspire-skills`. Select marketplace entries by name, not array position.
+- [ ] Corresponding plugin metadata agrees on the shipped skill family, Aspire
+      compatibility, repository, homepage, and license where those fields exist.
+      Preserve host-specific fields rather than forcing identical schemas.
+- [ ] Shared marketplace `keywords` and `tags` stay consistent.
 - [ ] `skills` glob in `.plugin/plugin.json` and `.claude-plugin/plugin.json` is still
       `./skills/` (never `./.github/skills/` — author skills must stay invisible to the
       published plugin).
+- [ ] The Copilot app's `extensions` path in `.plugin/plugin.json` resolves to
+      `./extensions/`; do not require it in hosts that only declare skills.
+- [ ] Published manifest and runtime skill/extension mirrors remain relative symlinks
+      to their root sources.
 - [ ] `mcpServers` paths are correct relative paths.
 - [ ] No secrets, tokens, or environment-specific paths committed.
 

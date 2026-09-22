@@ -9,7 +9,8 @@ description: >-
   comments as a review.
   USE FOR: review this PR, review the current branch, review pull request, gh pr view,
   gh pr diff, "what should I check before merging", PR review of changes to skills/,
-  evals/, .plugin/, .claude-plugin/, gemini-extension.json, CHANGELOG.md.
+  evals/, .plugin/, .claude-plugin/, .cursor-plugin/, package.json,
+  gemini-extension.json, CHANGELOG.md.
   DO NOT USE FOR: reviewing application code in *consumer* Aspire projects (this skill
   is scoped to microsoft/aspire-skills authoring); end-user Aspire workflows (use the
   shipped `aspire` router and its sub-skills); generic code review on unrelated repos.
@@ -154,9 +155,10 @@ specific** — adjust the focus column to what the file actually demands.
 | Trigger tests | `skills/<skill>/evals/trigger_tests.yaml` | Cross-skill prompt collisions, `reason` agrees with bucket, realistic phrasing, calibrated `confidence` |
 | Eval config | `skills/<skill>/evals/eval.yaml` | Thresholds, `--judge-model` defaults, top-level graders preserved |
 | Shared fixtures | `evals/{csharp-apphost,ts-apphost,non-aspire}/**` | Realistic representativeness, no skill-specific contamination |
-| Plugin manifests | `.plugin/plugin.json`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `gemini-extension.json` | Version sync across all four, identical metadata, valid JSON, `skills` glob unchanged at `./skills/` |
+| Plugin manifests | `package.json`, `.plugin/plugin.json`, `.claude-plugin/*.json`, `.cursor-plugin/marketplace.json`, `gemini-extension.json` | Version sync across all six canonical JSON files and the six shipped skills; valid JSON; host-specific metadata; `skills` glob unchanged at `./skills/` |
+| Published plugin mirror | `.github/plugins/aspire-skills/**` | Manifest and runtime skill/extension symlinks resolve to root sources; internal author skills stay out of the published plugin |
 | MCP | `.mcp.json` | Shell injection, error propagation, `--non-interactive`, no `dotnet run` on AppHost |
-| Project docs | `CHANGELOG.md`, `README.md`, `CONTRIBUTING.md` | Accuracy only; consistency with shipped behavior |
+| Project docs | `CHANGELOG.md`, `README.md`, `CONTRIBUTING.md` | Accuracy only; released versions and supported agent installation/update instructions agree with shipped behavior |
 | Author skills | `.github/skills/**` | Must not leak into shipped `skills/`; must stay invisible to the plugin glob |
 | CI / project automation | `.github/workflows/**`, `.github/CODEOWNERS` | Eval invocation correctness, no secrets, expected runner labels, hermetic execution |
 
@@ -190,8 +192,10 @@ Only flag concrete, high-confidence problems. Categories:
    `prompt` grader missing the "the assistant's response" anchor, combined
    positive/negative grader, over-broad `not_contains` (e.g., bare `"azd"`,
    `"docker"`).
-5. **Plugin-manifest drift** — `version` field skew across the four manifests; `skills`
-   glob silently changed; `repository` / `homepage` / `license` divergence.
+5. **Plugin-manifest drift** — release-version skew across the six canonical JSON
+   files or the six shipped skills; `skills` glob silently changed; corresponding
+   plugin `repository` / `homepage` / `license` fields diverge. Preserve each host's
+   schema rather than requiring identical manifest objects.
 6. **Bugs** — invalid YAML/JSON, broken cross-skill links (`../<wrong-name>/SKILL.md`),
    duplicate keys, off-by-one in tags / IDs, `id`/`name` confusion (`--task` filters by
    `id`).
