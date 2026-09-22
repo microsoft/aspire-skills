@@ -1,7 +1,7 @@
 {
   "name": "aspire",
-  "description": "Aspire skills plugin for AI coding agents. Seven skills: routing, init, AppHost wiring, Project v2 migration, lifecycle, deployment, and monitoring. Includes Aspire 13.6+ Project v2 migration guidance.",
-  "version": "0.0.2",
+  "description": "Aspire skills plugin for AI coding agents. Seven skills: aspire (router), aspire-init (skeleton drop), aspireify (AppHost wiring), aspire-project-v2-migration (approval-first 13.6+ migration), aspire-orchestration (lifecycle, guardrails), aspire-deployment (publish, deploy, destroy, pipeline steps), aspire-monitoring (logs, traces, dashboard, diagnostics bridge).",
+  "version": "0.0.3",
   "author": {
     "name": "Microsoft",
     "url": "https://www.microsoft.com"
