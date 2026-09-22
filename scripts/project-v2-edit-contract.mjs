@@ -147,6 +147,16 @@ function normalizedPath(value) {
   return value.replaceAll("\\", "/").replaceAll("//", "/").replace(/^\.\//, "");
 }
 
+function normalizeImmediateFluentContinuation(code, resourceNames) {
+  let result = code;
+  for (const name of resourceNames) {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = new RegExp(`var([A-Za-z_]\\w*)=builder\\.<resource:${escaped}>;\\1\\.`);
+    result = result.replace(pattern, `var$1=builder.<resource:${name}>.`);
+  }
+  return result;
+}
+
 function removeLegacyGatewayDockerfileMutation(source) {
   const marker = "var gatewayBuild = gateway.Resource.Annotations";
   const markerIndex = source.indexOf(marker);
@@ -239,7 +249,12 @@ function assertSource(before, after, contract) {
   const previous = registrations(baseline);
   const next = registrations(candidate);
   assert.deepEqual(next.found.map(c => c.name), previous.found.map(c => c.name), "Resource set/order changed");
-  assert.equal(next.stripped, previous.stripped, "Non-migration code/fluent behavior changed");
+  const migratedNames = Object.keys(contract.migrate);
+  assert.equal(
+    normalizeImmediateFluentContinuation(next.stripped, migratedNames),
+    normalizeImmediateFluentContinuation(previous.stripped, migratedNames),
+    "Non-migration code/fluent behavior changed"
+  );
   for (const call of next.found) {
     if (!(call.name in contract.migrate)) {
       assert.deepEqual([call.method, call.args],

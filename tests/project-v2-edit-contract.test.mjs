@@ -165,6 +165,26 @@ test("subset keeps worker registration and build edge", t => {
   assert.throws(() => assertEditedFixture(before, after, "subset"), /reference changes/);
 });
 
+test("source contract accepts an immediate same-variable fluent continuation", t => {
+  const { before, after } = fixture(t, "subset");
+  mutateCsharp(after, true);
+  edit(after, editCases.subset.source, source => source.replace(
+    /profile => \{ profile\.LaunchProfileName = "http"; \}\)\r?\n    \.WithReference\(cache\)/,
+    'profile => { profile.LaunchProfileName = "http"; });\napi.WithReference(cache)'
+  ));
+  assertEditedFixture(before, after, "subset");
+});
+
+test("source contract rejects an interleaved split fluent continuation", t => {
+  const { before, after } = fixture(t, "subset");
+  mutateCsharp(after, true);
+  edit(after, editCases.subset.source, source => source.replace(
+    /profile => \{ profile\.LaunchProfileName = "http"; \}\)\r?\n    \.WithReference\(cache\)/,
+    'profile => { profile.LaunchProfileName = "http"; });\nConsole.WriteLine("changed");\napi.WithReference(cache)'
+  ));
+  assert.throws(() => assertEditedFixture(before, after, "subset"), /fluent behavior/);
+});
+
 for (const [name, mutate, error] of [
   ["only one resource migrated", text => text.replace('AddDotnetProject("worker"', 'AddCSharpApp("worker"'), /Wrong target for worker/],
   ["C# null treated as default", text => text.replace("p.ExcludeLaunchProfile = true", 'p.LaunchProfileName = "http"'), /launch-profile mapping/],
