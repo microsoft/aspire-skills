@@ -213,7 +213,7 @@ update command when it cannot update a managed installation in place.
 ## References
 
 - [aspire-13-5-breaking-changes.md](references/aspire-13-5-breaking-changes.md) — Aspire
-  13.5.3 compatibility notes, breaking-change scrub, current CLI/AppHost behavior, deployment
+  13.5 compatibility notes, breaking-change scrub, current CLI/AppHost behavior, deployment
   additions, and patch-level fixes.
 - [aspire-13-3-breaking-changes.md](references/aspire-13-3-breaking-changes.md) — Every 13.3
   breaking change to scrub from agent-generated code, scripts, and CI snippets (rename of

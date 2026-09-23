@@ -205,7 +205,7 @@ mitigation, even temporarily or in an isolated test.
 |---------|-----------------|
 | Resource missing from `aspire describe` | Re-run `aspire describe --include-hidden`; do not use removed `aspire ps --include-hidden`. |
 | DevTunnel is healthy but has no public URL on 13.5.0-13.5.2 | Fixed in 13.5.3. Use a compatible release containing the fix before changing endpoint configuration. |
-| Known multi-path icon Graph crash on a dashboard older than 13.5.3 | Fixed in 13.5.3. Use a compatible release containing the fix. |
+| Known multi-path icon Graph crash on 13.5.0-13.5.2 | Fixed in 13.5.3. Use a compatible release containing the fix. |
 | Dashboard Graph crashes on 13.5.3 or later | Keep the selected version. Capture the browser console stack trace and dashboard logs to diagnose a separate cause or regression; do not recommend installing 13.5.3 as a workaround. |
 
 > **Resolved in 13.3**: The standalone-dashboard workaround for [#16236](https://github.com/microsoft/aspire/issues/16236) is obsolete — `aspire dashboard run` ships in-box (see Standalone Dashboard section above).

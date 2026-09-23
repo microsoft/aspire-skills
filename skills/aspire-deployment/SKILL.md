@@ -222,7 +222,7 @@ Use `aspire secret list` for AppHost user secrets when appropriate, but do not p
 - [references/javascript.md](references/javascript.md) - JavaScript app deployment models, including Vite/static assets, Node/SSR servers, Next.js, and gateway/backend serving patterns.
 - [references/cicd.md](references/cicd.md) - CI/CD and GitHub Actions workflow guidance for Aspire publish/deploy, parameters, secrets, registry auth, and cloud auth.
 - [references/preflight.md](references/preflight.md) - Common preflight, preview, parameter, destroy, and validation checklist.
-- [aspire-13-5-breaking-changes.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire/references/aspire-13-5-breaking-changes.md) - 13.5.3 package, API, and CLI migration rules.
+- [aspire-13-5-breaking-changes.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire/references/aspire-13-5-breaking-changes.md) - 13.5 package, API, and CLI migration rules.
 
 ## Agent execution
 

@@ -36,7 +36,7 @@ stimuli:
     prompt: >
       Use the aspireify skill before answering. Give a read-only plan for ordinary Redis
       wiring in app/AppHost.csproj. Its SDK and central AspireVersion select 13.6.0.
-      Preserve that version selection. Do not edit, execute commands, restore, start,
+      Do not edit, execute commands, restore, start,
       or migrate Project resources.
     tags:
       priority: p0
