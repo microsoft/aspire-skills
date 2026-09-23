@@ -245,10 +245,11 @@ test("skill-eval.yml: guard requires every expected scoped run", t => {
 });
 
 test("workflow and redaction changes exercise regression coverage", () => {
-  const workflow = readWorkflow("bundle-test.yml");
-  for (const filter of [".github/workflows/skill-eval*.yml", ".github/workflows/skill-experiment.yml"]) {
-    assert.equal(workflow.split(`- "${filter}"`).length - 1, 2);
-  }
+  const workflow = readWorkflow("test.yml");
+  assert.match(workflow, /pull_request:\s+branches:\s+- main\s+- dev/);
+  assert.match(workflow, /push:\s+branches:\s+- main\s+- dev/);
+  assert.doesNotMatch(workflow, /paths:|paths-ignore:|branches-ignore:/);
+  assert.match(workflow, /run: npm test/);
   const gate = readWorkflow("skill-eval.yml");
   assert.match(gate, /- "scripts\/redact-eval-artifacts\.mjs"/);
   assert.match(gate, /scripts\/redact-eval-artifacts\\\.mjs/);
@@ -256,7 +257,6 @@ test("workflow and redaction changes exercise regression coverage", () => {
     assert.ok(gate.includes(`- "${path}"`));
     assert.ok(gate.includes(path.replace(".mjs", "\\.mjs")));
   }
-  assert.equal(workflow.split('- "evals/grade-routing-entry.mjs"').length - 1, 2);
 });
 
 function getStepRun(workflow, name) {

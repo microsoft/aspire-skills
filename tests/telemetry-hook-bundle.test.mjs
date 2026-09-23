@@ -79,7 +79,7 @@ function createSanitizedGitEnvironment() {
   }
 
   environment.GIT_CONFIG_NOSYSTEM = "1";
-  environment.GIT_CONFIG_GLOBAL = process.platform === "win32" ? "NUL" : "/dev/null";
+  environment.GIT_CONFIG_GLOBAL = "/dev/null";
   environment.GIT_ATTR_NOSYSTEM = "1";
   environment.GIT_NO_REPLACE_OBJECTS = "1";
   return environment;

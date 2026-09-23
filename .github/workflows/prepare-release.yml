@@ -1,0 +1,310 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: Release version
+        required: true
+        type: string
+      source_commit:
+        description: Full current dev SHA (empty resolves origin/dev once)
+        required: false
+        type: string
+      dry_run:
+        description: Validate without pushing a branch or creating a PR
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prepare-release-${{ inputs.release_version }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Build preparation candidate
+    if: github.repository == 'microsoft/aspire-skills' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      source: ${{ steps.build.outputs.source }}
+      base: ${{ steps.build.outputs.base }}
+      version: ${{ steps.build.outputs.version }}
+      candidate: ${{ steps.build.outputs.candidate }}
+    steps:
+      - name: Check release permissions
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: |
+          set -euo pipefail
+          for actor in "$ACTOR" "$TRIGGERING_ACTOR"; do
+            if [[ -z "$actor" ]]; then
+              echo "::error::A release actor is missing."
+              exit 1
+            fi
+            if ! permission="$(gh api "repos/$REPOSITORY/collaborators/$actor/permission" --jq '.permission')"; then
+              echo "::error::Unable to verify release permissions."
+              exit 1
+            fi
+            case "$permission" in
+              write|maintain|admin) ;;
+              *)
+                echo "::error::Both release actors must have write, maintain, or admin permission."
+                exit 1
+                ;;
+            esac
+          done
+
+      - name: Checkout trusted tooling
+        # actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ github.sha }}
+          path: tooling
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout candidate repository
+        # actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: main
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node
+        # actions/setup-node@v6.4.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "22"
+
+      - name: Fetch main and dev
+        shell: bash
+        env:
+          RELEASE_REPO: ${{ github.workspace }}/candidate
+        run: |
+          set -euo pipefail
+          if ! git -C "$RELEASE_REPO" fetch --no-tags origin \
+            +refs/heads/main:refs/remotes/origin/main \
+            +refs/heads/dev:refs/remotes/origin/dev; then
+            echo "::error::Cannot fetch origin/main and origin/dev; both branches must exist."
+            exit 1
+          fi
+
+      - name: Resolve source and version once
+        id: resolve
+        shell: bash
+        env:
+          RELEASE_REPO: ${{ github.workspace }}/candidate
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+          node "$GITHUB_WORKSPACE/tooling/scripts/release.mjs" resolve-prepare
+
+      - name: Install trusted test dependencies
+        shell: bash
+        working-directory: ${{ github.workspace }}/tooling
+        run: npm ci --ignore-scripts
+
+      - name: Test trusted tooling
+        shell: bash
+        working-directory: ${{ github.workspace }}/tooling
+        run: npm test
+
+      - name: Build and verify candidate
+        id: build
+        shell: bash
+        env:
+          RELEASE_REPO: ${{ github.workspace }}/candidate
+          SOURCE_COMMIT: ${{ steps.resolve.outputs.source }}
+          BASE_COMMIT: ${{ steps.resolve.outputs.base }}
+          RELEASE_VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          node "$GITHUB_WORKSPACE/tooling/scripts/release.mjs" prepare
+
+      - name: Summarize candidate
+        shell: bash
+        env:
+          SUMMARY_PATH: ${{ github.workspace }}/candidate/dist/release/release-summary.md
+        run: cat "$SUMMARY_PATH" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload checked release artifacts
+        # actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: prepare-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            candidate/dist/release/release.bundle
+            candidate/dist/release/release-summary.md
+            candidate/dist/release/release.json
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Open draft preparation PR into dev
+    needs: prepare
+    if: github.repository == 'microsoft/aspire-skills' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && !inputs.dry_run
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check release permissions
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: |
+          set -euo pipefail
+          for actor in "$ACTOR" "$TRIGGERING_ACTOR"; do
+            if [[ -z "$actor" ]]; then
+              echo "::error::A release actor is missing."
+              exit 1
+            fi
+            if ! permission="$(gh api "repos/$REPOSITORY/collaborators/$actor/permission" --jq '.permission')"; then
+              echo "::error::Unable to verify release permissions."
+              exit 1
+            fi
+            case "$permission" in
+              write|maintain|admin) ;;
+              *)
+                echo "::error::Both release actors must have write, maintain, or admin permission."
+                exit 1
+                ;;
+            esac
+          done
+
+      - name: Checkout trusted tooling
+        # actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ github.sha }}
+          path: tooling
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout receiver repository
+        # actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: main
+          path: receiver
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node
+        # actions/setup-node@v6.4.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "22"
+
+      - name: Download checked release artifact
+        # actions/download-artifact@v4.3.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: prepare-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-artifact
+
+      - name: Fetch main and dev
+        shell: bash
+        env:
+          RELEASE_REPO: ${{ github.workspace }}/receiver
+        run: |
+          set -euo pipefail
+          if ! git -C "$RELEASE_REPO" fetch --no-tags origin \
+            +refs/heads/main:refs/remotes/origin/main \
+            +refs/heads/dev:refs/remotes/origin/dev; then
+            echo "::error::Cannot fetch origin/main and origin/dev; both branches must exist."
+            exit 1
+          fi
+
+      - name: Receive and verify candidate
+        id: verify
+        shell: bash
+        env:
+          RELEASE_REPO: ${{ github.workspace }}/receiver
+          SOURCE_COMMIT: ${{ needs.prepare.outputs.source }}
+          BASE_COMMIT: ${{ needs.prepare.outputs.base }}
+          CANDIDATE_COMMIT: ${{ needs.prepare.outputs.candidate }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          BUNDLE_PATH: ${{ runner.temp }}/release-artifact/release.bundle
+          SUMMARY_PATH: ${{ runner.temp }}/release-artifact/release-summary.md
+        run: |
+          set -euo pipefail
+          node "$GITHUB_WORKSPACE/tooling/scripts/release.mjs" receive-prepare
+
+      - name: Determine publication permissions
+        id: permissions
+        shell: bash
+        env:
+          RELEASE_REPO: ${{ github.workspace }}/receiver
+          SOURCE_COMMIT: ${{ needs.prepare.outputs.source }}
+          CANDIDATE_COMMIT: ${{ needs.prepare.outputs.candidate }}
+        run: |
+          set -euo pipefail
+          workflow_changes="$(git -C "$RELEASE_REPO" diff --name-only "$SOURCE_COMMIT" "$CANDIDATE_COMMIT" -- .github/workflows)"
+          if [[ -n "$workflow_changes" ]]; then
+            echo "workflows=write" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check GitHub App prerequisites
+        shell: bash
+        env:
+          APP_ID: ${{ secrets.ASPIRE_BOT_APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$APP_ID" || -z "$APP_PRIVATE_KEY" ]]; then
+            echo "::error::Configure the ASPIRE_BOT_APP_ID and ASPIRE_BOT_PRIVATE_KEY secrets before publishing."
+            exit 1
+          fi
+
+      - name: Create short-lived repository publication token
+        id: app-token
+        # actions/create-github-app-token@v3.1.1
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3
+        with:
+          client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
+          private-key: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: ${{ steps.permissions.outputs.workflows }}
+
+      - name: Push release branch and open draft PR
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_REPO: ${{ github.workspace }}/receiver
+          REPOSITORY: ${{ github.repository }}
+          CANDIDATE_REF: refs/heads/prepare-release/candidate
+          BRANCH: prepare-release/${{ steps.verify.outputs.version }}
+          TARGET_BRANCH: dev
+          PR_TITLE: Prepare v${{ steps.verify.outputs.version }}
+          PR_BODY_PATH: ${{ runner.temp }}/release-artifact/release-summary.md
+        run: |
+          set -euo pipefail
+          git check-ref-format "refs/heads/$BRANCH"
+          git check-ref-format "$CANDIDATE_REF"
+          existing="$(git -C "$RELEASE_REPO" ls-remote --heads origin "refs/heads/$BRANCH")"
+          if [[ -n "$existing" ]]; then
+            echo "::error::Release branch $BRANCH already exists; refusing to overwrite a reviewed release."
+            exit 1
+          fi
+          git -C "$RELEASE_REPO" \
+            -c core.hooksPath=/dev/null \
+            -c credential.helper= \
+            -c 'credential.helper=!f() { if [ "$1" = get ]; then printf "%s\n" "username=x-access-token" "password=$GH_TOKEN"; fi; }; f' \
+            push origin "$CANDIDATE_REF:refs/heads/$BRANCH"
+          gh pr create --repo "$REPOSITORY" --draft --base "$TARGET_BRANCH" --head "$BRANCH" \
+            --title "$PR_TITLE" --body-file "$PR_BODY_PATH"
