@@ -197,13 +197,16 @@ No additional configuration is needed — Aspire wires the connection string dur
 
 ## Version-Specific Diagnostics
 
-Apply historical fixes to affected versions, not as downgrade targets for newer releases.
+Check the running dashboard version and actual error before applying a historical fix.
+An older fix does not establish that downgrading a newer dashboard is a working
+mitigation, even temporarily or in an isolated test.
 
 | Symptom | Guidance |
 |---------|-----------------|
 | Resource missing from `aspire describe` | Re-run `aspire describe --include-hidden`; do not use removed `aspire ps --include-hidden`. |
 | DevTunnel is healthy but has no public URL on 13.5.0-13.5.2 | Fixed in 13.5.3. Use a compatible release containing the fix before changing endpoint configuration. |
-| Dashboard Graph crashes for an Azure Blob or another multi-path icon | The known multi-path icon bug was fixed in 13.5.3. On newer versions, investigate the error rather than downgrade. |
+| Known multi-path icon Graph crash on a dashboard older than 13.5.3 | Fixed in 13.5.3. Use a compatible release containing the fix. |
+| Dashboard Graph crashes on 13.5.3 or later | Keep the selected version. Capture the browser console stack trace and dashboard logs to diagnose a separate cause or regression; do not recommend installing 13.5.3 as a workaround. |
 
 > **Resolved in 13.3**: The standalone-dashboard workaround for [#16236](https://github.com/microsoft/aspire/issues/16236) is obsolete — `aspire dashboard run` ships in-box (see Standalone Dashboard section above).
 

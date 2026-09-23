@@ -13,8 +13,11 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   migration, and ordinary AppHost wiring.
 - Clarified Aspire skill descriptions and package guidance to avoid exact-release
   restrictions while retaining prerequisites and version-specific migration notes.
-  Historical fixes no longer imply that newer projects should downgrade.
+  Graph diagnostics distinguish affected older dashboards from newer failures
+  without recommending speculative downgrade workarounds.
 - Updated evaluation CI with bounded retries and result-integrity checks.
+- Set an explicit supported judge model in every skill evaluation to avoid
+  falling back to an unavailable model.
 
 ### Added
 - Added regression coverage for version-preserving wiring, deployment, and dashboard

@@ -18,16 +18,13 @@ test("canonical evaluation specs are present", () => {
 });
 
 for (const spec of specs) {
-  test(`${spec}: executor coverage remains stable`, () => {
+  test(`${spec}: executor and judge coverage remain stable`, () => {
     const evaluation = parse(readFileSync(join(root, spec), "utf8"));
     const usesSolFast = spec === join("skills", "aspire", "evals", "eval.yaml") ||
       spec.includes("aspire-project-v2-migration");
     assert.equal(evaluation.defaults.model,
       usesSolFast ? "gpt-5.6-sol-fast" : "gpt-5-mini");
-    if (spec === join("skills", "aspire", "evals", "eval.yaml") ||
-        spec.includes("aspire-project-v2-migration")) {
-      assert.equal(evaluation.defaults.judge_model, "gpt-5.6-sol");
-    }
+    assert.equal(evaluation.defaults.judge_model, "gpt-5.6-sol");
   });
 
   test(`${spec}: explicit grader names are compatible with Vally 0.16.0`, () => {

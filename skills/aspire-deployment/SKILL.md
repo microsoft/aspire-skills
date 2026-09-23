@@ -11,7 +11,7 @@ metadata:
 
 Use this skill when the task is to publish, preview, validate, deploy, or tear down an Aspire application deployment. This skill owns Aspire deployment routing. Do not start with a generic Azure, Docker, Kubernetes, Helm, or Bicep workflow until you have checked whether the workspace is an Aspire app.
 
-Aspire deployment starts from the AppHost model. Treat `aspire deploy`, `aspire publish`, `aspire destroy`, `aspire do`, and the deployment environment resources in the AppHost as the primary path. For projects using Aspire 13.5.3 or later, use stable SDK/hosting packages from the project's release family and matching preview builds for preview-only integrations such as Kubernetes and Radius.
+Aspire deployment starts from the AppHost model. Treat `aspire deploy`, `aspire publish`, `aspire destroy`, `aspire do`, and the deployment environment resources in the AppHost as the primary path. Use stable SDK/hosting packages from the project's release family and matching preview builds for preview-only integrations such as Kubernetes and Radius.
 
 Keep this as one skill with target-specific references. Load only the reference files that match the target you discover or the user requests.
 

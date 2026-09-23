@@ -36,7 +36,8 @@ evals/
 ├── csharp-apphost/      # Wired C# AppHost (Aspire.AppHost.Sdk + Program.cs)
 ├── ts-apphost/          # TypeScript AppHost (apphost.mts + .aspire/modules/)
 ├── non-aspire/          # Non-Aspire .NET project (for "should not trigger" stimuli)
-└── project-v2-migration/ # Legacy inputs, captured-edit contracts, and qualification guidance
+├── project-v2-migration/ # Legacy inputs, captured-edit contracts, and qualification guidance
+└── version-preservation/ # Read-only C# AppHost fixture with concrete, centrally managed Aspire versions
 ```
 
 `src` is resolved relative to the eval spec file (so the canonical reference from `skills/<skill>/evals/eval.yaml` is `../../../evals/<fixture-path>`). `dest` is the workspace-relative path the executor sees.
