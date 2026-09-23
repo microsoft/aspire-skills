@@ -73,10 +73,10 @@ await builder.addNextJsApp('web', '../web')
 await builder.build().run();
 ```
 
-## Aspire 13.5 AppHost APIs
+## AppHost APIs
 
 TypeScript AppHosts are generally available; remove stale `ASPIREATS001` suppressions.
-Use generated 13.5 APIs only after checking the TypeScript API reference.
+Use generated APIs only after checking the TypeScript API reference.
 
 ### Custom health checks and container files
 

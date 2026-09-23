@@ -26,6 +26,9 @@ aspire docs api search "Docker Compose service customization" --language typescr
 
 ## Target setup
 
+The AppHost is the deployment model, not a Compose workload. Generate services for its
+declared resources; do not containerize the AppHost to run the deployed application.
+
 Expected package and AppHost environment:
 
 ```bash

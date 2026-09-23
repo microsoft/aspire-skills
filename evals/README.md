@@ -36,7 +36,8 @@ evals/
 ├── csharp-apphost/      # Wired C# AppHost (Aspire.AppHost.Sdk + Program.cs)
 ├── ts-apphost/          # TypeScript AppHost (apphost.mts + .aspire/modules/)
 ├── non-aspire/          # Non-Aspire .NET project (for "should not trigger" stimuli)
-└── project-v2-migration/ # Legacy inputs, captured-edit contracts, and qualification guidance
+├── project-v2-migration/ # Legacy inputs, captured-edit contracts, and qualification guidance
+└── version-preservation/ # Read-only C# AppHost fixture with concrete, centrally managed Aspire versions
 ```
 
 `src` is resolved relative to the eval spec file (so the canonical reference from `skills/<skill>/evals/eval.yaml` is `../../../evals/<fixture-path>`). `dest` is the workspace-relative path the executor sees.
@@ -195,9 +196,9 @@ Use `--workers 4` to fan stimuli out and shave wall-clock time; expect higher co
 | `aspireify` | 14 | 19 | AppHost wiring (C# / file-based C# / TS), package-manager resolution, validation, never edit `.aspire/modules/` |
 | `aspire-orchestration` | 29 | 24 | Lifecycle tools, file lock recovery, `--include-hidden`, `aspire update --self` |
 | `aspire-deployment` | 11 | 22 | Multi-target deploy, `aspire destroy`, JS publishing, pipeline previews |
-| `aspire-monitoring` | 7 | 23 | Diagnostics bridge, standalone dashboard, browser logs, `--include-hidden` |
+| `aspire-monitoring` | 8 | 23 | Diagnostics bridge, standalone dashboard, browser logs, `--include-hidden` |
 | `aspire-project-v2-migration` | 16 | 6 | Approval/capability stops, bounded actual edits, idempotence, and explicit migration intent |
-| **Total** | **85** | **132** | **217 stimuli** |
+| **Total** | **86** | **132** | **218 stimuli** |
 
 Routing counts include `routing` in either a scalar or array `area` tag.
 

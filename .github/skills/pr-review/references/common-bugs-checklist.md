@@ -58,7 +58,7 @@ The vast majority of YAML in this repo is eval task files. The rules from
 - [ ] Every `graders[].config.prompt` for a `prompt` grader mentions "the assistant's
       response".
 - [ ] Combined positive + negative graders are split into a `prompt` + `text` pair.
-- [ ] Aspire 13.5.3 facts the judge might not know are stated in-grader.
+- [ ] Release-specific Aspire facts the judge might not know are stated in-grader.
 - [ ] No YAML duplicate keys; folded scalars (`>` / `>-`) are used for multi-line prose.
 - [ ] No tabs (YAML doesn't accept them); indentation is consistent (2 spaces).
 - [ ] String fields aren't accidentally booleans (`yes`, `no`, `on`, `off`, `true`,

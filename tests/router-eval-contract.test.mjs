@@ -52,6 +52,12 @@ test("skill metadata requires specialist activation for read-only guidance", () 
   assert.match(router.source, /eligible 13\.6\+ AppHost/);
 });
 
+test("router description is version-neutral", () => {
+  const { description } = readSkill("aspire");
+  assert.match(description, /Aspire router\./);
+  assert.doesNotMatch(description, /\b\d+\.\d+(?:\.\d+)?\b/);
+});
+
 test("editor lifecycle guidance requires the available editor tool before CLI fallback", () => {
   const stimulus = spec.stimuli.find(item => item.name === "router-orch-001");
   const rubric = stimulus.rubric.join("\n");

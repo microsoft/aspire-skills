@@ -1,4 +1,4 @@
-# Aspire 13.5.3 Alignment - Agent Reference
+# Aspire 13.5 Breaking Changes - Agent Reference
 
 Use this reference when upgrading AppHosts or reviewing generated code, scripts, and CI
 for Aspire 13.5. Sources:
@@ -8,17 +8,17 @@ for Aspire 13.5. Sources:
 - [Aspire 13.5.2](https://github.com/microsoft/aspire/releases/tag/v13.5.2)
 - [Aspire 13.5.3](https://github.com/microsoft/aspire/releases/tag/v13.5.3)
 
-## Version target
+## Package compatibility for 13.5 migrations
 
-- The latest Aspire CLI in this line is **13.5.3**.
-- Stable Aspire SDK and hosting package references use the serviced **13.5.3** release.
-- Preview-only integrations use matching preview packages instead of nonexistent stable
-  versions. For example, Kubernetes and Radius publish `13.5.3-preview.*`; let
-  `aspire add` or the current integration docs select the exact preview build.
+- For a migration into the 13.5 family, select compatible SDK and hosting packages
+  for the chosen servicing release.
+- Preview-only integrations use compatible preview packages instead of nonexistent
+  stable versions. Use integration discovery and package-specific docs to select a
+  build compatible with the chosen SDK; do not assume identical version strings.
 - Do not mix 13.4 and 13.5 SDK or hosting integration packages. Mixed graphs can fail at
   startup with `MissingMethodException` or `TypeLoadException`, especially for Kubernetes,
   Azure Functions, Go, JavaScript, and Python integrations.
-- Update the CLI first, then update every Aspire package together:
+- When updating, update the CLI first, then update every Aspire package together:
 
   ```bash
   aspire update --self

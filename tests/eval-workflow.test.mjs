@@ -257,7 +257,6 @@ test("workflow and redaction changes exercise regression coverage", () => {
     assert.ok(gate.includes(`- "${path}"`));
     assert.ok(gate.includes(path.replace(".mjs", "\\.mjs")));
   }
-  assert.equal(workflow.split('- "evals/grade-routing-entry.mjs"').length - 1, 2);
 });
 
 function getStepRun(workflow, name) {

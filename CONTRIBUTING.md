@@ -18,6 +18,12 @@ Skills follow the standard SKILL.md format:
 - Error handling tables
 - References in `references/` subdirectory
 
+## Version-Specific Guidance
+
+Avoid fixed Aspire release targets in general skill descriptions and workflows.
+Keep documented prerequisites, compatibility boundaries, breaking changes, and affected/fixed
+release ranges. Concrete examples should not imply that the skill only applies to that version.
+
 ## Testing
 
 - Ensure SKILL.md files are under 5000 tokens

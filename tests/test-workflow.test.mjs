@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { parse } from "yaml";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const workflow = readFileSync(join(repoRoot, ".github", "workflows", "test.yml"), "utf8").replaceAll("\r\n", "\n");
@@ -23,6 +24,23 @@ test("general CI runs tests and catalog checks", () => {
   assert.match(workflow, /run: npm run catalog\r?$/m);
   assert.match(workflow, /run: npm run catalog:check\r?$/m);
 });
+
+const workflowDirectory = join(repoRoot, ".github", "workflows");
+for (const file of readdirSync(workflowDirectory).filter(file => /\.ya?ml$/.test(file))) {
+  const definition = parse(readFileSync(join(workflowDirectory, file), "utf8"));
+  for (const [jobName, job] of Object.entries(definition.jobs)) {
+    const steps = job.steps ?? [];
+    for (const [index, step] of steps.entries()) {
+      if (step.run?.trim() !== "npm test") continue;
+      test(`${file}: ${jobName} installs locked dependencies before npm test`, () => {
+        assert.ok(steps.slice(0, index).some(previous =>
+          previous.run?.trim() === "npm ci --ignore-scripts" &&
+          previous["working-directory"] === step["working-directory"]),
+        "Restore dependencies in the test working directory before running tests.");
+      });
+    }
+  }
+}
 
 test("general tests run on both main and dev pushes", () => {
   const push = workflow.split(/\r?\n  push:\r?\n/)[1].split(/\r?\npermissions:/)[0];

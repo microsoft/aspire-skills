@@ -130,6 +130,11 @@ jobs:
           set -euo pipefail
           node "$GITHUB_WORKSPACE/tooling/scripts/release.mjs" resolve-promote
 
+      - name: Install trusted test dependencies
+        shell: bash
+        working-directory: ${{ github.workspace }}/tooling
+        run: npm ci --ignore-scripts
+
       - name: Test trusted tooling
         shell: bash
         working-directory: ${{ github.workspace }}/tooling
