@@ -1,7 +1,7 @@
 ---
 name: aspire
 description: >-
-  **WORKFLOW SKILL** - Aspire 13.5.3 router. Detects AppHosts, enforces guardrails,
+  **WORKFLOW SKILL** - Aspire router. Detects AppHosts, enforces guardrails,
   and selects the right sub-skill.
   USE FOR: Aspire AppHost, Aspire CLI, distributed app, cloud-native .NET, aspire
   start/stop/resource/deploy/destroy/publish/init/new/add/wait/describe/ps/logs/otel,
@@ -213,7 +213,7 @@ update command when it cannot update a managed installation in place.
 ## References
 
 - [aspire-13-5-breaking-changes.md](references/aspire-13-5-breaking-changes.md) — Aspire
-  13.5.3 target versions, breaking-change scrub, current CLI/AppHost behavior, deployment
+  13.5 compatibility notes, breaking-change scrub, current CLI/AppHost behavior, deployment
   additions, and patch-level fixes.
 - [aspire-13-3-breaking-changes.md](references/aspire-13-3-breaking-changes.md) — Every 13.3
   breaking change to scrub from agent-generated code, scripts, and CI snippets (rename of

@@ -11,7 +11,7 @@ metadata:
 
 Use this skill when the task is to publish, preview, validate, deploy, or tear down an Aspire application deployment. This skill owns Aspire deployment routing. Do not start with a generic Azure, Docker, Kubernetes, Helm, or Bicep workflow until you have checked whether the workspace is an Aspire app.
 
-Aspire deployment starts from the AppHost model. Treat `aspire deploy`, `aspire publish`, `aspire destroy`, `aspire do`, and the deployment environment resources in the AppHost as the primary path. This guidance targets Aspire 13.5.3: use stable 13.5.3 SDK/hosting packages and matching `13.5.3-preview.*` builds for preview-only integrations such as Kubernetes and Radius.
+Aspire deployment starts from the AppHost model. Treat `aspire deploy`, `aspire publish`, `aspire destroy`, `aspire do`, and the deployment environment resources in the AppHost as the primary path. Use stable SDK/hosting packages from the project's release family and matching preview builds for preview-only integrations such as Kubernetes and Radius.
 
 Keep this as one skill with target-specific references. Load only the reference files that match the target you discover or the user requests.
 
@@ -57,6 +57,10 @@ aspire docs api get "<id-from-api-search>"
 Do not invent package names, builder methods, overloads, or deployment commands. API shapes differ between C# and TypeScript AppHosts.
 
 ### Prefer Aspire-native deployment
+
+Deploy the resources declared in the AppHost, not the AppHost process itself.
+For Docker Compose, configure the Compose environment and let Aspire generate services
+for those resources; do not replace this with an AppHost Dockerfile or Compose service.
 
 Use Aspire deployment targets and CLI commands first:
 
@@ -114,10 +118,10 @@ The Azure deployment path in this skill is `aspire add <azure-target>`, AppHost 
 
 ### Keep Aspire packages on one release family
 
-Before publish or deploy, verify that `Aspire.AppHost.Sdk` and every hosting package use
-the matching 13.5 servicing line. Stable packages should be 13.5.3; preview-only
-integrations use matching `13.5.3-preview.*` builds selected by `aspire add` or current
-docs. A 13.5 CLI does not make mixed 13.4/13.5 hosting packages safe; mixed graphs can
+Before publish or deploy, verify that `Aspire.AppHost.Sdk` and the hosting packages use
+compatible versions in the project's selected release family. Preview-only integrations
+need compatible preview builds selected by `aspire add` or integration docs.
+The CLI version does not make incompatible hosting packages safe; mixed graphs can
 fail at startup with `MissingMethodException` or `TypeLoadException`.
 
 Migrate obsolete 13.5 surfaces while editing deployment code:
@@ -218,7 +222,7 @@ Use `aspire secret list` for AppHost user secrets when appropriate, but do not p
 - [references/javascript.md](references/javascript.md) - JavaScript app deployment models, including Vite/static assets, Node/SSR servers, Next.js, and gateway/backend serving patterns.
 - [references/cicd.md](references/cicd.md) - CI/CD and GitHub Actions workflow guidance for Aspire publish/deploy, parameters, secrets, registry auth, and cloud auth.
 - [references/preflight.md](references/preflight.md) - Common preflight, preview, parameter, destroy, and validation checklist.
-- [aspire-13-5-breaking-changes.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire/references/aspire-13-5-breaking-changes.md) - 13.5.3 package, API, and CLI migration rules.
+- [aspire-13-5-breaking-changes.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire/references/aspire-13-5-breaking-changes.md) - 13.5 package, API, and CLI migration rules.
 
 ## Agent execution
 

@@ -16,6 +16,7 @@ defaults:
   timeout: 600s
   executor: copilot-sdk
   model: gpt-5-mini
+  judge_model: gpt-5.6-sol
 scoring:
   # CI-gate tolerance: a stimulus passes when the weighted majority of its graders
   # pass, rather than demanding every grader pass on every trial. This absorbs (a)
@@ -31,6 +32,44 @@ environment:
     - ../../aspireify
     - ../../aspire-orchestration
 stimuli:
+  - name: aspireify-preserves-selected-version-001
+    prompt: >
+      Use the aspireify skill before answering. Give a read-only plan for ordinary Redis
+      wiring in app/AppHost.csproj. Its SDK and central AspireVersion select 13.6.0.
+      Do not edit, execute commands, restore, start,
+      or migrate Project resources.
+    tags:
+      priority: p0
+      area:
+        - version-preservation
+        - authoring
+    constraints:
+      max_agent_duration: 150s
+    environment:
+      files:
+        - src: ../../../evals/version-preservation/csharp-apphost
+          dest: app
+    rubric:
+      - The assistant's response accepts ordinary wiring through aspireify for the selected 13.6.0 AppHost rather than rejecting the skill as release-specific.
+      - The assistant's response preserves the SDK and centrally selected hosting-package versions instead of pinning 13.5.3 or starting a resource migration.
+      - The assistant's response remains read-only and does not claim unperformed execution.
+    graders:
+      - type: prompt
+        name: preserves-selected-version-during-wiring
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response preserve the existing version selection?
+            The fixture already declares Aspire.AppHost.Sdk, Aspire.Hosting.AppHost,
+            Aspire.Hosting.Redis, and Aspire.Hosting.Docker at 13.6.0. Retaining those
+            versions is correct. This case assesses skill applicability and version
+            preservation, not completed API verification or a successful restore.
+      - type: skill-invocation
+        name: invokes-wiring-for-selected-version
+        config:
+          required: [aspireify]
+      - type: diff-empty
+        name: preserves-version-wiring-workspace
   - name: aspireify-nextjs-001
     prompt: Add my Next.js frontend in ./web to my Aspire AppHost and wire it to talk to my API.
     tags:

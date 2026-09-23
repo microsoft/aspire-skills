@@ -13,6 +13,7 @@ defaults:
   timeout: 600s
   executor: copilot-sdk
   model: gpt-5-mini
+  judge_model: gpt-5.6-sol
 scoring:
   # Score each stimulus by the weighted share of graders that pass, then gate on
   # the aggregate (>= threshold) instead of demanding every grader pass on every
@@ -27,6 +28,38 @@ environment:
   skills:
     - ../../aspire-deployment
 stimuli:
+  - name: deploy-preserves-selected-version-001
+    prompt: >
+      Use the aspire-deployment skill before answering. Give a read-only Docker Compose
+      deployment plan for app/AppHost.csproj. Its SDK and
+      centrally managed hosting packages select 13.6.0. Explain package compatibility
+      and preflight without editing, executing commands, restoring, publishing, or deploying.
+    tags:
+      priority: p0
+      area:
+        - version-preservation
+        - package-compatibility
+    constraints:
+      max_agent_duration: 150s
+    environment:
+      files:
+        - src: ../../../evals/version-preservation/csharp-apphost
+          dest: app
+    rubric:
+      - The assistant's response keeps the plan Aspire-native and uses aspire-deployment rather than rejecting the skill because the AppHost is not on 13.5.3.
+      - The assistant's response preserves the selected 13.6.0 SDK and hosting family without an implicit upgrade, downgrade, or channel change.
+      - The assistant's response remains read-only and does not claim a completed publish, deployment, or runtime validation.
+    graders:
+      - type: prompt
+        name: preserves-selected-version-during-deployment
+        config:
+          scoring: binary
+      - type: skill-invocation
+        name: invokes-deployment-for-selected-version
+        config:
+          required: [aspire-deployment]
+      - type: diff-empty
+        name: preserves-version-deployment-workspace
   - name: deploy-destroy-001
     prompt: I'm done with this preview deployment — how do I tear down everything Aspire provisioned?
     tags:

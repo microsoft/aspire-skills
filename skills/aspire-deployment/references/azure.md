@@ -332,4 +332,4 @@ When troubleshooting generated Azure resources, match the live resource names an
 - App Service dashed setting failure: rename the connection/environment key if possible; bypass validation only when the app does not depend on the original dashed key at runtime.
 - Azure Kubernetes Service (AKS) workload not reachable: refresh credentials with `az aks get-credentials`, then inspect pods, services, ingress/gateway resources, and Helm release status with `kubectl` and `helm`.
 - DevTunnel is healthy but its public URL is missing: if the CLI/SDK is 13.5.0-13.5.2,
-  upgrade to 13.5.3 before changing endpoint configuration.
+  upgrade to 13.5.3 or a later compatible release before changing endpoint configuration.

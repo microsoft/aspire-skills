@@ -149,7 +149,7 @@ specific** — adjust the focus column to what the file actually demands.
 
 | Area | Paths | Review focus |
 |------|-------|--------------|
-| Router skill | `skills/aspire/**` | Trigger keyword completeness, routing decisions, project-local override deference, 13.5.3 alignment |
+| Router skill | `skills/aspire/**` | Trigger keyword completeness, routing decisions, project-local override deference, Aspire compatibility |
 | Sub-skills | `skills/aspire-init/**`, `skills/aspireify/**`, `skills/aspire-orchestration/**`, `skills/aspire-deployment/**`, `skills/aspire-monitoring/**` | Frontmatter, decision tables, safety guardrails, `INVOKES:` accuracy, references hygiene |
 | Eval tasks | `skills/<skill>/evals/tasks/**` | Grader patterns from `evals/AUTHORING.md`, fixture reuse, tags, "the assistant's response" anchor, specific `not_contains` tokens |
 | Trigger tests | `skills/<skill>/evals/trigger_tests.yaml` | Cross-skill prompt collisions, `reason` agrees with bucket, realistic phrasing, calibrated `confidence` |

@@ -126,8 +126,8 @@ These are quick mental tests that catch most of the bugs we see:
   Probably a guardrail regression.
 - **"Did the SKILL.md description shrink?"** Shrinking trigger keywords usually drops
   routing accuracy — check `trigger_tests.yaml`.
-- **"Does this eval rely on the judge knowing Aspire 13.5.3?"** State the current Aspire fact in the
-  grader prompt instead.
+- **"Does this eval rely on the judge knowing release-specific Aspire behavior?"**
+  State the relevant fact and affected version range in the grader prompt instead.
 - **"Does this snippet use `--non-interactive`?"** If it's agent-facing, it must.
 
 When in doubt, run the affected skill's eval locally with

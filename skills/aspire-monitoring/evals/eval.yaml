@@ -14,6 +14,7 @@ defaults:
   timeout: 600s
   executor: copilot-sdk
   model: gpt-5-mini
+  judge_model: gpt-5.6-sol
 scoring:
   # Score each stimulus by the weighted share of graders that pass, then gate on
   # the aggregate (>= threshold) instead of demanding every grader pass on every
@@ -28,6 +29,35 @@ environment:
   skills:
     - ../../aspire-monitoring
 stimuli:
+  - name: mon-newer-version-graph-crash-001
+    prompt: >
+      Use the aspire-monitoring skill before answering. My Aspire CLI, AppHost packages,
+      and dashboard all report 13.6.0, but the dashboard Graph view crashes when I open
+      an Azure Blob resource. I found advice to install 13.5.3 for a multi-path icon bug.
+      Does that advice apply here? Give read-only triage guidance; do not execute commands
+      or change files.
+    tags:
+      priority: p0
+      area:
+        - version-preservation
+        - servicing
+    constraints:
+      max_agent_duration: 150s
+    rubric:
+      - The assistant's response distinguishes the historical multi-path icon bug fixed in 13.5.3 from a new failure on the reported 13.6.0 dashboard.
+      - The assistant's response preserves the newer versions instead of recommending a downgrade to 13.5.3 or treating the skill as inapplicable.
+      - The assistant's response recommends gathering the actual dashboard error and relevant diagnostics rather than assuming the old bug explains the symptom or claiming an unverified fix.
+    graders:
+      - type: prompt
+        name: scopes-historical-graph-fix-to-affected-versions
+        config:
+          scoring: binary
+      - type: skill-invocation
+        name: invokes-monitoring-for-newer-version
+        config:
+          required: [aspire-monitoring]
+      - type: diff-empty
+        name: preserves-newer-version-diagnostics-workspace
   - name: mon-browser-logs-001
     prompt: My Aspire app already uses WithBrowserLogs() for a Vite frontend named storefront. A browser
       request is failing and I need to inspect its console messages, errors, exceptions, and network
