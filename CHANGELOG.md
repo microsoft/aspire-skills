@@ -15,6 +15,7 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   restrictions while retaining prerequisites and version-specific migration notes.
   Graph diagnostics distinguish affected older dashboards from newer failures
   without recommending speculative downgrade workarounds.
+- Clarified that Docker Compose deployments run the modeled resources, not the AppHost.
 - Updated evaluation CI with bounded retries and result-integrity checks.
 - Set an explicit supported judge model in every skill evaluation to avoid
   falling back to an unavailable model.

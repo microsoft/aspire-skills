@@ -58,6 +58,10 @@ Do not invent package names, builder methods, overloads, or deployment commands.
 
 ### Prefer Aspire-native deployment
 
+Deploy the resources declared in the AppHost, not the AppHost process itself.
+For Docker Compose, configure the Compose environment and let Aspire generate services
+for those resources; do not replace this with an AppHost Dockerfile or Compose service.
+
 Use Aspire deployment targets and CLI commands first:
 
 ```bash
