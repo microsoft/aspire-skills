@@ -15,7 +15,7 @@ import {
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const artifactsParentRoot = join(repoRoot, ".test-artifacts");
 const artifactsRoot = join(artifactsParentRoot, "telemetry-hook-bundle");
-const sourceCommit = resolveSourceCommit(undefined, repoRoot);
+const sourceCommit = resolveSourceCommit(process.env.ASPIRE_TEST_SOURCE_COMMIT, repoRoot);
 const hookFileNames = ["track-telemetry.sh", "track-telemetry.ps1"];
 const testGitEnv = createSanitizedGitEnvironment();
 

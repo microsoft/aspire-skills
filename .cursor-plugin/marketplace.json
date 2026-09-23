@@ -12,8 +12,8 @@
     {
       "name": "aspire",
       "source": "./",
-      "description": "Aspire skills plugin for AI coding agents. Six skills covering top-level routing, first-run init, agentic AppHost wiring (aspireify), lifecycle orchestration, multi-target deployment, and observability. Aligned with Aspire 13.5.3.",
-      "version": "0.0.2",
+      "description": "Aspire skills plugin for AI coding agents. Seven skills covering routing, init, AppHost wiring, Project v2 migration, lifecycle, deployment, and observability. Includes Aspire 13.6+ Project v2 migration guidance.",
+      "version": "0.0.3",
       "author": {
         "name": "Microsoft",
         "url": "https://www.microsoft.com"

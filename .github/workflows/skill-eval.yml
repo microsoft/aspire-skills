@@ -8,6 +8,8 @@ on:
       - ".vally.yaml"
       - ".github/workflows/skill-eval.yml"
       - "scripts/redact-eval-artifacts.mjs"
+      - "scripts/check-eval-results.mjs"
+      - "evals/grade-routing-entry.mjs"
 
 permissions:
   contents: read
@@ -75,8 +77,12 @@ jobs:
 
           workflow_changed=false
           if printf '%s\n' "$changed_files" \
-              | grep -Eq '^(\.github/workflows/skill-eval\.yml|scripts/redact-eval-artifacts\.mjs)$'; then
+              | grep -Eq '^(\.github/workflows/skill-eval\.yml|scripts/redact-eval-artifacts\.mjs|scripts/check-eval-results\.mjs|evals/grade-routing-entry\.mjs)$'; then
             workflow_changed=true
+          fi
+          routing_helper_changed=false
+          if printf '%s\n' "$changed_files" | grep -Eq '^evals/grade-routing-entry\.mjs$'; then
+            routing_helper_changed=true
           fi
 
           # Global suite config change -> evaluate everything.
@@ -84,6 +90,7 @@ jobs:
             echo "Global eval config changed — running the full ci-gate suite."
             echo "run_full=true" >> "$GITHUB_OUTPUT"
             echo "has_specs=false" >> "$GITHUB_OUTPUT"
+            echo "expected_runs=." >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "run_full=false" >> "$GITHUB_OUTPUT"
@@ -108,6 +115,11 @@ jobs:
             fi
           done
 
+          if [ "$routing_helper_changed" = true ] \
+              && ! printf '%s\n' $matched | grep -qx 'aspire'; then
+            matched="${matched} aspire"
+          fi
+
           if [ -z "$matched" ] && [ "$workflow_changed" = true ]; then
             matched=" aspire"
           fi
@@ -117,6 +129,7 @@ jobs:
           else
             echo "has_specs=true" >> "$GITHUB_OUTPUT"
             echo "matched=${matched# }" >> "$GITHUB_OUTPUT"
+            echo "expected_runs=${matched# }" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run full ci-gate suite (global change)
@@ -124,7 +137,10 @@ jobs:
         # A `.vally.yaml` change landed us here. `--suite ci-gate` applies the
         # p0 + p1 priority filter across every skill. (`--suite` can't be
         # combined with `-e`, which is why the scoped path below expresses the
-        # same filter with `--tag` instead.)
+        # same filter with `--tag` instead.) PR runs use one trial so Vally can
+        # retry transient executor timeouts; nightly retains each spec's
+        # repeated-run sampling. Keep one worker because the Copilot session
+        # filesystem provider is process-global.
         env:
           COPILOT_GITHUB_TOKEN: ${{ github.token }}
         run: |
@@ -132,7 +148,10 @@ jobs:
           echo "Global eval config changed — evaluating the full ci-gate suite."
           vally eval \
             --require-pass \
+            --runs 1 \
+            --max-retries 2 \
             --suite ci-gate \
+            --workers 1 \
             --output-dir ./results
 
       - name: Run CI gate evals
@@ -145,6 +164,9 @@ jobs:
         # while configuring it; one worker per process avoids that race while
         # the processes still run concurrently. Apply the ci-gate-equivalent
         # p0 + p1 filter so forward-looking p2 stimuli stay out of the PR gate.
+        # Vally disables per-stimulus retries for multi-trial plans, so the PR
+        # gate uses one trial plus bounded transient retries. Nightly keeps the
+        # eval specs' repeated-run defaults for variance measurement.
         env:
           COPILOT_GITHUB_TOKEN: ${{ github.token }}
         run: |
@@ -156,6 +178,8 @@ jobs:
             echo "Evaluating changed skill: $skill"
             vally eval \
               --require-pass \
+              --runs 1 \
+              --max-retries 2 \
               --eval-spec "skills/${skill}/evals/eval.yaml" \
               --tag priority=p0,p1 \
               --workers 1 \
@@ -181,6 +205,13 @@ jobs:
             echo "this PR, so the model-backed ci-gate had nothing to evaluate. The full"
             echo "suite still runs in the scheduled **Skill Eval (nightly)** workflow."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check evaluation infrastructure
+        if: ${{ !cancelled() && (steps.changed.outputs.run_full == 'true' || steps.changed.outputs.has_specs == 'true') }}
+        run: |
+          expected_runs="${{ steps.changed.outputs.expected_runs }}"
+          read -r -a expected_run_args <<< "$expected_runs"
+          node scripts/check-eval-results.mjs ./results "${expected_run_args[@]}"
 
       - name: Redact evaluation artifacts
         id: redact

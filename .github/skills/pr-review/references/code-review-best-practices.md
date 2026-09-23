@@ -32,7 +32,13 @@ Pick the depth from the change surface, not the line count.
 | Only `CHANGELOG.md`, `README.md`, or `CONTRIBUTING.md` | Skim — confirm consistency, no behavior claims that contradict the SKILL.md. |
 | Only `evals/` or `skills/<skill>/evals/` | Standard — apply `evals/AUTHORING.md` grader patterns; confirm fixtures are shared. |
 | `skills/<skill>/SKILL.md` or its `references/` | Standard+ — apply [aspire-skills-review-checklist.md](aspire-skills-review-checklist.md) §1–§5 and §10. |
-| `.plugin/plugin.json` / `.claude-plugin/*.json` / `gemini-extension.json` | Deep — version sync, manifest consistency, marketplace metadata. |
+| `package.json` / `.plugin/plugin.json` / `.claude-plugin/*.json` / `.cursor-plugin/marketplace.json` / `gemini-extension.json` | Deep — release-version sync with all six shipped skills, host-specific schemas, marketplace metadata. |
+| `.github/plugins/aspire-skills/` | Standard — manifest and runtime skill/extension symlinks still target the canonical root sources. |
+
+Use the root README as the installation reference for Aspire CLI, GitHub Copilot
+app and CLI, Claude Code, Gemini CLI, Cursor CLI, Codex CLI, OpenCode via APM,
+Ollama + Copilot CLI, and skills.sh. Check each host's documented installation and
+update path; do not assume a skills-only installation also installs canvas extensions.
 
 ## Communication
 

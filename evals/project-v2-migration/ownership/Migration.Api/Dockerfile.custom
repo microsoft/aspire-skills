@@ -1,0 +1,14 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+COPY Directory.Packages.props ./
+COPY Migration.Api/ ./Migration.Api/
+COPY Migration.Shared/ ./Migration.Shared/
+RUN dotnet publish Migration.Api/Migration.Api.csproj --configuration Release --output /out \
+    --self-contained false --source https://packagefeedproxy.microsoft.io/nuget/v3/index.json
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
+WORKDIR /app
+ENV ASPNETCORE_HTTP_PORTS=8080
+LABEL project-v2-owner="custom-dockerfile"
+COPY --from=build /out/ ./
+ENTRYPOINT ["dotnet", "Migration.Api.dll"]
