@@ -102,7 +102,8 @@ function mutateBlazor(root, removeLegacyMutation = true) {
 test("every edit case has a program contract and every assessment is no-edit", () => {
   const spec = parse(readFileSync(new URL("../skills/aspire-project-v2-migration/evals/eval.yaml", import.meta.url), "utf8"));
   assert.equal(spec.scoring.threshold, 1);
-  assert.equal(spec.environment.skills.length, 7);
+  assert.equal(spec.environment.skills.length, 8);
+  assert.ok(spec.environment.skills.includes("../../aspire-terminals"));
   for (const caseName of Object.keys(editCases)) {
     const stimuli = spec.stimuli.filter(stimulus => stimulus.tags?.integration === caseName);
     assert.equal(stimuli.length, 1, `Missing or duplicated edit case: ${caseName}`);
