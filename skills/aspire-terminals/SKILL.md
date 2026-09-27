@@ -55,6 +55,19 @@ terminal code or tape syntax.
 on-demand side shell. `TerminalService` launches a separate AppHost-owned process;
 it does not implicitly enter a container or become a modeled resource.
 
+### Lifecycle checklist for recommendations
+
+When comparing terminal models, explicitly state cleanup for each model you
+recommend, including headless alternatives:
+
+- **Dock:** survives the opening command; do not scope the handle with `await using`
+  in that command. Closing the tab or AppHost shutdown disposes it.
+- **Dialog and None:** the caller disposes both, normally with `await using`.
+  Headless placement does not transfer cleanup responsibility to the service.
+- **Prompt completion is not terminal disposal:** successful `Work` closes the
+  prompt, but the caller still disposes its terminal. Without `Work`, process exit
+  does not close the prompt; explicit completion/cancellation is required.
+
 ## Capability check
 
 1. Locate the exact AppHost and inspect its SDK, hosting and integration package

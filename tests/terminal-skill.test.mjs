@@ -76,6 +76,16 @@ test("terminal evals use real activation and actual-edit graders, with all routi
   }
 });
 
+test("lifecycle guidance and cancellation prompt retain explicit completion and cleanup requirements", () => {
+  const skill = read("skills/aspire-terminals/SKILL.md");
+  assert.match(skill, /\*\*Dialog and None:\*\* the caller disposes both/);
+  assert.match(skill, /successful `Work` closes the\s+prompt, but the caller still disposes/);
+  const cancellation = spec.stimuli.find(item => item.name === "terminal-manual-cancellation");
+  assert.match(cancellation.prompt, /Work callback completing successfully/);
+  assert.match(cancellation.prompt, /being canceled, or throwing an unrelated exception/);
+  assert.equal(spec.scoring.threshold, 1);
+});
+
 test("tape reference distinguishes upstream syntax, output formats and unsupported effects", () => {
   const tape = read("skills/aspire-terminals/references/tapes.md");
   for (const required of [
