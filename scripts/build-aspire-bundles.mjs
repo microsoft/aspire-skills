@@ -123,7 +123,7 @@ function buildSkill(skillDirectory) {
   return {
     name: skillName,
     description: frontmatter.description,
-    isDefault: ["aspire", "aspireify", "aspire-deployment"].includes(skillName),
+    isDefault: ["aspire", "aspireify", "aspire-deployment", "aspire-terminals"].includes(skillName),
     applicableLanguages: [],
     installExcludedRelativePaths: ["evals"],
     files

@@ -16,6 +16,8 @@ function readSkill(name) {
 }
 
 const named = {
+  "router-terminals-001": ["aspire", "aspire-terminals"],
+  "router-terminal-tapes-001": ["aspire-terminals"],
   "router-ordinary-wiring-preserves-136-001": ["aspire"],
   "router-init-001": ["aspire"],
   "router-azdiag-001": ["aspire", "aspire-monitoring"],

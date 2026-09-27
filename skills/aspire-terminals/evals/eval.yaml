@@ -1,0 +1,311 @@
+name: aspire-terminals-eval
+description: Terminal model selection, actual source edits, lifetime safety, capability gates and Aspire-specific tape contracts.
+version: "1.0"
+type: capability
+tags: { skill: aspire-terminals }
+defaults:
+  runs: 1
+  timeout: 300s
+  executor: copilot-sdk
+  model: gpt-5.6-sol-fast
+  judge_model: gpt-5.6-sol
+scoring: { threshold: 1.0 }
+environment:
+  skills:
+    - ../../aspire
+    - ../../aspire-init
+    - ../../aspireify
+    - ../../aspire-project-v2-migration
+    - ../../aspire-orchestration
+    - ../../aspire-deployment
+    - ../../aspire-monitoring
+    - ../../aspire-terminals
+grading_environment:
+  files:
+    - { src: ../../../evals/terminals/grade-edit.mjs, dest: .grader/grade-edit.mjs }
+stimuli:
+  - name: terminal-model-selection
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. Give read-only guidance: I have an
+      orchestrated interactive worker, an auxiliary tool that should stay open
+      after its command returns, and a focused setup flow. Which Aspire terminal
+      APIs should each use? Explain ownership, cleanup, installed-package capability
+      checks, process-exit versus prompt completion and headless alternatives.
+      Do not edit or run anything.
+    tags: { priority: p0, area: selection }
+    rubric:
+      - Selects WithTerminal for the actual worker, TerminalService Dock for the auxiliary tool, Dialog plus PromptTerminalAsync for focused setup, and None only for an intentionally headless workflow.
+      - Dock survives the command without scoped disposal; Dialog/None are caller-disposed, while resource lifecycle owns the resource PTY.
+      - Gates newer APIs on the actual hosting package, checks prompt availability, and does not assume process exit completes a prompt.
+    graders:
+      - type: skill-invocation
+        name: terminal-selection-activation
+        config: { required: [aspire-terminals] }
+      - type: prompt
+        name: terminal-selection-outcome
+        config: { scoring: binary }
+      - type: diff-empty
+
+  - name: terminal-dock-edit
+    prompt: >
+      Before editing, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge or only read a skill file without invoking
+      it. Edit only app/Program.cs. Add an
+      open-tool resource command that launches dotnet with the existing toolPath
+      in a dock terminal, starts and shows it, and returns while it stays open.
+      Preserve the existing worker process and all package versions. Use the
+      source-backed recipes as API evidence for this offline authoring exercise;
+      do not restore, build, start, install or claim runtime validation.
+      Include the added command code in the final response for review.
+    tags: { priority: p0, area: actual-edit }
+    environment:
+      files: &app
+        - { src: ../../../evals/terminals/app, dest: app }
+    rubric:
+      - The actual source adds a run-mode resource command resolving TerminalService from context.Services and passing toolPath as one argument.
+      - Dock lifetime survives command return; no await using or disposal kills it. Start and Show do not falsely promise tool completion.
+      - Existing resource execution and package versions are preserved, with narrowly paired experimental suppression.
+    graders:
+      - type: skill-invocation
+        name: terminal-dock-activation
+        config: { required: [aspire-terminals] }
+      - type: diff-contains
+        name: terminal-dock-actual-diff
+        config: { value: CreateTerminal }
+      - type: program
+        name: terminal-dock-edit-contract
+        config: { program: node, args: [.grader/grade-edit.mjs, dock] }
+      - type: prompt
+        name: terminal-dock-outcome
+        config: { scoring: binary }
+
+  - name: terminal-prompt-edit
+    prompt: >
+      Before editing, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge or only read a skill file without invoking
+      it. Edit only app/Program.cs. Add a focused
+      setup-tool command launching dotnet with the existing toolPath. Refuse
+      unavailable interactions before creating the process. Use a Dialog prompt
+      with Work: the tool asks Continue?, accepts yes plus Enter and then emits
+      Setup complete. Use the documented terminal/terminalContext/token variable
+      names, bounded waits and callback cancellation; report cancellation as
+      failure and dispose the caller-owned process. Preserve the worker and
+      package versions. This is offline source authoring against the source-backed
+      recipes; do not restore, build, start or claim runtime validation.
+      Include the added command code in the final response for review.
+    tags: { priority: p0, area: actual-edit }
+    environment: { files: *app }
+    rubric:
+      - Actual source checks IsAvailable before process creation and uses the same registered Dialog handle in PromptTerminalAsync.
+      - Work observes its TerminalContext token on input and bounded waits, verifies fresh completion output, and propagates errors rather than swallowing them.
+      - WaitForTextAsync polls current screen state, so a wait after Enter is valid for this fresh tool whose completion text remains visible; do not invent a requirement to subscribe before input.
+      - Cancellation is not success; await using disposes the process on all paths; prompt itself only borrows it.
+    graders:
+      - type: skill-invocation
+        name: terminal-prompt-activation
+        config: { required: [aspire-terminals] }
+      - type: diff-contains
+        name: terminal-prompt-actual-diff
+        config: { value: PromptTerminalAsync }
+      - type: program
+        name: terminal-prompt-edit-contract
+        config: { program: node, args: [.grader/grade-edit.mjs, prompt] }
+      - type: prompt
+        name: terminal-prompt-outcome
+        config: { scoring: binary }
+
+  - name: terminal-headless-edit
+    prompt: >
+      Before editing, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge or only read a skill file without invoking
+      it. Edit only app/Program.cs. Add an
+      automate-tool resource command for a deliberately headless tool, not a human
+      approval flow. Launch dotnet with toolPath, use the documented terminal and
+      token variables, wait for Continue?, send yes and Enter, then wait for Setup
+      complete. Bound waits, pass command cancellation and dispose the owned
+      process. Preserve resource execution and package versions. Offline source
+      authoring only; do not restore, build, start or claim runtime validation.
+      Include the added command code in the final response for review.
+    tags: { priority: p1, area: actual-edit }
+    environment: { files: *app }
+    rubric:
+      - Actual edit uses None placement, run-mode registration and caller-owned disposal, without creating a prompt or dock.
+      - Waits and inputs observe cancellation and meaningful completion, not invented exit-status APIs or unbounded delays.
+    graders:
+      - type: skill-invocation
+        name: terminal-headless-activation
+        config: { required: [aspire-terminals] }
+      - type: diff-contains
+        name: terminal-headless-actual-diff
+        config: { value: TerminalPlacement.None }
+      - type: program
+        name: terminal-headless-edit-contract
+        config: { program: node, args: [.grader/grade-edit.mjs, headless] }
+      - type: prompt
+        name: terminal-headless-outcome
+        config: { scoring: binary }
+
+  - name: terminal-resource-edit
+    prompt: >
+      Before editing, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge or only read a skill file without invoking
+      it. Edit only app/Program.cs. Give the
+      existing worker process a PTY; do not create an auxiliary shell or change
+      executable, arguments, package versions or dependencies. Use narrow paired
+      warning suppression. Offline source edit only; do not restore, build or run.
+      Include the changed resource registration in the final response for review.
+    tags: { priority: p1, area: actual-edit }
+    environment: { files: *app }
+    rubric:
+      - Adds WithTerminal on the existing resource with paired ASPIRETERMINAL001 suppression, preserving its execution.
+      - Does not substitute TerminalService or a separate shell and does not claim runtime validation.
+    graders:
+      - type: skill-invocation
+        name: terminal-resource-activation
+        config: { required: [aspire-terminals] }
+      - type: diff-contains
+        name: terminal-resource-actual-diff
+        config: { value: WithTerminal }
+      - type: program
+        name: terminal-resource-edit-contract
+        config: { program: node, args: [.grader/grade-edit.mjs, resource] }
+      - type: prompt
+        name: terminal-resource-outcome
+        config: { scoring: binary }
+
+  - name: terminal-135-typescript-boundary
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. My TypeScript AppHost is pinned to Aspire
+      13.5.3. Give read-only advice for a resource terminal with custom dimensions
+      and a TerminalService prompt. Do not upgrade, edit or execute.
+    tags: { priority: p0, area: compatibility }
+    rubric:
+      - Preserves 13.5.3, offers parameterless withTerminal only and explains the unsupported dimension DTO.
+      - Does not invent TypeScript TerminalService or PromptTerminalAsync exports, TerminalOptions.Shell or edit generated modules; distinguishes newer source evidence from installed APIs.
+    graders:
+      - type: skill-invocation
+        name: terminal-compatibility-activation
+        config: { required: [aspire-terminals] }
+      - type: prompt
+        name: terminal-compatibility-outcome
+        config: { scoring: binary }
+      - type: diff-empty
+
+  - name: terminal-manual-cancellation
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. Read-only review: my manual Dialog
+      terminal prompt has no Work callback and its tool exits. Should it close
+      automatically? Is PrimaryButtonText an OK button? If IsAvailable is false
+      can I silently run the human approval flow headlessly? Explain cleanup and
+      cancellation, without editing or running.
+    tags: { priority: p0, area: cancellation }
+    rubric:
+      - Process exit does not close a manual prompt; explicit completion/cancellation is required. PrimaryButtonText labels cancel, not OK.
+      - Rejects silent headless approval fallback; checks availability before launching; the prompt borrows and caller disposes its Dialog handle.
+      - Work completion closes the prompt, cancellation signals and joins callback work, and unrelated exceptions propagate.
+    graders:
+      - type: skill-invocation
+        name: terminal-cancellation-activation
+        config: { required: [aspire-terminals] }
+      - type: prompt
+        name: terminal-cancellation-outcome
+        config: { scoring: binary }
+      - type: diff-empty
+
+  - name: terminal-repl-and-resource-ownership
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. Give read-only advice for opening an
+      authenticated PostgreSQL client in Aspire 13.6. Must I put WithTerminal on
+      the server and hard-code docker exec postgres? Also explain how to discover
+      owners/replicas, whether attach/tape can target a listed dock ID, and whether
+      disposing a resource automation handle stops the resource. Do not run commands or edit.
+    tags: { priority: p1, area: ownership }
+    rubric:
+      - Prefers typed WithRepl/withRepl in a supported package, no server WithTerminal prerequisite or hard-coded container name; mentions authenticated privileges.
+      - Discovery distinguishes resource/apphost owners and replicas; CLI attach/tapes are resource-targeted, not arbitrary listed dock IDs.
+      - Resource-handle disposal only disconnects automation, while AppHost-owned disposal stops the process; does not invent resource lookup APIs or internal IDs.
+    graders:
+      - type: skill-invocation
+        name: terminal-repl-activation
+        config: { required: [aspire-terminals] }
+      - type: prompt
+        name: terminal-repl-outcome
+        config: { scoring: binary }
+      - type: diff-empty
+
+  - name: terminal-tape-subset-and-formats
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. Give read-only examples of the Aspire VHS
+      subset for an existing idle POSIX shell resource. Include Type/Enter, keys
+      and chords, bounded Line/Screen waits, Source, and a meaningful output
+      assertion that is not satisfied by input echo. Explain empty-tape snapshots,
+      stdout versus .txt/.ascii, file overwrite/multiple outputs, and nested Source
+      paths and included Output directives. Show a CLI playback example with
+      exact-target placeholders and both wait and overall timeouts. Cover required
+      parent directories, repeated checkpoints, and handling partial artifacts
+      and diagnostics after failure. Link Charmbracelet docs without implying full VHS compatibility.
+      Do not write files or play a tape.
+    tags: { priority: p0, area: tapes }
+    rubric:
+      - Provides appropriate supported syntax examples and CLI tape play with exact resource/apphost/replica selection, noninteractive mode and overall timeout distinct from wait timeout.
+      - Uses initial wait settings, explicit Enter, simple regexes and meaningful fresh output rather than only echo or Sleep; Source resolves from root tape directory even when nested.
+      - Describes empty/comment-only tape stdout snapshots, final stdout versus intermediate .txt/.ascii checkpoints, identical UTF-8 text encoding (not ASCII-only/ANSI/replay), no overwrite, one destination and existing parent directories.
+      - Included Output is ignored, repeated checkpoints remain, partial artifacts after failure are not passing goldens, and stderr must remain separate.
+    graders:
+      - type: skill-invocation
+        name: terminal-tape-subset-activation
+        config: { required: [aspire-terminals] }
+      - type: prompt
+        name: terminal-tape-subset-outcome
+        config: { scoring: binary }
+      - type: diff-empty
+
+  - name: terminal-tape-unsupported-and-secrets
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. Read-only review: I want Aspire tapes
+      to emit GIF, MP4, WebM, PNG and .cast; use Set Shell, Env and dimensions;
+      Copy/Paste, ScrollDown and Hide around passwords. Will --viewer prevent
+      concurrent input, and can I retry failed commands blindly? Explain whether
+      tapes launch a new terminal and whether unsupported operations fail before
+      earlier input is sent. Do not execute anything or write files.
+    tags: { priority: p0, area: tapes }
+    rubric:
+      - Rejects every requested media/.cast format through Aspire; no invented recording flags or VHS/ffmpeg installation.
+      - Rejects launch/env/dimension, clipboard and viewer-scroll effects with preflight behavior; the terminal already exists.
+      - Hide is not secret redaction and viewer is sizing ownership, not read-only/exclusive authorization; no blind non-idempotent retries.
+    graders:
+      - type: skill-invocation
+        name: terminal-tape-rejection-activation
+        config: { required: [aspire-terminals] }
+      - type: prompt
+        name: terminal-tape-rejection-outcome
+        config: { scoring: binary }
+      - type: diff-empty
+
+  - name: terminal-negative-monitoring
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. Give read-only guidance to find console
+      logs and OTEL traces for my running Aspire app. No terminal input or
+      authoring is needed; do not execute commands or edit.
+    tags: { priority: p1, area: routing }
+    graders:
+      - type: skill-invocation
+        name: terminal-monitoring-boundary
+        config: { required: [aspire-monitoring], disallowed: [aspire-terminals] }
+      - type: diff-empty
+
+  - name: terminal-negative-generic-shell
+    prompt: How do I list files in a normal bash terminal? Read-only answer; do not execute or edit. This project does not use Aspire.
+    tags: { priority: p1, area: routing }
+    graders:
+      - type: skill-invocation
+        name: terminal-generic-shell-boundary
+        config: { disallowed: [aspire, aspire-terminals] }
+      - type: diff-empty

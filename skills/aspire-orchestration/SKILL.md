@@ -7,11 +7,12 @@ description: >-
   "aspire stop", "aspire wait", resource restart, file-lock errors (MSB3491 or
   CS2012), port conflicts, git worktrees, "--isolated", "aspire update --self",
   "aspire update --migrate", "aspire describe --include-hidden", "aspire stop --force",
-  "aspire terminal", integration discovery, default watch, or hot reload.
+  integration discovery, default watch, or hot reload.
   INVOKES: VS Code lifecycle tools first when exposed; Aspire CLI for readiness,
   inspection, resource operations, isolated worktree starts, and allowed fallbacks.
   DO NOT USE FOR: deploy/publish/destroy (aspire-deployment), logs/traces/metrics
-  (aspire-monitoring), or AppHost code and resource wiring (aspireify).
+  (aspire-monitoring), terminal authoring/attach/tapes (aspire-terminals), or
+  AppHost code and resource wiring (aspireify).
   FOR SINGLE OPERATIONS: Load the matching editor tool first, then obey the
   exact-target, worktree-isolation, and stop-result rules below.
 license: MIT
@@ -158,7 +159,7 @@ See [safety-guardrails.md](references/safety-guardrails.md) for detailed rules a
 | Show hidden resources (proxies, helpers, migrations) | `aspire describe --include-hidden` |
 | Resource operation | `aspire resource <resource-name> <command>` such as `stop`, `start`, or `rebuild` when exposed |
 | Discover resource commands | `aspire resource <resource-name> --help` |
-| Attach to an experimental resource terminal | Enable `features.terminalCommandsEnabled`, then use `aspire terminal ps` / `aspire terminal attach` |
+| Terminal discovery, attach or tape playback | Invoke `aspire-terminals`; lifecycle/readiness remain here |
 | Create new project | `aspire new aspire-starter` |
 | Add Aspire to existing | `aspire init` (then hand off to `aspireify` skill for wiring) |
 | Add integration | `aspire add <package>` |
@@ -229,7 +230,8 @@ The same rule applies to any "file in use", "cannot access the file", or
 |----------|----------|
 | AppHost wiring after `aspire init` (scan repo, add resources, ServiceDefaults/OTel) | → `aspireify` skill ([`aspireify/SKILL.md`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md)) or project-local `.agents/skills/aspireify/SKILL.md` |
 | Browser logs (`Aspire.Hosting.Browsers` / `WithBrowserLogs()`) and dashboard authoring | → `aspireify` skill (code edits) and `aspire-monitoring` (discovery) |
-| Custom resource commands, arguments, interactions, or terminals (`WithCommand`, `CommandOptions.Arguments`, `IInteractionService`, `WithTerminal`) | → `aspireify` skill |
+| Custom resource commands, arguments, or nonterminal interactions (`WithCommand`, `CommandOptions.Arguments`, `IInteractionService`) | → `aspireify` skill |
+| Terminal commands, prompts, dock/headless sessions, REPLs, `WithTerminal`, attach or tapes | → `aspire-terminals` skill |
 | Lifecycle hooks (`SubscribeBeforeStart`, `SubscribeAfterResourcesCreated`, BeforeStart pipeline phase) | → `aspireify` skill |
 | Endpoint authoring (`WithEndpoint` updates, `ExcludeReferenceEndpoint` flag) | → `aspireify` skill |
 | Deploy, publish, pipeline steps, `aspire destroy` | → `aspire-deployment` skill |

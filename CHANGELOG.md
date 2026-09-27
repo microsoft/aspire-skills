@@ -5,7 +5,7 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [0.0.3] - Unreleased
 
 ### Changed
-- Bumped the plugin and all seven shipped skills to `0.0.3`.
+- Bumped the plugin and all eight shipped skills to `0.0.3`.
 - Clarified agent installation and update instructions in `README.md`.
 - Aligned PR review guidance with supported agent hosts, release versioning, and
   the published plugin mirror.
@@ -21,6 +21,11 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   falling back to an unavailable model.
 
 ### Added
+- Added the default-selected `aspire-terminals` skill for resource PTYs, persistent
+  dock sessions, terminal prompts, headless automation and integration REPLs.
+  Includes Aspire-specific VHS tape syntax/examples and stdout, `.txt` and
+  `.ascii` output contracts, capability gates, routing and lifetime evaluations.
+  Aspire CLI delivery requires refreshing its embedded skill bundle and metadata.
 - Added regression coverage for version-preserving wiring, deployment, and dashboard
   diagnostics, plus a version-neutral router description check.
 - Added the approval-first `aspire-project-v2-migration` skill for eligible Aspire
