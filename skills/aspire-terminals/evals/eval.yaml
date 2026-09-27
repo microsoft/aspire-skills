@@ -200,7 +200,8 @@ stimuli:
       terminal prompt has no Work callback and its tool exits. Should it close
       automatically? Is PrimaryButtonText an OK button? If IsAvailable is false
       can I silently run the human approval flow headlessly? Explain cleanup and
-      cancellation, without editing or running.
+      cancellation, and contrast this with a Work callback completing successfully,
+      being canceled, or throwing an unrelated exception. Do not edit or run.
     tags: { priority: p0, area: cancellation }
     rubric:
       - Process exit does not close a manual prompt; explicit completion/cancellation is required. PrimaryButtonText labels cancel, not OK.
