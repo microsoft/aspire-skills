@@ -50,6 +50,19 @@ test("bundle manifests support Aspire 13.5 and 13.6 with compatible SHA-256/SHA-
       "migration skill bundle must include its references and exclude eval assets"
     );
     assert.deepEqual(migrationSkill.installExcludedRelativePaths, ["evals"]);
+    const terminalSkill = skillsManifest.skills.find(skill => skill.name === "aspire-terminals");
+    assert.ok(terminalSkill, "skills bundle must include aspire-terminals");
+    assert.equal(terminalSkill.isDefault, true);
+    assert.deepEqual(terminalSkill.files.map(file => file.relativePath), [
+      "references/apphost-terminals.md",
+      "references/automation-and-cli.md",
+      "references/resource-terminals.md",
+      "references/tapes.md",
+      "SKILL.md"
+    ]);
+    assert.deepEqual(terminalSkill.installExcludedRelativePaths, ["evals"]);
+    assert.deepEqual(skillsManifest.skills.filter(skill => skill.isDefault).map(skill => skill.name).sort(),
+      ["aspire", "aspire-deployment", "aspire-terminals", "aspireify"]);
     assertManifestHashes({
       bundleRoot: join(outputRoot, "aspire-extensions-v9.9.9"),
       manifestName: "extension-manifest.json",

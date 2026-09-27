@@ -1,6 +1,6 @@
 {
   "name": "aspire",
-  "description": "Aspire skills plugin for AI coding agents. Seven skills covering routing, init, AppHost wiring, Project v2 migration, orchestration, deployment, and monitoring.",
+  "description": "Aspire skills plugin for AI coding agents. Eight skills covering routing, init, AppHost wiring, Project v2 migration, orchestration, deployment, monitoring, and terminal authoring/automation.",
   "version": "0.0.3",
   "mcpServers": {
     "context7": {

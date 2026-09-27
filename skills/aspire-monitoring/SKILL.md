@@ -6,11 +6,11 @@ description: >-
   Aspire CLI, AKS workload diagnostics, and deployed Azure resource health.
   USE FOR: aspire logs, aspire otel logs, aspire otel traces, aspire otel spans, aspire
   describe, aspire ps, aspire export, aspire dashboard run, describe --include-hidden,
-  browser logs in dashboard, terminal view, DevTunnel URLs, WithBrowserLogs, App Insights
+  browser logs in dashboard, DevTunnel URLs, WithBrowserLogs, App Insights
   query, AKS pod logs, container app logs.
   DO NOT USE FOR: start/stop/wait (use aspire-orchestration), deploy/publish/destroy (use
   aspire-deployment), AppHost code edits like WithBrowserLogs() (use aspireify), Azure
-  provisioning (use azure-prepare).
+  provisioning (use azure-prepare), terminal authoring/input/tapes (use aspire-terminals).
   INVOKES: aspire CLI, azure-diagnostics (deployed Azure), kubectl + Container Insights.
   FOR SINGLE OPERATIONS: Run the aspire CLI command directly for quick log or describe lookups.
 license: MIT
@@ -194,7 +194,8 @@ Agents inspecting a running dashboard should know:
 - **13.5 filtering** — filter telemetry by timestamp, use `==` / `!=` for exact numeric
   values, and search console-log text while streams continue updating.
 - **Terminal view** — resources configured with experimental `WithTerminal()` open as
-  interactive sessions in the dashboard.
+  interactive sessions in the dashboard. Invoke `aspire-terminals` for terminal
+  authoring, input, dock/dialog lifetimes and tapes; logs/traces remain here.
 - **No dashboard AI Assistant** — it was removed in 13.5. Use `aspire agent init` and the
   AppHost/CLI agent integration instead.
 - **VS Code launch is opt-in** — the Aspire extension no longer opens the dashboard

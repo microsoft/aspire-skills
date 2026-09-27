@@ -37,6 +37,7 @@ evals/
 ├── ts-apphost/          # TypeScript AppHost (apphost.mts + .aspire/modules/)
 ├── non-aspire/          # Non-Aspire .NET project (for "should not trigger" stimuli)
 ├── project-v2-migration/ # Legacy inputs, captured-edit contracts, and qualification guidance
+├── terminals/           # Terminal authoring fixtures, captured-edit checks and example compilation
 └── version-preservation/ # Read-only C# AppHost fixture with concrete, centrally managed Aspire versions
 ```
 
@@ -58,7 +59,14 @@ Eval-level `environment.skills` is **union-merged** into every stimulus, so you 
 **Hybrid loading convention used here:**
 
 - **Capability specs** load the skill under test **plus its transitive in-repo dependencies** (whatever its `SKILL.md` `INVOKES:`). E.g. `aspireify` loads `aspireify` + `aspire-orchestration` because it validates wiring by running `aspire start`.
-- **Migration routing stimuli** load all **seven skills** so the new migration workflow competes with real siblings. Legacy specs retain their existing candidate sets; they have not all been expanded to seven.
+- **Router, migration and terminal routing stimuli** load all **eight skills** so specialists compete with real siblings. Legacy capability specs retain narrower sets, including the terminal specialist where a handoff is supported.
+
+Terminal evaluations combine read-only decisions with actual C# dock/prompt/headless
+and resource edits. Their program grader inspects the captured diff and edited
+file; explanatory mentions alone do not pass. `evals/terminals/qualify-examples.mjs`
+separately compiles the documentation recipes against real preview packages.
+Neither static edit checks nor compilation prove dashboard/runtime cancellation
+behavior; record the exact qualified build and any unperformed runtime checks.
 
 **Activation assertions:** use a `skill-invocation` grader with `config.required` / `config.disallowed` to assert which skills the agent actually invoked. Vally 0.16.0 no longer accepts `constraints.expect_skills` / `constraints.reject_skills`.
 
@@ -83,6 +91,11 @@ The router spec deliberately uses `gpt-5.6-sol-fast` instead of the repository's
 usual `gpt-5-mini` executor so single-trial PR gates can enforce owner activation
 without naming the owner in prompts. This increases router-suite cost, but avoids
 weakening policy checks to accommodate small-model routing variance.
+The terminal suite uses the same executor for exact experimental APIs and real
+activation: initial `gpt-5-mini` trials invented dock APIs or skipped invocation.
+Actual-edit prompts expose the changed code in the reply as well as the captured
+diff, because the prompt judge's timeline may truncate tool output. The independent
+program grader still checks the actual workspace; prose cannot substitute for edits.
 
 These assessments are read-only: explicit rubrics judge the route and guidance,
 not successful live deployment or log retrieval, and `diff-empty` checks the

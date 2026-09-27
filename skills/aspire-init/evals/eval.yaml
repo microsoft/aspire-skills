@@ -30,6 +30,7 @@ environment:
     - ../../aspire-init
     - ../../aspireify
     - ../../aspire-orchestration
+    - ../../aspire-terminals
 stimuli:
   - name: init-cli-install-001
     prompt: I tried `aspire init` but it says command not found. How do I install the Aspire CLI?
