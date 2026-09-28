@@ -16,6 +16,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   Graph diagnostics distinguish affected 13.5.0-13.5.2 dashboards from newer failures
   without recommending speculative downgrade workarounds.
 - Clarified that Docker Compose deployments run the modeled resources, not the AppHost.
+- Distinguished ordinary `aspire stop`, `aspire stop --force` (which preserves
+  persistent volumes), and explicitly approved AppHost-wide `--volumes` cleanup, including
+  its ownership and compatibility limits. Stale-password recovery now prefers restoring
+  the password or a targeted reset and treats `--volumes` as a broader, approved option.
 - Updated evaluation CI with bounded retries and result-integrity checks.
 - Set an explicit supported judge model in every skill evaluation to avoid
   falling back to an unavailable model.
