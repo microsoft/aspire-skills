@@ -35,9 +35,9 @@ connects lazily as a secondary peer and does not resize, start or stop the workl
 
 ## Check capabilities, then discover owners
 
-The inspected CLI requires `features.terminalCommandsEnabled`. If commands are
-absent, check version/help/configuration rather than guessing alternative syntax.
-Feature-flag removal is not assumed from an open PR.
+Terminal commands no longer require feature-flag enablement. If commands are
+absent, check the installed version and help rather than setting the removed
+flag or guessing alternative syntax.
 
 ```sh
 aspire terminal --help
@@ -101,4 +101,4 @@ without sending input. Prefer them for inspection.
 
 - [Terminal CLI commands](https://github.com/microsoft/aspire/tree/34db30a7d3733229da64a403dfc4e4e4d7a1a43b/src/Aspire.Cli/Commands)
 - [Resource lookup proposal, not an available API](https://github.com/microsoft/aspire/issues/20219)
-- [Feature-flag removal proposal](https://github.com/microsoft/aspire/pull/20525)
+- [Terminal-command feature-flag removal](https://github.com/microsoft/aspire/pull/20525)
