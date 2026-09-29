@@ -7,6 +7,7 @@ description: >-
   "aspire stop", "aspire wait", resource restart, file-lock errors (MSB3491 or
   CS2012), port conflicts, git worktrees, "--isolated", "aspire update --self",
   "aspire update --migrate", "aspire describe --include-hidden", "aspire stop --force",
+  "aspire stop --force --volumes",
   "aspire terminal", integration discovery, default watch, or hot reload.
   INVOKES: VS Code lifecycle tools first when exposed; Aspire CLI for readiness,
   inspection, resource operations, isolated worktree starts, and allowed fallbacks.
@@ -126,7 +127,8 @@ its filesystem path first.
 | Task complete | `aspire_apphost_stop` with the exact selected `appHostPath` when available; follow its result matrix | Use an unapproved CLI fallback |
 | Check running AppHosts | `aspire ps` | Manual process inspection |
 | Check resource status | `aspire describe` | `aspire ps --resources` (removed in 13.5) |
-| Remove persistent resources | Confirm data loss and exact AppHost before `aspire stop --force --apphost <filesystem-path>` | Combining `--force` with `--all`, or using it for an ordinary stop |
+| Remove persistent resources | Confirm the exact AppHost and that its persistent resource instances will be removed before `aspire stop --force --apphost <filesystem-path>`; explain that `--force` alone preserves persistent volumes | Combining `--force` with `--all`, or using it for an ordinary stop |
+| Delete Aspire-owned volumes | Only after explicit approval naming the exact AppHost and accepting that every named volume Aspire created and owns for it is deleted, which can span several databases and caches: `aspire stop --force --volumes --apphost <filesystem-path>` | Adding `--volumes` to routine shutdown, lock recovery, or a single-resource fix without approval for that broader data scope |
 | Working in git worktree | `aspire start --non-interactive --isolated --apphost <filesystem-path>` | `aspire_apphost_start` when it cannot request isolation |
 | Running from AI agent | Load available lifecycle tools first; resolve CLI `--apphost` fallbacks to `<filesystem-path>`; add `--non-interactive` | Assuming interactive terminal |
 | Editing unfamiliar API | `aspire docs search <topic>` then `aspire docs api search <query>` for API reference | Guessing API shape |
@@ -219,6 +221,7 @@ aspire start --non-interactive --isolated --apphost <filesystem-path>
 | Delete `bin/` / `obj/` to "fix" the lock | Stop the AppHost; deletion may succeed but the next build relocks |
 | `pkill dotnet` or `kill <PID>` to free locks | Use the editor stop tool or exact-target CLI fallback for clean shutdown |
 | Tell the user to "reboot" or "restart your machine" | Stop the AppHost through lifecycle routing |
+| Add `--force` or `--volumes` to release locks | Use an ordinary exact-target stop; lock recovery never needs persistent-resource or volume cleanup |
 
 The same rule applies to any "file in use", "cannot access the file", or
 "another process is using" error during a build of an Aspire-managed resource.
