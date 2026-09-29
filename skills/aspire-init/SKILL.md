@@ -99,7 +99,11 @@ and need an AppHost added alongside them:
      generated `.aspire/modules/` folder)
    - AppHost configuration describing language + AppHost path
    - The **`aspireify`** agent skill into the project's skill directory (same one
-     `aspire agent init` uses)
+     `aspire agent init` uses). In 13.6+, the chained agent setup preselects the
+     recommended skills, including `aspireify`, and does **not** offer Aspire MCP server
+     configuration. If MCP config is missing after a successful init, that is expected and
+     isn't a defect. MCP is a separate opt-in; see the `aspire` router's *Skills vs. MCP*
+     guidance.
 4. **Hand off to `aspireify`** — `aspire init` does **not** wire resources, projects, or
    integrations on its own.
 5. After `aspireify` finishes wiring, validate via `aspire start`
@@ -143,7 +147,8 @@ copy and warn.
 | `aspire new` rejects `--output` path | Path exists and is non-empty | Use a different `--output` or empty the directory |
 | `aspire` command not found | CLI not installed | `dotnet tool install -g Aspire.Cli` (.NET 10) or `curl -sSL https://aspire.dev/install.sh \| bash` |
 | `aspire doctor` reports missing .NET 10 | SDK missing | Install .NET 10 SDK before retrying |
-| `aspire init` succeeded but no `aspireify` skill installed | Agent skill directory not detected | Run `aspire agent init` to install `aspireify`, then continue wiring |
+| `aspire init` succeeded but no `aspireify` skill installed | Agent skill directory not detected, or `aspireify` not selected (13.5 doesn't preselect it) | Run `aspire agent init --non-interactive --skills aspireify` (append `aspireify` to any explicit `--skills` list, keep any `--skill-locations`, and don't add `--mcp`), then continue wiring |
+| `aspire init` succeeded but no MCP config was written | Expected in 13.6+ — chained agent setup does not offer MCP | Don't repair it. Configure MCP only when the user explicitly asks for it (`aspire agent init --mcp` on 13.6+) |
 | Skeleton dropped but resources not wired | Expected — `aspire init` does not wire | Hand off to `aspireify` |
 | Existing TypeScript AppHost still uses `apphost.ts` | Legacy entry point and package graph | Hand off to `aspire-orchestration`, which owns approval and `aspire update --migrate --yes --non-interactive`; return to aspireify only for later source authoring |
 

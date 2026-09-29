@@ -18,6 +18,8 @@ function readSkill(name) {
 const named = {
   "router-ordinary-wiring-preserves-136-001": ["aspire"],
   "router-init-001": ["aspire"],
+  "router-agent-init-default-no-mcp-136-001": ["aspire"],
+  "router-agent-init-explicit-mcp-136-001": ["aspire"],
   "router-azdiag-001": ["aspire", "aspire-monitoring"],
   "router-deploy-001": ["aspire-deployment"],
   "router-mon-001": ["aspire-monitoring"],

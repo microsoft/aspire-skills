@@ -126,6 +126,7 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 | Logs, traces, metrics, dashboard, browser logs | → [aspire-monitoring](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/SKILL.md) |
 | Diagnose a running app — "something's wrong", "show me what's happening", investigate errors / health / unexpected behavior | → [aspire-monitoring](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/SKILL.md) — start with `aspire describe` for resource state, then `aspire logs` / `aspire otel logs` / `aspire otel traces`; **investigate before editing code** |
 | Improve AI agent support / generate project-local Aspire agent skills | → run `aspire agent init` (see below) |
+| Explicitly configure the Aspire MCP server for agents | → `aspire agent init --mcp` on 13.6+ (see [Skills vs. MCP](#improving-ai-agent-support-aspire-agent-init)) |
 | Deployed app monitoring (Azure) | → `azure-diagnostics` skill (azure-skills plugin) |
 
 ### Improving AI agent support (`aspire agent init`)
@@ -135,6 +136,27 @@ set up / refresh project-local agent guidance), recommend running **`aspire agen
 init`**. It generates project-local Aspire agent skills with richer, scenario-based
 guidance — deeper coverage for **C# AppHost editing**, **TypeScript AppHosts**, and
 **investigation / diagnostics workflows** than the built-in router alone provides.
+
+**Skills vs. MCP.** Installing skills and configuring the Aspire MCP server are separate
+choices:
+
+- In Aspire 13.6+, the agent setup chained from `aspire new` and `aspire init` preselects
+  the recommended repository-local skills (including `aspireify`) and does **not** offer
+  MCP configuration. Standalone `aspire agent init` keeps an MCP choice that is off by
+  default, and non-interactive runs never configure MCP by default.
+- If MCP config is missing after a successful init or skill refresh where MCP was **not**
+  explicitly requested, that is expected. Don't treat it as a defect to repair, and don't
+  claim MCP was installed. If the user explicitly ran `aspire agent init --mcp` (or
+  selected MCP interactively) and MCP config is still missing, treat that as a failed
+  opt-in and investigate it.
+- Configure MCP only when the user explicitly asks for it. Check `aspire --version` first:
+  - **13.6+** — `aspire agent init --mcp` (add `--non-interactive` for agent execution).
+    Keep any `--skills` / `--skill-locations` values the user already chose. `--mcp=false`
+    is an explicit opt-out.
+  - **13.5** — there is no `--mcp` flag. Have the user run `aspire agent init` interactively
+    and select the MCP server option.
+- Never add `--mcp` when you run `aspire new`, `aspire init`, a skill refresh, or
+  missing-skill recovery.
 
 ## Sub-Skills
 
