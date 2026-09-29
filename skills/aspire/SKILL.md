@@ -144,8 +144,11 @@ choices:
   the recommended repository-local skills (including `aspireify`) and does **not** offer
   MCP configuration. Standalone `aspire agent init` keeps an MCP choice that is off by
   default, and non-interactive runs never configure MCP by default.
-- If MCP config is missing after a successful init or skill refresh, that is expected.
-  Don't treat it as a defect to repair, and don't claim MCP was installed.
+- If MCP config is missing after a successful init or skill refresh where MCP was **not**
+  explicitly requested, that is expected. Don't treat it as a defect to repair, and don't
+  claim MCP was installed. If the user explicitly ran `aspire agent init --mcp` (or
+  selected MCP interactively) and MCP config is still missing, treat that as a failed
+  opt-in and investigate it.
 - Configure MCP only when the user explicitly asks for it. Check `aspire --version` first:
   - **13.6+** — `aspire agent init --mcp` (add `--non-interactive` for agent execution).
     Keep any `--skills` / `--skill-locations` values the user already chose. `--mcp=false`

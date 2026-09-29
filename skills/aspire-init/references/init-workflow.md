@@ -96,8 +96,10 @@ C# has two sub-modes the agent may encounter:
    project, or TypeScript `apphost.mts` exists there. For TypeScript, also confirm the
    adjacent generated `.aspire/modules/`; do not assume the AppHost is at the repo root.
 4. **Confirm `aspireify` skill installed** — the agent's skill directory contains
-   `aspireify/SKILL.md`. If missing, run `aspire agent init` to install it (without
-   `--mcp`; keep any explicit `--skills` / `--skill-locations` selections).
+   `aspireify/SKILL.md`. If missing, run
+   `aspire agent init --non-interactive --skills aspireify` to install it. If the user
+   already chose an explicit `--skills` list, append `aspireify` to it. Keep any
+   `--skill-locations` selection, and don't add `--mcp`.
 5. **Hand off to `aspireify`** for wiring:
    - Scan repo and discover existing projects, services, containers
    - Ask the user clarifying questions (which services to orchestrate, hardcoded ports,
@@ -126,7 +128,7 @@ The same precedence applies to a legacy `.agents/skills/aspire-init/SKILL.md` fr
 |---------|-------|----------|
 | `aspire init` reports an AppHost already exists | Repo is already an Aspire app | Stop. Route to `aspireify` or `aspire-orchestration` |
 | `aspire init` fails without `--language` in `--non-interactive` | CLI needs the language explicitly when prompts are disabled | Re-run with `--language csharp` or `--language typescript` |
-| Skeleton dropped but no `aspireify` skill | Agent skill directory not detected during init | Run `aspire agent init` (without `--mcp`) to install `aspireify`, then continue |
+| Skeleton dropped but no `aspireify` skill | Agent skill directory not detected, or `aspireify` not selected (13.5 doesn't preselect it) | Run `aspire agent init --non-interactive --skills aspireify` (append to any explicit `--skills` list, keep `--skill-locations`, no `--mcp`), then continue |
 | No MCP config after a successful init | Expected in 13.6+ — chained agent setup does not offer MCP | Leave as-is unless the user explicitly asks for MCP; then use `aspire agent init --mcp` (13.6+) |
 | `apphost.cs` references a missing `#:package` | Channel mismatch or transient feed issue | Re-run with `--channel stable` (or `daily` for pre-release) |
 | `aspire start` after wiring fails immediately | Wiring incomplete or wrong AppHost path | Re-invoke `aspireify`; confirm `aspire.config.json` `appHost.path` is correct |
