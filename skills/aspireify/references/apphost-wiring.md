@@ -75,7 +75,7 @@ package use the same release family. Do not mix incompatible package versions.
 | Command input | Prefer `CommandOptions.Arguments`; values become dashboard fields and CLI `--<name>` options. |
 | Direct interaction prompt | Check `IInteractionService.IsAvailable` (or TS equivalent) and provide a noninteractive path before prompting. |
 | File upload / progress | File inputs are stable; progress dialogs remain experimental under `ASPIREINTERACTION001`. |
-| Interactive terminal | `WithTerminal()` is experimental (`ASPIRETERMINAL001`); TypeScript uses parameterless defaults, and `TerminalOptions.Shell` no longer exists. |
+| Interactive terminal | Invoke `aspire-terminals` for `WithTerminal`, auxiliary dock/dialog/headless processes, terminal prompts, REPLs and automation. |
 | AI integration | Migrate deprecated `Aspire.Hosting.GitHub.Models` usage to Azure AI Foundry. |
 | Existing .NET project by path | `AddDotnetProject` moved to experimental `Aspire.Hosting.Dotnet` (`ASPIREDOTNETPROJECT001`). |
 | Dev tunnel region | Use normalized names such as `DevTunnelRegion.UKSouth` and `SoutheastAsia`. |

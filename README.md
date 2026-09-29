@@ -17,6 +17,12 @@ It helps agents recognize Aspire workspaces, use the Aspire CLI correctly, route
 | `aspire-orchestration` | Starts, stops, waits for, and manages Aspire resources |
 | `aspire-deployment` | Publishes, deploys, and tears down Aspire apps |
 | `aspire-monitoring` | Routes logs, traces, dashboard, telemetry, and diagnostics work |
+| `aspire-terminals` | Authors resource/dock/dialog/headless terminals, reuses REPLs, and automates terminal input and VHS-subset tapes |
+
+`aspire-terminals` covers Aspire 13.5 resource terminals and capability-gated
+13.6 terminal services, prompts, REPLs and tape playback. Its
+[tape reference](skills/aspire-terminals/references/tapes.md) documents Aspire's
+supported VHS syntax and plain-text output formats, not all upstream VHS features.
 
 ### Extensions
 
@@ -51,6 +57,13 @@ aspire init
 ```bash
 aspire agent init
 ```
+
+The generated skills bundle selects `aspire-terminals` by default alongside
+`aspire`, `aspireify` and `aspire-deployment`. Shipping this in Aspire also requires
+refreshing the CLI's embedded `aspire-skills` archive and metadata in
+`microsoft/aspire`, and aligning `AspireSkillsInstaller` with the published bundle
+version. Repository changes alone do not update an installed CLI's embedded skills;
+verify `aspire agent init` selection with the refreshed CLI before release.
 
 ### GitHub Copilot app
 

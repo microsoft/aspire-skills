@@ -14,8 +14,11 @@ on:
       - "package.json"
       - "package-lock.json"
       - "evals/project-v2-migration/**"
+      - "evals/terminals/**"
       - "evals/grade-routing-entry.mjs"
       - "skills/aspire-project-v2-migration/**"
+      - "skills/aspire-terminals/**"
+      - ".github/plugins/aspire-skills/skills/aspire-terminals/**"
       - "scripts/**"
       - "tests/**"
   push:
@@ -33,8 +36,11 @@ on:
       - "package.json"
       - "package-lock.json"
       - "evals/project-v2-migration/**"
+      - "evals/terminals/**"
       - "evals/grade-routing-entry.mjs"
       - "skills/aspire-project-v2-migration/**"
+      - "skills/aspire-terminals/**"
+      - ".github/plugins/aspire-skills/skills/aspire-terminals/**"
       - "scripts/**"
       - "tests/**"
 

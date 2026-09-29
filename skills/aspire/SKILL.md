@@ -5,12 +5,13 @@ description: >-
   and selects the right sub-skill.
   USE FOR: Aspire AppHost, Aspire CLI, distributed app, cloud-native .NET, aspire
   start/stop/resource/deploy/destroy/publish/init/new/add/wait/describe/ps/logs/otel,
-  aspire agent init, WithBrowserLogs, WithTerminal, Interaction Service, apphost.mts,
+  aspire agent init, WithBrowserLogs, WithTerminal, TerminalService, terminal prompts,
+  WithRepl, tapes, Interaction Service, apphost.mts,
   TS package managers, Yarn Classic, custom resource commands, .aspire/modules recovery,
   ProjectResource to DotnetProjectResource migration, or Playwright URL discovery.
   DO NOT USE FOR: non-Aspire projects or ordinary build/test tasks.
   INVOKES: aspire-init, aspireify, aspire-project-v2-migration,
-  aspire-orchestration, aspire-deployment, aspire-monitoring.
+  aspire-orchestration, aspire-deployment, aspire-monitoring, aspire-terminals.
   FOR SINGLE OPERATIONS: Route directly to the matching sub-skill.
 license: MIT
 metadata:
@@ -78,6 +79,9 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 
 ## Key Rules
 
+- Terminal requests require invoking `aspire-terminals` **before answering**, even
+  for read-only advice. Do not answer terminal API, prompt, REPL or VHS tape
+  questions from this router's overview; the specialist owns the exact contracts.
 - For agent AppHost lifecycle requests, identify one exact AppHost and route to
   `aspire-orchestration`. New 13.5 C# templates can make `dotnet run` delegate through the
   CLI bundle, but agents still use the editor lifecycle tool or `aspire start` for
@@ -124,6 +128,7 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 | Migrate legacy TypeScript `apphost.ts` (`aspire update --migrate`) | → [aspire-orchestration](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-orchestration/SKILL.md); hand back to aspireify only if source authoring remains |
 | Deploy, publish, destroy, pipeline steps | → [aspire-deployment](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-deployment/SKILL.md) |
 | Logs, traces, metrics, dashboard, browser logs | → [aspire-monitoring](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/SKILL.md) |
+| WithTerminal/withTerminal, TerminalService, dock/dialog/headless terminals, terminal prompts, WithRepl, terminal CLI or tapes | → [aspire-terminals](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-terminals/SKILL.md); choose owner and lifetime before code |
 | Diagnose a running app — "something's wrong", "show me what's happening", investigate errors / health / unexpected behavior | → [aspire-monitoring](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/SKILL.md) — start with `aspire describe` for resource state, then `aspire logs` / `aspire otel logs` / `aspire otel traces`; **investigate before editing code** |
 | Improve AI agent support / generate project-local Aspire agent skills | → run `aspire agent init` (see below) |
 | Deployed app monitoring (Azure) | → `azure-diagnostics` skill (azure-skills plugin) |
@@ -149,9 +154,18 @@ Agentic AppHost wiring after `aspire init` lands the skeleton. Scans the repo, p
 resource graph (Postgres / Redis / Rabbit / etc.), edits the AppHost (C#, file-based C#, or
 TypeScript), wires `Aspire.ServiceDefaults` + OTel, validates with `aspire start`, then
 self-deactivates. Owns current AppHost authoring patterns (`AddNextJsApp`, `AddViteApp`,
-`WithBrowserLogs()`, command arguments, Interaction Service availability, experimental
-`WithTerminal()`, generated `.aspire/modules/`, unified TS `withEnvironment`, endpoint
-references, and config/secret migration).
+`WithBrowserLogs()`, command arguments, nonterminal Interaction Service availability,
+generated `.aspire/modules/`, unified TS `withEnvironment`, endpoint references,
+and config/secret migration). Terminal authoring belongs to `aspire-terminals`.
+
+### aspire-terminals
+Code-authoring-first terminal guidance: choose resource `WithTerminal` versus
+AppHost-owned dock, terminal prompt or headless process; reuse integration REPLs.
+Owns terminal lifetimes, cancellation, screen/input automation, terminal CLI and
+Aspire's VHS tape subset/output formats. Hands lifecycle to `aspire-orchestration`
+and console/telemetry diagnostics to `aspire-monitoring`. `PromptTerminalAsync`
+borrows a caller-owned Dialog terminal: caller disposal stops the process, not
+prompt completion itself.
 
 ### aspire-project-v2-migration
 Approval-first migration for eligible Aspire 13.6+ AppHosts that replaces existing
@@ -192,6 +206,7 @@ guidance there should not be overridden by the in-plugin sibling:
 | `.agents/skills/aspireify/SKILL.md` | The in-plugin `aspireify` sibling defers to it for AppHost wiring. |
 | `.agents/skills/aspire-init/SKILL.md` | The in-plugin `aspire-init` sibling defers to it for the skeleton/first-run flow. |
 | `.agents/skills/aspire-project-v2-migration/SKILL.md` | The in-plugin migration sibling defers to it for Project v2 assessment and edits. |
+| `.agents/skills/aspire-terminals/SKILL.md` | The in-plugin terminal sibling defers to it for terminal authoring and automation. |
 
 **Safety guardrails from this plugin always apply** even when project-local skills are
 active.

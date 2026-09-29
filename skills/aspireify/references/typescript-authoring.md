@@ -135,15 +135,12 @@ if (await interaction.isAvailable()) {
 
 Prefer command arguments when input must work in both environments.
 
-`withTerminal()` is experimental and uses default dimensions in TypeScript:
-
-```ts
-await builder.addContainer('repl', 'my-repl').withTerminal();
-```
-
-Enable `aspire terminal` commands separately with
-`aspire config set features.terminalCommandsEnabled true`. Do not generate TypeScript
-terminal dimension options or the removed `TerminalOptions.Shell`.
+For terminal authoring, invoke
+[`aspire-terminals`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-terminals/SKILL.md).
+TypeScript exposes parameterless `withTerminal()` and supported integration
+`withRepl()` methods, not general `TerminalService`/terminal-prompt APIs in the
+inspected baseline. Do not invent dimension options or `TerminalOptions.Shell`.
+Nonterminal Interaction Service prompts remain in this skill.
 
 ## Unified `withEnvironment` API
 
