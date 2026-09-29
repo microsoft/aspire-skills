@@ -32,7 +32,10 @@ Choose the path that matches your agent host.
 
 ### Aspire CLI
 
-Aspire's first-party agent setup installs Aspire skill files, extension files, and MCP configuration into detected agent environments.
+Aspire's first-party agent setup installs Aspire skill files and extension files into detected agent environments. Aspire MCP server configuration is separate and opt-in.
+
+- In Aspire 13.6 and later, the agent setup that `aspire new` and `aspire init` run preselects the recommended repository-local skills, including `aspireify`. It doesn't offer MCP configuration.
+- Standalone `aspire agent init` keeps an MCP choice that's off by default. It doesn't configure MCP in non-interactive runs unless you pass `--mcp`.
 
 **Create a new Aspire app** and opt into agent guidance when prompted:
 
@@ -51,6 +54,14 @@ aspire init
 ```bash
 aspire agent init
 ```
+
+**Configure the Aspire MCP server** only when you want it (Aspire 13.6+):
+
+```bash
+aspire agent init --mcp
+```
+
+In Aspire 13.5, run `aspire agent init` interactively and select the MCP server option; 13.5 has no `--mcp` flag.
 
 ### GitHub Copilot app
 
