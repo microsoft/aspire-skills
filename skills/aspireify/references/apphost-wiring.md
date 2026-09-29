@@ -373,9 +373,9 @@ To fix it, choose the least destructive option the user approves:
    persistent resources and every named volume Aspire created for it. In an AppHost with
    several databases or caches, that deletes their data too, not just the failing one.
    Offer it only as a broader alternative, and run it only after the user approves that
-   exact AppHost and AppHost-wide data scope. It does not remove bind mounts, anonymous
-   volumes, or pre-existing named volumes, and older non-bundle AppHosts may not have the
-   ownership records it needs; see `aspire-orchestration`'s destructive-cleanup guardrails.
+   exact AppHost and AppHost-wide data scope. It requires Aspire CLI 13.6 or later. It
+   does not remove bind mounts, anonymous volumes, or pre-existing named volumes, and
+   older non-bundle AppHosts may not have the ownership records it needs; see `aspire-orchestration`'s destructive-cleanup guardrails.
 
 Then restart through `aspire-orchestration`; Aspire recreates removed containers and
 volumes with a matching password. `aspire stop --force` without `--volumes` does not fix

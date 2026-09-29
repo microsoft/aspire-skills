@@ -523,7 +523,8 @@ stimuli:
     prompt: >
       Use the aspire-orchestration skill before answering. I'm done for today. Stop
       csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj, but I want the Postgres and
-      Redis data to still be there tomorrow. Do not run commands; tell me the exact
+      Redis data to still be there tomorrow. Both use persistent lifetime and
+      WithDataVolume(). Do not run commands; tell me the exact
       stop command.
     tags:
       priority: p0
@@ -535,8 +536,6 @@ stimuli:
       files:
         - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
           dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
-        - src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs
-          dest: csharp-apphost/MyApp.AppHost/Program.cs
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: csharp-apphost/aspire.config.json
     rubric:
@@ -566,8 +565,9 @@ stimuli:
   - name: orch-stop-force-preserves-volumes-001
     prompt: >
       Use the aspire-orchestration skill before answering. I want to get rid of the
-      persistent containers for csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj. If
-      I run `aspire stop --force` on it, will my Postgres data be deleted too? Do not
+      persistent containers for csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj.
+      Its Postgres resource uses persistent lifetime and WithDataVolume(). If I run
+      `aspire stop --force` on it, will my Postgres data be deleted too? Do not
       run anything.
     tags:
       priority: p0
@@ -579,8 +579,6 @@ stimuli:
       files:
         - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
           dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
-        - src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs
-          dest: csharp-apphost/MyApp.AppHost/Program.cs
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: csharp-apphost/aspire.config.json
     rubric:
@@ -592,9 +590,9 @@ stimuli:
         name: force-alone-preserves-volumes
         config:
           prompt: >
-            Starting in Aspire 13.6, `aspire stop --force` removes persistent resource
-            instances but preserves persistent volumes unless `--volumes` is also
-            passed. Does the assistant's response explain that `--force` alone does not
+            `aspire stop --force` removes persistent resource instances but preserves
+            persistent volumes; Aspire 13.6 added the separate `--volumes` opt-in to
+            also delete Aspire-created volumes. Does the assistant's response explain that `--force` alone does not
             delete the volume data? Answer based on intent.
       - type: prompt
         name: volumes-requires-explicit-opt-in

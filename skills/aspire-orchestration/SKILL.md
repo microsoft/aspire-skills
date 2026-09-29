@@ -128,7 +128,7 @@ its filesystem path first.
 | Check running AppHosts | `aspire ps` | Manual process inspection |
 | Check resource status | `aspire describe` | `aspire ps --resources` (removed in 13.5) |
 | Remove persistent resources | Confirm the exact AppHost and that its persistent resource instances will be removed before `aspire stop --force --apphost <filesystem-path>`; explain that `--force` alone preserves persistent volumes | Combining `--force` with `--all`, or using it for an ordinary stop |
-| Delete Aspire-owned volumes | Only after explicit approval naming the exact AppHost and accepting that every named volume Aspire created for it (all of its databases and caches) is deleted: `aspire stop --force --volumes --apphost <filesystem-path>` | Adding `--volumes` to routine shutdown, lock recovery, or a single-resource fix without approval for that broader data scope |
+| Delete Aspire-owned volumes | Only after explicit approval naming the exact AppHost and accepting that every named volume Aspire created and owns for it is deleted, which can span several databases and caches: `aspire stop --force --volumes --apphost <filesystem-path>` | Adding `--volumes` to routine shutdown, lock recovery, or a single-resource fix without approval for that broader data scope |
 | Working in git worktree | `aspire start --non-interactive --isolated --apphost <filesystem-path>` | `aspire_apphost_start` when it cannot request isolation |
 | Running from AI agent | Load available lifecycle tools first; resolve CLI `--apphost` fallbacks to `<filesystem-path>`; add `--non-interactive` | Assuming interactive terminal |
 | Editing unfamiliar API | `aspire docs search <topic>` then `aspire docs api search <query>` for API reference | Guessing API shape |

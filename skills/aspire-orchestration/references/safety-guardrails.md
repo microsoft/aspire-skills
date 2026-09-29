@@ -271,10 +271,10 @@ recovery, or a request that concerns only one resource.
 - A named volume that already existed before the AppHost first mounted it (created with
   `docker volume create`, by another tool, or by an AppHost before it could record volume
   ownership) is adopted for mounting but not owned, so it is preserved.
-- Volume ownership records require the `--volumes` option (Aspire CLI 13.6+) and an
-  AppHost that uses Aspire.Hosting 13.6+ or the Aspire CLI bundle. For older non-bundle
-  .NET AppHosts, the CLI warns that volume cleanup might be unsupported and still
-  attempts it; volumes can remain.
+- The `--volumes` option requires Aspire CLI 13.6 or later. Only AppHosts that use
+  Aspire.Hosting 13.6+ or the Aspire CLI bundle record volume ownership. For older
+  non-bundle .NET AppHosts, the CLI warns that volume cleanup might be unsupported and
+  still attempts it; volumes can remain.
 
 Do not promise that `--volumes` removes every volume. If data outside Aspire's ownership
 must also be removed, identify the exact container, volume, or bind-mount path and get
