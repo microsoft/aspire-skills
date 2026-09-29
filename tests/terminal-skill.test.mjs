@@ -4,7 +4,7 @@ import test from "node:test";
 import { parse } from "yaml";
 import { assertTerminalEdit } from "../evals/terminals/grade-edit.mjs";
 
-const read = path => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const read = path => readFileSync(new URL(`../${path}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const base = read("evals/terminals/app/Program.cs");
 const apphost = read("skills/aspire-terminals/references/apphost-terminals.md");
 const recipes = [...apphost.matchAll(/```csharp\n(#pragma[\s\S]*?)\n```/g)].map(match => match[1]);
@@ -109,4 +109,15 @@ test("terminal authoring handoffs no longer declare aspireify as the owner", () 
   const activation = handoff.graders.find(grader => grader.type === "skill-invocation");
   assert.deepEqual(activation.config.required, ["aspire-terminals"]);
   assert.deepEqual(activation.config.disallowed, ["aspireify"]);
+});
+
+test("terminal guidance does not enable the removed CLI feature flag", () => {
+  for (const path of [
+    "skills/aspire-terminals/SKILL.md",
+    "skills/aspire-terminals/references/automation-and-cli.md",
+    "skills/aspire/references/aspire-13-5-breaking-changes.md"
+  ]) {
+    assert.doesNotMatch(read(path), /terminalCommandsEnabled/);
+    assert.match(read(path), /aspire terminal --help/);
+  }
 });

@@ -6,10 +6,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const fixture = fileURLToPath(new URL(".", import.meta.url));
-const reference = readFileSync(new URL("../../skills/aspire-terminals/references/apphost-terminals.md", import.meta.url), "utf8");
+const reference = readFileSync(new URL("../../skills/aspire-terminals/references/apphost-terminals.md", import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const recipes = [...reference.matchAll(/```csharp\n(#pragma[\s\S]*?)\n```/g)].map(match => match[1]);
 assert.equal(recipes.length, 4, "Expected dock, manual prompt, Work prompt and headless recipes");
 const resource = readFileSync(new URL("../../skills/aspire-terminals/references/resource-terminals.md", import.meta.url), "utf8")
+  .replace(/\r\n/g, "\n")
   .match(/```csharp\n([\s\S]*?)\n```/)[1].replace("worker.WithTerminal", "resource.WithTerminal");
 const root = mkdtempSync(join(tmpdir(), "aspire-terminal-qualification-"));
 try {
