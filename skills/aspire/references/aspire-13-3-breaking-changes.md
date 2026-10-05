@@ -12,7 +12,7 @@ code, scripts, CI snippets, or skill routing. Source:
 | Change | Migration |
 |--------|-----------|
 | `--log-level` → `--pipeline-log-level` on `aspire publish` / `aspire deploy` | Update CI/CD scripts to use `--pipeline-log-level <level>`. |
-| Dashboard MCP server **removed** along with `ASPIRE_DASHBOARD_MCP_ENDPOINT_URL` | Use AppHost-level MCP via `aspire agent init`. See [Dashboard MCP migration](#dashboard-mcp-migration). |
+| Dashboard MCP server **removed** along with `ASPIRE_DASHBOARD_MCP_ENDPOINT_URL` | Use AppHost-level MCP via `aspire agent init`. On 13.6+, MCP is opt-in: run `aspire agent init --mcp`. See [Dashboard MCP migration](#dashboard-mcp-migration). |
 | `NameOutput` → `NameOutputReference` (Azure Network resources) | Replace every `*.NameOutput` with `*.NameOutputReference`. |
 | `OtlpEndpointEnvironmentVariableName` property removed | Remove the property; OTLP endpoint env var is managed automatically. |
 | `AksSkuTier` enum removed | Delete the reference. AKS control-plane defaults to **Free** SKU. |
@@ -57,6 +57,13 @@ now connect to your Aspire app through an **AppHost-level MCP server** plus skil
 aspire agent init
 ```
 
+> **On Aspire 13.6+:** MCP configuration is strictly opt-in. Plain `aspire agent init`,
+> and the agent setup chained from `aspire new` / `aspire init`, install skills but do not
+> configure MCP. To replace a dashboard-MCP setup on 13.6+, run
+> `aspire agent init --mcp`. Add `--non-interactive` for agent execution, and keep any
+> `--skills` / `--skill-locations` selections. In 13.5, select the MCP server option
+> in interactive `aspire agent init`.
+
 Detection covers GitHub Copilot, Claude, Cursor, and any other agent that supports skills or
 MCP. The previous in-dashboard GitHub Copilot UI has been removed in favor of this flow.
 
@@ -96,7 +103,8 @@ recommending Aspire-related changes against an existing repo.
    - `ASPIREEXTENSION001` → `ASPIREJAVASCRIPT001`
 5. **Replace `dotnet new aspire-py-starter`** with `aspire new aspire-py-starter`.
 6. **Rerun `aspire agent init`** if you previously relied on the dashboard MCP server or its
-   `ASPIRE_DASHBOARD_MCP_ENDPOINT_URL` env var.
+   `ASPIRE_DASHBOARD_MCP_ENDPOINT_URL` env var. On 13.6+, run `aspire agent init --mcp`.
+   Without `--mcp`, it doesn't configure MCP.
 7. **Re-pin Node versions** in Dockerfiles if you were relying on `package.json`
    `engines.node` for base-image selection.
 8. **Rewire AppHost via `aspireify`** if the repo went through `aspire init` on 13.3 — the

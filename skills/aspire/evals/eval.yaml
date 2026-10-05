@@ -91,6 +91,62 @@ stimuli:
         config: { scoring: binary }
       - type: diff-empty
 
+  - name: router-agent-init-default-no-mcp-136-001
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. If this request explicitly uses the
+      umbrella aspire router for specialist-owned work, invoke both the router
+      and the owner.
+      This Aspire 13.6 project needs project-local Aspire agent skills refreshed.
+      I only want the recommended skills. Give read-only advice on the
+      non-interactive aspire agent init command an agent should run, and say
+      whether it configures the Aspire MCP server. Do not generate files, install
+      tools or run setup commands.
+    tags: { priority: p1, scenario: version-compatibility, area: agent-setup }
+    environment:
+      files: *csharp_apphost
+    rubric:
+      - The response recommends non-interactive aspire agent init for skills without adding --mcp.
+      - The response states that default and non-interactive agent setup in 13.6 leaves the Aspire MCP server unconfigured, and that MCP is a separate opt-in.
+      - The response does not claim MCP will be installed and does not treat missing MCP configuration as a defect.
+    graders:
+      - type: skill-invocation
+        name: invokes-router-for-default-agent-setup
+        config: { required: [aspire], disallowed: [customize-cloud-agent] }
+      - type: prompt
+        name: default-agent-setup-leaves-mcp-off
+        config: { scoring: binary }
+      - type: diff-empty
+        name: keeps-default-agent-setup-read-only
+
+  - name: router-agent-init-explicit-mcp-136-001
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. If this request explicitly uses the
+      umbrella aspire router for specialist-owned work, invoke both the router
+      and the owner.
+      I explicitly want my coding agent connected to the Aspire MCP server for
+      this AppHost. Give read-only advice on the supported way to configure it,
+      including any Aspire CLI version check. Do not generate files, install tools
+      or run setup commands.
+    tags: { priority: p1, scenario: version-compatibility, area: agent-setup }
+    environment:
+      files: *csharp_apphost
+    rubric:
+      - The response checks the Aspire CLI version before choosing a command.
+      - For Aspire 13.6 or later it recommends standalone aspire agent init --mcp, keeping any existing --skills or --skill-locations choices.
+      - For Aspire 13.5 it explains there is no --mcp flag and the MCP option must be selected in interactive aspire agent init.
+      - The response does not claim aspire new, aspire init or plain aspire agent init configure MCP by default, and does not reference the removed dashboard MCP server or ASPIRE_DASHBOARD_MCP_ENDPOINT_URL as a current option.
+    graders:
+      - type: skill-invocation
+        name: invokes-router-for-explicit-mcp
+        config: { required: [aspire], disallowed: [customize-cloud-agent] }
+      - type: prompt
+        name: explicit-mcp-uses-standalone-opt-in
+        config: { scoring: binary }
+      - type: diff-empty
+        name: keeps-explicit-mcp-read-only
+
   - name: router-reject-001
     prompt: >
       How do I run this .NET console app? Give read-only guidance; do not build,
