@@ -49,7 +49,8 @@ Redaction happens before output is truncated. Duplicate AppHosts use a bounded
 directory-name hint and stable ID to distinguish targets, not a full source path.
 Dashboard URLs remain provider-side. The provider resolves resource-specific
 details, console logs, structured logs, traces, and metrics routes and opens
-them in the integrated browser while preserving the Aspire login token. Raw
+them in the registered integrated browser, or the default system browser when
+the host has no browser canvas, while preserving the Aspire login token. Raw
 resource JSON and `.env` exports remain inside the authenticated Dashboard and
 never cross the canvas boundary.
 
@@ -79,8 +80,9 @@ bounded request bodies.
 - Team App-style resource cards with compact labeled Endpoints and Health rows,
   endpoint name plus sanitized host/port, natural-width semantic health pills, and
   a distinct unlabeled command footer inside the resource that owns them.
-- Endpoint links open in GitHub Copilot's integrated browser and expose a
-  separate copy-URL control.
+- Endpoint links prefer GitHub Copilot's registered integrated browser and use
+  the default system browser in CLI hosts without that canvas. They expose a
+  separate copy-URL control. Browser launch failures remain visible.
 - Resource overflow opens authenticated Dashboard details, console logs,
   structured logs, traces, and metrics without adding a separate diagnostics
   row to every card.
@@ -100,8 +102,8 @@ bounded request bodies.
   the model crosses into the renderer.
 - Explicit Run, Stop, Deploy, Publish, and pipeline-step actions, with blocked
   operations explained in place and high-impact actions confirmed inline.
-- **View dashboard** opens the authenticated Aspire Dashboard in GitHub
-  Copilot's integrated browser.
+- **View dashboard** opens the authenticated Aspire Dashboard in the registered
+  integrated browser, or the default system browser when it is unavailable.
 - Loading, empty, stale, partial-AppHost-failure, and error states.
 - Background and explicit refreshes preserve the last complete board or empty
   state; the full skeleton appears only before the first complete snapshot.

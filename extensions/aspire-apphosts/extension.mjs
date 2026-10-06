@@ -8,6 +8,7 @@ import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, extname, isAbsolute, normalize, relative, resolve, sep } from "node:path";
 import { joinSession, createCanvas, CanvasError } from "@github/copilot-sdk/extension";
+import { openSystemBrowser } from "./lib/browser.mjs";
 import {
     AppHostOperationCoordinator,
     CommandInputMetadataStore,
@@ -1149,20 +1150,30 @@ function privateDashboardUrl(entry, record) {
     return buildDashboardViewUrl(candidate);
 }
 
-async function openBrowserCanvas({ instanceId, url, title }) {
-    if (typeof sessionRef?.rpc?.canvas?.open !== "function") {
-        return { ok: false, error: "The integrated browser canvas is unavailable." };
+async function openBrowserUrl({ instanceId, url, title }) {
+    const canvas = sessionRef?.rpc?.canvas;
+    if (typeof canvas?.list === "function" && typeof canvas?.open === "function") {
+        const { canvases } = await canvas.list();
+        const browsers = canvases.filter((candidate) => candidate.canvasId === "browser");
+        if (browsers.length > 1) {
+            return { ok: false, error: "Multiple browser canvases are registered. Disable duplicate browser providers and try again." };
+        }
+        if (browsers.length === 1) {
+            await canvas.open({
+                canvasId: "browser",
+                extensionId: browsers[0].extensionId,
+                instanceId,
+                input: {
+                    url,
+                    title,
+                    placement: { surface: "side", focus: true },
+                },
+            });
+            return { ok: true, target: "integrated" };
+        }
     }
-    await sessionRef.rpc.canvas.open({
-        canvasId: "browser",
-        instanceId,
-        input: {
-            url,
-            title,
-            placement: { surface: "side", focus: true },
-        },
-    });
-    return { ok: true };
+    await openSystemBrowser(url);
+    return { ok: true, target: "system" };
 }
 
 async function openAppHostDashboard(entry, appHostId) {
@@ -1171,7 +1182,7 @@ async function openAppHostDashboard(entry, appHostId) {
     if (!record || !dashboardUrl) {
         return { ok: false, error: "The dashboard URL is not available." };
     }
-    return await openBrowserCanvas({
+    return await openBrowserUrl({
         instanceId: `aspire-dashboard-${record.id}`,
         url: dashboardUrl,
         title: `${record.displayName} dashboard`,
@@ -1209,7 +1220,7 @@ async function openResourceDashboardView(entry, nodeId, view) {
     if (!viewLabel || !url) {
         return { ok: false, error: "This Dashboard view is not available." };
     }
-    return await openBrowserCanvas({
+    return await openBrowserUrl({
         instanceId: `aspire-dashboard-${record.id}`,
         url,
         title: `${record.displayName} ${viewLabel} (${node.label})`,
@@ -1229,9 +1240,9 @@ async function openResourceEndpoint(entry, nodeId) {
         return { ok: false, error: "The endpoint URL is invalid." };
     }
     if (url.protocol !== "http:" && url.protocol !== "https:") {
-        return { ok: false, error: "Only HTTP and HTTPS endpoints can open in the integrated browser." };
+        return { ok: false, error: "Only HTTP and HTTPS endpoints can open in a browser." };
     }
-    return await openBrowserCanvas({
+    return await openBrowserUrl({
         instanceId: `aspire-endpoint-${stableId(node.id)}`,
         url: url.toString(),
         title: `${record.displayName}: ${node.label}`,
@@ -1373,7 +1384,7 @@ async function handleRequest(entry, req, res) {
             const result = await openAppHostDashboard(entry, body?.appHostId);
             return sendJson(res, result.ok ? 200 : 400, result);
         } catch (error) {
-            return sendJson(res, 500, { ok: false, error: clampText(error?.message || error, 1000) });
+            return sendJson(res, 500, { ok: false, error: clampText(redactText(error?.message || error), 1000) });
         }
     }
     if (url.pathname === "/api/open-dashboard-view") {
@@ -1381,7 +1392,7 @@ async function handleRequest(entry, req, res) {
             const result = await openResourceDashboardView(entry, body?.nodeId, body?.view);
             return sendJson(res, result.ok ? 200 : 400, result);
         } catch (error) {
-            return sendJson(res, 500, { ok: false, error: clampText(error?.message || error, 1000) });
+            return sendJson(res, 500, { ok: false, error: clampText(redactText(error?.message || error), 1000) });
         }
     }
     if (url.pathname === "/api/open-endpoint") {
@@ -1389,7 +1400,7 @@ async function handleRequest(entry, req, res) {
             const result = await openResourceEndpoint(entry, body?.nodeId);
             return sendJson(res, result.ok ? 200 : 400, result);
         } catch (error) {
-            return sendJson(res, 500, { ok: false, error: clampText(error?.message || error, 1000) });
+            return sendJson(res, 500, { ok: false, error: clampText(redactText(error?.message || error), 1000) });
         }
     }
     if (url.pathname === "/api/open-terminal") {

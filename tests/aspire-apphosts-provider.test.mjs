@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { openSystemBrowser } from "../extensions/aspire-apphosts/lib/browser.mjs";
 import {
     CommandInputMetadataStore,
     appHostIdentityHint,
@@ -153,6 +154,38 @@ test("launch failures redact submitted values without hiding useful diagnostics"
     assert.equal(result.ok, false);
     assert.match(result.error, /Failed to run Aspire CLI/);
     assert.doesNotMatch(result.error, /DUMMY-PRIVATE/);
+});
+
+for (const [platform, command] of [["win32", "rundll32.exe"], ["darwin", "open"], ["linux", "xdg-open"]]) {
+    test(`${platform} browser launches keep the complete URL in one argument without a shell`, async () => {
+        const url = "https://localhost/login?t=private-token&returnUrl=%2Ftraces&label=%22%3B%24()%25!";
+        const calls = [];
+        await openSystemBrowser(url, { platform, launch: async (...args) => calls.push(args) });
+        assert.equal(calls.length, 1);
+        assert.equal(calls[0][0], command);
+        assert.deepEqual(calls[0][1], platform === "win32" ? ["url.dll,FileProtocolHandler", url] : [url]);
+        assert.equal(calls[0][2].shell, undefined);
+        assert.equal(calls[0][2].windowsHide, true);
+        assert.equal(calls[0][2].timeout, 10_000);
+    });
+}
+
+test("browser launch errors are actionable and do not expose private URL arguments", async () => {
+    await assert.rejects(openSystemBrowser("https://localhost/login?t=private-token", {
+        launch: async () => { throw Object.assign(new Error("failed https://localhost/login?t=private-token"), { code: "ENOENT" }); },
+    }), (error) => {
+        assert.match(error.message, /ENOENT.*Check your default browser/);
+        assert.doesNotMatch(error.message, /private-token|localhost/);
+        return true;
+    });
+    await assert.rejects(openSystemBrowser("https://localhost", {
+        launch: async () => { throw Object.assign(new Error("timeout"), { killed: true }); },
+    }), /timed out/);
+    let launched = false;
+    await assert.rejects(openSystemBrowser("file:///private/file", {
+        launch: async () => { launched = true; },
+    }), /Only HTTP and HTTPS/);
+    assert.equal(launched, false);
 });
 
 test("provider HTTP, SDK callbacks, and platform boundaries", { timeout: 60_000 }, () => {
