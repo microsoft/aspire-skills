@@ -14,7 +14,6 @@ export async function openSystemBrowser(value, { platform = process.platform, la
         await launch(command, args, {
             windowsHide: true,
             timeout: 10_000,
-            maxBuffer: 64 * 1024,
         });
     } catch (error) {
         const reason = error?.killed ? "timed out" : error?.code ?? "launch failed";

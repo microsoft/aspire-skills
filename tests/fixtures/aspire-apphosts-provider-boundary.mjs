@@ -362,7 +362,6 @@ for (const target of ["integrated", "system"]) {
         ]) {
             const response = await h.request(open, route, body);
             assert.equal(response.ok, true);
-            assert.equal(response.target, target);
             assert.doesNotMatch(JSON.stringify(response), /private-host-token|private-endpoint-token|localhost/);
             const url = new URL(target === "system" ? h.systemBrowserUrls.at(-1) : h.canvasOpens.at(-1).input.url);
             if (expectedPath !== null) {
@@ -375,9 +374,10 @@ for (const target of ["integrated", "system"]) {
         }
         if (target === "integrated") {
             assert.equal(h.systemBrowserUrls.length, 0);
-            assert.ok(h.canvasOpens.every((payload) => payload.extensionId === "host:builtins"));
+            assert.equal(h.canvasOpens.length, 3);
         } else {
             assert.equal(h.canvasOpens.length, 0);
+            assert.equal(h.systemBrowserUrls.length, 3);
         }
     });
 }
@@ -387,7 +387,7 @@ test("hosts without canvas discovery use the default browser", async (t) => {
     const open = await h.open();
     const { state } = await h.request(open, "/api/state");
     const response = await h.request(open, "/api/open-dashboard", { appHostId: state.roots[0].appHostId });
-    assert.equal(response.target, "system");
+    assert.equal(response.ok, true);
     assert.equal(h.systemBrowserUrls.length, 1);
     assert.equal(h.canvasOpens.length, 0);
 });
@@ -409,19 +409,6 @@ for (const failure of ["browserListError", "browserOpenError", "systemBrowserErr
         assert.equal(h.canvasOpens.length, 0);
     });
 }
-
-test("ambiguous browser registrations fail explicitly", async (t) => {
-    const h = await harness(t, { browserCanvases: [
-        { canvasId: "browser", extensionId: "one" }, { canvasId: "browser", extensionId: "two" },
-    ] });
-    const open = await h.open();
-    const { state } = await h.request(open, "/api/state");
-    const response = await h.request(open, "/api/open-dashboard", { appHostId: state.roots[0].appHostId });
-    assert.equal(response.ok, false);
-    assert.match(response.error, /Multiple browser canvases/);
-    assert.equal(h.systemBrowserUrls.length, 0);
-    assert.equal(h.canvasOpens.length, 0);
-});
 
 test("direct HTTP execution rejects missing, mismatched, failed and pending dynamic metadata", async (t) => {
     const h = await harness(t);

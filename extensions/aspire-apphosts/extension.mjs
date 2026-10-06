@@ -1154,14 +1154,9 @@ async function openBrowserUrl({ instanceId, url, title }) {
     const canvas = sessionRef?.rpc?.canvas;
     if (typeof canvas?.list === "function" && typeof canvas?.open === "function") {
         const { canvases } = await canvas.list();
-        const browsers = canvases.filter((candidate) => candidate.canvasId === "browser");
-        if (browsers.length > 1) {
-            return { ok: false, error: "Multiple browser canvases are registered. Disable duplicate browser providers and try again." };
-        }
-        if (browsers.length === 1) {
+        if (canvases.some((candidate) => candidate.canvasId === "browser")) {
             await canvas.open({
                 canvasId: "browser",
-                extensionId: browsers[0].extensionId,
                 instanceId,
                 input: {
                     url,
@@ -1169,11 +1164,11 @@ async function openBrowserUrl({ instanceId, url, title }) {
                     placement: { surface: "side", focus: true },
                 },
             });
-            return { ok: true, target: "integrated" };
+            return { ok: true };
         }
     }
     await openSystemBrowser(url);
-    return { ok: true, target: "system" };
+    return { ok: true };
 }
 
 async function openAppHostDashboard(entry, appHostId) {

@@ -1843,8 +1843,7 @@ async function executeNodeAction(action, node) {
                 method: "POST",
                 body: { appHostId: node.appHostId },
             });
-            const browser = result.target === "system" ? "your default browser" : "the integrated browser";
-            showToast(result.ok ? `Opened the dashboard in ${browser}.` : result.error, !result.ok);
+            showToast(result.ok ? "Opened the dashboard." : result.error, !result.ok);
         } catch (error) {
             showToast(error.message, true);
         }
@@ -1871,8 +1870,7 @@ async function executeNodeAction(action, node) {
                 method: "POST",
                 body: { nodeId: node.id },
             });
-            const browser = result.target === "system" ? "your default browser" : "the integrated browser";
-            showToast(result.ok ? `Opened ${node.label} in ${browser}.` : result.error, !result.ok);
+            showToast(result.ok ? `Opened ${node.label}.` : result.error, !result.ok);
         } catch (error) {
             showToast(error.message, true);
         }

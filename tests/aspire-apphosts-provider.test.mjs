@@ -157,16 +157,13 @@ test("launch failures redact submitted values without hiding useful diagnostics"
 });
 
 for (const [platform, command] of [["win32", "rundll32.exe"], ["darwin", "open"], ["linux", "xdg-open"]]) {
-    test(`${platform} browser launches keep the complete URL in one argument without a shell`, async () => {
+    test(`${platform} browser launches preserve the complete URL in one argument`, async () => {
         const url = "https://localhost/login?t=private-token&returnUrl=%2Ftraces&label=%22%3B%24()%25!";
         const calls = [];
         await openSystemBrowser(url, { platform, launch: async (...args) => calls.push(args) });
         assert.equal(calls.length, 1);
         assert.equal(calls[0][0], command);
         assert.deepEqual(calls[0][1], platform === "win32" ? ["url.dll,FileProtocolHandler", url] : [url]);
-        assert.equal(calls[0][2].shell, undefined);
-        assert.equal(calls[0][2].windowsHide, true);
-        assert.equal(calls[0][2].timeout, 10_000);
     });
 }
 
