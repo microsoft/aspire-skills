@@ -140,9 +140,10 @@ async function harness(t, {
     await module.link(async (specifier) => {
         const exports = specifier === "@github/copilot-sdk/extension" ? sdk
             : specifier === "./lib/app-model.mjs" ? { ...model, createAspireCliRunner: () => ({ run }) }
-                : specifier === "./lib/browser.mjs" ? { ...browser, openSystemBrowser: async (url) => {
+                : specifier === "./lib/browser.mjs" ? { ...browser, openSystemBrowser: async (url, options) => {
                     if (systemBrowserError) throw systemBrowserError;
                     systemBrowserUrls.push(url);
+                    controls.reportBrowserError = options.onError;
                 } }
                 : specifier === "node:http" ? { ...http, createServer } : await import(specifier);
         return new SyntheticModule(Object.keys(exports), function () {
@@ -396,19 +397,44 @@ for (const failure of ["browserListError", "browserOpenError", "systemBrowserErr
     test(`${failure} is surfaced without silently falling back or leaking authentication`, async (t) => {
         const h = await harness(t, {
             browserCanvases: failure === "systemBrowserError" ? [] : undefined,
-            [failure]: new Error("Browser failed at https://localhost/login?t=private-host-token"),
+            [failure]: new Error('Browser failed at "\u001b[31mhttps\u001b[0m://localhost/login?t=private-host-token&custom=private-value". Also HTTP://private-host:7001/api. Check configuration.'),
         });
         const open = await h.open();
         const { state } = await h.request(open, "/api/state");
-        const response = await h.request(open, "/api/open-dashboard", { appHostId: state.roots[0].appHostId });
-        assert.equal(response.status, 500);
-        assert.equal(response.ok, false);
-        assert.match(response.error, /Browser failed/);
-        assert.doesNotMatch(response.error, /private-host-token/);
+        const host = state.roots[0];
+        const nodes = allNodes([host]);
+        for (const [route, body] of [
+            ["/api/open-dashboard", { appHostId: host.appHostId }],
+            ["/api/open-dashboard-view", { nodeId: nodes.find((node) => node.kind === "resource" && node.resourceName === "api").id, view: "traces" }],
+            ["/api/open-endpoint", { nodeId: nodes.find((node) => node.kind === "endpoint").id }],
+        ]) {
+            const response = await h.request(open, route, body);
+            assert.equal(response.status, 500);
+            assert.equal(response.ok, false);
+            assert.match(response.error, /Browser failed/);
+            assert.match(response.error, /Check configuration/);
+            assert.doesNotMatch(JSON.stringify(response), /https?:\/\/|localhost|private-host|private-value|7001/i);
+        }
         assert.equal(h.systemBrowserUrls.length, 0);
         assert.equal(h.canvasOpens.length, 0);
     });
 }
+
+test("launcher failures after handoff notify the renderer and log without private URLs", async (t) => {
+    const h = await harness(t, { browserCanvases: [] });
+    const open = await h.open();
+    const { state } = await h.request(open, "/api/state");
+    const stream = await sse(h, open);
+    t.after(() => stream.close());
+    const response = await h.request(open, "/api/open-dashboard", { appHostId: state.roots[0].appHostId });
+    assert.equal(response.ok, true);
+    h.controls.reportBrowserError(new Error("Launcher exited with code 4 at https://localhost/login?t=private-host-token"));
+    const event = await stream.waitFor((message) => message.type === "browser-error");
+    assert.match(event.error, /Launcher exited with code 4/);
+    assert.doesNotMatch(JSON.stringify(event), /https?:\/\/|localhost|private-host-token/);
+    assert.ok(h.logs.includes(event.error));
+    assert.equal(h.canvasOpens.length, 0);
+});
 
 test("direct HTTP execution rejects missing, mismatched, failed and pending dynamic metadata", async (t) => {
     const h = await harness(t);

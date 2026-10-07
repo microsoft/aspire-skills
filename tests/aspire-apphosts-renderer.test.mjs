@@ -746,6 +746,21 @@ test("duplicate host labels use stable public hints in tabs, heading, and confir
     assert.equal(renderer.document.querySelector(".apphost-heading h2").textContent, before);
 });
 
+for (const failureFirst of [true, false]) {
+    test(`browser failures remain visible ${failureFirst ? "before" : "after"} the navigation acknowledgement`, async () => {
+        const renderer = await boot();
+        const opening = renderer.context.executeNodeAction("dashboard", snapshot().roots[0]);
+        const failure = { type: "browser-error", error: "Could not open the default browser (exit code 4)." };
+        if (failureFirst) await renderer.push(failure);
+        await renderer.respond(renderer.request("/api/open-dashboard"), { ok: true });
+        await opening;
+        if (!failureFirst) await renderer.push(failure);
+        const toast = renderer.document.querySelector(".toast.is-error");
+        assert.ok(toast);
+        assert.equal(toast.textContent, failure.error);
+    });
+}
+
 test("resource details and copying are separate native buttons and copying uses the canonical name", async () => {
     const renderer = await boot();
     const card = renderer.document.querySelector('[data-resource-id="host-a:resource:api"]');

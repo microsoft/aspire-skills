@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { EventEmitter } from "node:events";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
@@ -156,11 +157,20 @@ test("launch failures redact submitted values without hiding useful diagnostics"
     assert.doesNotMatch(result.error, /DUMMY-PRIVATE/);
 });
 
+function browserChild() {
+    return Object.assign(new EventEmitter(), { unref() {} });
+}
+
 for (const [platform, command] of [["win32", "rundll32.exe"], ["darwin", "open"], ["linux", "xdg-open"]]) {
     test(`${platform} browser launches preserve the complete URL in one argument`, async () => {
         const url = "https://localhost/login?t=private-token&returnUrl=%2Ftraces&label=%22%3B%24()%25!";
         const calls = [];
-        await openSystemBrowser(url, { platform, launch: async (...args) => calls.push(args) });
+        await openSystemBrowser(url, { platform, launch: (...args) => {
+            calls.push(args);
+            const child = browserChild();
+            queueMicrotask(() => child.emit("spawn"));
+            return child;
+        } });
         assert.equal(calls.length, 1);
         assert.equal(calls[0][0], command);
         assert.deepEqual(calls[0][1], platform === "win32" ? ["url.dll,FileProtocolHandler", url] : [url]);
@@ -169,20 +179,60 @@ for (const [platform, command] of [["win32", "rundll32.exe"], ["darwin", "open"]
 
 test("browser launch errors are actionable and do not expose private URL arguments", async () => {
     await assert.rejects(openSystemBrowser("https://localhost/login?t=private-token", {
-        launch: async () => { throw Object.assign(new Error("failed https://localhost/login?t=private-token"), { code: "ENOENT" }); },
+        launch: () => { throw Object.assign(new Error("failed https://localhost/login?t=private-token"), { code: "ENOENT" }); },
     }), (error) => {
         assert.match(error.message, /ENOENT.*Check your default browser/);
         assert.doesNotMatch(error.message, /private-token|localhost/);
         return true;
     });
-    await assert.rejects(openSystemBrowser("https://localhost", {
-        launch: async () => { throw Object.assign(new Error("timeout"), { killed: true }); },
-    }), /timed out/);
+    const child = browserChild();
+    const opening = openSystemBrowser("https://localhost", { launch: () => child });
+    child.emit("error", Object.assign(new Error("failed https://localhost/login?t=private-token"), { code: "EACCES" }));
+    child.emit("close", -1);
+    await assert.rejects(opening, /EACCES.*Check your default browser/);
     let launched = false;
     await assert.rejects(openSystemBrowser("file:///private/file", {
-        launch: async () => { launched = true; },
+        launch: () => { launched = true; },
     }), /Only HTTP and HTTPS/);
     assert.equal(launched, false);
+});
+
+test("browser launches wait for spawn but not the opener's lifetime", { timeout: 2000 }, async () => {
+    const child = browserChild();
+    let unreferenced = false;
+    child.unref = () => { unreferenced = true; };
+    let acknowledged = false;
+    const opening = openSystemBrowser("https://localhost", { launch: () => child })
+        .then(() => { acknowledged = true; });
+    await Promise.resolve();
+    assert.equal(acknowledged, false);
+    child.emit("spawn");
+    await opening;
+    assert.equal(unreferenced, true);
+    child.emit("close", 0);
+});
+
+test("browser launcher failures after spawn are reported once without exposing URLs", async () => {
+    for (const [event, args, reason] of [
+        ["close", [4, null], /exit code 4/],
+        ["close", [null, "SIGTERM"], /signal SIGTERM/],
+        ["error", [Object.assign(new Error("failed https://localhost/login?t=private-token"), { code: "EIO" })], /EIO/],
+    ]) {
+        const child = browserChild();
+        const errors = [];
+        const opening = openSystemBrowser("https://localhost/login?t=private-token", {
+            launch: () => child,
+            onError: (error) => errors.push(error),
+        });
+        child.emit("spawn");
+        await opening;
+        child.emit(event, ...args);
+        child.emit("close", 4);
+        assert.equal(errors.length, 1);
+        assert.match(errors[0].message, reason);
+        assert.match(errors[0].message, /Check your default browser/);
+        assert.doesNotMatch(errors[0].message, /https?:\/\/|localhost|private-token/);
+    }
 });
 
 test("provider HTTP, SDK callbacks, and platform boundaries", { timeout: 60_000 }, () => {

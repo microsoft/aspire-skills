@@ -52,7 +52,8 @@ details, console logs, structured logs, traces, and metrics routes and opens
 them in the registered integrated browser, or the default system browser when
 the host has no browser canvas, while preserving the Aspire login token. Raw
 resource JSON and `.env` exports remain inside the authenticated Dashboard and
-never cross the canvas boundary.
+never cross the canvas boundary. Browser errors remove complete HTTP(S) URLs
+before reaching the renderer or provider log.
 
 Each canvas instance serves its renderer from a random loopback port protected by
 a per-instance token, host/origin checks, a strict Content Security Policy, and
@@ -83,7 +84,9 @@ bounded request bodies.
 - Endpoint links prefer GitHub Copilot's registered integrated browser and use
   the default system browser in CLI hosts without that canvas. They expose a
   separate copy-URL control. Browser discovery and launch failures remain visible
-  and do not trigger a fallback.
+  and do not trigger a fallback. System-browser requests acknowledge a detached
+  opener without waiting for the browser to exit; later launcher failures appear
+  as error notifications and in the provider log.
 - Resource overflow opens authenticated Dashboard details, console logs,
   structured logs, traces, and metrics without adding a separate diagnostics
   row to every card.
