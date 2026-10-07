@@ -14,8 +14,10 @@ import {
     readJsonBody,
     replayLatestDiagnostics,
     requestErrorStatus,
+    resolveCliExecutable,
     runLatestDiagnostics,
     selectDiagnosticsResult,
+    windowsExplorerExecutable,
     windowsExplorerInvocation,
 } from "./provider-helpers.mjs";
 import { normalizeDoctorData } from "./ui/model.mjs";
@@ -186,18 +188,6 @@ function broadcast(entry, payload) {
 
 /* ---------------- aspire doctor subprocess ---------------- */
 
-function resolveCli() {
-    const override = process.env.ASPIRE_CLI?.trim();
-    if (override) {
-        const useShell = process.platform === "win32" && [".cmd", ".bat"].includes(extname(override).toLowerCase());
-        return { command: useShell ? `"${override}"` : override, useShell };
-    }
-    // Bare "aspire" relies on PATH. On Windows the CLI is `aspire.cmd`/`aspire.exe`,
-    // which execFile-style spawning won't resolve via PATHEXT — so route through
-    // the shell there. Args are static and trusted, so shell use is safe.
-    return { command: "aspire", useShell: process.platform === "win32" };
-}
-
 // `aspire doctor --format Json` prints a human preamble before the JSON object.
 function extractJson(text) {
     const start = text.indexOf("{");
@@ -224,7 +214,12 @@ function extractJson(text) {
 }
 
 async function runDoctor() {
-    const { command, useShell } = resolveCli();
+    let command = process.env.ASPIRE_CLI?.trim() || (process.platform === "win32" ? "aspire.exe" : "aspire");
+    try {
+        command = await resolveCliExecutable(command);
+    } catch (err) {
+        return { ok: false, error: `Failed to launch '${command}': ${err.message}` };
+    }
     const args = ["doctor", "--format", "Json", "--non-interactive", "--nologo"];
 
     return await new Promise((resolve) => {
@@ -252,7 +247,7 @@ async function runDoctor() {
         }, DOCTOR_TIMEOUT_MS);
 
         try {
-            child = spawn(command, args, { shell: useShell, windowsHide: true });
+            child = spawn(command, args, { shell: false, windowsHide: true });
         } catch (err) {
             finish({ ok: false, error: `Failed to launch '${command}': ${err.message}` });
             return;
@@ -428,7 +423,7 @@ async function revealInFileManager(absolutePath, stats) {
     let windowsVerbatimArguments = false;
 
     if (process.platform === "win32") {
-        command = "explorer.exe";
+        command = windowsExplorerExecutable();
         const invocation = windowsExplorerInvocation(absolutePath, stats.isFile());
         args = invocation.args;
         windowsVerbatimArguments = invocation.windowsVerbatimArguments;

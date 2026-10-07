@@ -589,6 +589,6 @@ test("Windows batch wrappers fail explicitly without a shell, while executable a
         assert.match(result.error, /ASPIRE_CLI.*unsupported.*executable/);
     }
     assert.equal(spawns, 0);
-    assert.match((await module.namespace.runProcess("aspire.exe", [])).error, /native spawn reached/);
+    assert.match((await module.namespace.runProcess("C:\\Tools\\aspire.exe", [])).error, /native spawn reached/);
     assert.equal(spawns, 1, "native executable was invoked directly, never through another CLI");
 });
