@@ -1,10 +1,11 @@
-version: 2
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     groups:
       github-actions:
         patterns: ["*"]
+    ignore:
+      - dependency-name: "github/gh-aw-actions/**" # Managed by gh aw compile; version-locked to the compiler.
     schedule:
       interval: "weekly"
     cooldown:
@@ -18,3 +19,4 @@ updates:
       interval: "weekly"
     cooldown:
       default-days: 7
+version: 2

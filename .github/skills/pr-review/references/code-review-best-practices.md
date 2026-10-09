@@ -32,7 +32,7 @@ Pick the depth from the change surface, not the line count.
 | Only `CHANGELOG.md`, `README.md`, or `CONTRIBUTING.md` | Skim — confirm consistency, no behavior claims that contradict the SKILL.md. |
 | Only `evals/` or `skills/<skill>/evals/` | Standard — apply `evals/AUTHORING.md` grader patterns; confirm fixtures are shared. |
 | `skills/<skill>/SKILL.md` or its `references/` | Standard+ — apply [aspire-skills-review-checklist.md](aspire-skills-review-checklist.md) §1–§5 and §10. |
-| `package.json` / `.plugin/plugin.json` / `.claude-plugin/*.json` / `.cursor-plugin/marketplace.json` / `gemini-extension.json` | Deep — release-version sync with all six shipped skills, host-specific schemas, marketplace metadata. |
+| `package.json` / `.plugin/plugin.json` / `.claude-plugin/*.json` / `.cursor-plugin/marketplace.json` / `gemini-extension.json` | Deep — release-version sync with every shipped skill, host-specific schemas, marketplace metadata. |
 | `.github/plugins/aspire-skills/` | Standard — manifest and runtime skill/extension symlinks still target the canonical root sources. |
 
 Use the root README as the installation reference for Aspire CLI, GitHub Copilot
@@ -75,7 +75,7 @@ behavior in the agent, not a rhetorical victory.
 | Tier | Label | Examples in this repo |
 |------|-------|------------------------|
 | Must fix | `blocking` | Removed safety guardrail; plugin manifest version out of sync; project-local override deference removed; unsanitized hook command. |
-| Should fix | `important` | New routing without `trigger_tests.yaml` coverage; new eval task missing the "the assistant's response" anchor; SKILL.md frontmatter `INVOKES:` is stale; CHANGELOG entry missing for a user-visible change. |
+| Should fix | `important` | New routing without `trigger_tests.yaml` coverage; new eval task missing the "the assistant's response" anchor; SKILL.md frontmatter `INVOKES:` is stale; unclear commit subjects for generated release notes. |
 | Nice to have | `suggestion` | Decision-table row could call out a current Aspire alternative; reference file could be split for focus; quick-reference table could be reordered for scan-ability. |
 
 If a finding doesn't fit one of those three tiers, **drop it**. We deliberately do not
@@ -114,7 +114,6 @@ Before approving, confirm:
 - [ ] All `important` findings are addressed *or* tracked in a follow-up issue linked
   from the PR.
 - [ ] CI is green, including the eval job for any touched skill.
-- [ ] `CHANGELOG.md` reflects what merged.
 - [ ] The PR description matches the final diff (no stale "this PR adds X" claims).
 
 ## Anti-pattern smell tests (Aspire-specific)

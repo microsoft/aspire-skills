@@ -2,7 +2,9 @@
 
 All notable changes to the aspire-skills plugin will be documented in this file.
 
-## [0.0.3] - Unreleased
+## [v0.0.3](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.3)
+
+<!-- aspire-skills-changelog-done from=842c4fb8d9ff5f89bf3e5f6f16739a728b5ba77e to=a83ca78b9d35b8238f9c4fdba72cb779defe2a90 base=0.0.2 -->
 
 ### Changed
 - Bumped the plugin and all seven shipped skills to `0.0.3`.
@@ -34,7 +36,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   contracts; EF overload diagnostics, Dockerfile/prebuilt ownership, file-app AOT,
   and Blazor publishing differences have explicit validation boundaries.
 
-## [0.0.2] - 2026-09-18
+## [v0.0.2](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.2)
+
+<!-- aspire-skills-changelog-done from=f8270164334fff609e6b301de8486e5e04207221 to=842c4fb8d9ff5f89bf3e5f6f16739a728b5ba77e base=0.0.1 -->
 
 ### Changed
 - Aligned the shipped skill family and bundle compatibility metadata with Aspire 13.5.3.
@@ -128,7 +132,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   `--skip-grade`, `--workers`, `--runs`, etc.) and documented `vally serve`
   (local dashboard) and `vally ingest` (SQLite store) workflows.
 
-## [0.0.1] - 2026-05-27
+## [v0.0.1](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.1)
+
+<!-- aspire-skills-changelog-done from=5987dd316a92cd32252db03c8c8a28e7a42156c5 to=f8270164334fff609e6b301de8486e5e04207221 base= -->
 
 ### Added
 - Initial `aspire` skill with detection, safety guardrails, diagnostics bridge
