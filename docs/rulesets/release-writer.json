@@ -1,0 +1,30 @@
+{
+  "name": "Release flow - writer",
+  "target": "branch",
+  "enforcement": "disabled",
+  "bypass_actors": [
+    {
+      "actor_id": 2,
+      "actor_type": "RepositoryRole",
+      "bypass_mode": "always"
+    }
+  ],
+  "conditions": {
+    "ref_name": {
+      "include": [
+        "refs/heads/release/**",
+        "refs/heads/backport/**"
+      ],
+      "exclude": []
+    }
+  },
+  "rules": [
+    { "type": "creation" },
+    {
+      "type": "update",
+      "parameters": {
+        "update_allows_fetch_and_merge": false
+      }
+    }
+  ]
+}
