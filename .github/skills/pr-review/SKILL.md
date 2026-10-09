@@ -160,7 +160,7 @@ specific** — adjust the focus column to what the file actually demands.
 | MCP | `.mcp.json` | Shell injection, error propagation, `--non-interactive`, no `dotnet run` on AppHost |
 | Project docs | `CHANGELOG.md`, `README.md`, `CONTRIBUTING.md` | Accuracy only; released versions and supported agent installation/update instructions agree with shipped behavior |
 | Author skills | `.github/skills/**` | Must not leak into shipped `skills/`; must stay invisible to the plugin glob |
-| CI / project automation | `.github/workflows/**`, `scripts/release.mjs`, `scripts/release/**`, `.github/CODEOWNERS` | Declarative workflows or attributed upstream copies, directly tested modules, and least-privilege permissions |
+| CI / project automation | `.github/workflows/**`, `scripts/release.mjs`, `scripts/release/**`, `docs/rulesets/**`, `.github/CODEOWNERS` | Declarative workflows or attributed upstream copies, directly tested modules, least-privilege permissions, dev-targeted contributor PRs, generated release/backport heads, disabled protection presets, and no direct main/dev writes or auto-merges |
 
 ## Step 4 — Review the code
 
