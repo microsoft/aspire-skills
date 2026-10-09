@@ -2,7 +2,18 @@
 
 All notable changes to the aspire-skills plugin will be documented in this file.
 
-## [0.0.3] - Unreleased
+## [0.0.4] - Unreleased
+
+### Changed
+- Hardened Windows launches in the AppHosts and Doctor extensions by resolving
+  the Aspire CLI and Explorer to fully qualified executable paths. Relative
+  `ASPIRE_CLI` paths are no longer supported, and Doctor no longer accepts
+  `.cmd`/`.bat` wrappers. Migrate overrides to a fully qualified native
+  `aspire.exe` path. Bare native `ASPIRE_CLI` names retain `.exe` completion,
+  including names containing periods. Executable lookup and execution share the
+  existing timeout.
+
+## [0.0.3] - 2026-09-23
 
 ### Changed
 - Bumped the plugin and all seven shipped skills to `0.0.3`.

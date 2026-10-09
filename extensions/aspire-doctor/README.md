@@ -44,7 +44,12 @@ port) that serves the static UI from `ui/` and a JSON API:
 Diagnostics are produced by shelling out to
 `aspire doctor --format Json --non-interactive --nologo` and parsing the JSON.
 `aspire` is resolved from `PATH`; set the `ASPIRE_CLI` environment variable to
-an explicit executable path if the CLI is not on `PATH`.
+an explicit executable path if the CLI is not on `PATH`. On Windows, the CLI is
+launched by its fully qualified path, so an `ASPIRE_CLI` path must be fully
+qualified and name an executable rather than a `.cmd` or `.bat` wrapper.
+Bare `ASPIRE_CLI` names on `PATH` support `.exe` completion, including names
+containing periods.
+Executable lookup and diagnostics share a 60-second timeout.
 
 ## Agent actions & tools
 

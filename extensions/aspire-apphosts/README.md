@@ -33,10 +33,14 @@ to the model revision they describe. Selected context includes the owning
 AppHost, stable item identity, and that AppHost's freshness, including retained
 stale data.
 
-On Windows, the default runner invokes `aspire.exe` directly. An `ASPIRE_CLI`
-override must also name an executable rather than a `.cmd` or `.bat` wrapper:
-batch-wrapper argument serialization cannot safely preserve every command input.
+On Windows, the default runner resolves `aspire.exe` from `PATH` and invokes it
+directly by its fully qualified path. Bare `ASPIRE_CLI` names on `PATH` support
+`.exe` completion, including names containing periods. An `ASPIRE_CLI` path
+must also be fully qualified and name an executable rather than a `.cmd` or
+`.bat` wrapper: batch-wrapper argument serialization cannot safely preserve
+every command input.
 Unsupported wrappers fail explicitly instead of silently changing arguments.
+Executable lookup is included in each CLI operation's timeout.
 
 ## Security boundary
 
