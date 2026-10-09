@@ -8,6 +8,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { basename, dirname, extname, isAbsolute, normalize, relative, resolve, sep } from "node:path";
+import { performance } from "node:perf_hooks";
 import { joinSession, createCanvas, CanvasError } from "@github/copilot-sdk/extension";
 import {
     listenOnLoopback,
@@ -215,11 +216,6 @@ function extractJson(text) {
 
 async function runDoctor() {
     let command = process.env.ASPIRE_CLI?.trim() || (process.platform === "win32" ? "aspire.exe" : "aspire");
-    try {
-        command = await resolveCliExecutable(command);
-    } catch (err) {
-        return { ok: false, error: `Failed to launch '${command}': ${err.message}` };
-    }
     const args = ["doctor", "--format", "Json", "--non-interactive", "--nologo"];
 
     return await new Promise((resolve) => {
@@ -237,49 +233,70 @@ async function runDoctor() {
             resolve(value);
         };
 
-        const timer = setTimeout(() => {
+        const deadline = performance.now() + DOCTOR_TIMEOUT_MS;
+        const onTimeout = () => {
             try {
                 child?.kill();
             } catch {
                 /* ignore */
             }
             finish({ ok: false, error: `'aspire doctor' timed out after ${DOCTOR_TIMEOUT_MS / 1000}s.` });
-        }, DOCTOR_TIMEOUT_MS);
+        };
+        const timer = setTimeout(onTimeout, DOCTOR_TIMEOUT_MS);
 
-        try {
-            child = spawn(command, args, { shell: false, windowsHide: true });
-        } catch (err) {
-            finish({ ok: false, error: `Failed to launch '${command}': ${err.message}` });
-            return;
-        }
-
-        child.stdout?.on("data", (chunk) => {
-            stdout += chunk.toString();
-        });
-        child.stderr?.on("data", (chunk) => {
-            stderr += chunk.toString();
-        });
-        child.on("error", (err) => {
-            finish({
-                ok: false,
-                error: `Failed to run '${command}': ${err.message}. Set the ASPIRE_CLI environment variable to the aspire executable if it is not on PATH.`,
-            });
-        });
-        child.on("close", (code) => {
-            // Warn/fail checks can produce a non-zero exit code; parse the report anyway.
-            const parsed = extractJson(stdout);
-            if (!parsed) {
-                finish({
-                    ok: false,
-                    error: `Could not parse 'aspire doctor' output${code ? ` (exit code ${code})` : ""}.`,
-                    raw: (stderr || stdout).slice(0, 4000),
-                });
+        resolveCliExecutable(command).then((executable) => {
+            if (settled) {
                 return;
             }
-            finish({
-                ok: true,
-                data: { ...parsed, generatedAt: new Date().toISOString(), exitCode: code },
+            if (performance.now() >= deadline) {
+                onTimeout();
+                return;
+            }
+            command = executable;
+            try {
+                child = spawn(command, args, { shell: false, windowsHide: true });
+            } catch (err) {
+                finish({ ok: false, error: `Failed to launch '${command}': ${err.message}` });
+                return;
+            }
+
+            child.stdout?.on("data", (chunk) => {
+                stdout += chunk.toString();
             });
+            child.stderr?.on("data", (chunk) => {
+                stderr += chunk.toString();
+            });
+            child.on("error", (err) => {
+                finish({
+                    ok: false,
+                    error: `Failed to run '${command}': ${err.message}. Set the ASPIRE_CLI environment variable to the aspire executable if it is not on PATH.`,
+                });
+            });
+            child.on("close", (code) => {
+                // Warn/fail checks can produce a non-zero exit code; parse the report anyway.
+                const parsed = extractJson(stdout);
+                if (!parsed) {
+                    finish({
+                        ok: false,
+                        error: `Could not parse 'aspire doctor' output${code ? ` (exit code ${code})` : ""}.`,
+                        raw: (stderr || stdout).slice(0, 4000),
+                    });
+                    return;
+                }
+                finish({
+                    ok: true,
+                    data: { ...parsed, generatedAt: new Date().toISOString(), exitCode: code },
+                });
+            });
+        }, (err) => {
+            if (settled) {
+                return;
+            }
+            if (performance.now() >= deadline) {
+                onTimeout();
+                return;
+            }
+            finish({ ok: false, error: `Failed to launch '${command}': ${err.message}` });
         });
     });
 }

@@ -47,6 +47,9 @@ Diagnostics are produced by shelling out to
 an explicit executable path if the CLI is not on `PATH`. On Windows, the CLI is
 launched by its fully qualified path, so an `ASPIRE_CLI` path must be fully
 qualified and name an executable rather than a `.cmd` or `.bat` wrapper.
+Bare `ASPIRE_CLI` names on `PATH` support `.exe` completion, including names
+containing periods.
+Executable lookup and diagnostics share a 60-second timeout.
 
 ## Agent actions & tools
 

@@ -37,7 +37,7 @@ export async function resolveCliExecutable(command, env = process.env) {
         throw new Error("ASPIRE_CLI must name an executable on PATH or a fully qualified executable path on Windows. Relative executable paths are unsupported.");
     }
 
-    const executableName = extension ? command : `${command}.exe`;
+    const executableNames = extension ? [command, `${command}.exe`] : [`${command}.exe`];
     const pathKey = Object.keys(env).sort().find((key) => key.toUpperCase() === "PATH");
     const searchPath = pathKey === undefined ? "" : env[pathKey];
     for (const entry of String(searchPath ?? "").split(";")) {
@@ -45,14 +45,16 @@ export async function resolveCliExecutable(command, env = process.env) {
         if (!fullyQualified(directory)) {
             continue;
         }
-        const candidate = win32.join(directory, executableName);
-        try {
-            if ((await stat(candidate)).isFile()) {
-                return candidate;
-            }
-        } catch (error) {
-            if (error.code !== "ENOENT" && error.code !== "ENOTDIR") {
-                throw error;
+        for (const executableName of executableNames) {
+            const candidate = win32.join(directory, executableName);
+            try {
+                if ((await stat(candidate)).isFile()) {
+                    return candidate;
+                }
+            } catch (error) {
+                if (error.code !== "ENOENT" && error.code !== "ENOTDIR") {
+                    throw error;
+                }
             }
         }
     }

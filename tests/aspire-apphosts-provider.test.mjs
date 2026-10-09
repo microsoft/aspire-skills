@@ -96,33 +96,36 @@ test("native executable invocation preserves JSON, quotes, empty tokens, and she
     assert.deepEqual(JSON.parse(result.stdout), args);
 });
 
-test("Windows native launcher ignores an aspire.exe in the working directory", { skip: process.platform !== "win32" }, async (t) => {
-    const root = await mkdtemp(join(tmpdir(), "aspire-cli-launch-"));
-    t.after(() => rm(root, { recursive: true, force: true }));
-    const installed = join(root, "installed");
-    const workspace = join(root, "workspace");
-    const appHost = join(workspace, "Demo.AppHost");
-    const executable = join(installed, "aspire.exe");
-    for (const directory of [installed, workspace, appHost]) {
-        await mkdir(directory, { recursive: true });
-        await copyFile(process.execPath, join(directory, "aspire.exe"));
-    }
-    const searchPolicy = Object.entries(process.env).filter(([key]) => key.toUpperCase() === "NODEFAULTCURRENTDIRECTORYINEXEPATH");
-    // Exercise Windows' default search policy even when the test host disables it.
-    for (const [key] of searchPolicy) delete process.env[key];
-    try {
-        const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toUpperCase() !== "PATH"));
-        env.Path = installed;
-        const cli = createAspireCliRunner({ command: "aspire.exe" });
-        for (const cwd of [workspace, appHost]) {
-            const result = await cli.run(["-e", "process.stdout.write(process.execPath)"], { cwd, env });
-            assert.equal(result.ok, true, result.error);
-            assert.equal(result.stdout, executable);
+for (const command of ["aspire.exe", "aspire-13.6"]) {
+    test(`Windows native launcher resolves ${command} through PATH, ignoring working-directory copies`, { skip: process.platform !== "win32" }, async (t) => {
+        const root = await mkdtemp(join(tmpdir(), "aspire-cli-launch-"));
+        t.after(() => rm(root, { recursive: true, force: true }));
+        const installed = join(root, "installed");
+        const workspace = join(root, "workspace");
+        const appHost = join(workspace, "Demo.AppHost");
+        const executableName = command.endsWith(".exe") ? command : `${command}.exe`;
+        const executable = join(installed, executableName);
+        for (const directory of [installed, workspace, appHost]) {
+            await mkdir(directory, { recursive: true });
+            await copyFile(process.execPath, join(directory, executableName));
         }
-    } finally {
-        for (const [key, value] of searchPolicy) process.env[key] = value;
-    }
-});
+        const searchPolicy = Object.entries(process.env).filter(([key]) => key.toUpperCase() === "NODEFAULTCURRENTDIRECTORYINEXEPATH");
+        // Exercise Windows' default search policy even when the test host disables it.
+        for (const [key] of searchPolicy) delete process.env[key];
+        try {
+            const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toUpperCase() !== "PATH"));
+            env.Path = installed;
+            const cli = createAspireCliRunner({ command });
+            for (const cwd of [workspace, appHost]) {
+                const result = await cli.run(["-e", "process.stdout.write(process.execPath)"], { cwd, env });
+                assert.equal(result.ok, true, result.error);
+                assert.equal(result.stdout, executable);
+            }
+        } finally {
+            for (const [key, value] of searchPolicy) process.env[key] = value;
+        }
+    });
+}
 
 test("process stdout preserves machine JSON while redacting only submitted secret values", async () => {
     const secret = "dummy-\"quoted\"\n😀-secret";

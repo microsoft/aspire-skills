@@ -4,6 +4,7 @@ import { EventEmitter } from "node:events";
 import * as fs from "node:fs/promises";
 import { PassThrough } from "node:stream";
 import { test } from "node:test";
+import { setImmediate as nextTurn } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { SourceTextModule, SyntheticModule, createContext } from "node:vm";
 
@@ -23,32 +24,48 @@ const withLocalCopies = file(installedExecutable, `${workspace}\\aspire.exe`, `$
 const isFullyQualified = (path) => /^(?:[A-Za-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+[\\/])/.test(path);
 
 // Loads an extension module on a simulated platform with process launching and file lookup replaced.
-async function load(url, { platform = "win32", env = { Path: installDirectory }, files = file(installedExecutable) } = {}) {
+async function load(url, {
+    platform = "win32",
+    env = { Path: installDirectory },
+    files = file(installedExecutable),
+    lookup,
+    closeOnSpawn = true,
+    clock,
+} = {}) {
     const entries = new Map(files.map(([path, kind]) => [path.toLowerCase(), kind]));
     const spawns = [];
     let registration;
-    const context = createContext({ Buffer, URL, setTimeout, clearTimeout, process: { platform, env, cwd: () => workspace } });
+    const context = createContext({
+        Buffer, URL,
+        setTimeout: clock?.setTimeout ?? setTimeout,
+        clearTimeout: clock?.clearTimeout ?? clearTimeout,
+        process: { platform, env, cwd: () => workspace },
+    });
     const replacements = {
         "node:child_process": {
             ...childProcess,
             spawn(command, _args, options) {
-                spawns.push({ command, options });
                 const child = new EventEmitter();
+                spawns.push({ command, options, child });
                 child.stdout = new PassThrough();
                 child.stderr = new PassThrough();
-                child.kill = () => {};
+                child.killed = false;
+                child.kill = () => { child.killed = true; };
                 child.unref = () => {};
-                queueMicrotask(() => {
-                    child.emit("spawn");
-                    child.stdout.end(JSON.stringify({ checks: [] }));
-                    child.emit("close", 0);
-                });
+                if (closeOnSpawn) {
+                    queueMicrotask(() => {
+                        child.emit("spawn");
+                        child.stdout.end(JSON.stringify({ checks: [] }));
+                        child.emit("close", 0);
+                    });
+                }
                 return child;
             },
         },
         "node:fs/promises": {
             ...fs,
             async stat(path) {
+                if (lookup) await lookup(path);
                 // A relative lookup resolves against the working directory, so it always finds a binary.
                 const entry = isFullyQualified(path) ? entries.get(path.toLowerCase()) : "file";
                 if (entry instanceof Error) throw entry;
@@ -65,6 +82,9 @@ async function load(url, { platform = "win32", env = { Path: installDirectory },
             },
         },
     };
+    if (clock) {
+        replacements["node:perf_hooks"] = { performance: { now: clock.now } };
+    }
     const create = async (identifier) => {
         const exports = replacements[identifier] ?? (identifier.startsWith("node:") ? await import(identifier) : undefined);
         return exports
@@ -89,6 +109,14 @@ async function load(url, { platform = "win32", env = { Path: installDirectory },
 const providers = [
     {
         name: "AppHosts",
+        timeoutMs: 20,
+        async withRunner(options, use) {
+            const { module, spawns } = await load(appHosts, options);
+            return use({
+                spawns,
+                run: () => module.createAspireCliRunner().run(["ps"], { cwd: workspace, timeoutMs: this.timeoutMs }),
+            });
+        },
         async resolve({ command, cwd, platform, env, files }) {
             const { module, spawns } = await load(appHosts, { platform, env, files });
             const result = await module.createAspireCliRunner({ command }).run(["ps"], { cwd });
@@ -97,6 +125,13 @@ const providers = [
     },
     {
         name: "Doctor",
+        timeoutMs: 60_000,
+        async withRunner(options, use) {
+            return withDoctorCanvas(options, ({ canvas, instance, spawns }) => use({
+                spawns,
+                run: () => canvas.actions.find(({ name }) => name === "run_diagnostics").handler(instance),
+            }));
+        },
         async resolve({ command, platform, env, files }) {
             const { module } = await load(doctorHelpers, { platform, env, files });
             try {
@@ -141,13 +176,27 @@ const cases = [
         env: { Path: `C:\\Denied;${installDirectory}` },
         files: [["C:\\Denied\\aspire.exe", denied], ...file(installedExecutable)],
     },
-    ...["aspire", "custom-aspire.exe"].map((command) => {
-        const executable = `${installDirectory}\\${command.endsWith(".exe") ? command : `${command}.exe`}`;
+    ...["aspire", "custom-aspire.exe", "aspire-13.6"].map((command) => {
+        const executableName = command.endsWith(".exe") ? command : `${command}.exe`;
+        const executable = `${installDirectory}\\${executableName}`;
         return {
             name: `bare ASPIRE_CLI=${command} is resolved only through PATH`,
-            command, files: file(executable, `${workspace}\\${command}.exe`), executable,
+            command, files: file(executable, `${workspace}\\${executableName}`), executable,
         };
     }),
+    {
+        name: "a dotted bare ASPIRE_CLI prefers the literal executable over .exe completion",
+        command: "aspire-13.6",
+        files: file(`${installDirectory}\\aspire-13.6`, `${installDirectory}\\aspire-13.6.exe`),
+        executable: `${installDirectory}\\aspire-13.6`,
+    },
+    {
+        name: "dotted bare ASPIRE_CLI completion preserves PATH directory order",
+        command: "aspire-13.6",
+        env: { Path: "C:\\First;C:\\Second" },
+        files: file("C:\\First\\aspire-13.6.exe", "C:\\Second\\aspire-13.6"),
+        executable: "C:\\First\\aspire-13.6.exe",
+    },
     ...["C:\\Custom Tools\\Aspire.EXE", "\\\\cli-server\\tools\\aspire.exe"].map((command) => ({
         name: `fully qualified ASPIRE_CLI=${command} is used as written`, command, files: [], executable: command,
     })),
@@ -181,6 +230,140 @@ for (const provider of providers) {
     }
 }
 
+function deferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((resolvePromise, rejectPromise) => {
+        resolve = resolvePromise;
+        reject = rejectPromise;
+    });
+    return { promise, resolve, reject };
+}
+
+function createClock() {
+    let now = 0;
+    const timers = new Set();
+    return {
+        timers,
+        now: () => now,
+        setTimeout(callback, delay) {
+            const timer = { callback, at: now + delay, unref() {} };
+            timers.add(timer);
+            return timer;
+        },
+        clearTimeout(timer) {
+            timers.delete(timer);
+        },
+        advance(ms, { fireTimers = true } = {}) {
+            now += ms;
+            if (fireTimers) {
+                for (const timer of [...timers]) {
+                    if (timer.at <= now) {
+                        timers.delete(timer);
+                        timer.callback();
+                    }
+                }
+            }
+        },
+    };
+}
+
+for (const provider of providers) {
+    for (const lateOutcome of ["success", "error"]) {
+        test(`${provider.name}: stalled lookup times out and late ${lateOutcome} cannot launch a child`, async () => {
+            const clock = createClock();
+            const lookup = deferred();
+            await provider.withRunner({ clock, lookup: () => lookup.promise }, async ({ run, spawns }) => {
+                const pending = run();
+                assert.equal(clock.timers.size, 1, "the timeout must be active while lookup is pending");
+                clock.advance(provider.timeoutMs);
+                const result = await pending;
+                assert.equal(result.ok, false);
+                assert.match(result.error, /timed out/);
+                assert.equal(spawns.length, 0);
+
+                if (lateOutcome === "success") lookup.resolve();
+                else lookup.reject(denied);
+                await nextTurn();
+                assert.equal(spawns.length, 0);
+                assert.equal(await pending, result);
+                assert.equal(clock.timers.size, 0);
+            });
+        });
+    }
+
+    test(`${provider.name}: lookup and child execution share one timeout`, async () => {
+        const clock = createClock();
+        const lookup = deferred();
+        await provider.withRunner({ clock, lookup: () => lookup.promise, closeOnSpawn: false }, async ({ run, spawns }) => {
+            const pending = run();
+            clock.advance(provider.timeoutMs / 2);
+            lookup.resolve();
+            await nextTurn();
+            assert.equal(spawns.length, 1);
+            const [{ child }] = spawns;
+            assert.equal(child.killed, false);
+            assert.equal(clock.timers.size, 1);
+            assert.equal([...clock.timers][0].at, provider.timeoutMs, "lookup must not restart the timeout");
+
+            clock.advance(provider.timeoutMs / 2);
+            const result = await pending;
+            assert.equal(result.ok, false);
+            assert.match(result.error, /timed out/);
+            assert.equal(child.killed, true);
+            assert.equal(clock.timers.size, 0);
+            child.stdout.end(JSON.stringify({ checks: [] }));
+            child.emit("close", 0);
+            assert.equal(await pending, result);
+        });
+    });
+
+    for (const lateOutcome of ["success", "error"]) {
+        test(`${provider.name}: expired lookup ${lateOutcome} reports a timeout before a delayed timer callback`, async () => {
+            const clock = createClock();
+            const lookup = deferred();
+            await provider.withRunner({ clock, lookup: () => lookup.promise }, async ({ run, spawns }) => {
+                const pending = run();
+                clock.advance(provider.timeoutMs, { fireTimers: false });
+                if (lateOutcome === "success") lookup.resolve();
+                else lookup.reject(denied);
+                await nextTurn();
+                const result = await pending;
+                assert.equal(result.ok, false);
+                assert.match(result.error, /timed out/);
+                assert.equal(spawns.length, 0);
+                assert.equal(clock.timers.size, 0);
+            });
+        });
+    }
+
+    test(`${provider.name}: successful lookup and execution clear the timeout`, async () => {
+        const clock = createClock();
+        const lookup = deferred();
+        await provider.withRunner({ clock, lookup: () => lookup.promise }, async ({ run, spawns }) => {
+            const pending = run();
+            clock.advance(provider.timeoutMs / 2);
+            lookup.resolve();
+            assert.equal((await pending).ok, true);
+            assert.equal(spawns.length, 1);
+            assert.equal(clock.timers.size, 0);
+            clock.advance(provider.timeoutMs);
+            assert.equal(spawns[0].child.killed, false);
+        });
+    });
+
+    test(`${provider.name}: lookup failures clear the timeout without spawning`, async () => {
+        const clock = createClock();
+        await provider.withRunner({ clock, files: [[installedExecutable, denied]] }, async ({ run, spawns }) => {
+            const result = await run();
+            assert.equal(result.ok, false);
+            assert.match(result.error, /Permission denied/);
+            assert.equal(spawns.length, 0);
+            assert.equal(clock.timers.size, 0);
+        });
+    });
+}
+
 test("AppHosts spawns the resolved executable with the caller's cwd and child environment, and no shell", async () => {
     const executable = "C:\\Child Tools\\aspire.exe";
     const env = { Path: "C:\\Child Tools" };
@@ -207,7 +390,7 @@ async function withDoctorCanvas(options, use) {
     const instance = { instanceId: "launch-boundary" };
     const { url } = await canvas.open(instance);
     try {
-        return { result: await use({ canvas, instance, url }), spawns };
+        return { result: await use({ canvas, instance, url, spawns }), spawns };
     } finally {
         await canvas.onClose(instance);
     }

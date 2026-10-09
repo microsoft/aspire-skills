@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, normalize, relative, resolve, sep, win32 } from "node:path";
+import { performance } from "node:perf_hooks";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
@@ -1676,7 +1677,7 @@ async function resolveCliExecutable(command, env = process.env) {
         throw new Error("ASPIRE_CLI must name an executable on PATH or a fully qualified executable path on Windows. Relative executable paths are unsupported.");
     }
 
-    const executableName = extension ? command : `${command}.exe`;
+    const executableNames = extension ? [command, `${command}.exe`] : [`${command}.exe`];
     const pathKey = Object.keys(env).sort().find((key) => key.toUpperCase() === "PATH");
     const searchPath = pathKey === undefined ? "" : env[pathKey];
     for (const entry of String(searchPath ?? "").split(";")) {
@@ -1684,14 +1685,16 @@ async function resolveCliExecutable(command, env = process.env) {
         if (!fullyQualified(directory)) {
             continue;
         }
-        const candidate = win32.join(directory, executableName);
-        try {
-            if ((await stat(candidate)).isFile()) {
-                return candidate;
-            }
-        } catch (error) {
-            if (error.code !== "ENOENT" && error.code !== "ENOTDIR") {
-                throw error;
+        for (const executableName of executableNames) {
+            const candidate = win32.join(directory, executableName);
+            try {
+                if ((await stat(candidate)).isFile()) {
+                    return candidate;
+                }
+            } catch (error) {
+                if (error.code !== "ENOENT" && error.code !== "ENOTDIR") {
+                    throw error;
+                }
             }
         }
     }
@@ -1737,15 +1740,6 @@ export async function runProcess(command, args, {
         }
         return text;
     };
-    let executable;
-    try {
-        executable = await resolveCliExecutable(command, env);
-    } catch (error) {
-        return {
-            ok: false, code: null, stdout: "", stderr: "",
-            error: redactText(redactOutput(`Failed to launch Aspire CLI: ${error.message}`, true), 8000),
-        };
-    }
     return new Promise((resolveResult) => {
         let stdout = "";
         let stderr = "";
@@ -1793,37 +1787,10 @@ export async function runProcess(command, args, {
             return next;
         };
 
-        try {
-            child = spawn(executable, args, { cwd, env, shell: false, windowsHide: true });
-        } catch (error) {
-            finish({ ok: false, code: null, stdout, stderr, error: `Failed to launch Aspire CLI: ${error.message}` });
-            return;
-        }
-
-        child.stdout?.setEncoding("utf8");
-        child.stderr?.setEncoding("utf8");
-        child.stdout?.on("data", (chunk) => {
-            stdout = append(stdout, chunk);
-        });
-        child.stderr?.on("data", (chunk) => {
-            stderr = append(stderr, chunk);
-        });
-        child.once("error", (error) => {
-            finish({ ok: false, code: null, stdout, stderr, error: `Failed to run Aspire CLI: ${error.message}` });
-        });
-        child.once("close", (code) => {
-            finish({
-                ok: code === 0,
-                code,
-                stdout,
-                stderr,
-                error: code === 0 ? undefined : stderr || stdout || `Aspire CLI exited with code ${code}.`,
-            });
-        });
-
-        timer = setTimeout(() => {
+        const deadline = performance.now() + timeoutMs;
+        const onTimeout = () => {
             try {
-                child.kill();
+                child?.kill();
             } catch {
                 // The process may already have exited.
             }
@@ -1834,8 +1801,55 @@ export async function runProcess(command, args, {
                 stderr,
                 error: `Aspire CLI timed out after ${Math.round(timeoutMs / 1000)} seconds.`,
             });
-        }, timeoutMs);
+        };
+        timer = setTimeout(onTimeout, timeoutMs);
         timer.unref?.();
+
+        resolveCliExecutable(command, env).then((executable) => {
+            if (settled) {
+                return;
+            }
+            if (performance.now() >= deadline) {
+                onTimeout();
+                return;
+            }
+            try {
+                child = spawn(executable, args, { cwd, env, shell: false, windowsHide: true });
+            } catch (error) {
+                finish({ ok: false, code: null, stdout, stderr, error: `Failed to launch Aspire CLI: ${error.message}` });
+                return;
+            }
+
+            child.stdout?.setEncoding("utf8");
+            child.stderr?.setEncoding("utf8");
+            child.stdout?.on("data", (chunk) => {
+                stdout = append(stdout, chunk);
+            });
+            child.stderr?.on("data", (chunk) => {
+                stderr = append(stderr, chunk);
+            });
+            child.once("error", (error) => {
+                finish({ ok: false, code: null, stdout, stderr, error: `Failed to run Aspire CLI: ${error.message}` });
+            });
+            child.once("close", (code) => {
+                finish({
+                    ok: code === 0,
+                    code,
+                    stdout,
+                    stderr,
+                    error: code === 0 ? undefined : stderr || stdout || `Aspire CLI exited with code ${code}.`,
+                });
+            });
+        }, (error) => {
+            if (settled) {
+                return;
+            }
+            if (performance.now() >= deadline) {
+                onTimeout();
+                return;
+            }
+            finish({ ok: false, code: null, stdout, stderr, error: `Failed to launch Aspire CLI: ${error.message}` });
+        });
     });
 }
 
