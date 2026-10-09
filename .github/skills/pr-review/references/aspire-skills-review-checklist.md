@@ -87,12 +87,13 @@ baseline exists so that cross-skill behavior is measured against the same projec
 
 ## 6. Plugin manifest version sync
 
-Six canonical JSON files and all six shipped skills carry the release version.
-Check them together whenever release versions change:
+Six canonical JSON files and all shipped skill metadata share one version within a
+branch. Ordinary feature and release-fix PRs preserve dev's current version:
 
 | File | Field |
 |------|-------|
 | `package.json` | `version` |
+| `package-lock.json` (if present) | root `version` and `packages[""].version` |
 | `.plugin/plugin.json` | `version` |
 | `.claude-plugin/plugin.json` | `version` |
 | `.claude-plugin/marketplace.json` | `version` of the plugin named `aspire` |
@@ -100,37 +101,36 @@ Check them together whenever release versions change:
 | `gemini-extension.json` | `version` |
 | `skills/<name>/SKILL.md` | `metadata.version` |
 
-The shipped skills are `aspire`, `aspire-init`, `aspireify`,
-`aspire-orchestration`, `aspire-deployment`, and `aspire-monitoring`. Their versions
-match the plugin release; do not require independent per-skill bumps. Release
-`v0.0.2` uses `0.0.2` throughout. Documentation-only corrections do not require a
-new release version.
-
 Plugin manifests and runtime skill/extension files under
 `.github/plugins/aspire-skills/` remain relative symlinks to the root sources.
 Review changes against those sources rather than treating the mirror as another
 version authority. Internal author skills under `.github/skills/` are not part of
 the shipped skill set.
 
-**Severity if release versions are out of sync:** `blocking`.
+**Severity for version skew or unrelated manifest edits:** `blocking`.
 
-## 7. CHANGELOG
+## 7. Generated release content
 
-User-visible changes need a `CHANGELOG.md` entry under the appropriate version heading:
+Only `release/<version>` PRs may change `CHANGELOG.md` or generated `opencode/`
+catalogs. `dev` must not contain either.
 
-- New skill, removed skill, renamed skill.
-- Safety-guardrail change (added, removed, or scope changed).
-- New CLI command surface routed (e.g., adding `aspire destroy` mapping).
-- New deployment target.
-- New eval tag or new fixture.
+For a release PR, verify:
 
-Pure refactors, doc fixes, and eval-only additions that don't change the shipped surface
-don't need a CHANGELOG entry — but call them out in the PR description.
+- The linked version heading, release metadata, and finalized notes describe the
+  selected range while preserving earlier entries.
+- The candidate contains the selected dev snapshot plus only coordinated version,
+  changelog, and catalog changes.
+- The version is newer than main's version and the PR will merge with a merge commit.
+- No pending placeholder remains in a release that is ready to merge.
 
-Published versions use their actual release dates, not `Unreleased`. Preserve
-historical release entries when correcting the current release's status or references.
+**Severity for invalid release metadata or rewritten published history:** `blocking`.
+Unclear release notes are `important`.
 
-**Severity:** `important`.
+Generated dev backports must exclude `CHANGELOG.md` and `opencode/` and leave canonical
+versions aligned.
+
+**Severity for hand-edited generated content or unrelated release-candidate changes:**
+`blocking`.
 
 ## 8. Project-local override pattern
 
@@ -177,7 +177,7 @@ adds a new reference file:
 
 ## 11. MCP
 
-- `.mcp.json` changes need a CHANGELOG note **and** a quick
+- `.mcp.json` changes need a descriptive commit subject **and** a quick
   scan for shell-injection or path-traversal risk in any new shell snippet.
 - New MCP commands must use `--non-interactive` on Aspire CLI calls and must not
   swallow errors.
@@ -208,6 +208,6 @@ first:
 4. Eval coverage (§3) + grader patterns (§4).
 5. SKILL.md frontmatter (§1) + token budget (§2).
 6. Fixtures (§5).
-7. CHANGELOG (§7).
+7. Generated release content (§7).
 8. MCP (§11).
 9. References hygiene (§10).

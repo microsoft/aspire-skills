@@ -1,0 +1,285 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: New aspire-skills version (e.g., 1.0.8)
+        required: true
+        type: string
+      sha:
+        description: Commit SHA on dev. Leave empty to use the latest dev sha.
+        required: false
+        type: string
+      dry_run:
+        description: Validate without creating or updating a branch or PR
+        required: true
+        default: false
+        type: boolean
+  pull_request:
+    branches: [main]
+    types: [closed]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.event_name == 'workflow_dispatch' && 'aspire-skills-source-release' || format('aspire-skills-source-release-{0}', github.event.pull_request.number) }}
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    name: Prepare source release
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      source: ${{ steps.build.outputs.source }}
+      base: ${{ steps.build.outputs.base }}
+      from: ${{ steps.build.outputs.from }}
+      version: ${{ steps.build.outputs.version }}
+      candidate: ${{ steps.build.outputs.candidate }}
+      previous: ${{ steps.build.outputs.previous }}
+    steps:
+      - name: Checkout trusted main tooling
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ github.sha }}
+          path: tooling
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "22"
+
+      - name: Install trusted release dependencies
+        working-directory: tooling
+        run: npm ci --ignore-scripts
+
+      - name: Check release actors
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REPO: ${{ github.workspace }}/tooling
+        run: node tooling/scripts/release.mjs authorize
+
+      - name: Checkout isolated candidate repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: main
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prepare candidate refs
+        env:
+          RELEASE_REPO: ${{ github.workspace }}/candidate
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: node tooling/scripts/release.mjs fetch-stage
+
+      - name: Resolve release SHAs from changelog metadata
+        id: resolve-sha
+        env:
+          RELEASE_REPO: ${{ github.workspace }}/candidate
+          SOURCE_COMMIT: ${{ inputs.sha }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: node tooling/scripts/release.mjs resolve-stage
+
+      - name: Generate skills commit log
+        id: generate-diff
+        env:
+          RELEASE_REPO: ${{ github.workspace }}/candidate
+          RELEASE_WORK_DIR: ${{ runner.temp }}/skills-release/${{ github.run_id }}-${{ github.run_attempt }}
+          FROM_SHA: ${{ steps.resolve-sha.outputs.from_sha }}
+          TO_SHA: ${{ steps.resolve-sha.outputs.to_sha }}
+          BASE_COMMIT: ${{ steps.resolve-sha.outputs.base }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: node tooling/scripts/release.mjs generate-commit-log
+
+      - name: Generate release notes
+        id: release-notes
+        env:
+          RELEASE_REPO: ${{ github.workspace }}/candidate
+          RELEASE_WORK_DIR: ${{ runner.temp }}/skills-release/${{ github.run_id }}-${{ github.run_attempt }}
+          NEW_VERSION: ${{ inputs.release_version }}
+          FROM_SHA: ${{ steps.resolve-sha.outputs.from_sha }}
+          TO_SHA: ${{ steps.resolve-sha.outputs.to_sha }}
+          BASE_COMMIT: ${{ steps.resolve-sha.outputs.base }}
+          BASE_VERSION: ${{ steps.resolve-sha.outputs.base_version }}
+        run: node tooling/scripts/release.mjs generate-notes
+
+      - name: Test trusted tooling
+        working-directory: tooling
+        run: npm test
+
+      - name: Update versions, prepend the changelog placeholder, and generate catalogs
+        id: build
+        env:
+          RELEASE_REPO: ${{ github.workspace }}/candidate
+          RELEASE_WORK_DIR: ${{ runner.temp }}/skills-release/${{ github.run_id }}-${{ github.run_attempt }}
+          SOURCE_COMMIT: ${{ steps.resolve-sha.outputs.to_sha }}
+          BASE_COMMIT: ${{ steps.resolve-sha.outputs.base }}
+          RELEASE_VERSION: ${{ steps.resolve-sha.outputs.version }}
+        run: node tooling/scripts/release.mjs stage
+
+      - name: Install candidate test dependencies without lifecycle scripts
+        working-directory: candidate
+        run: npm ci --ignore-scripts
+
+      - name: Test candidate without publication credentials
+        working-directory: candidate
+        run: npm test
+
+      - name: Reverify candidate and transport artifacts after testing
+        env:
+          RELEASE_REPO: ${{ github.workspace }}/candidate
+          SOURCE_COMMIT: ${{ steps.build.outputs.source }}
+          BASE_COMMIT: ${{ steps.build.outputs.base }}
+          RELEASE_VERSION: ${{ steps.build.outputs.version }}
+          CANDIDATE_COMMIT: ${{ steps.build.outputs.candidate }}
+          PREVIOUS_COMMIT: ${{ steps.build.outputs.previous }}
+          BUNDLE_PATH: ${{ github.workspace }}/candidate/dist/release/release.bundle
+          SUMMARY_PATH: ${{ github.workspace }}/candidate/dist/release/release-summary.md
+        run: node tooling/scripts/release.mjs verify-stage
+
+      - name: Summarize candidate
+        shell: bash
+        run: cat candidate/dist/release/release-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload checked Git transport and summary
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: stage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            candidate/dist/release/release.bundle
+            candidate/dist/release/release-summary.md
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Open or update release PR into main
+    needs: stage
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && !inputs.dry_run
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout trusted main tooling on a clean runner
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ github.sha }}
+          path: tooling
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "22"
+
+      - name: Install trusted release dependencies
+        working-directory: tooling
+        run: npm ci --ignore-scripts
+
+      - name: Check release actors
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REPO: ${{ github.workspace }}/tooling
+        run: node tooling/scripts/release.mjs authorize
+
+      - name: Checkout isolated receiver
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: main
+          path: receiver
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download checked transport
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: stage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-artifact
+
+      - name: Fetch current baselines and publication branch
+        env:
+          RELEASE_REPO: ${{ github.workspace }}/receiver
+          RELEASE_VERSION: ${{ needs.stage.outputs.version }}
+        run: node tooling/scripts/release.mjs fetch-stage
+
+      - name: Independently receive and verify
+        id: verify
+        env:
+          RELEASE_REPO: ${{ github.workspace }}/receiver
+          SOURCE_COMMIT: ${{ needs.stage.outputs.source }}
+          BASE_COMMIT: ${{ needs.stage.outputs.base }}
+          RELEASE_VERSION: ${{ needs.stage.outputs.version }}
+          CANDIDATE_COMMIT: ${{ needs.stage.outputs.candidate }}
+          PREVIOUS_COMMIT: ${{ needs.stage.outputs.previous }}
+          BUNDLE_PATH: ${{ runner.temp }}/release-artifact/release.bundle
+          SUMMARY_PATH: ${{ runner.temp }}/release-artifact/release-summary.md
+        run: node tooling/scripts/release.mjs receive-stage
+
+      - name: Determine workflow-file publication permission
+        id: permissions
+        env:
+          RELEASE_REPO: ${{ github.workspace }}/receiver
+          BASE_COMMIT: ${{ steps.verify.outputs.base }}
+          CANDIDATE_COMMIT: ${{ steps.verify.outputs.candidate }}
+        run: node tooling/scripts/release.mjs publication-permissions
+
+      - name: Obtain short-lived publication credentials after verification
+        id: app-token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3
+        with:
+          client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
+          private-key: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: ${{ steps.permissions.outputs.workflows }}
+
+      - name: Open or update the release PR
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_REPO: ${{ github.workspace }}/receiver
+          SOURCE_COMMIT: ${{ steps.verify.outputs.source }}
+          BASE_COMMIT: ${{ steps.verify.outputs.base }}
+          RELEASE_VERSION: ${{ steps.verify.outputs.version }}
+          CANDIDATE_COMMIT: ${{ steps.verify.outputs.candidate }}
+          PREVIOUS_COMMIT: ${{ steps.verify.outputs.previous }}
+          BUNDLE_PATH: ${{ runner.temp }}/release-artifact/release.bundle
+          SUMMARY_PATH: ${{ runner.temp }}/release-artifact/release-summary.md
+        run: node tooling/scripts/release.mjs publish-stage
+
+  release:
+    name: Tag main merge and publish source release
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.head.ref, 'release/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout the exact reviewed main merge
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "22"
+
+      - name: Install trusted validation dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Publish the immutable main tag and source-only GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REPO: ${{ github.workspace }}
+          RELEASE_COMMIT: ${{ github.event.pull_request.merge_commit_sha }}
+        run: node scripts/release.mjs publish-release
