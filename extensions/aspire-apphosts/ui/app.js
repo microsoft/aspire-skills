@@ -1843,7 +1843,7 @@ async function executeNodeAction(action, node) {
                 method: "POST",
                 body: { appHostId: node.appHostId },
             });
-            showToast(result.ok ? "Opened the dashboard in the integrated browser." : result.error, !result.ok);
+            showToast(result.ok ? "Opening the dashboard." : result.error, !result.ok);
         } catch (error) {
             showToast(error.message, true);
         }
@@ -1856,7 +1856,7 @@ async function executeNodeAction(action, node) {
                 body: { nodeId: node.id, view: DASHBOARD_VIEW_ACTIONS[action] },
             });
             showToast(
-                result.ok ? `Opened ${ACTIONS[action].label.toLowerCase()} in the Dashboard.` : result.error,
+                result.ok ? `Opening ${ACTIONS[action].label.toLowerCase()} in the Dashboard.` : result.error,
                 !result.ok,
             );
         } catch (error) {
@@ -1870,7 +1870,7 @@ async function executeNodeAction(action, node) {
                 method: "POST",
                 body: { nodeId: node.id },
             });
-            showToast(result.ok ? `Opened ${node.label} in the integrated browser.` : result.error, !result.ok);
+            showToast(result.ok ? `Opening ${node.label}.` : result.error, !result.ok);
         } catch (error) {
             showToast(error.message, true);
         }
@@ -2490,6 +2490,10 @@ function connectEvents() {
         }
         if (message.type === "freshness" && modelState) {
             acceptFreshness(message);
+            return;
+        }
+        if (message.type === "browser-error") {
+            showToast(message.error, true);
             return;
         }
         if (message.type === "command") {

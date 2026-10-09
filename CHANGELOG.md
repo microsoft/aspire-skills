@@ -2,7 +2,14 @@
 
 All notable changes to the aspire-skills plugin will be documented in this file.
 
-## [0.0.3] - Unreleased
+## [0.0.4] - Unreleased
+
+### Fixed
+- Fixed Aspire AppHosts canvas browser navigation in CLI hosts: endpoint,
+  Dashboard, and resource-diagnostic links now use the default system browser
+  when no integrated browser canvas is registered.
+
+## [0.0.3] - 2026-09-23
 
 ### Changed
 - Bumped the plugin and all seven shipped skills to `0.0.3`.
