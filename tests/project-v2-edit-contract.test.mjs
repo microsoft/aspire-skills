@@ -139,6 +139,8 @@ test("gateway image decisions have read-only controls and a separately approved 
     assert.ok(stimulus.graders.some(grader => grader.type === "prompt" && grader.config.scoring === "binary"));
     assert.equal(stimulus.tags.integration, undefined);
   }
+  assert.match(skill, /Preserve exact prerelease identifiers/);
+  assert.match(skill, /say `\.NET 11 RC1` and `11\.0\.0-rc\.1`, not\s+the less specific `\.NET 11 RC`/);
   const approved = spec.stimuli.find(item => item.tags?.integration === "blazor-ef");
   assert.match(approved.prompt, /separately approve the resolved gateway/);
   assert.match(approved.prompt, /root to UID 1654/);
