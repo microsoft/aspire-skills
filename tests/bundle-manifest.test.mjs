@@ -43,6 +43,7 @@ test("bundle manifests support Aspire 13.5 and 13.6 with compatible SHA-256/SHA-
     assert.deepEqual(
       migrationSkill.files.map(file => file.relativePath),
       [
+        "references/apphost-sdk-migration.md",
         "references/compatibility-and-validation.md",
         "references/migration-patterns.md",
         "SKILL.md"
