@@ -26,6 +26,8 @@ metadata:
 Migrate supported legacy .NET project resources to the experimental
 `DotnetProjectResource` model without silently changing application behavior.
 This skill first applies to AppHosts targeting **Aspire 13.6 or newer**.
+It also owns read-only `ASPIRE012` assessment and separately approved SDK removal
+when the exact selected AppHost package supports package-only hosting.
 
 > **Approval boundary:** A request such as "migrate to Project v2" authorizes an
 > assessment, not unseen edits. Present the exact per-resource and per-file plan,
@@ -93,7 +95,10 @@ Inspect the selected AppHost and every legacy candidate:
   entrypoint, and port configuration. The AppHost's target framework does not
   establish the packaged gateway file app's publishing framework.
 
-An already migrated app or an app with no matching resources is a no-op.
+For a resource-only request, an already migrated app or an app with no matching
+resources is a no-op. For an explicit SDK-removal request, still inspect the SDK
+declarations and exact package-only host capability, then follow step 4a;
+do not invent resource edits just because there are no migration candidates.
 
 ### 2. Classify and propose
 

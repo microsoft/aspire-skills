@@ -7,7 +7,8 @@ description: >-
   start/stop/resource/deploy/destroy/publish/init/new/add/wait/describe/ps/logs/otel,
   aspire agent init, WithBrowserLogs, WithTerminal, Interaction Service, apphost.mts,
   TS package managers, Yarn Classic, custom resource commands, .aspire/modules recovery,
-  ProjectResource to DotnetProjectResource migration, or Playwright URL discovery.
+  ProjectResource to DotnetProjectResource migration, ASPIRE012 / AppHost SDK
+  removal assessment, or Playwright URL discovery.
   DO NOT USE FOR: non-Aspire projects or ordinary build/test tasks.
   INVOKES: aspire-init, aspireify, aspire-project-v2-migration,
   aspire-orchestration, aspire-deployment, aspire-monitoring.
@@ -54,7 +55,9 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 | Signal | How to Detect | Confidence | Scope |
 |--------|---------------|------------|-------|
 | C# AppHost | `.csproj` containing `Aspire.AppHost.Sdk` | ✅ Definitive | AppHost present → orchestration / deployment / monitoring |
+| Package-only C# AppHost | `.csproj` resolves an explicit `Aspire.Hosting.AppHost` package reference, including shared props/CPM; respect evaluated `IsAspireHost=false` | High; verify selected package capability | AppHost present → orchestration / deployment / monitoring |
 | File-based C# AppHost | `apphost.cs` with `#:sdk Aspire.AppHost.Sdk` | ✅ Definitive | AppHost present → orchestration / deployment / monitoring |
+| Package-only file-based C# AppHost | `apphost.cs` has an active `#:package Aspire.Hosting.AppHost` directive; ignore commented examples | High; verify selected package capability | AppHost present → orchestration / deployment / monitoring |
 | TypeScript AppHost | Current `apphost.mts` or legacy `apphost.ts` file in project | ✅ Definitive | AppHost present → orchestration / deployment / monitoring |
 | Aspire config without AppHost | `aspire.config.json` present **and no AppHost** above | High | Bootstrap → `aspireify` (skeleton dropped, needs wiring) |
 | Aspire config with AppHost | `aspire.config.json` present **and** AppHost above | High | AppHost present → orchestration / deployment / monitoring |
@@ -107,10 +110,13 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
   and its package-manager rules; do not substitute a raw package-manager launcher for
   `aspire start`.
 - Adding a new project or integration is ordinary `aspireify` wiring. Route to
-  `aspire-project-v2-migration` only when the user wants to replace existing
+  `aspire-project-v2-migration` when the user wants to replace existing
   `AddProject`, `addProject`, `AddCSharpApp`, or Blazor gateway resources with
-  Project v2 APIs. That migration requires an eligible 13.6+ AppHost and approval
-  of the exact per-resource edits.
+  Project v2 APIs, or explicitly requests `ASPIRE012` assessment / AppHost SDK
+  removal. Resource migration requires an eligible 13.6+ AppHost and approval
+  of the exact per-resource edits. SDK removal additionally requires verified
+  package-only AppHost capability and separate approval; a warning is not
+  permission to edit or upgrade packages.
 
 ## Routing
 
@@ -121,6 +127,7 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 | Add Aspire to an existing repo (`aspire init`, drop skeleton) | → [aspire-init](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-init/SKILL.md) (in-plugin) |
 | Wire AppHost / scaffold resource graph / add integrations after `aspire init` | → [aspireify](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md) (in-plugin) |
 | Migrate existing legacy project resources to Project v2 | → [aspire-project-v2-migration](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-project-v2-migration/SKILL.md); assess and obtain approval before edits |
+| Assess `ASPIRE012` / migrate off `Aspire.AppHost.Sdk` | → [aspire-project-v2-migration](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-project-v2-migration/SKILL.md); verify exact package capability and obtain separate approval for SDK removal |
 | Migrate legacy TypeScript `apphost.ts` (`aspire update --migrate`) | → [aspire-orchestration](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-orchestration/SKILL.md); hand back to aspireify only if source authoring remains |
 | Deploy, publish, destroy, pipeline steps | → [aspire-deployment](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-deployment/SKILL.md) |
 | Logs, traces, metrics, dashboard, browser logs | → [aspire-monitoring](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/SKILL.md) |
