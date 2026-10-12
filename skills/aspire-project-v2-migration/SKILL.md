@@ -6,8 +6,9 @@ description: >-
   per-resource assessment and explicit approval of exact edits.
   USE FOR: assess or migrate existing AddProject, addProject, AddCSharpApp,
   addCSharpApp, or AddBlazorGateway resources to Project v2; migrate
-  ProjectResource to DotnetProjectResource; clean up the resulting obsolete
-  AppHost ProjectReference edges.
+  ProjectResource to DotnetProjectResource; assess ASPIRE012 and migrate off
+  Aspire.AppHost.Sdk when the selected packages support package-only AppHosts;
+  clean up the resulting obsolete AppHost ProjectReference edges.
   DO NOT USE FOR: upgrading Aspire versions, creating/wiring a new AppHost,
   Azure Functions migration, generic source modernization, ordinary C# resource
   wiring or adding a new AddProject resource (use aspireify), publishing,
@@ -181,6 +182,17 @@ remains. Retain:
 
 `ReferenceOutputAssembly="false"` does not prevent an AppHost reference from
 participating in the build and is not a substitute for safe cleanup.
+
+### 4a. Remove the AppHost SDK only when separately approved
+
+Resource migration does not require removing `Aspire.AppHost.Sdk`, and replacing
+the SDK is not permission to migrate every resource. For `ASPIRE012` or an
+explicit SDK-removal request, load
+[apphost-sdk-migration.md](references/apphost-sdk-migration.md). Verify the exact
+target package supports package-only AppHosts before proposing those edits.
+Keep the SDK and necessary references while any original resource still relies
+on its generated metadata. Do not upgrade packages or deprecate `AddProject`
+as an implicit part of this workflow.
 
 ### 5. Preserve build and runtime intent
 

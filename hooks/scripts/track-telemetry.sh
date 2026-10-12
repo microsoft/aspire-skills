@@ -93,6 +93,7 @@ aspire-orchestration/references/app-commands.md
 aspire-orchestration/references/detection.md
 aspire-orchestration/references/resource-management.md
 aspire-orchestration/references/safety-guardrails.md
+aspire-project-v2-migration/references/apphost-sdk-migration.md
 aspire-project-v2-migration/references/compatibility-and-validation.md
 aspire-project-v2-migration/references/migration-patterns.md
 aspire/references/aspire-13-3-breaking-changes.md

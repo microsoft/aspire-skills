@@ -163,6 +163,20 @@ test("file apps preserve AOT and the negative TypeScript input remains handle-on
   assert.doesNotMatch(handle, /interface DotnetProjectOptions/);
 });
 
+test("SDK removal stays capability-gated and separately approved", () => {
+  const skill = readFileSync(new URL("../skills/aspire-project-v2-migration/SKILL.md", import.meta.url), "utf8");
+  const reference = readFileSync(new URL("../skills/aspire-project-v2-migration/references/apphost-sdk-migration.md", import.meta.url), "utf8");
+  assert.match(skill, /apphost-sdk-migration\.md/);
+  assert.match(skill, /does not require removing `Aspire\.AppHost\.Sdk`/);
+  assert.match(skill, /Do not upgrade packages or deprecate `AddProject`/);
+  assert.match(reference, /Never infer approval from an `ASPIRE012` warning/);
+  assert.match(reference, /preview source provenance, not proof of a released package/);
+  assert.match(reference, /Keep the explicit AppHost reference/);
+  assert.match(reference, /`NoWarn` cannot make opt-out work/);
+  assert.match(reference, /AppHost-only builds no longer\s+prove the service projects compile/);
+  assert.match(reference, /Reassess to prove idempotence/);
+});
+
 test("source contract tolerates layout/attribute order/lambda naming without weakening scope", t => {
   const { before, after } = fixture(t);
   mutateCsharp(after);

@@ -179,6 +179,8 @@ references, and config/secret migration).
 Approval-first migration for eligible Aspire 13.6+ AppHosts that replaces existing
 legacy `ProjectResource` APIs with experimental `DotnetProjectResource` APIs while
 preserving supported behavior and removing only proven-obsolete AppHost references.
+Also assesses `ASPIRE012` and approved SDK removal when the selected AppHost
+packages support the package-only experience; it never upgrades Aspire implicitly.
 
 ### aspire-orchestration
 Lifecycle management: start, stop, wait, resource commands, default watch/HMR guidance, and file-lock recovery.
