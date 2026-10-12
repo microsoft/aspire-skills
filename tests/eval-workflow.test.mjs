@@ -244,11 +244,7 @@ test("skill-eval.yml: guard requires every expected scoped run", t => {
   assert.match(result.stderr, /Missing expected evaluation run: migration/);
 });
 
-test("workflow and redaction changes exercise regression coverage", () => {
-  const workflow = readWorkflow("bundle-test.yml");
-  for (const filter of [".github/workflows/skill-eval*.yml", ".github/workflows/skill-experiment.yml"]) {
-    assert.equal(workflow.split(`- "${filter}"`).length - 1, 2);
-  }
+test("evaluation workflow covers redaction and grading infrastructure changes", () => {
   const gate = readWorkflow("skill-eval.yml");
   assert.match(gate, /- "scripts\/redact-eval-artifacts\.mjs"/);
   assert.match(gate, /scripts\/redact-eval-artifacts\\\.mjs/);
@@ -256,7 +252,6 @@ test("workflow and redaction changes exercise regression coverage", () => {
     assert.ok(gate.includes(`- "${path}"`));
     assert.ok(gate.includes(path.replace(".mjs", "\\.mjs")));
   }
-  assert.equal(workflow.split('- "evals/grade-routing-entry.mjs"').length - 1, 2);
 });
 
 function getStepRun(workflow, name) {

@@ -155,12 +155,12 @@ specific** — adjust the focus column to what the file actually demands.
 | Trigger tests | `skills/<skill>/evals/trigger_tests.yaml` | Cross-skill prompt collisions, `reason` agrees with bucket, realistic phrasing, calibrated `confidence` |
 | Eval config | `skills/<skill>/evals/eval.yaml` | Thresholds, `--judge-model` defaults, top-level graders preserved |
 | Shared fixtures | `evals/{csharp-apphost,ts-apphost,non-aspire}/**` | Realistic representativeness, no skill-specific contamination |
-| Plugin manifests | `package.json`, `.plugin/plugin.json`, `.claude-plugin/*.json`, `.cursor-plugin/marketplace.json`, `gemini-extension.json` | Version sync across all six canonical JSON files and the six shipped skills; valid JSON; host-specific metadata; `skills` glob unchanged at `./skills/` |
+| Plugin manifests | `package.json`, `package-lock.json`, `.plugin/plugin.json`, `.claude-plugin/*.json`, `.cursor-plugin/marketplace.json`, `gemini-extension.json` | Aligned branch versions, including both lockfile fields and all shipped skills; coordinated release/backport updates; valid JSON; host-specific metadata; `skills` glob unchanged at `./skills/` |
 | Published plugin mirror | `.github/plugins/aspire-skills/**` | Manifest and runtime skill/extension symlinks resolve to root sources; internal author skills stay out of the published plugin |
 | MCP | `.mcp.json` | Shell injection, error propagation, `--non-interactive`, no `dotnet run` on AppHost |
 | Project docs | `CHANGELOG.md`, `README.md`, `CONTRIBUTING.md` | Accuracy only; released versions and supported agent installation/update instructions agree with shipped behavior |
 | Author skills | `.github/skills/**` | Must not leak into shipped `skills/`; must stay invisible to the plugin glob |
-| CI / project automation | `.github/workflows/**`, `.github/CODEOWNERS` | Eval invocation correctness, no secrets, expected runner labels, hermetic execution |
+| CI / project automation | `.github/workflows/**`, `scripts/release.mjs`, `scripts/release/**`, `.github/CODEOWNERS` | Declarative workflows or attributed upstream copies, directly tested modules, and least-privilege permissions |
 
 ## Step 4 — Review the code
 
@@ -192,14 +192,15 @@ Only flag concrete, high-confidence problems. Categories:
    `prompt` grader missing the "the assistant's response" anchor, combined
    positive/negative grader, over-broad `not_contains` (e.g., bare `"azd"`,
    `"docker"`).
-5. **Plugin-manifest drift** — release-version skew across the six canonical JSON
-   files or the six shipped skills; `skills` glob silently changed; corresponding
+5. **Plugin-manifest drift** — target-version skew across canonical JSON values,
+   both root lockfile fields, or any shipped skill; `skills` glob silently changed; corresponding
    plugin `repository` / `homepage` / `license` fields diverge. Preserve each host's
    schema rather than requiring identical manifest objects.
 6. **Bugs** — invalid YAML/JSON, broken cross-skill links (`../<wrong-name>/SKILL.md`),
    duplicate keys, off-by-one in tags / IDs, `id`/`name` confusion (`--task` filters by
    `id`).
-7. **CHANGELOG gap** — user-visible change with no entry.
+7. **Release history** — `CHANGELOG.md` or `opencode/` added to `dev`, release source
+   changes outside the selected snapshot, or inconsistent canonical versions.
 8. **13.5 staleness** — treating legacy `apphost.ts` as current, inspecting resources
    through `aspire ps`, using obsolete `.ServiceProvider` / `PublishAsConnectionString`,
    mixing 13.4/13.5 package families, or omitting experimental qualifications.
@@ -309,7 +310,7 @@ Only three:
 | Label | When | Recommendation |
 |-------|------|----------------|
 | `blocking` | Concrete harm if merged: removed safety guardrail, manifests out of sync, override-deference removed, unsafe hook, broken JSON/YAML in a manifest or eval file, routing change that drops eval threshold. | `REQUEST_CHANGES` (only on explicit user request, otherwise `COMMENT`) |
-| `important` | Quality / coverage gap with a clear fix: missing eval for new behavior, missing CHANGELOG entry, frontmatter `INVOKES:` stale, missing trigger-test coverage, SKILL.md over 5000 tokens. | `COMMENT` |
+| `important` | Quality / coverage gap with a clear fix: missing eval for new behavior, unclear commit subjects for generated release notes, frontmatter `INVOKES:` stale, missing trigger-test coverage, SKILL.md over 5000 tokens. | `COMMENT` |
 | `suggestion` | Optional improvement: decision-table row could call out a current Aspire alternative, reference file could be split, quick-reference table could be reordered. | `COMMENT` or `APPROVE` |
 
 No `nit`, `learning`, or `praise`. Rationale and more examples:

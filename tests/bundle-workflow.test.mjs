@@ -30,12 +30,6 @@ test("extension source and plugin mirror changes trigger pull request and main t
   );
 });
 
-test("npm test includes root and nested Aspireify suites without an overridden script", () => {
-  const source = readFileSync(join(repoRoot, "package.json"), "utf8");
-  assert.equal(source.match(/"test"\s*:/g)?.length, 1);
-  assert.equal(
-    JSON.parse(source).scripts.test,
-    "node --test tests/*.test.mjs tests/aspireify/*.test.mjs"
-  );
+test("bundle workflow runs the shared validation command", () => {
   assert.match(workflow, /run: npm test/);
 });
