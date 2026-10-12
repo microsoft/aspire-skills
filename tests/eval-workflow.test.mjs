@@ -148,6 +148,66 @@ test("PR evaluations exclude forks and Dependabot without privileged PR triggers
   assert.match(workflow, /gh pr diff/);
 });
 
+test("model discovery stays inside authenticated gate and nightly eval steps", () => {
+  for (const name of ["skill-eval.yml", "skill-eval-nightly.yml"]) {
+    const workflow = readWorkflow(name);
+    const steps = workflow.split(/^      - name: /m).slice(1);
+    for (const step of steps.filter(step => step.includes("vally eval"))) {
+      assert.match(step, /node scripts\/report-eval-models\.mjs "\$RUNNER_TEMP\/aspire-eval-tools"/);
+      assert.ok(step.indexOf("unset GITHUB_TOKEN") < step.indexOf("node scripts/report-eval-models"));
+      assert.ok(step.indexOf("node scripts/report-eval-models") < step.indexOf("vally eval"));
+      assert.doesNotMatch(step, /--model\b|--judge-model\b|--threshold\b/);
+    }
+  }
+  assert.match(readWorkflow("skill-eval.yml"), /- "scripts\/report-eval-models\.mjs"/);
+});
+
+for (const scenario of ["success", "discovery-error", "cleanup-error", "invalid-model"]) {
+  test(`model discovery reports IDs without masking ${scenario}`, t => {
+    const root = mkdtempSync(join(tmpdir(), "aspire-eval-models-"));
+    t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 3 }));
+    const sdk = join(root, "node_modules", "@github", "copilot-sdk");
+    mkdirSync(sdk, { recursive: true });
+    writeFileSync(join(sdk, "package.json"), JSON.stringify({ type: "module", exports: "./index.js" }));
+    writeFileSync(join(sdk, "index.js"), `
+      import { writeFileSync } from "node:fs";
+      export class CopilotClient {
+        constructor(options) {
+          if (options.cliPath !== "selected-runtime") throw new Error("Wrong runtime");
+        }
+        async listModels() {
+          if (${JSON.stringify(scenario)} === "discovery-error") throw new Error("Discovery failed");
+          return ${scenario === "invalid-model" ? "[{ id: null }]" : '[{ id: "model-b", policy: { state: "disabled" } }, { id: "model-a", policy: { state: "enabled" } }, { id: "model-c" }]'};
+        }
+        async stop() {
+          writeFileSync(${JSON.stringify(join(root, "stopped"))}, "stopped");
+          return ${scenario === "cleanup-error" ? '[new Error("Cleanup failed")]' : "[]"};
+        }
+      }
+    `);
+    const result = spawnSync(process.execPath, [join(repoRoot, "scripts/report-eval-models.mjs"), root], {
+      encoding: "utf8",
+      env: { ...process.env, COPILOT_CLI_PATH: "selected-runtime" },
+      timeout: 30_000
+    });
+    assert.ifError(result.error);
+    assert.equal(readFileSync(join(root, "stopped"), "utf8"), "stopped");
+    assert.equal(result.status, scenario === "success" ? 0 : 1, result.stderr);
+    if (scenario === "success" || scenario === "cleanup-error") {
+      assert.deepEqual(JSON.parse(result.stdout), { listedModels: [
+        { id: "model-a", policyState: "enabled" },
+        { id: "model-b", policyState: "disabled" },
+        { id: "model-c", policyState: null }
+      ] });
+    } else {
+      assert.equal(result.stdout, "");
+    }
+    if (scenario === "discovery-error") assert.match(result.stderr, /Discovery failed/);
+    if (scenario === "cleanup-error") assert.match(result.stderr, /Cleanup failed/);
+    if (scenario === "invalid-model") assert.match(result.stderr, /invalid model ID/);
+  });
+}
+
 test("scheduled and manual triggers remain unchanged", () => {
   for (const [name, cron] of [["skill-eval-nightly.yml", "0 6 * * 0"], ["skill-experiment.yml", "0 6 * * 6"]]) {
     const workflow = readWorkflow(name);
@@ -252,7 +312,7 @@ test("workflow and redaction changes exercise regression coverage", () => {
   const gate = readWorkflow("skill-eval.yml");
   assert.match(gate, /- "scripts\/redact-eval-artifacts\.mjs"/);
   assert.match(gate, /scripts\/redact-eval-artifacts\\\.mjs/);
-  for (const path of ["scripts/check-eval-results.mjs", "evals/grade-routing-entry.mjs"]) {
+  for (const path of ["scripts/check-eval-results.mjs", "scripts/report-eval-models.mjs", "evals/grade-routing-entry.mjs"]) {
     assert.ok(gate.includes(`- "${path}"`));
     assert.ok(gate.includes(path.replace(".mjs", "\\.mjs")));
   }
@@ -287,7 +347,7 @@ function runChangedSpecSelection(t, changedPaths, skills) {
   return readFileSync(output, "utf8").replaceAll("\r\n", "\n");
 }
 
-for (const changedPath of ["scripts/check-eval-results.mjs", "evals/grade-routing-entry.mjs"]) {
+for (const changedPath of ["scripts/check-eval-results.mjs", "scripts/report-eval-models.mjs", "evals/grade-routing-entry.mjs"]) {
   test(`${changedPath}: a helper-only PR selects the router smoke evaluation`, t => {
     assert.equal(runChangedSpecSelection(t, [changedPath], ["aspire"]),
       "run_full=false\nhas_specs=true\nmatched=aspire\nexpected_runs=aspire\n");

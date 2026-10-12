@@ -9,6 +9,7 @@ on:
       - ".github/workflows/skill-eval.yml"
       - "scripts/redact-eval-artifacts.mjs"
       - "scripts/check-eval-results.mjs"
+      - "scripts/report-eval-models.mjs"
       - "evals/grade-routing-entry.mjs"
 
 permissions:
@@ -77,7 +78,7 @@ jobs:
 
           workflow_changed=false
           if printf '%s\n' "$changed_files" \
-              | grep -Eq '^(\.github/workflows/skill-eval\.yml|scripts/redact-eval-artifacts\.mjs|scripts/check-eval-results\.mjs|evals/grade-routing-entry\.mjs)$'; then
+              | grep -Eq '^(\.github/workflows/skill-eval\.yml|scripts/redact-eval-artifacts\.mjs|scripts/check-eval-results\.mjs|scripts/report-eval-models\.mjs|evals/grade-routing-entry\.mjs)$'; then
             workflow_changed=true
           fi
           routing_helper_changed=false
@@ -145,6 +146,7 @@ jobs:
           COPILOT_GITHUB_TOKEN: ${{ github.token }}
         run: |
           unset GITHUB_TOKEN GH_TOKEN GITHUB_COPILOT_API_TOKEN
+          node scripts/report-eval-models.mjs "$RUNNER_TEMP/aspire-eval-tools" || exit "$?"
           echo "Global eval config changed — evaluating the full ci-gate suite."
           vally eval \
             --require-pass \
@@ -172,6 +174,7 @@ jobs:
         run: |
           set -uo pipefail
           unset GITHUB_TOKEN GH_TOKEN GITHUB_COPILOT_API_TOKEN
+          node scripts/report-eval-models.mjs "$RUNNER_TEMP/aspire-eval-tools" || exit "$?"
           pids=()
 
           for skill in ${{ steps.changed.outputs.matched }}; do

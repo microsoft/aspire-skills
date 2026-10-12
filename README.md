@@ -246,6 +246,17 @@ For a separately validated release target, the bundle generator accepts
 Current Aspire consumers check the skills archive's range as a whole; the manifest
 does not provide per-skill installation-time version filtering.
 
+### Model-backed evaluation failures
+
+The PR gate and nightly evaluation steps report `listedModels` using their
+pinned Copilot runtime and the same Actions identity as the evaluations. A
+session-creation or model-discovery error is an infrastructure failure, not a
+skill-behavior verdict. Model discovery does not change the configured executor
+or judge models, thresholds, or approval guards. Policy state is reported when
+provided (`null` means it was omitted); a listed model is not necessarily enabled
+and still needs successful execution and grading. Local reproduction can have different account
+or network access, so distinguish those failures from the original CI error.
+
 ### Publishing releases
 
 The publish workflow builds and attests both bundles, but uploads only

@@ -51,6 +51,7 @@ jobs:
           COPILOT_GITHUB_TOKEN: ${{ github.token }}
         run: |
           unset GITHUB_TOKEN GH_TOKEN GITHUB_COPILOT_API_TOKEN
+          node scripts/report-eval-models.mjs "$RUNNER_TEMP/aspire-eval-tools" || exit "$?"
           vally eval \
             --require-pass \
             --suite nightly \
