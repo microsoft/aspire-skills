@@ -2,6 +2,12 @@
 
 All notable changes to the aspire-skills plugin will be documented in this file.
 
+## [0.0.4] - Unreleased
+
+### Added
+- Added `copilot-app` attribution to both canonical telemetry hooks when
+  `AI_AGENT=github_copilot_app_agent`, before generic Copilot CLI detection.
+
 ## [0.0.3] - Unreleased
 
 ### Changed

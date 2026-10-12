@@ -232,6 +232,10 @@ The skills manifest records the release commit and LF-normalized SHA-512 hash fo
 each file under `hooks/scripts/`. Downstream consumers can copy the `hooks` object
 directly instead of maintaining hook provenance separately.
 
+The hooks attribute `AI_AGENT=github_copilot_app_agent` to `copilot-app` before
+checking `COPILOT_CLI=1` or a CLI-compatible `toolArgs` payload. Without the app
+marker, Copilot CLI, VS Code, and Claude Code attribution stays unchanged.
+
 Use `npm run bundle:skills` or `npm run bundle:extensions` to build one bundle type.
 
 Both archives declare Aspire CLI/SDK compatibility with `>=13.5.0 <13.7.0`.
