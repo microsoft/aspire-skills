@@ -11,6 +11,7 @@ const { CopilotClient } = await import(pathToFileURL(require.resolve("@github/co
 const client = new CopilotClient({ cliPath: process.env.COPILOT_CLI_PATH });
 
 try {
+  await client.start();
   const models = await client.listModels();
   if (models.some(model => typeof model.id !== "string" || model.id.length === 0)) {
     throw new Error("Evaluation runtime returned an invalid model ID.");

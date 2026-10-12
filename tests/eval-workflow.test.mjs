@@ -162,7 +162,7 @@ test("model discovery stays inside authenticated gate and nightly eval steps", (
   assert.match(readWorkflow("skill-eval.yml"), /- "scripts\/report-eval-models\.mjs"/);
 });
 
-for (const scenario of ["success", "discovery-error", "cleanup-error", "invalid-model"]) {
+for (const scenario of ["success", "startup-error", "discovery-error", "cleanup-error", "invalid-model"]) {
   test(`model discovery reports IDs without masking ${scenario}`, t => {
     const root = mkdtempSync(join(tmpdir(), "aspire-eval-models-"));
     t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 3 }));
@@ -174,8 +174,14 @@ for (const scenario of ["success", "discovery-error", "cleanup-error", "invalid-
       export class CopilotClient {
         constructor(options) {
           if (options.cliPath !== "selected-runtime") throw new Error("Wrong runtime");
+          this.started = false;
+        }
+        async start() {
+          if (${JSON.stringify(scenario)} === "startup-error") throw new Error("Startup failed");
+          this.started = true;
         }
         async listModels() {
+          if (!this.started) throw new Error("Client not connected");
           if (${JSON.stringify(scenario)} === "discovery-error") throw new Error("Discovery failed");
           return ${scenario === "invalid-model" ? "[{ id: null }]" : '[{ id: "model-b", policy: { state: "disabled" } }, { id: "model-a", policy: { state: "enabled" } }, { id: "model-c" }]'};
         }
@@ -203,6 +209,7 @@ for (const scenario of ["success", "discovery-error", "cleanup-error", "invalid-
       assert.equal(result.stdout, "");
     }
     if (scenario === "discovery-error") assert.match(result.stderr, /Discovery failed/);
+    if (scenario === "startup-error") assert.match(result.stderr, /Startup failed/);
     if (scenario === "cleanup-error") assert.match(result.stderr, /Cleanup failed/);
     if (scenario === "invalid-model") assert.match(result.stderr, /invalid model ID/);
   });
