@@ -57,5 +57,8 @@ test("npm test includes root and nested Aspireify suites without an overridden s
     JSON.parse(source).scripts.test,
     "node --test tests/*.test.mjs tests/aspireify/*.test.mjs"
   );
+});
+
+test("bundle workflow runs the shared validation command", () => {
   assert.match(workflow, /run: npm test/);
 });

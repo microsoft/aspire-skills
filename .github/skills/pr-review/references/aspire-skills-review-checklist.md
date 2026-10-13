@@ -88,8 +88,8 @@ baseline exists so that cross-skill behavior is measured against the same projec
 ## 6. Plugin manifest version sync
 
 Six canonical JSON files, both lockfile root versions, and all seven shipped
-skills carry the release version. Check them together whenever release versions
-change:
+skills share one version within a branch. Check them together whenever release
+versions change. Ordinary feature and release-fix PRs preserve dev's current version:
 
 | File | Field |
 |------|-------|
@@ -115,9 +115,9 @@ Review changes against those sources rather than treating the mirror as another
 version authority. Internal author skills under `.github/skills/` are not part of
 the shipped skill set.
 
-**Severity if release versions are out of sync:** `blocking`.
+**Severity for version skew or unrelated manifest edits:** `blocking`.
 
-## 7. CHANGELOG
+## 7. Generated release content
 
 For release PRs, compare the previous published tag with the release branch.
 The new entry must cover user-visible changes since that tag, not features
@@ -140,7 +140,39 @@ without a `v` prefix, but keep the actual tag name in the link target, for examp
 `## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)`.
 Preserve historical release note bodies when updating headings or references.
 
-**Severity:** `important`.
+Only `release/<version>` PRs may change `CHANGELOG.md` or generated `opencode/`
+catalogs. `dev` must not contain either.
+
+For a release PR prepared by the release skill, verify:
+
+- The linked version heading, release metadata, and finalized notes describe the
+  selected range while preserving earlier entries.
+- The candidate contains the selected dev snapshot plus only coordinated version,
+  changelog, and catalog changes.
+- The version is newer than main's version, the branch is `release/<version>`,
+  and the PR targets main and will use squash and merge.
+- The PR uses the release skill's reference template, with the pinned main/dev
+  SHAs, full-SHA source range, and Release Checklist. Only verified items are checked.
+- The release skill finalizes the newest changelog entry locally before committing
+  and opening the draft PR. No pending placeholder remains when ready to merge.
+- Publication reads the version and source range from finalized changelog metadata
+  and verifies the exact reviewed squash tree; its commit message is not constrained.
+- The post-merge workflow builds and attests both bundles, creates or reuses the
+  immutable tag and GitHub release, and uploads only the skills bundle.
+- Required checks pass and needed documentation changes are reviewed and ready.
+  Maintainer approval, merge, publication verification, and dev backflow remain
+  human steps tracked in the Release Checklist.
+
+**Severity for invalid release metadata or rewritten published history:** `blocking`.
+Unclear release notes are `important`.
+
+Release backflows start from updated main, remove `CHANGELOG.md` and `opencode/`,
+and target dev. Their merge must preserve later dev work and leave canonical
+versions aligned.
+
+**Severity for hand-edited catalogs, changes outside newest-entry finalization,
+or unrelated release-candidate changes:**
+`blocking`.
 
 ## 8. Project-local override pattern
 
@@ -187,7 +219,7 @@ adds a new reference file:
 
 ## 11. MCP
 
-- `.mcp.json` changes need a CHANGELOG note **and** a quick
+- `.mcp.json` changes need a descriptive commit subject **and** a quick
   scan for shell-injection or path-traversal risk in any new shell snippet.
 - New MCP commands must use `--non-interactive` on Aspire CLI calls and must not
   swallow errors.
@@ -218,6 +250,6 @@ first:
 4. Eval coverage (§3) + grader patterns (§4).
 5. SKILL.md frontmatter (§1) + token budget (§2).
 6. Fixtures (§5).
-7. CHANGELOG (§7).
+7. Generated release content (§7).
 8. MCP (§11).
 9. References hygiene (§10).

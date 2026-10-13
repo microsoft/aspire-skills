@@ -21,6 +21,9 @@ Use `blocking` when the PR…
   `aspire start` mapping disappears from `skills/aspire-orchestration/SKILL.md`).
 - Leaves canonical manifests, either lockfile root, or the seven shipped skills out of release-version sync (see
   `aspire-skills-review-checklist.md` §6).
+- Adds generated changelog/catalogs to dev, changes dev's version in an ordinary PR,
+  drops dev work during a manual backport, leaves canonical version fields
+  inconsistent, or publishes a candidate with unselected source changes.
 - Drops or shadows the project-local override deference block (`§8`).
 - Introduces a routing change with no `trigger_tests.yaml` update **and** the change is
   likely to drop accuracy below the per-skill threshold.
@@ -45,8 +48,8 @@ Use `important` when the PR…
 - Has a SKILL.md frontmatter `INVOKES:` list that lies about what the skill calls.
 - Pushes SKILL.md past the 5000-token authoring budget without splitting into
   `references/`.
+- Uses unclear commit subjects for user-visible changes in generated release notes.
 - Uses stale release-status or skill-version references in documentation.
-- Lacks a CHANGELOG entry for a user-visible change.
 - Uses a bare `not_contains` substring (e.g., `"azd"`) instead of full command tokens.
 - Omits the "the assistant's response" anchor in a `prompt` grader.
 - Copies fixtures per-skill instead of reusing the shared `evals/` baseline.

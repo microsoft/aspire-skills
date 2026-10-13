@@ -575,8 +575,15 @@ test("discoverConfiguredAppHosts resolves aspire.config.json without scanning pr
 });
 
 test("workspace fallback discovers file-based TypeScript AppHosts with mts extensions", async () => {
-    const root = await mkdtemp(join(tmpdir(), "aspire-mts-apphost-"));
+    const fixtureRoot = await mkdtemp(join(tmpdir(), "aspire-mts-apphost-"));
     try {
+        // Keep all ten ancestor probes inside the fixture.
+        const root = join(fixtureRoot, ...Array(10).fill("scope"));
+        await mkdir(root, { recursive: true });
+        await writeFile(join(fixtureRoot, "Outside.AppHost.csproj"), "<Project />");
+        await writeFile(join(fixtureRoot, "aspire.config.json"), JSON.stringify({
+            appHost: { path: "Outside.AppHost.csproj" },
+        }));
         const nestedDirectory = join(root, "nested");
         const directAppHost = join(root, "apphost.mts");
         const nestedAppHost = join(nestedDirectory, "apphost.mts");
@@ -589,7 +596,7 @@ test("workspace fallback discovers file-based TypeScript AppHosts with mts exten
             new Set([directAppHost, nestedAppHost]),
         );
     } finally {
-        await rm(root, { recursive: true, force: true });
+        await rm(fixtureRoot, { recursive: true, force: true });
     }
 });
 
