@@ -9,10 +9,6 @@ Thank you for your interest in contributing to the Aspire Skills plugin!
 3. Make your changes
 4. Submit a pull request targeting `dev`
 
-Use the [PR template](.github/pull_request_template.md) to describe user impact,
-testing, risk, and documentation changes. Main accepts only maintainer-prepared
-releases and reviewed backports; see the [development guide](docs/development.md).
-
 ## Skill File Format
 
 Skills follow the standard SKILL.md format:
@@ -36,14 +32,6 @@ process.
 - Ensure SKILL.md files are under 5000 tokens
 - Verify frontmatter compliance
 - Test with at least one agent host (Copilot CLI, Claude Code, etc.)
-
-## Documentation Impact
-
-For user-visible changes, update related repository documentation and identify
-affected external documentation pages. Link each documentation issue or PR,
-name its owner, and state when it should publish. If no page needs an update,
-explain why. Maintainers collect documentation approval and publication receipts
-in the release PR before and after release.
 
 ## Code of Conduct
 
