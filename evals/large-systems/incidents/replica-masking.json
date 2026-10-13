@@ -1,0 +1,11 @@
+{
+  "request": "Commerce API has three instances and intermittent 500s. The parent resource is Running. Find the instance-level cause instead of claiming all replicas are healthy.",
+  "resource": "api",
+  "evidence": [
+    {"id":"parent-running","resource":"api","kind":"state","state":"Running","replicas":3},
+    {"id":"replica-one","resource":"api","kind":"state","instanceId":"api-1","health":"Healthy"},
+    {"id":"replica-two","resource":"api","kind":"state","instanceId":"api-2","health":"Healthy"},
+    {"id":"replica-three","resource":"api","kind":"state","instanceId":"api-3","health":"Unhealthy"},
+    {"id":"replica-error","resource":"api","kind":"log","instanceId":"api-3","message":"missing required connection string ConnectionStrings__orders"}
+  ]
+}

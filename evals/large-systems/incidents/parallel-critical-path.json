@@ -1,0 +1,10 @@
+{
+  "request": "Commerce API fan-out takes 510 ms. Payments and inventory overlap. Identify the longer observed branch without adding parallel durations or diagnosing from log counts.",
+  "resource": "api",
+  "evidence": [
+    {"id":"fanout-parent","resource":"api","kind":"span","traceId":"777777777777777777777777777777aa","spanId":"77777777777777aa","startOffsetMs":0,"durationMs":510},
+    {"id":"inventory-branch","resource":"inventory","kind":"span","traceId":"777777777777777777777777777777aa","parentSpanId":"77777777777777aa","startOffsetMs":10,"durationMs":480},
+    {"id":"payment-branch","resource":"payments","kind":"span","traceId":"777777777777777777777777777777aa","parentSpanId":"77777777777777aa","startOffsetMs":10,"durationMs":460},
+    {"id":"noisy-payments","resource":"payments","kind":"metric","debugLogCount":1000}
+  ]
+}

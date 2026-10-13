@@ -1,0 +1,10 @@
+{
+  "request": "Commerce storefront browser requests fail; admin is fine. Both frontends have browser logging. Find the right console stream without opening a browser or changing code.",
+  "resource": "storefront",
+  "evidence": [
+    {"id":"store-browser-owner","resource":"storefront-browser-logs","kind":"state","parent":"storefront","Source":"storefront"},
+    {"id":"store-browser-error","resource":"storefront-browser-logs","kind":"console","message":"TypeError Failed to fetch /checkout; browser CORS policy blocked response"},
+    {"id":"admin-browser-owner","resource":"admin-browser-logs","kind":"state","parent":"admin","Source":"admin"},
+    {"id":"server-otel","resource":"storefront","kind":"query","rows":[],"message":"server OTel logs contain no browser output"}
+  ]
+}

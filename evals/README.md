@@ -37,6 +37,7 @@ evals/
 ├── ts-apphost/          # TypeScript AppHost (apphost.mts + .aspire/modules/)
 ├── non-aspire/          # Non-Aspire .NET project (for "should not trigger" stimuli)
 ├── project-v2-migration/ # Legacy inputs, captured-edit contracts, and qualification guidance
+├── large-systems/       # Offline multi-AppHost incident snapshots, diagnosis contracts, and judge controls
 └── version-preservation/ # Read-only C# AppHost fixture with concrete, centrally managed Aspire versions
 ```
 
@@ -191,16 +192,85 @@ Use `--workers 4` to fan stimuli out and shave wall-clock time; expect higher co
 
 | Skill | Task stimuli | Routing stimuli | Focus |
 |-------|--------------|-----------------|-------|
-| `aspire` (router) | 2 | 23 | Routing precision to sub-skills; preserve selected release family |
-| `aspire-init` | 6 | 15 | Skeleton drop, `aspire new` / `aspire init` decision, aspireify handoff |
+| `aspire` (router) | 4 | 23 | Routing precision to sub-skills; preserve selected release family |
+| `aspire-init` | 7 | 15 | Skeleton drop, `aspire new` / `aspire init` decision, aspireify handoff |
 | `aspireify` | 14 | 19 | AppHost wiring (C# / file-based C# / TS), package-manager resolution, validation, never edit `.aspire/modules/` |
 | `aspire-orchestration` | 29 | 24 | Lifecycle tools, file lock recovery, `--include-hidden`, `aspire update --self` |
 | `aspire-deployment` | 11 | 22 | Multi-target deploy, `aspire destroy`, JS publishing, pipeline previews |
-| `aspire-monitoring` | 8 | 23 | Diagnostics bridge, standalone dashboard, browser logs, `--include-hidden` |
+| `aspire-monitoring` | 32 | 23 | Diagnostics bridge, dashboard, browser logs, hidden resources, and 24 adversarial large-system incidents |
 | `aspire-project-v2-migration` | 16 | 6 | Approval/capability stops, bounded actual edits, idempotence, and explicit migration intent |
-| **Total** | **86** | **132** | **218 stimuli** |
+| **Total** | **113** | **132** | **245 stimuli** |
 
 Routing counts include `routing` in either a scalar or array `area` tag.
+
+### Large-system incident assessments
+
+The monitoring spec adds **24 independently meaningful offline incidents**, not
+24 phrasings of the same command question. A shared topology has three AppHosts
+with colliding resource names and 34 resources in Commerce. Per-incident snapshots
+contain causal evidence plus distractors; they are synthetic normalized records,
+**not Aspire CLI wire-format responses** and not running applications.
+
+| Coverage | Cases |
+|----------|-------|
+| Exact AppHost identity and unresolved targets | `target-collision`, `ambiguous-target` |
+| Dependency propagation and hidden completion gates | `dependency-fanout`, `hidden-migrator` |
+| Missing, dropped, truncated and stale telemetry | `exporter-silence`, `missing-span`, `truncated-window`, `stale-snapshot` |
+| Full trace/span identity and causal ordering | `trace-prefix`, `span-correlation`, `clock-skew`, `cross-service-slice` |
+| Asynchronous links, acknowledgment limits, dead letters and backlog | `async-link`, `retry-recovered`, `poison-message`, `backlog-dependency` |
+| Parallel critical path and connection-pool contention | `parallel-critical-path`, `pool-exhaustion` |
+| Business outcomes and per-replica health | `business-failure`, `replica-masking` |
+| Console-only and browser-child ownership | `console-only`, `browser-owner` |
+| Scoped/redacted handoff and untrusted log instructions | `scoped-export`, `telemetry-injection` |
+
+Each case has three layers: `diff-empty`, a grading-only `program` contract, and a
+rubric-backed binary `prompt` judge. The program requires actual monitoring skill
+activation, successful fixture reads, exact target/evidence identity, explicit
+uncertainty, safe command proposals, full correlation IDs and bounded queries.
+It rejects execution of shell/live tools, not merely destructive words in prose.
+The semantic judge checks the actual causal explanation, missing evidence,
+business success versus technical success, and invented repair/measurements.
+Valid IDs and commands alone cannot prove a correct diagnosis.
+
+The response contract is supplied to the agent; expected findings and grader code
+are staged only through `grading_environment`, after execution. No real AppHost,
+production credentials, external telemetry API or cloud mutation is required.
+Seven p0 and seventeen p1 cases are included in the existing PR gate; each has a
+150-second agent working-time cap. The existing monitoring model, three-run
+sampling and aggregate threshold of `0.7` are unchanged. **An aggregate pass is
+not proof that every safety or semantic assertion passed**; inspect individual
+grader results. Fixture/grader-only changes also select monitoring in CI.
+
+Offline structural regression and known-bad candidate checks:
+
+```bash
+node --test tests/large-system-eval-contract.test.mjs tests/eval-spec-compat.test.mjs tests/eval-workflow.test.mjs
+vally lint --eval-spec skills/aspire-monitoring/evals/eval.yaml
+```
+
+One actual agent sample (not the full 24-case suite):
+
+```bash
+vally eval --eval-spec skills/aspire-monitoring/evals/eval.yaml --tag incident=dependency-fanout --runs 1 --workers 1 --max-retries 0 --require-pass --output-dir ./results
+node scripts/check-eval-results.mjs ./results .
+```
+
+Semantic grader qualification is separately opt-in and makes **ten judge calls**:
+three positive controls (including a paraphrase) and seven deliberately wrong answers with otherwise valid
+IDs/commands/reads. It uses Vally's existing `PromptGrader` and Copilot judge
+client, not a new evaluation engine:
+
+```bash
+# Use the @microsoft/vally module installed alongside the pinned Vally CLI.
+node evals/large-systems/check-semantic-controls.mjs /path/to/node_modules/@microsoft/vally/dist/index.js
+```
+
+Set the existing Copilot runtime/authentication environment as documented below.
+On Windows, supply a Windows module path. `npm test` never runs these model calls.
+The runner exits nonzero for incorrect positive/negative verdicts or judge
+infrastructure errors. The structural tests explicitly demonstrate that semantic
+counterexamples pass the structural layer and therefore need the independent judge;
+they do **not** claim offline proof that a model judge rejects them.
 
 ### Project v2 validation layers
 

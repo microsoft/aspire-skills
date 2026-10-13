@@ -1,0 +1,9 @@
+{
+  "request": "Commerce API query returned 100 Information logs. Can I tell the team there were no errors in the ten-minute incident?",
+  "resource": "api",
+  "evidence": [
+    {"id":"limited-query","resource":"api","kind":"query","limit":100,"returned":100,"truncated":true,"windowRequested":"10:00-10:10Z","windowReturned":"10:09:58-10:10:00Z","severity":"Information"},
+    {"id":"unobserved-window","resource":"api","kind":"coverage","message":"10:00-10:09:58Z not represented in this result"},
+    {"id":"healthy-after","resource":"api","kind":"state","timestamp":"10:12Z","health":"Healthy"}
+  ]
+}

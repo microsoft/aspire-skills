@@ -1,0 +1,10 @@
+{
+  "request": "Commerce API trace cccccccccccccccccccccccccccccc01 failed. Explain the causal dependency and propose a trace-log slice across all its services, not just API logs.",
+  "resource": "api",
+  "evidence": [
+    {"id":"api-symptom","resource":"api","kind":"log","traceId":"cccccccccccccccccccccccccccccc01","message":"checkout returned 500"},
+    {"id":"inventory-cause","resource":"inventory","kind":"log","traceId":"cccccccccccccccccccccccccccccc01","message":"inventory-db connection refused"},
+    {"id":"db-down","resource":"inventory-db","kind":"state","state":"Exited","exitCode":1},
+    {"id":"other-trace-auth","resource":"orders","kind":"log","traceId":"cccccccccccccccccccccccccccccc99","message":"orders-db authentication failed"}
+  ]
+}

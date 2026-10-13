@@ -1,0 +1,10 @@
+{
+  "request": "Commerce API returns 202 for invoice i-42, but the invoice never arrives. The broker is green. Explain the processing failure without purging the queue.",
+  "resource": "invoice-worker",
+  "evidence": [
+    {"id":"invoice-accepted","resource":"api","kind":"log","messageId":"i-42","httpStatus":202,"message":"enqueued"},
+    {"id":"invoice-poison","resource":"invoice-worker","kind":"log","messageId":"i-42","attempt":5,"message":"unsupported invoice schema version 99"},
+    {"id":"invoice-deadletter","resource":"broker","kind":"log","messageId":"i-42","message":"dead-lettered after retry limit"},
+    {"id":"broker-health","resource":"broker","kind":"state","health":"Healthy"}
+  ]
+}
