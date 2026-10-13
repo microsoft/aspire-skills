@@ -271,6 +271,16 @@ same response/command rules the hidden grader enforces, allow harmless CLI optio
 reordering, and reject negated search terms rather than matching their substrings.
 Wire shared fixture/grader changes to their owning spec in CI.
 
+When a program grader reads trajectory events, distinguish the execution workspace
+from Vally's disposable grading copy. Do not compare captured absolute read paths
+to the copy's `trajectory.workDir`. Bind successful reads to a consistent original
+root and their staged fixture contents, and qualify through
+`gradeInDisposableWorkspace`, not only direct calls to the assertion helper.
+Validate command alternatives against released CLI contracts; reject contradictory
+dedicated/search selectors rather than accepting one correct fragment in an empty
+intersection. Include negative semantic controls when context IDs are allowed,
+so an excluded/recovered event cannot silently become the asserted cause.
+
 ## See also
 
 - [README.md](./README.md) — how to run evals

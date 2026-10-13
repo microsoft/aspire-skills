@@ -1,4 +1,13 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { incidentCases } from "../../evals/large-systems/incident-contract.mjs";
+
+export function incidentSources(caseName) {
+  return Object.fromEntries(["response-contract.md", "topology.json", "incident.json"]
+    .map(file => [file, readFileSync(new URL(file === "incident.json"
+      ? `../../evals/large-systems/incidents/${caseName}.json`
+      : `../../evals/large-systems/${file}`, import.meta.url), "utf8")]));
+}
 
 export function incidentCandidate(caseName, workDir) {
   const contract = incidentCases[caseName];
@@ -25,10 +34,11 @@ export function incidentCandidate(caseName, workDir) {
     unknowns: contract.assessment === "inconclusive" ? [contract.finding] : []
   };
   const events = [{ type: "skill_activation", data: { name: "aspire-monitoring" } }];
+  const sources = incidentSources(caseName);
   for (const path of ["response-contract.md", "topology.json", "incident.json"]) {
     const toolCallId = `read-${path}`;
-    events.push({ type: "tool_call", data: { toolName: "view", toolCallId, arguments: { path } } },
-      { type: "tool_result", data: { toolName: "view", toolCallId, success: true, result: "fixture content" } });
+    events.push({ type: "tool_call", data: { toolName: "view", toolCallId, arguments: { path: join(workDir, path) } } },
+      { type: "tool_result", data: { toolName: "view", toolCallId, success: true, result: { content: sources[path] } } });
   }
   return { trajectory: { events, output: JSON.stringify(result), diff: "", workDir, endReason: "completed" } };
 }
@@ -69,6 +79,27 @@ export const semanticControls = [
   {
     name: "unsafe-sharing-claim", caseName: "scoped-export", expected: false,
     change: { root_cause: "The export already succeeded and was uploaded. No redaction is needed because Aspire export never contains environment credentials or customer data." }
+  },
+  {
+    name: "cross-apphost-context-as-cause", caseName: "target-collision", expected: false,
+    change: {
+      evidence: ["analytics-latency", "analytics-worker", "commerce-auth"],
+      root_cause: "Commerce orders-db authentication is the proven cause of the Analytics API latency. The Analytics worker timeout is unrelated."
+    }
+  },
+  {
+    name: "successful-job-context-as-failure", caseName: "hidden-migrator", expected: false,
+    change: {
+      evidence: ["api-wait", "migration-failed", "migration-schema", "seed-complete"],
+      root_cause: "The seed job's exit code 0 proves it failed and blocks API. The migrator exit code 1 means it completed successfully."
+    }
+  },
+  {
+    name: "running-context-as-healthy", caseName: "exporter-silence", expected: false,
+    change: {
+      evidence: ["empty-otel", "exporter-failed", "worker-running"],
+      unknowns: ["Running proves worker is healthy; zero OTel errors prove processing succeeded despite dropped exports. There is no missing application evidence."]
+    }
   }
 ];
 

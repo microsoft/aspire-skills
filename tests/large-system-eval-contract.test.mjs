@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { parse } from "yaml";
 import { assertIncidentResponse as gradeResponse, incidentCases } from "../evals/large-systems/incident-contract.mjs";
-import { incidentCandidate, semanticCandidate, semanticControls } from "./fixtures/large-system-candidates.mjs";
+import { incidentCandidate, incidentSources, semanticCandidate, semanticControls } from "./fixtures/large-system-candidates.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const fixture = join(root, "evals", "large-systems");
@@ -15,7 +15,7 @@ const specPath = join(root, "skills", "aspire-monitoring", "evals", "eval.yaml")
 const spec = parse(readFileSync(specPath, "utf8"));
 const stimuli = spec.stimuli.filter(item => item.tags?.incident);
 const topology = JSON.parse(readFileSync(join(fixture, "topology.json"), "utf8"));
-const assertIncidentResponse = (input, caseName) => gradeResponse(input, caseName, topology);
+const assertIncidentResponse = (input, caseName) => gradeResponse(input, caseName, topology, incidentSources(caseName));
 const incident = name => JSON.parse(readFileSync(join(fixture, "incidents", `${name}.json`), "utf8"));
 
 function changedOutput(input, change) {
@@ -38,6 +38,40 @@ test("all 24 independent incidents are wired into the canonical monitoring spec"
   assert.equal(new Set(ids).size, ids.length);
   const graderNames = spec.stimuli.flatMap(item => item.graders.map(grader => grader.name)).filter(Boolean);
   assert.equal(new Set(graderNames).size, graderNames.length);
+});
+
+test("legacy monitoring assessments mirror host activation policy and routing exposes real alternatives", () => {
+  const candidates = ["aspire", "aspire-init", "aspireify", "aspire-project-v2-migration",
+    "aspire-orchestration", "aspire-deployment", "aspire-monitoring"];
+  for (const stimulus of spec.stimuli.filter(item => !item.tags?.incident)) {
+    assert.match(stimulus.prompt, /read-only|do not execute commands/i, stimulus.name);
+    const areas = [].concat(stimulus.tags.area);
+    if (areas.includes("routing")) {
+      assert.deepEqual(stimulus.environment.skills.map(path => path.split("/").at(-1)).sort(),
+        [...candidates].sort(), `${stimulus.name}: must offer actual alternative owners`);
+    }
+    if (stimulus.name.startsWith("should_trigger_") || (stimulus.name.startsWith("mon-") &&
+      stimulus.name !== "mon-newer-version-graph-crash-001")) {
+      assert.match(stimulus.prompt, /Before answering, invoke the matching available Aspire skill or skills/);
+      assert.doesNotMatch(stimulus.prompt, /(?:use|invoke|load) (?:the )?aspire-monitoring skill/i);
+    }
+  }
+});
+
+test("monitoring guidance teaches the captured failure modes without fixture answers", () => {
+  const skill = readFileSync(join(root, "skills", "aspire-monitoring", "SKILL.md"), "utf8");
+  const reference = readFileSync(join(root, "skills", "aspire-monitoring", "references", "monitoring.md"), "utf8");
+  assert.match(skill, /read its \[monitoring reference\]/);
+  assert.match(skill, /missing telemetry does not make an already named AppHost ambiguous/);
+  assert.match(skill, /exit 0 means completed/);
+  assert.match(skill, /Running is not proof/);
+  assert.match(reference, /All three commands support `--trace-id`/);
+  assert.match(reference, /Do not invent `--query` or `--span-id`/);
+  assert.match(reference, /span-id:<full-span-id>/);
+  assert.match(reference, /<replica-name>/);
+  assert.match(reference, /<message-id>/);
+  assert.doesNotMatch(reference, /\bm-17\b|\bapi-3\b/);
+  assert.doesNotMatch(skill, /mon-large-|incident\.json|SQLSTATE 28P01/);
 });
 
 test("topology has three exact AppHosts, 34 Commerce resources and closed relationships", () => {
@@ -65,6 +99,7 @@ for (const stimulus of stimuli) {
     const ids = new Set(evidence.evidence.map(record => record.id));
     assert.equal(ids.size, evidence.evidence.length);
     for (const id of contract.evidence) assert.ok(ids.has(id), `Missing oracle record ${id}`);
+    for (const id of contract.contextEvidence ?? []) assert.ok(ids.has(id));
     for (const record of evidence.evidence) {
       const apphost = topology.apphosts.find(item => item.path === (record.apphost ?? contract.apphost));
       assert.ok(apphost, `Unresolved fixture AppHost for ${record.id}`);
@@ -123,7 +158,8 @@ for (const stimulus of stimuli) {
       }],
       ["extra-fields", result => { result.fixed = true; }]
     ];
-    const distractor = evidence.evidence.find(record => !contract.evidence.includes(record.id));
+    const distractor = evidence.evidence.find(record => !contract.evidence.includes(record.id) &&
+      !contract.contextEvidence?.includes(record.id));
     if (distractor) mutations.push(["distractor", result => { result.evidence.push(distractor.id); }]);
     if (contract.assessment === "inconclusive") {
       mutations.push(["concealed-missing-evidence", result => { result.unknowns = []; }]);
@@ -211,7 +247,97 @@ test("full-trace search qualifiers and reordered CLI options are accepted", () =
       "--search", `trace-id:${contract.query.traceId}`, "--non-interactive", "--apphost", contract.apphost];
   });
   assertIncidentResponse(alternate, caseName);
+  const quoted = changedOutput(alternate, result => {
+    const command = result.next_commands[1];
+    command[command.indexOf("--search") + 1] = `trace-id:"${contract.query.traceId}"`;
+  });
+  assertIncidentResponse(quoted, caseName);
 });
+
+  test("captured CI reads remain valid when Vally relocates the grading workspace", () => {
+    const input = incidentCandidate("ambiguous-target", root);
+    for (const event of input.trajectory.events) {
+      if (event.type === "tool_call") {
+        event.data.arguments.path = `/tmp/vally-eval-8xWBKI/${event.data.arguments.path.split(/[\\/]/).at(-1)}`;
+      } else if (event.type === "tool_result") {
+        event.data.result.content = event.data.result.content.split("\n").map((line, index) => `${index + 1}. ${line}`).join("\n");
+      }
+    }
+    // This is the actual response from the failed CI case; its reads succeeded.
+    input.trajectory.output = JSON.stringify({
+      apphost: null, resource: "api", assessment: "inconclusive", root_cause: null,
+      evidence: ["commerce-api", "analytics-api", "sandbox-api"], next_commands: [],
+      unknowns: ["Which AppHost is the intended target?", "Missing logs/traces to correlate requests to a single AppHost."]
+    });
+    input.trajectory.workDir = join(root, "vally-grade-view-disposable");
+    assertIncidentResponse(input, "ambiguous-target");
+    for (const path of ["/another-workspace/incident.json", "/tmp/vally-eval-8xWBKI/../incident.json"]) {
+      const bad = structuredClone(input);
+      bad.trajectory.events.find(event => event.type === "tool_call" && event.data.arguments.path.endsWith("/incident.json"))
+        .data.arguments.path = path;
+      assert.throws(() => assertIncidentResponse(bad, "ambiguous-target"));
+    }
+    const wrongContent = structuredClone(input);
+    wrongContent.trajectory.events.find(event => event.type === "tool_result" && event.data.toolCallId === "read-incident.json")
+      .data.result.content = '{"request":"different incident","evidence":[]}';
+    assert.throws(() => assertIncidentResponse(wrongContent, "ambiguous-target"));
+  });
+
+  test("released trace-id flags work on logs, traces and spans without accepting invented flags", () => {
+    for (const verb of ["otel logs", "otel traces", "otel spans"]) {
+      const input = incidentCandidate(verb === "otel logs" ? "trace-prefix" : "pool-exhaustion", root);
+      const caseName = verb === "otel logs" ? "trace-prefix" : "pool-exhaustion";
+      const contract = incidentCases[caseName];
+      const command = ["aspire", ...verb.split(" "), "--trace-id", contract.query.traceId,
+        "--apphost", contract.apphost, "--format", "Json", "--non-interactive", "--limit", "50"];
+      const valid = changedOutput(input, result => { result.next_commands.push(command); });
+      assertIncidentResponse(valid, caseName);
+      for (const flag of ["--span-id", "--query"]) {
+        const invalid = changedOutput(valid, result => { result.next_commands.at(-1).push(flag, "44444444444444aa"); });
+        assert.throws(() => assertIncidentResponse(invalid, caseName), undefined, flag);
+      }
+    }
+  });
+
+  test("minimal causal evidence accepts designated context but not unrelated or fabricated IDs", () => {
+    for (const [caseName, contract] of Object.entries(incidentCases)) {
+      if (!contract.contextEvidence) continue;
+      const input = incidentCandidate(caseName, root);
+      assertIncidentResponse(changedOutput(input, result => result.evidence.push(...contract.contextEvidence)), caseName);
+      assert.throws(() => assertIncidentResponse(changedOutput(input, result => result.evidence.push("imaginary-context")), caseName));
+      assert.throws(() => assertIncidentResponse(changedOutput(input, result => {
+        result.evidence = [...contract.contextEvidence];
+      }), caseName), undefined, "Context must never replace the causal evidence");
+    }
+  });
+
+  test("hidden graph expansion can follow the requested resource state check, but must precede helper telemetry", () => {
+    const input = incidentCandidate("hidden-migrator", root);
+    const apiFirst = changedOutput(input, result => {
+      result.next_commands.unshift(["aspire", "describe", "api", "--apphost", result.apphost, "--format", "Json", "--non-interactive"]);
+    });
+    assertIncidentResponse(apiFirst, "hidden-migrator");
+    assert.throws(() => assertIncidentResponse(changedOutput(apiFirst, result => {
+      result.next_commands.splice(1, 1);
+    }), "hidden-migrator"));
+    assert.throws(() => assertIncidentResponse(changedOutput(apiFirst, result => {
+      result.next_commands.push(result.next_commands.splice(1, 1)[0]);
+    }), "hidden-migrator"));
+  });
+
+  test("resource-qualified span slices are equivalent to positional inventory scope", () => {
+    const input = incidentCandidate("span-correlation", root);
+    const valid = changedOutput(input, result => {
+      const command = result.next_commands[1];
+      command.splice(command.indexOf("inventory"), 1);
+      command[command.indexOf("--search") + 1] += " resource:inventory";
+    });
+    assertIncidentResponse(valid, "span-correlation");
+    assert.throws(() => assertIncidentResponse(changedOutput(valid, result => {
+      const command = result.next_commands[1];
+      command[command.indexOf("--search") + 1] = command[command.indexOf("--search") + 1].replace("resource:inventory", "-resource:inventory");
+    }), "span-correlation"));
+  });
 
 test("console qualifiers and resource-filtered cross-service trace slices are rejected", () => {
   const consoleInput = incidentCandidate("console-only", root);
@@ -223,10 +349,36 @@ test("console qualifiers and resource-filtered cross-service trace slices are re
   assert.throws(() => assertIncidentResponse(changedOutput(crossService, result => {
     result.next_commands[1].splice(3, 0, "api");
   }), "cross-service-slice"));
+  assert.throws(() => assertIncidentResponse(changedOutput(crossService, result => {
+    result.next_commands[1].push("--search", "-resource:inventory");
+  }), "cross-service-slice"));
+});
+
+test("positive qualifiers cannot compensate for contradictory trace or resource selectors", () => {
+  const input = incidentCandidate("span-correlation", root);
+  for (const change of [
+    command => {
+      command[command.indexOf("--trace-id") + 1] = "ffffffffffffffffffffffffffffff01";
+      command[command.indexOf("--search") + 1] += " trace-id:444444444444444444444444444444aa";
+    },
+    command => { command[command.indexOf("--search") + 1] += " trace-id:ffffffffffffffffffffffffffffff01"; },
+    command => { command[command.indexOf("--search") + 1] += " resource:inventory resource:payments"; },
+    command => { command[command.indexOf("--search") + 1] += " resource:payments"; },
+    command => { command[command.indexOf("--search") + 1] += " -trace-id:444444444444444444444444444444aa"; },
+    command => { command[command.indexOf("--search") + 1] += " -span-id:44444444444444aa"; },
+    command => { command[command.indexOf("--search") + 1] += " severity:error -severity:error"; }
+  ]) {
+    assert.throws(() => assertIncidentResponse(changedOutput(input, result => change(result.next_commands[1])), "span-correlation"));
+  }
+  const quoted = changedOutput(input, result => {
+    const command = result.next_commands[1];
+    command[command.indexOf("--search") + 1] = 'span-id:"44444444444444aa" resource:"inventory"';
+  });
+  assertIncidentResponse(quoted, "span-correlation");
 });
 
 test("semantic negative controls stay structurally valid and require the grounded prompt grader", () => {
-  assert.equal(semanticControls.filter(control => !control.expected).length, 7);
+  assert.equal(semanticControls.filter(control => !control.expected).length, 10);
   for (const control of semanticControls) {
     const input = semanticCandidate(control, root);
     assertIncidentResponse(input, control.caseName);
@@ -249,6 +401,9 @@ test("program entry emits valid negative verdicts and fails on infrastructure er
   const script = join(fixture, "grade-incident.mjs");
   const input = incidentCandidate("dependency-fanout", directory);
   writeFileSync(join(directory, "topology.json"), JSON.stringify(topology));
+  for (const [file, text] of Object.entries(incidentSources("dependency-fanout"))) {
+    writeFileSync(join(directory, file), text);
+  }
   writeFileSync(path, JSON.stringify(input));
   const run = () => spawnSync(process.execPath, [script, "dependency-fanout"], {
     encoding: "utf8", env: { ...process.env, EVALUATE_GRADER_INPUT: path, EVALUATE_WORKSPACE: directory }, windowsHide: true

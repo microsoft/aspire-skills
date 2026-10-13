@@ -50,7 +50,7 @@ stimuli:
     rubric:
       - The assistant's response attributes Analytics API latency to its worker report-query timeout using analytics-latency and analytics-worker.
       - The assistant's response excludes Commerce authentication and Sandbox health from the requested diagnosis.
-      - The assistant's response proposes Analytics-scoped state inspection and full-trace logs without claiming a fix succeeded.
+      - The assistant's response proposes Analytics-scoped state inspection and logs correlated to the full trace ID, either across the trace or scoped to its implicated worker, without claiming a fix succeeded.
     graders:
       - type: diff-empty
       - type: program
@@ -695,7 +695,9 @@ stimuli:
       - type: diff-empty
         name: preserves-newer-version-diagnostics-workspace
   - name: mon-browser-logs-001
-    prompt: My Aspire app already uses WithBrowserLogs() for a Vite frontend named storefront. A browser
+    prompt: Before answering, invoke the matching available Aspire skill or skills; do not answer from general knowledge.
+      Give read-only guidance without executing commands or changing files.
+      My Aspire app already uses WithBrowserLogs() for a Vite frontend named storefront. A browser
       request is failing and I need to inspect its console messages, errors, exceptions, and network
       diagnostics. I see a storefront-browser-logs resource and need to confirm through its parent and
       Source which frontend it belongs to. What commands should I run to find the browser resource,
@@ -708,6 +710,15 @@ stimuli:
         - dashboard
         - 13-3
         - routing
+    environment:
+      skills: &monitoring-routing-skills
+        - ../../aspire
+        - ../../aspire-init
+        - ../../aspireify
+        - ../../aspire-project-v2-migration
+        - ../../aspire-orchestration
+        - ../../aspire-deployment
+        - ../../aspire-monitoring
     graders:
       - type: prompt
         name: discovers-browser-logs-child-resource
@@ -743,7 +754,9 @@ stimuli:
             route that AppHost authoring work to the `aspireify` skill rather than performing it as
             monitoring? Answer based on intent.
   - name: mon-dashboard-run-001
-    prompt: I want to view OTLP telemetry from a non-Aspire service in the Aspire Dashboard without
+    prompt: Before answering, invoke the matching available Aspire skill or skills; do not answer from general knowledge.
+      Give read-only guidance without executing commands or changing files.
+      I want to view OTLP telemetry from a non-Aspire service in the Aspire Dashboard without
       booting an AppHost. How do I do that and how do I query it from the CLI?
     tags:
       priority: p1
@@ -751,6 +764,7 @@ stimuli:
         - dashboard
         - standalone
         - 13-3
+    environment: { skills: *monitoring-routing-skills }
     graders:
       - type: prompt
         name: knows-dashboard-run
@@ -794,7 +808,9 @@ stimuli:
         config:
           substring: --dashboard-url
   - name: mon-azure-001
-    prompt: My app is deployed to Azure Container Apps with Front Door in front and I'm seeing 500
+    prompt: Before answering, invoke the matching available Aspire skill or skills; do not answer from general knowledge.
+      Give read-only guidance without executing commands or changing files.
+      My app is deployed to Azure Container Apps with Front Door in front and I'm seeing 500
       errors. Help me debug.
     tags:
       priority: p0
@@ -802,6 +818,7 @@ stimuli:
         - routing
         - deployed
     environment:
+      skills: *monitoring-routing-skills
       files:
         - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
           dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
@@ -842,13 +859,16 @@ stimuli:
         config:
           substring: aspire describe
   - name: mon-docker-001
-    prompt: Check the logs for my service running in Docker Compose
+    prompt: Before answering, invoke the matching available Aspire skill or skills; do not answer from general knowledge.
+      Explain how to check the logs for my service running in Docker Compose.
+      Give read-only guidance without executing commands or changing files.
     tags:
       priority: p1
       area:
         - routing
         - deployed
     environment:
+      skills: *monitoring-routing-skills
       files:
         - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
           dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
@@ -871,11 +891,14 @@ stimuli:
         config:
           substring: docker
   - name: mon-bridge-001
-    prompt: How do I check what's going on with my application?
+    prompt: Before answering, invoke the matching available Aspire skill or skills; do not answer from general knowledge.
+      How do I check what's going on with my Aspire application?
+      Give read-only guidance without executing commands or changing files.
     tags:
       priority: p0
       area: routing
     environment:
+      skills: *monitoring-routing-skills
       files:
         - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
           dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
@@ -898,7 +921,9 @@ stimuli:
           substring: aspire logs <pod>
         name: no-local-for-deployed
   - name: mon-export-001
-    prompt: I need to share the diagnostic data with another team member
+    prompt: Before answering, invoke the matching available Aspire skill or skills; do not answer from general knowledge.
+      I need to share the diagnostic data from my Aspire app with another team member.
+      Give read-only guidance without executing commands, exporting, uploading or changing files.
     tags:
       priority: p1
       area: local-diagnostics
@@ -922,6 +947,8 @@ stimuli:
           substring: aspire export
   - name: mon-include-hidden-001
     prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do not answer from general knowledge.
+      Give read-only guidance without executing commands or changing files.
       `aspire ps` shows my running AppHost, but I need to inspect its hidden
       'db-migrator' resource. Which Aspire 13.5 command should I use?
     tags:
@@ -969,7 +996,9 @@ stimuli:
     # the executor to actually run the AppHost and probe live, timing out the trial. The graders
     # check intent (investigate before editing), so asking how to investigate keeps the workflow
     # signal without launching the app.
-    prompt: Something is wrong with my app and requests are failing. How should I investigate?
+    prompt: Before answering, invoke the matching available Aspire skill or skills; do not answer from general knowledge.
+      Something is wrong with my Aspire app and requests are failing. How should I investigate?
+      Give read-only guidance without executing commands or changing files.
     tags:
       priority: p0
       area: workflow
@@ -1001,7 +1030,9 @@ stimuli:
     # the executor to actually run the AppHost and hunt/tail resource logs on disk (a long
     # probe that never returns), timing out the trial. Asking how to view the logs elicits the
     # `aspire logs` recommendation without launching the app.
-    prompt: How do I view what the API service is logging?
+    prompt: Before answering, invoke the matching available Aspire skill or skills; do not answer from general knowledge.
+      How do I view what the API service in my Aspire app is logging?
+      Give read-only guidance without executing commands or changing files.
     tags:
       priority: p0
       area: local-diagnostics
@@ -1034,7 +1065,9 @@ stimuli:
         config:
           substring: aspire logs
   - name: mon-otel-001
-    prompt: I need to trace a request across my services to find the bottleneck
+    prompt: Before answering, invoke the matching available Aspire skill or skills; do not answer from general knowledge.
+      I need to trace a request across my Aspire services to find the bottleneck.
+      Give read-only guidance without executing commands or changing files.
     tags:
       priority: p0
       area: local-diagnostics
@@ -1064,6 +1097,8 @@ stimuli:
           substring: aspire otel traces
   - name: mon-devtunnel-1353-001
     prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do not answer from general knowledge.
+      Give read-only guidance without executing commands or changing files.
       My DevTunnel resource is Running and Healthy on Aspire 13.5.1, but its public URL
       is missing from both the dashboard and the MCP resource snapshot. Should I rewrite
       the AppHost endpoint configuration?
@@ -1102,10 +1137,13 @@ stimuli:
           substring: 13.5.3
   - name: should_trigger_01
     description: "Reason: aspire logs is monitoring"
-    prompt: Show me the aspire logs for the API service
+    prompt: Before answering, invoke the matching available Aspire skill or skills; do not answer from general knowledge.
+      Give read-only guidance for showing aspire logs for the API service.
+      Do not execute commands or change files.
     tags:
       priority: p1
       area: routing
+    environment: { skills: *monitoring-routing-skills }
     graders:
       - type: skill-invocation
         name: invokes-aspire-monitoring
@@ -1114,10 +1152,13 @@ stimuli:
             - aspire-monitoring
   - name: should_trigger_02
     description: "Reason: aspire otel traces is monitoring"
-    prompt: Run aspire otel traces to view distributed traces
+    prompt: Before answering, invoke the matching available Aspire skill or skills; do not answer from general knowledge.
+      Give read-only guidance for aspire otel traces to view distributed traces.
+      Do not execute commands or change files.
     tags:
       priority: p1
       area: routing
+    environment: { skills: *monitoring-routing-skills }
     graders:
       - type: skill-invocation
         name: invokes-aspire-monitoring-2
@@ -1126,10 +1167,13 @@ stimuli:
             - aspire-monitoring
   - name: should_trigger_03
     description: "Reason: Resource state via aspire describe is monitoring"
-    prompt: Run aspire describe to see resource state
+    prompt: Before answering, invoke the matching available Aspire skill or skills; do not answer from general knowledge.
+      Give read-only guidance for aspire describe to see resource state.
+      Do not execute commands or change files.
     tags:
       priority: p1
       area: routing
+    environment: { skills: *monitoring-routing-skills }
     graders:
       - type: skill-invocation
         name: invokes-aspire-monitoring-3
@@ -1138,10 +1182,13 @@ stimuli:
             - aspire-monitoring
   - name: should_trigger_04
     description: "Reason: Telemetry export is monitoring"
-    prompt: Run aspire export to bundle telemetry
+    prompt: Before answering, invoke the matching available Aspire skill or skills; do not answer from general knowledge.
+      Give read-only guidance for aspire export to bundle telemetry.
+      Do not execute commands, export data or change files.
     tags:
       priority: p1
       area: routing
+    environment: { skills: *monitoring-routing-skills }
     graders:
       - type: skill-invocation
         name: invokes-aspire-monitoring-4
@@ -1150,10 +1197,13 @@ stimuli:
             - aspire-monitoring
   - name: should_trigger_05
     description: "Reason: App Insights query routes through monitoring bridge"
-    prompt: Query App Insights for my deployed Aspire app
+    prompt: Before answering, invoke the matching available Aspire skill or skills; do not answer from general knowledge.
+      Explain how to query App Insights for my deployed Aspire app.
+      Give read-only guidance without executing commands or changing files.
     tags:
       priority: p1
       area: routing
+    environment: { skills: *monitoring-routing-skills }
     graders:
       - type: skill-invocation
         name: invokes-aspire-monitoring-5
@@ -1162,10 +1212,13 @@ stimuli:
             - aspire-monitoring
   - name: should_trigger_06
     description: "Reason: OTEL spans are monitoring"
-    prompt: Show me the OpenTelemetry spans with aspire otel spans
+    prompt: Before answering, invoke the matching available Aspire skill or skills; do not answer from general knowledge.
+      Give read-only guidance for showing OpenTelemetry spans with aspire otel spans.
+      Do not execute commands or change files.
     tags:
       priority: p1
       area: routing
+    environment: { skills: *monitoring-routing-skills }
     graders:
       - type: skill-invocation
         name: invokes-aspire-monitoring-6
@@ -1174,10 +1227,13 @@ stimuli:
             - aspire-monitoring
   - name: should_trigger_07
     description: "Reason: Deployed container app logs route through monitoring bridge"
-    prompt: Tail the container app logs for my deployed Aspire service
+    prompt: Before answering, invoke the matching available Aspire skill or skills; do not answer from general knowledge.
+      Explain how to tail container app logs for my deployed Aspire service.
+      Give read-only guidance without executing commands or changing files.
     tags:
       priority: p1
       area: routing
+    environment: { skills: *monitoring-routing-skills }
     graders:
       - type: skill-invocation
         name: invokes-aspire-monitoring-7
@@ -1188,10 +1244,13 @@ stimuli:
     description: "Reason: aspire dashboard run is a monitoring concern"
     # Phrased as a question: `aspire dashboard run` is a foreground daemon that
     # would never let the agent turn go idle. Monitoring must still activate.
-    prompt: How do I open a standalone Aspire dashboard with aspire dashboard run?
+    prompt: Before answering, invoke the matching available Aspire skill or skills; do not answer from general knowledge.
+      How do I open a standalone Aspire dashboard with aspire dashboard run?
+      Give read-only guidance without executing commands or changing files.
     tags:
       priority: p1
       area: routing
+    environment: { skills: *monitoring-routing-skills }
     graders:
       - type: skill-invocation
         name: invokes-aspire-monitoring-8
@@ -1200,10 +1259,13 @@ stimuli:
             - aspire-monitoring
   - name: should_trigger_09
     description: "Reason: Aspire.Hosting.Browsers / WithBrowserLogs surfaces in dashboard"
-    prompt: View browser console logs in the Aspire dashboard
+    prompt: Before answering, invoke the matching available Aspire skill or skills; do not answer from general knowledge.
+      Explain how to view browser console logs in the Aspire dashboard.
+      Give read-only guidance without executing commands or changing files.
     tags:
       priority: p1
       area: routing
+    environment: { skills: *monitoring-routing-skills }
     graders:
       - type: skill-invocation
         name: invokes-aspire-monitoring-9
@@ -1212,10 +1274,13 @@ stimuli:
             - aspire-monitoring
   - name: should_trigger_10
     description: "Reason: Aspire 13.5 hidden-resource inspection uses describe, not ps"
-    prompt: aspire ps shows my AppHost but not its hidden proxy resource
+    prompt: Before answering, invoke the matching available Aspire skill or skills; do not answer from general knowledge.
+      aspire ps shows my AppHost but not its hidden proxy resource.
+      Give read-only guidance without executing commands or changing files.
     tags:
       priority: p1
       area: routing
+    environment: { skills: *monitoring-routing-skills }
     graders:
       - type: skill-invocation
         name: invokes-aspire-monitoring-10
@@ -1224,10 +1289,13 @@ stimuli:
             - aspire-monitoring
   - name: should_trigger_11
     description: "Reason: AKS pod log routing lives in monitoring"
-    prompt: Tail AKS pod logs for my deployed Aspire service
+    prompt: Before answering, invoke the matching available Aspire skill or skills; do not answer from general knowledge.
+      Explain how to tail AKS pod logs for my deployed Aspire service.
+      Give read-only guidance without executing commands or changing files.
     tags:
       priority: p1
       area: routing
+    environment: { skills: *monitoring-routing-skills }
     graders:
       - type: skill-invocation
         name: invokes-aspire-monitoring-11
@@ -1239,10 +1307,11 @@ stimuli:
     # Question phrasing: an imperative makes the executor launch a foreground app run
     # that never returns, timing out the trial; the skill-invocation grader only checks
     # routing, so intent is unchanged.
-    prompt: How do I start my Aspire app?
+    prompt: How do I start my Aspire app? Give read-only guidance; do not execute commands or change files.
     tags:
       priority: p1
       area: routing
+    environment: { skills: *monitoring-routing-skills }
     graders:
       - type: skill-invocation
         name: does-not-invoke-aspire-monitoring
@@ -1251,10 +1320,11 @@ stimuli:
             - aspire-monitoring
   - name: should_not_trigger_02
     description: "Reason: Deploy routes to aspire-deployment"
-    prompt: Deploy my Aspire app to Azure
+    prompt: How do I deploy my Aspire app to Azure? Give read-only guidance; do not execute commands or change files.
     tags:
       priority: p1
       area: routing
+    environment: { skills: *monitoring-routing-skills }
     graders:
       - type: skill-invocation
         name: does-not-invoke-aspire-monitoring-2
@@ -1263,10 +1333,11 @@ stimuli:
             - aspire-monitoring
   - name: should_not_trigger_03
     description: "Reason: Resource restart routes to aspire-orchestration"
-    prompt: Restart the Redis resource
+    prompt: How do I restart the Redis resource? Give read-only guidance; do not execute commands or change files.
     tags:
       priority: p1
       area: routing
+    environment: { skills: *monitoring-routing-skills }
     graders:
       - type: skill-invocation
         name: does-not-invoke-aspire-monitoring-3
@@ -1275,10 +1346,11 @@ stimuli:
             - aspire-monitoring
   - name: should_not_trigger_04
     description: "Reason: Adding integrations routes to aspireify"
-    prompt: How do I add PostgreSQL to my Aspire AppHost?
+    prompt: How do I add PostgreSQL to my Aspire AppHost? Give read-only guidance; do not execute commands or change files.
     tags:
       priority: p1
       area: routing
+    environment: { skills: *monitoring-routing-skills }
     graders:
       - type: skill-invocation
         name: does-not-invoke-aspire-monitoring-4
@@ -1287,10 +1359,11 @@ stimuli:
             - aspire-monitoring
   - name: should_not_trigger_05
     description: "Reason: Non-Aspire Azure work"
-    prompt: Create an Azure storage account
+    prompt: How do I create an Azure storage account? Give read-only guidance; do not execute commands or change files.
     tags:
       priority: p1
       area: routing
+    environment: { skills: *monitoring-routing-skills }
     graders:
       - type: skill-invocation
         name: does-not-invoke-aspire-monitoring-5
@@ -1299,10 +1372,11 @@ stimuli:
             - aspire-monitoring
   - name: should_not_trigger_06
     description: "Reason: Not monitoring related"
-    prompt: Write unit tests for my service
+    prompt: Explain how to write unit tests for my service. Give read-only guidance; do not execute commands or change files.
     tags:
       priority: p1
       area: routing
+    environment: { skills: *monitoring-routing-skills }
     graders:
       - type: skill-invocation
         name: does-not-invoke-aspire-monitoring-6
@@ -1311,10 +1385,11 @@ stimuli:
             - aspire-monitoring
   - name: should_not_trigger_07
     description: "Reason: aspire destroy routes to aspire-deployment"
-    prompt: Tear down my Aspire deployment with aspire destroy
+    prompt: How do I tear down my Aspire deployment with aspire destroy? Give read-only guidance; do not execute commands or change files.
     tags:
       priority: p1
       area: routing
+    environment: { skills: *monitoring-routing-skills }
     graders:
       - type: skill-invocation
         name: does-not-invoke-aspire-monitoring-7
@@ -1323,10 +1398,11 @@ stimuli:
             - aspire-monitoring
   - name: should_not_trigger_08
     description: "Reason: AppHost code edits route to aspireify (monitoring only observes)"
-    prompt: Add WithBrowserLogs() to my Vite app in the AppHost
+    prompt: How do I add WithBrowserLogs() to my Vite app in the AppHost? Give read-only guidance; do not execute commands or change files.
     tags:
       priority: p1
       area: routing
+    environment: { skills: *monitoring-routing-skills }
     graders:
       - type: skill-invocation
         name: does-not-invoke-aspire-monitoring-8
