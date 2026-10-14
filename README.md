@@ -253,12 +253,11 @@ does not provide per-skill installation-time version filtering.
 
 ### Publishing releases
 
-Prepare releases locally as described in the [development guide](docs/development.md).
-After a `release/<version>` PR merges into main, the
-[Publish release artifacts workflow](.github/workflows/publish.yml) builds and
-attests both bundles, tags the exact merged main commit, creates the GitHub
-release with its approved changelog notes, and uploads only the `aspire-skills`
-bundle.
+The publish workflow builds and attests both bundles, but uploads only
+`aspire-skills` by default. Manual runs on an existing version tag can select
+`include_skills` (default `true`) and `include_extensions` (default `false`); at
+least one must be selected. Tag pushes use the defaults. The workflow does not
+create Git tags.
 
 ## Contributing
 
