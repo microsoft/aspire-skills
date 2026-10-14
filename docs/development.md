@@ -20,6 +20,9 @@ The **OpenCode catalog check** runs on every PR, including stacked PRs, on
 main/dev/release pushes, and on merge-queue candidates. Require this check in
 the branch protection rules or rulesets for main, dev, and release branches.
 
+The **Release branch check** fails any PR into main unless its head is a
+`release/<version>` branch in this repository. Require it in main's rules.
+
 ## Expected release flow
 
 1. **Cut the release.** Create `release/<version>` at the chosen dev commit.

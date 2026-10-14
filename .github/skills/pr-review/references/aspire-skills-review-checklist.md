@@ -222,7 +222,7 @@ For a release PR, verify:
 
 - `release/<version>` starts at the selected dev commit, records that SHA and
   deliberate backports, and targets main. Coordinated versions match the branch
-  and are newer than main's version.
+  and are newer than main's version. The required Release branch check passes.
 - Changelog notes are finalized in nonempty Changed, Removed, and Added sections,
   in that order, omitting empty sections and preserving published history.
 - Committed V1 and V2 catalogs match the shipped source. Dev retains these

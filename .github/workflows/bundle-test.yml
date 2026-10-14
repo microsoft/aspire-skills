@@ -27,6 +27,8 @@ on:
   push:
     branches:
       - main
+      - dev
+      - release/**
     paths:
       - ".gitattributes"
       - ".github/workflows/bundle-test.yml"
