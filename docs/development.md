@@ -17,11 +17,10 @@ Feature PRs update the current version's changelog notes and preserve earlier
 entries and the coordinated version.
 
 The **OpenCode catalog check** runs on every PR, including stacked PRs, on
-main/dev/release pushes, and on merge-queue candidates. Require this check in
-the branch protection rules or rulesets for main, dev, and release branches.
+main/dev/release pushes, and on merge-queue candidates.
 
 The **Release branch check** fails any PR into main unless its head is a
-`release/<version>` branch in this repository. Require it in main's rules.
+`release/<version>` branch in this repository.
 
 ## Expected release flow
 
