@@ -199,7 +199,8 @@ Only flag concrete, high-confidence problems. Categories:
 6. **Bugs** — invalid YAML/JSON, broken cross-skill links (`../<wrong-name>/SKILL.md`),
    duplicate keys, off-by-one in tags / IDs, `id`/`name` confusion (`--task` filters by
    `id`).
-7. **Release history** — `CHANGELOG.md` or `opencode/` added to `dev`, release source
+7. **Release history** — `opencode/` added to `dev`, changelog edits in ordinary
+   dev PRs or backflow that differs from main's approved history, release source
    changes outside the selected snapshot, edits beyond maintainer finalization of
    the newest notes entry, or inconsistent canonical versions. Check documentation
    readiness and maintainer publication/dev-backflow steps in the Release Checklist.

@@ -55,6 +55,11 @@ previous changelog from `HEAD`; preserve its header and all historical entries
 byte-for-byte. Stop with a diagnostic if the branch, marker, history, or staged
 version values disagree. If the entry is already finalized, leave its notes unchanged.
 
+Dev carries published changelog history, but its pinned copy may be older than
+main's. Always build the release entry on main's changelog, never the dev copy.
+Ordinary dev PRs cannot edit it; release backflow copies main's approved history
+to dev and removes only OpenCode catalogs.
+
 ## Examine the entire range
 
 List every first-parent commit with:
@@ -82,8 +87,19 @@ If nothing affects users, say so explicitly in one bullet.
 ## Finalize the notes
 
 Replace only the newest entry's placeholder with concise Markdown bullets.
-Match the style of published entries; use `### Features` or `### Fixes` only
-when useful. Keep the notes under 32 KiB.
+Use nonempty sections in this order:
+
+- `### Changed`: changes to existing behavior, including bug fixes.
+- `### Removed`: removed capabilities or support.
+- `### Added`: new capabilities or support.
+
+Omit sections with no relevant changes. Do not use Features, Fixes, or other
+section headings. If nothing affects users, put the explicit no-user-facing-changes
+bullet under Changed. Keep the notes under 32 KiB.
+
+GitHub release notes must copy this entry's notes, preserving section headings,
+bullets, links, and order, but excluding the version heading and internal metadata
+marker. Do not generate a separate summary. Keep the Git tag annotation brief.
 
 Change `aspire-skills-changelog` to `aspire-skills-changelog-done` in that entry's
 marker without changing any fields. Preserve the version/tag heading, header,

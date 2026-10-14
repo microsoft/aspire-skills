@@ -140,13 +140,16 @@ without a `v` prefix, but keep the actual tag name in the link target, for examp
 `## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)`.
 Preserve historical release note bodies when updating headings or references.
 
-Only `release/<version>` PRs may change `CHANGELOG.md` or generated `opencode/`
-catalogs. `dev` must not contain either.
+Only `release/<version>` PRs author new `CHANGELOG.md` entries and generated
+`opencode/` catalogs. Dev retains published changelog history copied from main
+through release backflow, but must not contain catalogs. Ordinary dev PRs cannot
+add, edit, or delete the changelog.
 
 For a release PR prepared by the release skill, verify:
 
 - The linked version heading, release metadata, and finalized notes describe the
-  selected range while preserving earlier entries.
+  selected range while preserving earlier entries. New notes use nonempty Changed,
+  Removed, and Added sections in that order.
 - The candidate contains the selected dev snapshot plus only coordinated version,
   changelog, and catalog changes.
 - The version is newer than main's version, the branch is `release/<version>`,
@@ -158,7 +161,8 @@ For a release PR prepared by the release skill, verify:
 - Publication reads the version and source range from finalized changelog metadata
   and verifies the exact reviewed squash tree; its commit message is not constrained.
 - The post-merge workflow builds and attests both bundles, creates or reuses the
-  immutable tag and GitHub release, and uploads only the skills bundle.
+  immutable tag and GitHub release, and uploads only the skills bundle. GitHub
+  release notes match the changelog notes; the tag annotation remains brief.
 - Required checks pass and needed documentation changes are reviewed and ready.
   Maintainer approval, merge, publication verification, and dev backflow remain
   human steps tracked in the Release Checklist.
@@ -166,9 +170,9 @@ For a release PR prepared by the release skill, verify:
 **Severity for invalid release metadata or rewritten published history:** `blocking`.
 Unclear release notes are `important`.
 
-Release backflows start from updated main, remove `CHANGELOG.md` and `opencode/`,
-and target dev. Their merge must preserve later dev work and leave canonical
-versions aligned.
+Release backflows start from updated main, retain its approved `CHANGELOG.md`,
+remove only `opencode/`, and target dev. Their merge must preserve later dev work
+and leave canonical versions aligned.
 
 **Severity for hand-edited catalogs, changes outside newest-entry finalization,
 or unrelated release-candidate changes:**

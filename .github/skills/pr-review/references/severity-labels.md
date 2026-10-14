@@ -21,7 +21,8 @@ Use `blocking` when the PR…
   `aspire start` mapping disappears from `skills/aspire-orchestration/SKILL.md`).
 - Leaves canonical manifests, either lockfile root, or the seven shipped skills out of release-version sync (see
   `aspire-skills-review-checklist.md` §6).
-- Adds generated changelog/catalogs to dev, changes dev's version in an ordinary PR,
+- Adds OpenCode catalogs to dev, edits its changelog in an ordinary PR or copies
+  unapproved history during backflow, changes dev's version in an ordinary PR,
   drops dev work during a manual backport, leaves canonical version fields
   inconsistent, or publishes a candidate with unselected source changes.
 - Drops or shadows the project-local override deference block (`§8`).

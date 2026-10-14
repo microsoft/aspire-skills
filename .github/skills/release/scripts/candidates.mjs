@@ -191,12 +191,18 @@ function checkMain(repo, head, base, branch, { allowPendingNotes = false, review
   }
 }
 
+function sameChangelog(repo, before, after) {
+  return repo.run([
+    "diff", "--no-ext-diff", "--no-textconv", "--quiet", before, after, "--", "CHANGELOG.md"
+  ], { statuses: [0, 1] }).status === 0;
+}
+
 function validateDevMerge(repo, head, dev, expectedVersion) {
   const merged = repo.mergeTree(dev, head);
   if (!merged.conflicts.length) {
     requireSourceOnly(repo, merged.tree);
     if (versionSnapshot(repo, merged.tree).version !== expectedVersion) {
-      throw new Error("The dev merge must preserve its source-only tree and expected version.");
+      throw new Error("The dev merge must exclude OpenCode catalogs and preserve its expected version.");
     }
   }
 }
@@ -206,8 +212,8 @@ function initializeDevelopment(repo, head, base, branch) {
   if (base !== repo.sha("origin/main")
     || (published && (published.from !== published.source
       || (published.baselineVersion && published.baselineVersion !== published.version)))
-    || !onlyVersionChanges(repo, base, head)) {
-    throw new Error("Initialization is allowed only from the bootstrap main tree, removing generated files and preserving source.");
+    || !onlyVersionChanges(repo, base, head) || !sameChangelog(repo, base, head)) {
+    throw new Error("Initialization is allowed only from the bootstrap main tree, removing catalogs and preserving source and published changelog history.");
   }
   const version = versionSnapshot(repo, head).version;
   if (branch !== `initialize-dev/${version}` || version !== versionSnapshot(repo, base).version) {
@@ -232,10 +238,16 @@ export function checkDevelopment(repo, { head, base, branch }) {
     return;
   }
   if (/^backport\/pr-[1-9]\d*-to-dev$/.test(branch)) {
+    if (!sameChangelog(repo, main, head)) {
+      throw new Error("Dev backflows must copy main's approved CHANGELOG.md without edits.");
+    }
     validateDevMerge(repo, head, repo.sha("origin/dev"), version);
     return;
   }
   const common = repo.run(["merge-base", base, head]).trim();
+  if (!sameChangelog(repo, common, head)) {
+    throw new Error("Ordinary development PRs must preserve their dev baseline's CHANGELOG.md. Only release backflows may copy main's approved history.");
+  }
   if (version !== versionSnapshot(repo, common).version) {
     throw new Error("Ordinary development PRs must preserve their dev baseline's version.");
   }

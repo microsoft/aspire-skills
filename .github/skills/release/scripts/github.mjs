@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { latestRelease, readChangelog } from "./changelog.mjs";
+import { latestRelease, readChangelog, releaseNotes } from "./changelog.mjs";
 import { fullSha } from "./git.mjs";
 
 export function repositoryName() {
@@ -88,6 +88,7 @@ export function publishSourceRelease(repo, result) {
   const repository = requireRepositoryOrigin(repo);
   if (!process.env.GH_TOKEN) throw new Error("Release publication requires a GitHub token.");
   const tag = `v${result.version}`;
+  const notes = releaseNotes(readChangelog(repo, result.release));
   const ref = `refs/tags/${tag}`;
   repo.run(["check-ref-format", ref]);
   const rows = repo.run(["ls-remote", "--tags", "origin", ref, `${ref}^{}`]).trim().split(/\r?\n/).filter(Boolean);
@@ -119,11 +120,11 @@ export function publishSourceRelease(repo, result) {
     .filter(release => release.tag_name === tag);
   if (releases.length > 1) throw new Error(`More than one GitHub release uses ${tag}.`);
   if (releases[0]?.draft) throw new Error(`${tag} already belongs to a draft GitHub release; publish it explicitly.`);
+  if (releases.length && (typeof releases[0].body !== "string" || releases[0].body.trim() !== notes.trim())) {
+    throw new Error(`${tag} already has GitHub release notes that do not match the approved changelog. Correct them before retrying publication.`);
+  }
   const url = `${repositoryUrl(repository)}/releases/tag/${tag}`;
   if (!releases.length) {
-    const changelog = readChangelog(repo, result.release);
-    const entry = changelog.slice(changelog.search(/^## /m)).split(/\r?\n## /)[0];
-    const notes = `${entry.split(/\r?\n/).slice(1).filter(line => !line.startsWith("<!-- aspire-skills-")).join("\n").trim()}\n`;
     const created = gh([
       "release", "create", tag, "--repo", repository, "--verify-tag", "--target", result.release,
       "--title", tag, "--notes-file", "-", ...(result.version.split("+")[0].includes("-") ? ["--prerelease"] : [])

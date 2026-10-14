@@ -92,6 +92,13 @@ export function generateChangelog(context, entry = changelogEntry(context)) {
   return combine(context.previousChangelog, entry);
 }
 
+export function releaseNotes(changelog) {
+  const release = latestRelease(changelog);
+  if (release.notesState !== "finalized") throw new Error("GitHub release notes require a finalized changelog entry.");
+  return `${release.entry.split(/\r?\n/).slice(1)
+    .filter(line => !notesPattern.test(line)).join("\n").trim()}\n`;
+}
+
 export function validateChangelog(context, changelog, { allowPending = true } = {}) {
   const actual = latestRelease(changelog);
   for (const key of ["from", "source", "version"]) {
@@ -110,6 +117,21 @@ export function validateChangelog(context, changelog, { allowPending = true } = 
     if (!actual.entry.startsWith(prefix) || !/^- \S/m.test(actual.entry.slice(prefix.length))
       || actual.entry.includes(notesPlaceholder) || actual.entry.includes("### Provisional changes")) {
       throw new Error("Finalized release notes must replace the placeholder and contain user-facing Markdown bullets.");
+    }
+    const sections = releaseNotes(changelog).trimEnd().split(/^### /m);
+    const preamble = sections.shift();
+    let previous = -1;
+    if (preamble.trim() || !sections.length) {
+      throw new Error("Finalized release notes must use nonempty Changed, Removed, and Added sections in that order.");
+    }
+    for (const section of sections) {
+      const [heading, ...lines] = section.split(/\r?\n/);
+      const position = ["Changed", "Removed", "Added"].indexOf(heading);
+      const body = lines.join("\n");
+      if (position <= previous || !/^- \S/m.test(body) || /^#{1,6}\s/m.test(body)) {
+        throw new Error("Finalized release notes must use nonempty Changed, Removed, and Added sections in that order.");
+      }
+      previous = position;
     }
     return;
   }

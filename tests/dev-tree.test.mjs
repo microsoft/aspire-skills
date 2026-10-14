@@ -29,11 +29,11 @@ test("standalone dev check validates the committed tree without npm or main tool
   assert.equal(check().status, 0);
   commit();
   const changelog = check();
-  assert.equal(changelog.status, 1);
-  assert.match(changelog.stderr, /CHANGELOG\.md/);
-  repo.run(["rm", "--", "CHANGELOG.md"]);
+  assert.equal(changelog.status, 0, changelog.stderr);
+  assert.match(changelog.stdout, /published changelog history is allowed/);
   mkdirSync(join(root, "opencode", "v1"), { recursive: true });
   writeFileSync(join(root, "opencode", "v1", "catalog.md"), "Generated catalog.\n");
+  assert.equal(check().status, 0);
   commit();
   const catalogs = check();
   assert.equal(catalogs.status, 1);
