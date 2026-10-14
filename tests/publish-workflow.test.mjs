@@ -147,7 +147,20 @@ test("release PR checks use trusted main tooling on the exact reviewed head", ()
   assert.equal(main.with.ref, "main");
   assert.equal(main.with["persist-credentials"], false);
   const validation = job.steps.find(step => step.run?.includes("release.mjs"));
+  assert.match(validation.run, /tooling\/scripts\/release\.mjs/);
   assert.equal(validation.env.HEAD_COMMIT, "${{ github.event.pull_request.head.sha || github.sha }}");
+});
+
+test("backported release fixes receive CI on PRs and pushes", () => {
+  const workflow = parse(read(".github/workflows/test.yml"));
+  assert.deepEqual(workflow.on.pull_request.branches, ["main", "dev", "release/**"]);
+  assert.deepEqual(workflow.on.push.branches, ["main", "dev", "release/**"]);
+  const guard = workflow.jobs["branch-check"].steps.find(step => step.run);
+  const result = spawnSync(bash, ["--noprofile", "--norc", "-e", "-o", "pipefail", "-c", guard.run], {
+    cwd: repoRoot, encoding: "utf8", timeout: 10_000,
+    env: { ...process.env, BASH_ENV: "", TARGET_BRANCH: "release/0.0.5", HEAD_BRANCH: "backport/fix-to-release" }
+  });
+  assert.equal(result.status, 0, result.stderr);
 });
 
 test("publication uses only the workflow token and never requires a bot secret or PR write permission", () => {
@@ -190,7 +203,7 @@ test("bootstrap exception requires published 0.0.4 and disappears once trusted t
   assert.equal(run({}, 'git() { return 17; }').status, 17);
   assert.equal(run({}, 'git() { return 0; }\ngh() { printf "true"; }').status, 1);
   assert.equal(run({}, 'git() { return 0; }\ngh() { return 17; }').status, 1);
-  const trusted = join(root, "tooling", ".github", "skills", "release", "scripts", "release.mjs");
+  const trusted = join(root, "tooling", "scripts", "release.mjs");
   mkdirSync(dirname(trusted), { recursive: true });
   writeFileSync(trusted, 'console.error("Trusted policy rejected bootstrap"); process.exitCode = 19;\n');
   const checked = run();

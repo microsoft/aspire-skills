@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "release": "node .github/skills/release/scripts/prepare-release.mjs",
-    "version:dev": "node .github/skills/release/scripts/version-development.mjs",
+    "release": "node scripts/release.mjs",
+    "version:dev": "node scripts/version-development.mjs",
     "test": "node --test tests/*.test.mjs tests/aspireify/*.test.mjs",
-    "catalog": "node .github/skills/release/scripts/build-opencode-catalog.mjs",
+    "catalog": "node scripts/build-opencode-catalog.mjs",
     "bundle": "node scripts/build-aspire-bundles.mjs",
     "bundle:skills": "node scripts/build-aspire-bundles.mjs --bundle skills",
     "bundle:extensions": "node scripts/build-aspire-bundles.mjs --bundle extensions"

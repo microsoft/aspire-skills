@@ -2,10 +2,10 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { assertSafePath, createCatalog, isDevelopmentPath } from "./build-opencode-catalog.mjs";
-import { updateVersion, versionSnapshot } from "./versions.mjs";
+import { versionSnapshot } from "./release-versions.mjs";
 
-export function expectedCatalog(repo, source, version = versionSnapshot(repo, source).version) {
-  const manifests = versionSnapshot(repo, source).manifests;
+export function expectedCatalog(repo, source) {
+  versionSnapshot(repo, source);
   const snapshot = mkdtempSync(join(tmpdir(), "aspire-release-source-"));
   try {
     mkdirSync(join(snapshot, "skills"));
@@ -29,7 +29,7 @@ export function expectedCatalog(repo, source, version = versionSnapshot(repo, so
       const destination = join(snapshot, ...path.split("/"));
       mkdirSync(dirname(destination), { recursive: true });
       const bytes = contents.get(entry.oid);
-      writeFileSync(destination, manifests.has(path) ? updateVersion(bytes, path, version) : bytes);
+      writeFileSync(destination, bytes);
     }
     const files = new Map();
     for (const format of ["v1", "v2"]) {

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { Repository } from "../.github/skills/release/scripts/git.mjs";
+import { Repository } from "../scripts/release-git.mjs";
 
 test("standalone dev check validates the committed tree without npm or main tooling", t => {
   const root = mkdtempSync(join(tmpdir(), "dev-tree-"));

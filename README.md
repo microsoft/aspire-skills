@@ -255,9 +255,10 @@ does not provide per-skill installation-time version filtering.
 
 Prepare releases locally as described in the [development guide](docs/development.md).
 After a `release/<version>` PR merges into main, the
-[Publish release artifacts workflow](.github/workflows/publish.yml) tags the reviewed merge,
-publishes its approved changelog notes, builds and attests both bundles, and
-uploads only the `aspire-skills` bundle.
+[Publish release artifacts workflow](.github/workflows/publish.yml) builds and
+attests both bundles, tags the exact merged main commit, creates the GitHub
+release with its approved changelog notes, and uploads only the `aspire-skills`
+bundle.
 
 ## Contributing
 

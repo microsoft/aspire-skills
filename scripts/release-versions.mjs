@@ -3,7 +3,8 @@ import { isScalar, parseDocument } from "yaml";
 
 const manifestPaths = [
   "package.json", ".plugin/plugin.json", ".claude-plugin/plugin.json",
-  ".claude-plugin/marketplace.json", ".cursor-plugin/marketplace.json", "gemini-extension.json"
+  ".claude-plugin/marketplace.json", ".cursor-plugin/marketplace.json", "gemini-extension.json",
+  "package-lock.json"
 ];
 const snapshots = new WeakMap();
 
@@ -96,27 +97,15 @@ export function updateVersion(contents, path, version) {
   return Buffer.from(text);
 }
 
-export function versionTree(repo, tree, version) {
-  return repo.withIndex(indexFile => {
-    repo.run(["read-tree", tree], { indexFile });
-    for (const [path, bytes] of versionManifests(repo, tree)) {
-      const updated = updateVersion(bytes, path, version);
-      if (!updated.equals(bytes)) {
-        const oid = repo.run(["hash-object", "-w", "--stdin"], { input: updated }).trim();
-        repo.run(["update-index", "--add", "--cacheinfo", "100644", oid, path], { indexFile });
-      }
-    }
-    return repo.run(["write-tree"], { indexFile }).trim();
-  });
-}
-
 export function versionManifests(repo, sha) {
   const entries = repo.files(sha);
   const paths = [...manifestPaths, ...entries.keys()].filter(path =>
     manifestPaths.includes(path) || /^skills\/[^/]+\/SKILL\.md$/.test(path));
   const unique = [...new Set(paths)];
-  if (entries.has("package-lock.json")) unique.push("package-lock.json");
   for (const path of unique) {
+    if (path.startsWith("skills/") && !/^skills\/[a-z0-9]+(?:-[a-z0-9]+)*\/SKILL\.md$/.test(path)) {
+      throw new Error(`Invalid shipped skill path: ${path}`);
+    }
     if (entries.get(path)?.mode !== "100644" || entries.get(path)?.type !== "blob") {
       throw new Error(`Expected a regular version manifest: ${path}`);
     }

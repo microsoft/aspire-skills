@@ -1,7 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { realpathSync } from "node:fs";
+import { resolve } from "node:path";
 
 function gitEnvironment() {
   const environment = { ...process.env };
@@ -39,9 +38,8 @@ export class Repository {
     this.firstParentHistories = new Map();
   }
 
-  run(args, { statuses = [0], binary = false, input, indexFile } = {}) {
+  run(args, { statuses = [0], binary = false, input } = {}) {
     const environment = gitEnvironment();
-    if (indexFile) environment.GIT_INDEX_FILE = indexFile;
     const result = spawnSync("git", [
       "-c", `safe.directory=${this.root}`, "-c", "core.hooksPath=/dev/null",
       "-c", "core.fsmonitor=false", "-c", "commit.gpgsign=false",
@@ -96,15 +94,6 @@ export class Repository {
     }
   }
 
-  withIndex(action) {
-    const directory = mkdtempSync(join(tmpdir(), "aspire-release-index-"));
-    try {
-      return action(join(directory, "index"));
-    } finally {
-      rmSync(directory, { recursive: true, force: true });
-    }
-  }
-
   mergeTree(first, second) {
     const result = this.run(["merge-tree", "--write-tree", "--name-only", "-z", first, second], { statuses: [0, 1] });
     const separator = result.stdout.indexOf("\0");
@@ -116,13 +105,6 @@ export class Repository {
       throw new Error("Git merge failed without identifying conflicted paths.");
     }
     return { tree, conflicts };
-  }
-
-  commitTree(tree, parents, message) {
-    return this.run([
-      "commit-tree", tree, ...parents.flatMap(parent => ["-p", parent]), "-m", message,
-      "-m", "Co-authored-by: Copilot App <223556219+Copilot@users.noreply.github.com>"
-    ]).trim();
   }
 
   parents(sha) {

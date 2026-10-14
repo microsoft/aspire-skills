@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - dev
+      - release/**
     types:
       - opened
       - synchronize
@@ -15,6 +16,7 @@ on:
     branches:
       - main
       - dev
+      - release/**
 
 permissions:
   contents: read
@@ -101,8 +103,10 @@ jobs:
                   ;;
               esac
               ;;
+            release/?*)
+              ;;
             *)
-              echo "::error::PRs must target main or dev."
+              echo "::error::PRs must target main, dev, or release/*."
               exit 1
               ;;
           esac
@@ -165,7 +169,7 @@ jobs:
           SAME_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
         run: |
           set -euo pipefail
-          tooling="$GITHUB_WORKSPACE/tooling/.github/skills/release/scripts/release.mjs"
+          tooling="$GITHUB_WORKSPACE/tooling/scripts/release.mjs"
           if [[ ! -f "$tooling" ]]; then
             if [[ "$TARGET_BRANCH" == main &&
                   "$HEAD_BRANCH" == ellahathaway-release-workflow-bootstrap &&

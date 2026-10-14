@@ -1,14 +1,14 @@
 import { writeFileSync } from "node:fs";
-import { Repository } from "./git.mjs";
-import { checkPull, publishRelease, validatePublished } from "./candidates.mjs";
-import { resolveReleasePull } from "./github.mjs";
+import { Repository } from "./release-git.mjs";
+import { checkPull, publishRelease, validatePublished } from "./release-checks.mjs";
+import { resolveReleasePull } from "./release-github.mjs";
 
 const operations = new Set(["check", "validate-release", "publish-release"]);
 
 try {
   const [operation, ...args] = process.argv.slice(2);
   if (!operations.has(operation) || args.length) {
-    throw new Error(`Usage: node .github/skills/release/scripts/release.mjs <${[...operations].join("|")}>`);
+    throw new Error(`Usage: node scripts/release.mjs <${[...operations].join("|")}>`);
   }
   if (!process.env.RELEASE_REPO) throw new Error("RELEASE_REPO is required.");
   const repo = new Repository(process.env.RELEASE_REPO);

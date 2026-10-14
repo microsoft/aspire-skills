@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { latestRelease, readChangelog, releaseNotes } from "./changelog.mjs";
-import { fullSha } from "./git.mjs";
+import { latestRelease, readChangelog, releaseNotes } from "./release-changelog.mjs";
+import { fullSha } from "./release-git.mjs";
 
 export function repositoryName() {
   const repository = process.env.GITHUB_REPOSITORY ?? "microsoft/aspire-skills";
@@ -55,22 +55,22 @@ function requireRepositoryOrigin(repo) {
   return repository;
 }
 
-export function resolveReleasePull(repo, release, { pullNumber, headCommit } = {}) {
+export function resolveReleasePull(repo, release, { pullNumber, headCommit, request = api } = {}) {
   const repository = requireRepositoryOrigin(repo);
-  release = fullSha(release, "published squash commit");
+  release = fullSha(release, "published main commit");
   const branch = `release/${latestRelease(readChangelog(repo, release)).version}`;
   if (headCommit !== undefined) headCommit = fullSha(headCommit, "reviewed release head");
   const matchesRelease = pull => pull.state === "closed" && pull.merge_commit_sha === release
     && pull.base?.ref === "main" && pull.base?.repo?.full_name === repository
     && pull.head?.ref === branch && pull.head?.repo?.full_name === repository;
   if (pullNumber === undefined) {
-    const matches = api(`repos/${repository}/commits/${release}/pulls?per_page=100`, { pages: true })
+    const matches = request(`repos/${repository}/commits/${release}/pulls?per_page=100`, { pages: true })
       .filter(pull => pull.merged_at && matchesRelease(pull));
     if (matches.length !== 1) throw new Error("The published commit must identify exactly one merged release PR.");
     pullNumber = matches[0].number;
   }
   const number = positiveNumber(pullNumber, "Release PR number");
-  const pull = api(`repos/${repository}/pulls/${number}`);
+  const pull = request(`repos/${repository}/pulls/${number}`);
   if (String(pull.number) !== number || !pull.merged || !matchesRelease(pull)
     || (headCommit !== undefined && pull.head.sha !== headCommit)) {
     throw new Error("The merged release PR does not match the published commit and reviewed head.");
@@ -84,7 +84,7 @@ export function resolveReleasePull(repo, release, { pullNumber, headCommit } = {
   return Object.freeze({ pull: number, head });
 }
 
-export function publishSourceRelease(repo, result) {
+export function publishSourceRelease(repo, result, { request = api, run = gh } = {}) {
   const repository = requireRepositoryOrigin(repo);
   if (!process.env.GH_TOKEN) throw new Error("Release publication requires a GitHub token.");
   const tag = `v${result.version}`;
@@ -116,7 +116,7 @@ export function publishSourceRelease(repo, result) {
       "push", "origin", ref
     ]);
   }
-  const releases = api(`repos/${repository}/releases?per_page=100`, { pages: true })
+  const releases = request(`repos/${repository}/releases?per_page=100`, { pages: true })
     .filter(release => release.tag_name === tag);
   if (releases.length > 1) throw new Error(`More than one GitHub release uses ${tag}.`);
   if (releases[0]?.draft) throw new Error(`${tag} already belongs to a draft GitHub release; publish it explicitly.`);
@@ -125,12 +125,12 @@ export function publishSourceRelease(repo, result) {
   }
   const url = `${repositoryUrl(repository)}/releases/tag/${tag}`;
   if (!releases.length) {
-    const created = gh([
+    const created = run([
       "release", "create", tag, "--repo", repository, "--verify-tag", "--target", result.release,
       "--title", tag, "--notes-file", "-", ...(result.version.split("+")[0].includes("-") ? ["--prerelease"] : [])
     ], notes).trim();
     if (decodeURI(created) !== url) throw new Error("GitHub did not return the created release URL.");
   }
-  console.log(`Verified release ${tag} at main squash ${result.release}: ${url}`);
+  console.log(`Verified release ${tag} at main commit ${result.release}: ${url}`);
   return Object.freeze({ ...result, tag, url });
 }

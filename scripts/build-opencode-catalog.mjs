@@ -4,7 +4,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, unlinkSync
 import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const excludedDirectories = new Set(["evals", "tests", "node_modules", "__pycache__"]);
 const inlineLink = /(\]\([ \t]*)(<[^<>\n]*>|[^\s()<>]+)((?:[ \t]+(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\((?:\\.|[^)\\])*\)))?[ \t]*\))/g;
 const referenceLink = /^([ ]{0,3}\[(?:\\.|[^\]\\\n])+\]:[ \t]*)(<[^<>\n]*>|[^\s()<>]+)((?:[ \t]+(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\((?:\\.|[^)\\])*\)))?[ \t]*)$/gm;
@@ -132,11 +132,7 @@ export function buildCatalog(root) {
   const outputFiles = new Map([...files].map(([path, contents]) => [`v2/${path}`, contents]));
   const v1 = createCatalog(root, { format: "v1" });
   for (const [path, contents] of v1.files) outputFiles.set(`v1/${path}`, contents);
-  const distRoot = join(root, "dist");
-  if (existsSync(distRoot) && lstatSync(distRoot).isSymbolicLink()) {
-    throw new Error(`Symbolic links are not supported in the output path: ${distRoot}`);
-  }
-  const outputRoot = join(distRoot, "opencode");
+  const outputRoot = join(root, "opencode");
   const existingPaths = existsSync(outputRoot) ? listFiles(outputRoot) : [];
   for (const [path, contents] of outputFiles) {
     const target = join(outputRoot, ...path.split("/"));
@@ -152,7 +148,7 @@ export function buildCatalog(root) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const args = process.argv.slice(2);
-    if (args.length) throw new Error("Usage: node .github/skills/release/scripts/build-opencode-catalog.mjs");
+    if (args.length) throw new Error("Usage: node scripts/build-opencode-catalog.mjs");
     const index = buildCatalog(repoRoot);
     console.log(`Generated OpenCode V1 and V2 catalogs (${index.skills.length} skills each).`);
   } catch (error) {

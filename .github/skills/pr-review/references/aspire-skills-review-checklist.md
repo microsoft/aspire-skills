@@ -149,32 +149,33 @@ Only `release/<version>` PRs author new `CHANGELOG.md` entries and generated
 through release backflow, but must not contain catalogs. Ordinary dev PRs cannot
 add, edit, or delete the changelog.
 
-For a release PR prepared by the release skill, verify:
+For a dev-based release PR, verify:
 
-- The linked version heading, release metadata, and finalized notes describe the
+- The linked version heading and finalized notes describe the
   selected range while preserving earlier entries. New notes use nonempty Changed,
   Removed, and Added sections in that order.
 - Display versions without a `v` prefix and link to the actual `v<version>` tag.
   Include only new user-visible behavior, not already published features,
   version-bump housekeeping, repository inventory metadata, or test-only changes.
-- The candidate contains the selected dev snapshot plus only coordinated version,
-  changelog, and catalog changes.
+- The branch starts directly at the selected dev snapshot. Later source fixes
+  are deliberate backports, not unrelated newer dev work.
 - The version is newer than main's version, the branch is `release/<version>`,
-  and the PR targets main and will use squash and merge.
-- The PR uses the release skill's reference template, with the pinned main/dev
-  SHAs, full-SHA source range, and Release Checklist. Only verified items are checked.
-- The release skill finalizes the newest changelog entry locally before committing
-  and opening the draft PR. No pending placeholder remains when ready to merge.
-- Publication reads the version and source range from finalized changelog metadata
-  and verifies the exact reviewed squash tree; its commit message is not constrained.
+  and the PR targets main using an allowed merge method.
+- The PR records the selected dev SHA and backports and uses the Release
+  Checklist. Only verified items are checked.
+- The newest changelog entry is finalized before merging. No pending placeholder
+  remains when ready to merge.
+- No pending/done metadata marker or prescribed commit message is required.
+  Publication verifies the merged PR and tags its exact merged main commit,
+  not the release head or a later main tip.
 - The post-merge workflow builds and attests both bundles, creates or reuses the
   immutable tag and GitHub release, and uploads only the skills bundle. GitHub
   release notes match the changelog notes; the tag annotation remains brief.
 - Required checks pass and needed documentation changes are reviewed and ready.
   Maintainer approval, merge, publication verification, and dev backflow remain
-  human steps tracked in the Release Checklist.
+  human steps tracked in the release PR.
 
-**Severity for invalid release metadata or rewritten published history:** `blocking`.
+**Severity for mismatched release versions or rewritten published history:** `blocking`.
 Unclear release notes are `important`.
 
 Release backflows start from current dev and merge updated main, retain main's
@@ -182,8 +183,7 @@ approved `CHANGELOG.md`, remove `opencode/`, and target dev. Their merge must
 preserve dev's next version and later source work, including non-version manifest
 content. Merge them with a merge commit, not squash or rebase.
 
-**Severity for hand-edited catalogs, changes outside newest-entry finalization,
-or unrelated release-candidate changes:**
+**Severity for hand-edited catalogs or unrelated release-candidate changes:**
 `blocking`.
 
 ## 8. Project-local override pattern
@@ -271,10 +271,10 @@ For the legacy main-based release, verify:
   same version tag. Both archives are built and attested.
 - Instructions acknowledge generic release notes and asset-overwriting reruns.
 
-For subsequent dev-based releases, apply section 7 and the Release Checklist.
+For subsequent dev-based releases, apply section 7 and the development guide.
 The maintainer's approved release-PR merge authorizes the post-merge publisher;
 do not add a manual tag step or assume a token-created tag triggers another job.
-Verify the exact reviewed main squash, approved changelog notes, immutable tag,
+Verify the exact merged main commit, approved changelog notes, immutable tag,
 and version-preserving backflow.
 
 **Severity:** `important` for inaccurate guidance or missing validation evidence;
