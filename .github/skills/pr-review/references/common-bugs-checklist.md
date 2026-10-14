@@ -104,13 +104,13 @@ routing failures and silently degraded agent behavior.
 
 ## JSON — manifests and MCP
 
-Files: `package.json`, `.plugin/plugin.json`, `.claude-plugin/plugin.json`,
+Files: `package.json`, `package-lock.json`, `.plugin/plugin.json`, `.claude-plugin/plugin.json`,
 `.claude-plugin/marketplace.json`, `.cursor-plugin/marketplace.json`,
 `gemini-extension.json`, `.mcp.json`.
 
 - [ ] Valid JSON (no trailing commas, no comments — these silently break some loaders).
-- [ ] Release versions are consistent across all six canonical JSON files and
-      `metadata.version` in all six shipped skills (see
+- [ ] Release versions are consistent across canonical manifests, both lockfile
+      root versions, and `metadata.version` in all seven shipped skills (see
       `aspire-skills-review-checklist.md` §6).
 - [ ] Plugin entries are named `aspire`; the package and marketplaces are named
       `aspire-skills`. Select marketplace entries by name, not array position.

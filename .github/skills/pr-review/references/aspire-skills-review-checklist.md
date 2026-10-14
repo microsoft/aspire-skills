@@ -87,12 +87,14 @@ baseline exists so that cross-skill behavior is measured against the same projec
 
 ## 6. Plugin manifest version sync
 
-Six canonical JSON files and all six shipped skills carry the release version.
-Check them together whenever release versions change:
+Six canonical JSON files, both lockfile root versions, and all seven shipped
+skills carry the release version. Check them together whenever release versions
+change:
 
 | File | Field |
 |------|-------|
 | `package.json` | `version` |
+| `package-lock.json` | `version` and `packages[""].version` |
 | `.plugin/plugin.json` | `version` |
 | `.claude-plugin/plugin.json` | `version` |
 | `.claude-plugin/marketplace.json` | `version` of the plugin named `aspire` |
@@ -101,10 +103,11 @@ Check them together whenever release versions change:
 | `skills/<name>/SKILL.md` | `metadata.version` |
 
 The shipped skills are `aspire`, `aspire-init`, `aspireify`,
-`aspire-orchestration`, `aspire-deployment`, and `aspire-monitoring`. Their versions
-match the plugin release; do not require independent per-skill bumps. Release
-`v0.0.2` uses `0.0.2` throughout. Documentation-only corrections do not require a
-new release version.
+`aspire-project-v2-migration`, `aspire-orchestration`, `aspire-deployment`, and
+`aspire-monitoring`. Their versions match the plugin release; do not require
+independent per-skill bumps. Select the `aspire` marketplace entry by name;
+unrelated catalog entries can have independent versions. Documentation-only
+corrections do not require a new release version.
 
 Plugin manifests and runtime skill/extension files under
 `.github/plugins/aspire-skills/` remain relative symlinks to the root sources.
@@ -116,19 +119,26 @@ the shipped skill set.
 
 ## 7. CHANGELOG
 
+For release PRs, compare the previous published tag with the release branch.
+The new entry must cover user-visible changes since that tag, not features
+already shipped.
+
 User-visible changes need a `CHANGELOG.md` entry under the appropriate version heading:
 
 - New skill, removed skill, renamed skill.
 - Safety-guardrail change (added, removed, or scope changed).
 - New CLI command surface routed (e.g., adding `aspire destroy` mapping).
 - New deployment target.
-- New eval tag or new fixture.
 
 Pure refactors, doc fixes, and eval-only additions that don't change the shipped surface
 don't need a CHANGELOG entry — but call them out in the PR description.
+Keep version-bump housekeeping, repository inventory metadata, and test-only
+changes out of release notes.
 
-Published versions use their actual release dates, not `Unreleased`. Preserve
-historical release entries when correcting the current release's status or references.
+Release headings use Git tag links, not dates or `Unreleased`. Display versions
+without a `v` prefix, but keep the actual tag name in the link target, for example
+`## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)`.
+Preserve historical release note bodies when updating headings or references.
 
 **Severity:** `important`.
 

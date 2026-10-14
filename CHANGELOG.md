@@ -2,7 +2,18 @@
 
 All notable changes to the aspire-skills plugin will be documented in this file.
 
-## [0.0.4] - Unreleased
+## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)
+
+### Changed
+- Aligned agent setup guidance with Aspire 13.6: `aspire new` and `aspire init`
+  preselect recommended skills without offering MCP configuration. Standalone
+  `aspire agent init --mcp` configures MCP only when explicitly requested; Aspire
+  13.5 users must select MCP interactively.
+- Clarified missing-`aspireify` recovery to preserve explicit skill and location
+  selections without enabling MCP.
+
+### Fixed
+- Removed dangling hook links from the published plugin mirror.
 
 ### Changed
 - Hardened Windows launches in the AppHosts and Doctor extensions by resolving
@@ -18,9 +29,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 
 ### Added
 - Added `copilot-app` attribution to both canonical telemetry hooks when
-  `AI_AGENT=github_copilot_app_agent`, before generic Copilot CLI detection.
+  `AI_AGENT=github_copilot_app_agent`, before generic Copilot CLI detection,
+  without changing attribution for other agent hosts.
 
-## [0.0.3] - 2026-09-23
+## [0.0.3](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.3)
 
 ### Changed
 - Bumped the plugin and all seven shipped skills to `0.0.3`.
@@ -52,7 +64,7 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   contracts; EF overload diagnostics, Dockerfile/prebuilt ownership, file-app AOT,
   and Blazor publishing differences have explicit validation boundaries.
 
-## [0.0.2] - 2026-09-18
+## [0.0.2](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.2)
 
 ### Changed
 - Aligned the shipped skill family and bundle compatibility metadata with Aspire 13.5.3.
@@ -146,7 +158,7 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   `--skip-grade`, `--workers`, `--runs`, etc.) and documented `vally serve`
   (local dashboard) and `vally ingest` (SQLite store) workflows.
 
-## [0.0.1] - 2026-05-27
+## [0.0.1](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.1)
 
 ### Added
 - Initial `aspire` skill with detection, safety guardrails, diagnostics bridge

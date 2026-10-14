@@ -19,7 +19,7 @@ Use `blocking` when the PR…
 
 - Removes or weakens a documented safety guardrail (e.g., the `dotnet run` →
   `aspire start` mapping disappears from `skills/aspire-orchestration/SKILL.md`).
-- Leaves the six canonical JSON files or six shipped skills out of release-version sync (see
+- Leaves canonical manifests, either lockfile root, or the seven shipped skills out of release-version sync (see
   `aspire-skills-review-checklist.md` §6).
 - Drops or shadows the project-local override deference block (`§8`).
 - Introduces a routing change with no `trigger_tests.yaml` update **and** the change is
