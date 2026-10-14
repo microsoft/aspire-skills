@@ -2,7 +2,6 @@ import { compareVersions, onlyVersionChanges, updateVersion, versionSnapshot } f
 import { readChangelog, releaseNotes, validateChangelog } from "./release-changelog.mjs";
 import { expectedCatalog, validateCatalog } from "./release-catalog.mjs";
 import { publishSourceRelease, resolveReleasePull } from "./release-github.mjs";
-import { requireSourceOnly } from "./check-dev-tree.mjs";
 
 function validateCandidate(repo, head, version, previous) {
   if (versionSnapshot(repo, head).version !== version) throw new Error("Release branch and coordinated versions must match.");
@@ -39,10 +38,10 @@ function sameChangelog(repo, before, after) {
 function validateDevMerge(repo, head, dev, expectedVersion) {
   const merged = repo.mergeTree(dev, head);
   if (!merged.conflicts.length) {
-    requireSourceOnly(repo, merged.tree);
     if (versionSnapshot(repo, merged.tree).version !== expectedVersion) {
-      throw new Error("The dev merge must exclude OpenCode catalogs and preserve its expected version.");
+      throw new Error("The dev merge must preserve its expected version.");
     }
+    validateCatalog(repo, merged.tree, expectedCatalog(repo, merged.tree));
   }
 }
 
@@ -99,7 +98,7 @@ export function checkPull(repo, { target, headBranch, headCommit, baseCommit }) 
     return;
   }
   if (target !== "dev") throw new Error("Release policy supports main, dev, and release branches.");
-  requireSourceOnly(repo, head);
+  validateCatalog(repo, head, expectedCatalog(repo, head));
   const dev = repo.sha("origin/dev");
   if (!headBranch) {
     if (version !== versionSnapshot(repo, dev).version) throw new Error("Dev must preserve its current coordinated version.");

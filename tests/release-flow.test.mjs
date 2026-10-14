@@ -42,6 +42,7 @@ function fixture(t) {
   write("skills/aspire/SKILL.md", "---\nname: aspire\nmetadata:\n  version: 0.0.4\n---\n\n# Aspire\n\nPublished skill.\n");
   const history = "# Changelog\n\n## [0.0.4] - 2026-10-14\n\n### Added\n- Legacy main release.\n";
   write("CHANGELOG.md", history);
+  buildCatalog(root);
   const legacy = commit("Legacy release 0.0.4");
   repo.run(["tag", "--annotate", "--message", "Legacy release", "v0.0.4"]);
   write("tooling.txt", "Approved release infrastructure.\n");
@@ -126,11 +127,11 @@ function backflow(f) {
   assert.ok([0, 1].includes(merged.status));
   for (const [path, contents] of manifests) write(path, contents);
   write("CHANGELOG.md", repo.read(f.released, "CHANGELOG.md"));
-  rmSync(join(root, "opencode"), { recursive: true, force: true });
+  buildCatalog(root);
   return commit("Merge released main back into dev");
 }
 
-test("legacy initialization advances versions, removes catalogs, and preserves all source and history", t => {
+test("development initialization advances versions, regenerates catalogs, and preserves source and history", t => {
   const f = fixture(t);
   f.write("opencode/v2/index.json", "Legacy generated catalog.\n");
   f.main = f.commit("Generated main content");
@@ -139,7 +140,8 @@ test("legacy initialization advances versions, removes catalogs, and preserves a
   f.track("dev");
   initialize(f);
   assert.equal(versionSnapshot(f.repo, f.repo.sha("dev")).version, "0.0.5");
-  assert.equal(f.repo.files(f.repo.sha("dev"), ["opencode"]).size, 0);
+  assert.ok(f.repo.files(f.repo.sha("dev"), ["opencode"]).size > 0);
+  assert.match(f.repo.read(f.repo.sha("dev"), "opencode/v2/aspire/aspire.md").toString(), /version: 0\.0\.5/);
   assert.equal(readChangelog(f.repo, f.repo.sha("dev")), f.history);
   assert.equal(f.repo.read(f.repo.sha("dev"), "tooling.txt").toString(), "Approved release infrastructure.\n");
 });
@@ -222,7 +224,8 @@ test("dev backflow preserves next-version manifests, newer work, approved notes,
   assert.equal(readChangelog(f.repo, head), readChangelog(f.repo, f.released));
   assert.equal(f.repo.read(head, "newer.txt").toString(), "Work after the release cut.\n");
   assert.match(f.repo.read(head, ".plugin/plugin.json").toString(), /Newer dev manifest content/);
-  assert.equal(f.repo.files(head, ["opencode"]).size, 0);
+  assert.ok(f.repo.files(head, ["opencode"]).size > 0);
+  assert.match(f.repo.read(head, "opencode/v2/aspire/aspire.md").toString(), /version: 0\.0\.6/);
   assert.ok(f.repo.ancestor(f.released, head));
 });
 
@@ -230,12 +233,14 @@ test("dev backflow rejects downgrades, dropped newer work, rewritten history, an
   const f = releaseCycle(fixture(t));
   const head = backflow(f);
   for (const [path, contents] of versionManifests(f.repo, head)) f.write(path, updateVersion(contents, path, "0.0.5"));
+  buildCatalog(f.root);
   const downgrade = f.commit();
   const check = headCommit => checkPull(f.repo, {
     target: "dev", headBranch: "backport/pr-100-to-dev", headCommit, baseCommit: f.dev
   });
   assert.throws(() => check(downgrade), /preserve dev's current version/);
   for (const [path, contents] of versionManifests(f.repo, head)) f.write(path, contents);
+  buildCatalog(f.root);
   f.repo.run(["rm", "--quiet", "--", "newer.txt"]);
   const dropped = f.commit();
   assert.throws(() => check(dropped), /Backflow follow-ups may only/);

@@ -2,10 +2,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { assertSafePath, createCatalog, isDevelopmentPath } from "./build-opencode-catalog.mjs";
-import { versionSnapshot } from "./release-versions.mjs";
 
 export function expectedCatalog(repo, source) {
-  versionSnapshot(repo, source);
   const snapshot = mkdtempSync(join(tmpdir(), "aspire-release-source-"));
   try {
     mkdirSync(join(snapshot, "skills"));
@@ -45,8 +43,14 @@ export function expectedCatalog(repo, source) {
 
 export function validateCatalog(repo, candidate, expected) {
   const actual = repo.files(candidate, ["opencode"]);
-  if (JSON.stringify([...actual.keys()].sort()) !== JSON.stringify([...expected.keys()].sort())) {
-    throw new Error("Catalog paths do not match the selected source.");
+  const missing = [...expected.keys()].filter(path => !actual.has(path));
+  const extra = [...actual.keys()].filter(path => !expected.has(path));
+  if (missing.length || extra.length) {
+    throw new Error([
+      "Catalog paths do not match the selected source.",
+      ...missing.map(path => `Missing: ${JSON.stringify(path)}`),
+      ...extra.map(path => `Unexpected: ${JSON.stringify(path)}`)
+    ].join("\n"));
   }
   const contents = repo.contents(actual.values());
   for (const [path, bytes] of expected) {

@@ -131,12 +131,21 @@ test("bundle build and upload failures fail their workflow steps", () => {
   }
 });
 
-test("dev source-only checks cover PRs and pushes without release tooling", () => {
-  const workflow = parse(read(".github/workflows/test.yml"));
-  const job = workflow.jobs["dev-source-check"];
-  assert.match(job.if, /github\.event\.pull_request\.base\.ref == 'dev'/);
-  assert.match(job.if, /github\.ref == 'refs\/heads\/dev'/);
-  assert.ok(job.steps.some(step => step.run === "node scripts/check-dev-tree.mjs"));
+test("catalog parity runs unconditionally for every PR, supported pushes, and merge groups", () => {
+  const workflow = parse(read(".github/workflows/catalog-check.yml"));
+  assert.ok(Object.hasOwn(workflow.on, "merge_group"));
+  assert.equal(workflow.on.pull_request.branches, undefined);
+  assert.equal(workflow.on.pull_request.paths, undefined);
+  assert.deepEqual(workflow.on.push, { branches: ["main", "dev", "release/**"] });
+  assert.deepEqual(workflow.permissions, { contents: "read" });
+  const job = workflow.jobs["catalog-check"];
+  assert.equal(job.name, "OpenCode catalog check");
+  assert.equal(job.if, undefined);
+  assert.ok(job.steps.every(step => step.if === undefined && step["continue-on-error"] === undefined));
+  const checkout = job.steps.find(step => step.uses?.startsWith("actions/checkout@"));
+  assert.equal(checkout.with.ref, "${{ github.sha }}");
+  assert.equal(checkout.with["persist-credentials"], false);
+  assert.ok(job.steps.some(step => step.run === "npm run catalog:check"));
 });
 
 test("release PR checks use trusted main tooling on the exact reviewed head", () => {

@@ -91,9 +91,8 @@ Six canonical JSON files, both lockfile root versions, and all seven shipped
 skills share one version within a branch. Check them together whenever release
 versions change. Ordinary feature and release-fix PRs preserve dev's current version:
 
-Dedicated `initialize-dev/<version>` and `bump-dev/<version>` PRs advance dev's
-coordinated version without source or changelog edits. The former also removes
-catalogs from the synchronized bootstrap tree.
+Dedicated `bump-dev/<version>` PRs advance dev's coordinated version without
+source or changelog edits and regenerate catalogs for the new version.
 
 | File | Field |
 |------|-------|
@@ -144,10 +143,11 @@ without a `v` prefix, but keep the actual tag name in the link target, for examp
 `## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)`.
 Preserve historical release note bodies when updating headings or references.
 
-Only `release/<version>` PRs author new `CHANGELOG.md` entries and generated
-`opencode/` catalogs. Dev retains published changelog history copied from main
-through release backflow, but must not contain catalogs. Ordinary dev PRs cannot
-add, edit, or delete the changelog.
+Only `release/<version>` PRs author new `CHANGELOG.md` entries. Dev retains
+published changelog history copied from main through release backflow and
+generated `opencode/` catalogs matching its current shipped source. Regenerate
+both formats whenever that source changes. Ordinary dev PRs cannot add, edit,
+or delete the changelog.
 
 For a dev-based release PR, verify:
 
@@ -179,7 +179,7 @@ For a dev-based release PR, verify:
 Unclear release notes are `important`.
 
 Release backflows start from current dev and merge updated main, retain main's
-approved `CHANGELOG.md`, remove `opencode/`, and target dev. Their merge must
+approved `CHANGELOG.md`, regenerate `opencode/`, and target dev. Their merge must
 preserve dev's next version and later source work, including non-version manifest
 content. Merge them with a merge commit, not squash or rebase.
 
