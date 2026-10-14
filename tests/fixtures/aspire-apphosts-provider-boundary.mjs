@@ -6,6 +6,7 @@ import { setImmediate as nextTurn } from "node:timers/promises";
 import { SourceTextModule, SyntheticModule, createContext } from "node:vm";
 import { test } from "node:test";
 import * as model from "../../extensions/aspire-apphosts/lib/app-model.mjs";
+import * as browser from "../../extensions/aspire-apphosts/lib/browser.mjs";
 
 const providerUrl = new URL("../../extensions/aspire-apphosts/extension.mjs", import.meta.url);
 const source = await readFile(providerUrl, "utf8");
@@ -41,11 +42,16 @@ function describe(inputs = baseInputs, state = "Running") {
     ] };
 }
 
-async function harness(t, { listenGate, failListen = false, cliOverride } = {}) {
+async function harness(t, {
+    listenGate, failListen = false, cliOverride,
+    browserCanvases = [{ canvasId: "browser", extensionId: "host:builtins" }],
+    browserListAvailable = true, browserListError, browserOpenError, systemBrowserError,
+} = {}) {
     const servers = [];
     const intervals = new Set();
     const attachments = [];
     const canvasOpens = [];
+    const systemBrowserUrls = [];
     const logs = [];
     const calls = [];
     const controls = { failedHost: null, failPs: false, inputs: baseInputs, state: "Running", loader: null, executor: null };
@@ -113,7 +119,16 @@ async function harness(t, { listenGate, failListen = false, cliOverride } = {}) 
                 log: (message) => logs.push(message),
                 rpc: {
                     extensions: { sendAttachmentsToMessage: async (payload) => attachments.push(clone(payload)) },
-                    canvas: { open: async (payload) => canvasOpens.push(clone(payload)) },
+                    canvas: {
+                        ...(browserListAvailable ? { list: async () => {
+                            if (browserListError) throw browserListError;
+                            return { canvases: browserCanvases };
+                        } } : {}),
+                        open: async (payload) => {
+                            if (browserOpenError) throw browserOpenError;
+                            canvasOpens.push(clone(payload));
+                        },
+                    },
                 },
             };
         },
@@ -125,6 +140,11 @@ async function harness(t, { listenGate, failListen = false, cliOverride } = {}) 
     await module.link(async (specifier) => {
         const exports = specifier === "@github/copilot-sdk/extension" ? sdk
             : specifier === "./lib/app-model.mjs" ? { ...model, createAspireCliRunner: () => ({ run }) }
+                : specifier === "./lib/browser.mjs" ? { ...browser, openSystemBrowser: async (url, options) => {
+                    if (systemBrowserError) throw systemBrowserError;
+                    systemBrowserUrls.push(url);
+                    controls.reportBrowserError = options.onError;
+                } }
                 : specifier === "node:http" ? { ...http, createServer } : await import(specifier);
         return new SyntheticModule(Object.keys(exports), function () {
             for (const [name, value] of Object.entries(exports)) this.setExport(name, value);
@@ -133,7 +153,7 @@ async function harness(t, { listenGate, failListen = false, cliOverride } = {}) 
     await module.evaluate();
     const opened = new Set();
     const h = {
-        controls, calls, servers, intervals, attachments, canvasOpens, logs,
+        controls, calls, servers, intervals, attachments, canvasOpens, systemBrowserUrls, logs,
         async open(instanceId = "test") {
             opened.add(instanceId);
             return declaration.open({ instanceId, input: { viewMode: "global" } });
@@ -325,6 +345,95 @@ test("Dashboard details use canonical identity without changing telemetry groupi
         assert.equal(url.searchParams.get("t"), "private-host-token");
         assert.doesNotMatch(JSON.stringify(response), /private-host-token/);
     }
+});
+
+for (const target of ["integrated", "system"]) {
+    test(`dashboard, diagnostics and endpoint links use the ${target} browser without exposing private URLs`, async (t) => {
+        const h = await harness(t, { browserCanvases: target === "system" ? [] : undefined });
+        const open = await h.open();
+        const { state } = await h.request(open, "/api/state");
+        const host = state.roots[0];
+        const nodes = allNodes([host]);
+        const resource = nodes.find((node) => node.kind === "resource" && node.resourceName === "api");
+        const endpoint = nodes.find((node) => node.kind === "endpoint");
+        for (const [route, body, expectedPath] of [
+            ["/api/open-dashboard", { appHostId: host.appHostId }, ""],
+            ["/api/open-dashboard-view", { nodeId: resource.id, view: "console-logs" }, "/consolelogs/resource/api"],
+            ["/api/open-endpoint", { nodeId: endpoint.id }, null],
+        ]) {
+            const response = await h.request(open, route, body);
+            assert.equal(response.ok, true);
+            assert.doesNotMatch(JSON.stringify(response), /private-host-token|private-endpoint-token|localhost/);
+            const url = new URL(target === "system" ? h.systemBrowserUrls.at(-1) : h.canvasOpens.at(-1).input.url);
+            if (expectedPath !== null) {
+                assert.equal(url.pathname, "/login");
+                assert.equal(url.searchParams.get("returnUrl") ?? "", expectedPath);
+                assert.equal(url.searchParams.get("t"), "private-host-token");
+            } else {
+                assert.equal(url.href, "https://localhost:7001/");
+            }
+        }
+        if (target === "integrated") {
+            assert.equal(h.systemBrowserUrls.length, 0);
+            assert.equal(h.canvasOpens.length, 3);
+        } else {
+            assert.equal(h.canvasOpens.length, 0);
+            assert.equal(h.systemBrowserUrls.length, 3);
+        }
+    });
+}
+
+test("hosts without canvas discovery use the default browser", async (t) => {
+    const h = await harness(t, { browserListAvailable: false });
+    const open = await h.open();
+    const { state } = await h.request(open, "/api/state");
+    const response = await h.request(open, "/api/open-dashboard", { appHostId: state.roots[0].appHostId });
+    assert.equal(response.ok, true);
+    assert.equal(h.systemBrowserUrls.length, 1);
+    assert.equal(h.canvasOpens.length, 0);
+});
+
+for (const failure of ["browserListError", "browserOpenError", "systemBrowserError"]) {
+    test(`${failure} is surfaced without silently falling back or leaking authentication`, async (t) => {
+        const h = await harness(t, {
+            browserCanvases: failure === "systemBrowserError" ? [] : undefined,
+            [failure]: new Error('Browser failed at "\u001b[31mhttps\u001b[0m://localhost/login?t=private-host-token&custom=private-value". Also HTTP://private-host:7001/api. Check configuration.'),
+        });
+        const open = await h.open();
+        const { state } = await h.request(open, "/api/state");
+        const host = state.roots[0];
+        const nodes = allNodes([host]);
+        for (const [route, body] of [
+            ["/api/open-dashboard", { appHostId: host.appHostId }],
+            ["/api/open-dashboard-view", { nodeId: nodes.find((node) => node.kind === "resource" && node.resourceName === "api").id, view: "traces" }],
+            ["/api/open-endpoint", { nodeId: nodes.find((node) => node.kind === "endpoint").id }],
+        ]) {
+            const response = await h.request(open, route, body);
+            assert.equal(response.status, 500);
+            assert.equal(response.ok, false);
+            assert.match(response.error, /Browser failed/);
+            assert.match(response.error, /Check configuration/);
+            assert.doesNotMatch(JSON.stringify(response), /https?:\/\/|localhost|private-host|private-value|7001/i);
+        }
+        assert.equal(h.systemBrowserUrls.length, 0);
+        assert.equal(h.canvasOpens.length, 0);
+    });
+}
+
+test("launcher failures after handoff notify the renderer and log without private URLs", async (t) => {
+    const h = await harness(t, { browserCanvases: [] });
+    const open = await h.open();
+    const { state } = await h.request(open, "/api/state");
+    const stream = await sse(h, open);
+    t.after(() => stream.close());
+    const response = await h.request(open, "/api/open-dashboard", { appHostId: state.roots[0].appHostId });
+    assert.equal(response.ok, true);
+    h.controls.reportBrowserError(new Error("Launcher exited with code 4 at https://localhost/login?t=private-host-token"));
+    const event = await stream.waitFor((message) => message.type === "browser-error");
+    assert.match(event.error, /Launcher exited with code 4/);
+    assert.doesNotMatch(JSON.stringify(event), /https?:\/\/|localhost|private-host-token/);
+    assert.ok(h.logs.includes(event.error));
+    assert.equal(h.canvasOpens.length, 0);
 });
 
 test("direct HTTP execution rejects missing, mismatched, failed and pending dynamic metadata", async (t) => {

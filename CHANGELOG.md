@@ -12,7 +12,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   `aspire.exe` path. Bare native `ASPIRE_CLI` names retain `.exe` completion,
   including names containing periods. Executable lookup and execution share the
   existing timeout.
- 
+- Fixed Aspire AppHosts canvas browser navigation in CLI hosts: endpoint,
+  Dashboard, and resource-diagnostic links now use the default system browser
+  when no integrated browser canvas is registered.
+
 ### Added
 - Added `copilot-app` attribution to both canonical telemetry hooks when
   `AI_AGENT=github_copilot_app_agent`, before generic Copilot CLI detection.
