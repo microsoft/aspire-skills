@@ -20,6 +20,76 @@ permissions:
   contents: read
 
 jobs:
+  copilot-model-catalog:
+    name: One-time Actions Copilot model catalogue
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.number == 69 &&
+      github.event.pull_request.head.ref == 'ellahathaway-release-workflow-bootstrap' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'ellahathaway' &&
+      github.actor == 'ellahathaway'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      copilot-requests: write
+    steps:
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "22"
+
+      - name: Install the eval runtime without running evals
+        run: |
+          tools_dir="$RUNNER_TEMP/aspire-eval-tools"
+          npm install --ignore-scripts --prefix "$tools_dir" @microsoft/vally-cli@0.16.0 @github/copilot-linux-x64@1.0.80
+          npm ls --prefix "$tools_dir" @microsoft/vally @github/copilot-sdk @github/copilot-linux-x64
+          cli_path="$tools_dir/node_modules/@github/copilot-linux-x64/index.js"
+          test -f "$cli_path"
+          node "$cli_path" --version
+          echo "COPILOT_CLI_PATH=$cli_path" >> "$GITHUB_ENV"
+          echo "EVAL_TOOLS_DIR=$tools_dir" >> "$GITHUB_ENV"
+
+      - name: List models using only the Actions runtime token
+        timeout-minutes: 2
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          unset GITHUB_TOKEN GH_TOKEN GITHUB_COPILOT_API_TOKEN COPILOT_API_URL
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { appendFileSync } from "node:fs";
+          import { createRequire } from "node:module";
+          import { pathToFileURL } from "node:url";
+          const require = createRequire(`${process.env.EVAL_TOOLS_DIR}/node_modules/@microsoft/vally/package.json`);
+          const { CopilotClient } = await import(pathToFileURL(require.resolve("@github/copilot-sdk")).href);
+          const client = new CopilotClient({ cliPath: process.env.COPILOT_CLI_PATH });
+          const timer = setTimeout(() => {
+            console.error("Actions model catalogue request exceeded 60 seconds.");
+            process.exit(1);
+          }, 60_000);
+          try {
+            await client.start();
+            const models = await client.listModels();
+            assert.ok(Array.isArray(models) && models.length > 0, "The runtime returned no model catalogue.");
+            for (const model of models) assert.ok(typeof model.id === "string" && model.id.length > 0);
+            const catalogue = {
+              runId: process.env.GITHUB_RUN_ID,
+              repository: process.env.GITHUB_REPOSITORY,
+              authentication: "COPILOT_GITHUB_TOKEN from github.token; no SDK githubToken override",
+              operation: "models.list only; no sessions or inference",
+              models: models.toSorted((a, b) => a.id.localeCompare(b.id)),
+            };
+            const json = JSON.stringify(catalogue, null, 2);
+            console.log(json);
+            appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Actions Copilot model catalogue\n\n\`\`\`json\n${json}\n\`\`\`\n`);
+          } finally {
+            await client.stop();
+            clearTimeout(timer);
+          }
+          NODE
+
   dev-source-check:
     name: Dev source-only check
     if: >-
