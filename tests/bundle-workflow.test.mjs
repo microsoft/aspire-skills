@@ -3,9 +3,11 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { parse } from "yaml";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const workflow = readFileSync(join(repoRoot, ".github", "workflows", "bundle-test.yml"), "utf8");
+const events = parse(workflow).on;
 
 test("bundle tests run for release workflow changes", () => {
   assert.equal(
@@ -29,6 +31,24 @@ test("extension source and plugin mirror changes trigger pull request and main t
     2
   );
 });
+
+for (const event of ["pull_request", "push"]) {
+  test(`${event} bundle tests cover every release version source`, () => {
+    const paths = events[event].paths;
+    for (const path of [
+      "package.json",
+      "package-lock.json",
+      ".plugin/plugin.json",
+      ".claude-plugin/plugin.json",
+      ".claude-plugin/marketplace.json",
+      ".cursor-plugin/marketplace.json",
+      "gemini-extension.json",
+      "skills/*/SKILL.md"
+    ]) {
+      assert.ok(paths.includes(path), `${event} must trigger for ${path}`);
+    }
+  });
+}
 
 test("npm test includes root and nested Aspireify suites without an overridden script", () => {
   const source = readFileSync(join(repoRoot, "package.json"), "utf8");
