@@ -254,9 +254,8 @@ These are the questions Phase 2 of the review workflow exists to answer.
 ## 13. Release preparation and publication
 
 Choose the release contract from the reviewed revision, not a different branch's
-workflow. Use [the legacy release guide](../../../../CONTRIBUTING.md#preparing-and-publishing-a-release)
-through `0.0.4`, and [the dev-based guide](../../../../docs/development.md)
-after the bootstrap.
+workflow. Through `0.0.4`, inspect the legacy publisher directly. After the
+bootstrap, use [the dev-based guide](../../../../docs/development.md).
 
 For the legacy main-based release, verify:
 

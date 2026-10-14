@@ -99,15 +99,64 @@ Publication uses the short-lived `GITHUB_TOKEN`, exposed to GitHub CLI as
 GitHub App credentials, or stored personal token.
 
 The successful `v0.0.3` publisher received contents and attestations write
-permissions and created the GitHub release. Repository Actions-settings endpoints
-were inaccessible during bootstrap, so PR creation and protection bypass are not
-assumed. Maintainers create release, version-bump, and backflow PRs with their own
-authenticated GitHub CLI or agent session and approve and merge them.
+permissions and created the GitHub release. A separate
+[Actions-token probe](https://github.com/microsoft/aspire-skills/actions/runs/38612461257/job/116019025531)
+confirmed that `GITHUB_TOKEN` can create and update PR comments and create and
+delete a temporary branch. Despite an explicit `pull-requests: write` grant,
+creating a draft PR failed with HTTP 403: "GitHub Actions is not permitted to
+create or approve pull requests." The temporary branch was deleted.
+
+PR creation is therefore currently blocked by repository or organization Actions
+policy, not by missing Aspire repo bot credentials. An administrator can review
+the "Allow GitHub Actions to create and approve pull requests" setting separately;
+this bootstrap does not change it or assume a branch-protection bypass.
+Until policy permits PR creation, maintainers create release, version-bump, and
+backflow PRs with their authenticated GitHub CLI or agent session. Approval and
+merging remain maintainer decisions.
 
 The publisher tags and publishes in the same run. A tag pushed with
 `GITHUB_TOKEN` does not trigger another push workflow; publication does not rely
 on a downstream tag-triggered job. Rerun a failed publishing job rather than
 moving an existing tag.
+
+## Automated PR findings
+
+The GitHub Agentic Workflow in `.github/workflows/pr-review.md` reviews non-draft,
+same-repository PRs into main or dev when opened, reopened, updated, or marked
+ready for review. GitHub Agentic Workflows also checks the triggering actor's
+trusted repository role; fork PRs and untrusted actors are not enabled. It uses
+the internal `pr-review` skill and references from the trusted PR base branch,
+not instructions supplied by the proposed changes.
+
+Its `pull_request_target` trigger deliberately loads the approved base workflow
+and local skill during activation. This is not the PR-code-execution pattern:
+forks are excluded, there is no PR checkout, and the reviewer cannot run shell
+commands or write to GitHub. Keep those boundaries intact when editing it.
+
+The agent has read-only GitHub tools, no shell, and no PR checkout. Copilot
+inference uses `copilot-requests: write` with the short-lived workflow token,
+not a PAT or repo bot. Only a separate safe-output job can post a findings
+comment on the triggering PR. That job rejects closed PRs and changed head SHAs
+before posting. Findings include the reviewed commit and exact source permalinks;
+existing findings are deduplicated. A complete review with no new findings posts
+no comment. Incomplete reviews are reported as incomplete, not clean.
+
+This workflow cannot approve, request changes, modify code, create PRs, merge,
+tag, or publish. It starts serving PRs after the workflow and skill guidance land
+on their trusted base branch; it does not self-review its initial bootstrap.
+Rerun it through GitHub Actions when needed. It is advisory and does not replace
+maintainer approval or existing checks.
+
+Edit the Markdown source and regenerate the committed `.lock.yml` using
+GitHub Agentic Workflows CLI **v0.89.21**:
+
+```powershell
+gh aw compile pr-review --validate --strict
+node --test tests/pr-review-workflow.test.mjs
+```
+
+Do not edit the generated lockfile by hand or enable broader write outputs to
+work around a failure.
 
 ## Backflow to dev
 
