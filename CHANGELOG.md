@@ -11,11 +11,6 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   13.5 users must select MCP interactively.
 - Clarified missing-`aspireify` recovery to preserve explicit skill and location
   selections without enabling MCP.
-
-### Fixed
-- Removed dangling hook links from the published plugin mirror.
-
-### Changed
 - Hardened Windows launches in the AppHosts and Doctor extensions by resolving
   the Aspire CLI and Explorer to fully qualified executable paths. Relative
   `ASPIRE_CLI` paths are no longer supported, and Doctor no longer accepts
@@ -31,6 +26,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Added `copilot-app` attribution to both canonical telemetry hooks when
   `AI_AGENT=github_copilot_app_agent`, before generic Copilot CLI detection,
   without changing attribution for other agent hosts.
+
+### Removed
+- Removed dangling hook links from the published plugin mirror.
 
 ## [0.0.3](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.3)
 
