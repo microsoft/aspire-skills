@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "release": "node .github/skills/release/scripts/prepare-release.mjs",
+    "version:dev": "node .github/skills/release/scripts/version-development.mjs",
     "test": "node --test tests/*.test.mjs tests/aspireify/*.test.mjs",
     "catalog": "node .github/skills/release/scripts/build-opencode-catalog.mjs",
     "bundle": "node scripts/build-aspire-bundles.mjs",

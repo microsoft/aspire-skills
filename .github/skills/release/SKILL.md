@@ -14,6 +14,10 @@ Prepare a release PR from a pinned dev snapshot. Ask for the release version and
 full dev commit SHA if missing; never select live dev implicitly. Do not merge
 PRs, create tags or GitHub releases, or perform the dev backflow.
 
+`0.0.4` is the final legacy main-based release. Use this flow only after it is
+published and the bootstrap has initialized dev at `0.0.5`. See
+[development guidance](../../../docs/development.md) for the one-time transition.
+
 ## Prepare the branch
 
 Work from the repository root with Node.js 22 or later and a clean working tree
@@ -139,5 +143,15 @@ the selected repository; report a scope limitation if it cannot. When no host
 tool is available, use GitHub CLI with an explicit `--repo <OWNER>/<REPO>`.
 Do not create a second PR if one already exists.
 
-Report the PR link and pinned version/source. Leave review, squash merge,
-publication verification, and dev backflow to the maintainer.
+After the candidate is cut, arrange a separate checkout/session for a dev
+version-bump PR. Confirm the next development version with the maintainer; do not
+change the release candidate. From freshly fetched `origin/dev`, create
+`bump-dev/<NEXT_VERSION>` and run `npm run version:dev -- <NEXT_VERSION>`.
+Review and test the staged version-only changes, then commit, push, and open a
+PR to dev using the maintainer's authenticated tools. Merge remains a human step;
+dev must advance before further development.
+
+Report the release PR link and pinned version/source, plus the version-bump PR
+or the outstanding maintainer handoff. Leave review, squash merge, publication
+verification, and dev backflow to the maintainer. Publication uses Actions'
+`GITHUB_TOKEN`; PR creation and merges do not require the Aspire repo bot.

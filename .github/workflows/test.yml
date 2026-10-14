@@ -87,6 +87,7 @@ jobs:
           case "${TARGET_BRANCH:-}" in
             main)
               if [[ "$HEAD_BRANCH" != release/?* &&
+                    "$HEAD_BRANCH" != ellahathaway-release-workflow-bootstrap &&
                     ! "$HEAD_BRANCH" =~ ^backport/pr-[1-9][0-9]*-to-main$ ]]; then
                 echo "::error::PRs to main must come from maintainer-created release/* or backport/pr-<number>-to-main branches."
                 exit 1
@@ -161,6 +162,31 @@ jobs:
           HEAD_BRANCH: ${{ github.event.pull_request.head.ref || '' }}
           HEAD_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
           BASE_COMMIT: ${{ github.event.pull_request.base.sha || '' }}
+          SAME_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
         run: |
           set -euo pipefail
-          node "$GITHUB_WORKSPACE/tooling/.github/skills/release/scripts/release.mjs" check
+          tooling="$GITHUB_WORKSPACE/tooling/.github/skills/release/scripts/release.mjs"
+          if [[ ! -f "$tooling" ]]; then
+            if [[ "$TARGET_BRANCH" == main &&
+                  "$HEAD_BRANCH" == ellahathaway-release-workflow-bootstrap &&
+                  "$SAME_REPOSITORY" == true ]]; then
+              node --input-type=module -e '
+                import { readFileSync } from "node:fs";
+                const pkg = JSON.parse(readFileSync(process.env.GITHUB_WORKSPACE + "/tooling/package.json"));
+                if (pkg.version !== "0.0.4") throw new Error("Publish the legacy 0.0.4 release before landing the bootstrap.");
+              '
+              git -C "$GITHUB_WORKSPACE/tooling" fetch --no-tags origin \
+                refs/tags/v0.0.4:refs/tags/v0.0.4
+              git -C "$GITHUB_WORKSPACE/tooling" merge-base --is-ancestor \
+                'v0.0.4^{commit}' HEAD
+              if [[ "$(gh release view v0.0.4 --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')" != false ]]; then
+                echo "::error::The legacy 0.0.4 release must be published, not draft."
+                exit 1
+              fi
+              echo "One-time infrastructure bootstrap; normal tests and maintainer approval remain required."
+              exit 0
+            fi
+            echo "::error::Trusted main release tooling is missing outside the approved bootstrap."
+            exit 1
+          fi
+          node "$tooling" check

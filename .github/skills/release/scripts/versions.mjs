@@ -96,6 +96,20 @@ export function updateVersion(contents, path, version) {
   return Buffer.from(text);
 }
 
+export function versionTree(repo, tree, version) {
+  return repo.withIndex(indexFile => {
+    repo.run(["read-tree", tree], { indexFile });
+    for (const [path, bytes] of versionManifests(repo, tree)) {
+      const updated = updateVersion(bytes, path, version);
+      if (!updated.equals(bytes)) {
+        const oid = repo.run(["hash-object", "-w", "--stdin"], { input: updated }).trim();
+        repo.run(["update-index", "--add", "--cacheinfo", "100644", oid, path], { indexFile });
+      }
+    }
+    return repo.run(["write-tree"], { indexFile }).trim();
+  });
+}
+
 export function versionManifests(repo, sha) {
   const entries = repo.files(sha);
   const paths = [...manifestPaths, ...entries.keys()].filter(path =>

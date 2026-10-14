@@ -1,8 +1,8 @@
 import {
-  compareVersions, onlyVersionChanges, updateVersion, versionManifests, versionSnapshot
+  compareVersions, onlyVersionChanges, updateVersion, versionSnapshot, versionTree
 } from "./versions.mjs";
 import {
-  developmentChanges, generateChangelog, latestRelease, readChangelog, releaseMessage, validateChangelog
+  developmentChanges, generateChangelog, latestRelease, publishedBaseline, readChangelog, releaseMessage, validateChangelog
 } from "./changelog.mjs";
 import { expectedCatalog, validateCatalog } from "./catalog.mjs";
 import { generatedPaths as generated, requireSourceOnly } from "./development.mjs";
@@ -20,27 +20,12 @@ function contextFor(repo, inputs) {
     throw new Error("Release version must be greater than main's version.");
   }
   const previousChangelog = readChangelog(repo, base);
-  const previousRelease = latestRelease(previousChangelog, { optional: true });
-  if (!previousRelease) throw new Error("Main's latest changelog entry needs verified historical release metadata.");
+  const previousRelease = publishedBaseline(repo, base);
   if (previousRelease.version !== baseline.version) throw new Error("Main's version does not match the last published release.");
   const from = previousRelease.source;
   return Object.freeze({
     from, source, base, version: inputs.version, baselineVersion: baseline.version,
     previousChangelog, changes: developmentChanges(repo, from, source)
-  });
-}
-
-function alignedTree(repo, tree, version) {
-  return repo.withIndex(indexFile => {
-    repo.run(["read-tree", tree], { indexFile });
-    for (const [path, bytes] of versionManifests(repo, tree)) {
-      const updated = updateVersion(bytes, path, version);
-      if (!updated.equals(bytes)) {
-        const oid = repo.run(["hash-object", "-w", "--stdin"], { input: updated }).trim();
-        repo.run(["update-index", "--add", "--cacheinfo", "100644", oid, path], { indexFile });
-      }
-    }
-    return repo.run(["write-tree"], { indexFile }).trim();
   });
 }
 
@@ -69,7 +54,7 @@ function validateReleaseHead(repo, head, main, { currentState = true, allowPendi
       const canonical = `${message.title}\n\n${message.body}`;
       const trailers = actual.slice(canonical.length + 2);
       if (actual === canonical || (actual.startsWith(`${canonical}\n\n`) && trailers.split("\n").every(line =>
-        /^(?:Co-authored-by|Signed-off-by): [^<>\r\n]+ <[^<>\r\n]+>$/.test(line)))) {
+        /^(?:(?:Co-authored-by|Signed-off-by): [^<>\r\n]+ <[^<>\r\n]+>|Copilot-Session: [0-9a-f-]{36})$/.test(line)))) {
         const context = contextFor(repo, { ...release, base: parents[0] });
         if (!onlyVersionChanges(repo, context.source, current)) {
           throw new Error("The local release must preserve the selected dev snapshot.");
@@ -208,26 +193,59 @@ function validateDevMerge(repo, head, dev, expectedVersion) {
 }
 
 function initializeDevelopment(repo, head, base, branch) {
-  const published = latestRelease(readChangelog(repo, base), { optional: true });
-  if (base !== repo.sha("origin/main")
-    || (published && (published.from !== published.source
-      || (published.baselineVersion && published.baselineVersion !== published.version)))
-    || !onlyVersionChanges(repo, base, head) || !sameChangelog(repo, base, head)) {
-    throw new Error("Initialization is allowed only from the bootstrap main tree, removing catalogs and preserving source and published changelog history.");
+  const main = repo.sha("origin/main");
+  const published = publishedBaseline(repo, main);
+  if (base !== main || !onlyVersionChanges(repo, main, head) || !sameChangelog(repo, main, head)) {
+    throw new Error("Initialization must start from synchronized main/dev, preserving source and published changelog history.");
   }
   const version = versionSnapshot(repo, head).version;
-  if (branch !== `initialize-dev/${version}` || version !== versionSnapshot(repo, base).version) {
-    throw new Error("Initialization must preserve main's current version.");
+  if (branch !== `initialize-dev/${version}` || compareVersions(version, published.version) <= 0) {
+    throw new Error("Initialization must advance dev beyond main's published version.");
   }
+  repo.requireFirstParent(published.source, head);
+  validateDevMerge(repo, head, repo.sha("origin/dev"), version);
+}
+
+function validateBackflow(repo, head, dev, main) {
+  const expectedVersion = versionSnapshot(repo, dev).version;
+  if (versionSnapshot(repo, head).version !== expectedVersion || !sameChangelog(repo, main, head)) {
+    throw new Error("Dev backflows must preserve dev's current version and copy main's approved CHANGELOG.md.");
+  }
+  repo.requireAncestor(main, head);
+  let merge = head;
+  while (repo.parents(merge).length === 1) {
+    const parent = repo.parents(merge)[0];
+    if (!onlyVersionChanges(repo, parent, merge)) {
+      throw new Error("Backflow follow-ups may only resolve versions, catalogs, and changelog history.");
+    }
+    merge = parent;
+  }
+  const parents = repo.parents(merge);
+  if (parents.length !== 2 || parents[1] !== main || !repo.ancestor(parents[0], dev)) {
+    throw new Error("Backflows must merge current main into a branch based on dev, preserving dev's first-parent history.");
+  }
+  const merged = repo.mergeTree(...parents);
+  const mutable = mutablePaths(repo, parents[0], head);
+  if (!repo.sameTree(merged.tree, head, { exclude: [...mutable, ...merged.conflicts] })) {
+    throw new Error("Backflow changed source outside the actual main/dev merge conflicts.");
+  }
+  for (const path of mutable.filter(path => !generated.includes(path) && !merged.conflicts.includes(path))) {
+    const bytes = repo.files(merged.tree).has(path) ? repo.read(merged.tree, path) : undefined;
+    const actual = versionSnapshot(repo, head).manifests.get(path);
+    if ((!bytes && actual) || (bytes && !actual?.equals(updateVersion(bytes, path, expectedVersion)))) {
+      throw new Error("Backflow changed non-version manifest content outside a merge conflict.");
+    }
+  }
+  validateDevMerge(repo, head, dev, expectedVersion);
 }
 
 export function checkDevelopment(repo, { head, base, branch }) {
   requireSourceOnly(repo, head);
   const version = versionSnapshot(repo, head).version;
   const main = repo.sha("origin/main");
-  const published = latestRelease(readChangelog(repo, main), { optional: true });
+  const published = publishedBaseline(repo, main);
   if (!branch) {
-    if (published) repo.requireFirstParent(published.source, head);
+    repo.requireFirstParent(published.source, head);
     return;
   }
   if (branch === "main" || branch.startsWith("release/") || branch.startsWith("prepare-release/")) {
@@ -237,11 +255,18 @@ export function checkDevelopment(repo, { head, base, branch }) {
     initializeDevelopment(repo, head, base, branch);
     return;
   }
-  if (/^backport\/pr-[1-9]\d*-to-dev$/.test(branch)) {
-    if (!sameChangelog(repo, main, head)) {
-      throw new Error("Dev backflows must copy main's approved CHANGELOG.md without edits.");
+  if (branch.startsWith("bump-dev/")) {
+    const common = repo.run(["merge-base", base, head]).trim();
+    if (branch !== `bump-dev/${version}` || compareVersions(version, versionSnapshot(repo, common).version) <= 0
+      || !onlyVersionChanges(repo, common, head) || !sameChangelog(repo, common, head)) {
+      throw new Error("Dev version bumps must advance coordinated versions without changing source or changelog.");
     }
     validateDevMerge(repo, head, repo.sha("origin/dev"), version);
+    checkDevelopment(repo, { head });
+    return;
+  }
+  if (/^backport\/pr-[1-9]\d*-to-dev$/.test(branch)) {
+    validateBackflow(repo, head, repo.sha("origin/dev"), main);
     return;
   }
   const common = repo.run(["merge-base", base, head]).trim();
@@ -293,7 +318,7 @@ export function prepareLocalRelease(repo, { releaseVersion, sourceCommit, remote
   const dev = repo.sha(`refs/remotes/${remote}/dev`);
   repo.requireFirstParent(context.source, dev);
   requireSourceOnly(repo, dev);
-  const sourceTree = alignedTree(repo, context.source, context.version);
+  const sourceTree = versionTree(repo, context.source, context.version);
   const files = expectedCatalog(repo, sourceTree, context.version);
   files.set("CHANGELOG.md", Buffer.from(generateChangelog(context)));
   const tree = repo.withIndex(indexFile => {

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { parse } from "yaml";
@@ -147,6 +148,54 @@ test("release PR checks use trusted main tooling on the exact reviewed head", ()
   assert.equal(main.with["persist-credentials"], false);
   const validation = job.steps.find(step => step.run?.includes("release.mjs"));
   assert.equal(validation.env.HEAD_COMMIT, "${{ github.event.pull_request.head.sha || github.sha }}");
+});
+
+test("publication uses only the workflow token and never requires a bot secret or PR write permission", () => {
+  assert.equal(workflow.permissions.contents, "read");
+  assert.equal(workflow.jobs.release.permissions["pull-requests"], "read");
+  const source = read(".github/workflows/publish.yml");
+  assert.doesNotMatch(source, /secrets\.|create-github-app-token|pull_request_target|gh pr create|gh pr merge/);
+  assert.equal(workflow.jobs.release.env.GH_TOKEN, "${{ github.token }}");
+});
+
+test("bootstrap exception requires published 0.0.4 and disappears once trusted tooling exists", t => {
+  const root = mkdtempSync(join(tmpdir(), "release-bootstrap-"));
+  t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 3 }));
+  mkdirSync(join(root, "tooling"));
+  const workflow = parse(read(".github/workflows/test.yml"));
+  const validation = workflow.jobs["release-validation"].steps.find(step => step.run?.includes("release.mjs"));
+  const env = {
+    ...process.env, BASH_ENV: "", GITHUB_WORKSPACE: root.replaceAll("\\", "/"),
+    GITHUB_REPOSITORY: "microsoft/aspire-skills",
+    TARGET_BRANCH: "main", HEAD_BRANCH: "ellahathaway-release-workflow-bootstrap", SAME_REPOSITORY: "true"
+  };
+  const run = (overrides = {}, setup = 'git() { return 0; }\ngh() { printf "false"; }') => spawnSync(
+    bash, ["--noprofile", "--norc", "-e", "-o", "pipefail", "-c", `${setup}\n${validation.run}`],
+    { cwd: repoRoot, encoding: "utf8", timeout: 10_000, env: { ...env, ...overrides } }
+  );
+  writeFileSync(join(root, "tooling", "package.json"), '{"version":"0.0.4"}');
+  const accepted = run();
+  assert.equal(accepted.status, 0, accepted.stderr);
+  assert.match(accepted.stdout, /One-time infrastructure bootstrap/);
+  for (const overrides of [
+    { SAME_REPOSITORY: "false" }, { HEAD_BRANCH: "feature/unreviewed" }, { TARGET_BRANCH: "dev" }
+  ]) {
+    const rejected = run(overrides);
+    assert.equal(rejected.status, 1, rejected.stderr);
+    assert.match(rejected.stdout, /Trusted main release tooling is missing/);
+  }
+  writeFileSync(join(root, "tooling", "package.json"), '{"version":"0.0.3"}');
+  assert.equal(run().status, 1);
+  writeFileSync(join(root, "tooling", "package.json"), '{"version":"0.0.4"}');
+  assert.equal(run({}, 'git() { return 17; }').status, 17);
+  assert.equal(run({}, 'git() { return 0; }\ngh() { printf "true"; }').status, 1);
+  assert.equal(run({}, 'git() { return 0; }\ngh() { return 17; }').status, 1);
+  const trusted = join(root, "tooling", ".github", "skills", "release", "scripts", "release.mjs");
+  mkdirSync(dirname(trusted), { recursive: true });
+  writeFileSync(trusted, 'console.error("Trusted policy rejected bootstrap"); process.exitCode = 19;\n');
+  const checked = run();
+  assert.equal(checked.status, 19, checked.stderr);
+  assert.doesNotMatch(checked.stdout, /One-time infrastructure bootstrap/);
 });
 
 function step(name) {

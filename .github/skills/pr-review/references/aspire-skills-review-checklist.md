@@ -91,6 +91,10 @@ Six canonical JSON files, both lockfile root versions, and all seven shipped
 skills share one version within a branch. Check them together whenever release
 versions change. Ordinary feature and release-fix PRs preserve dev's current version:
 
+Dedicated `initialize-dev/<version>` and `bump-dev/<version>` PRs advance dev's
+coordinated version without source or changelog edits. The former also removes
+catalogs from the synchronized bootstrap tree.
+
 | File | Field |
 |------|-------|
 | `package.json` | `version` |
@@ -170,9 +174,10 @@ For a release PR prepared by the release skill, verify:
 **Severity for invalid release metadata or rewritten published history:** `blocking`.
 Unclear release notes are `important`.
 
-Release backflows start from updated main, retain its approved `CHANGELOG.md`,
-remove only `opencode/`, and target dev. Their merge must preserve later dev work
-and leave canonical versions aligned.
+Release backflows start from current dev and merge updated main, retain main's
+approved `CHANGELOG.md`, remove `opencode/`, and target dev. Their merge must
+preserve dev's next version and later source work, including non-version manifest
+content. Merge them with a merge commit, not squash or rebase.
 
 **Severity for hand-edited catalogs, changes outside newest-entry finalization,
 or unrelated release-candidate changes:**

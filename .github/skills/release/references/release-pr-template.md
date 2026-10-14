@@ -14,6 +14,8 @@ Selected dev snapshot: `<DEV_SHA>`
 - [ ] This PR targets `main` from `release/<VERSION>` in `<OWNER>/<REPO>`.
 - [ ] The source range and pinned dev snapshot are correct; later dev changes
   are excluded.
+- [ ] A separate `bump-dev/<NEXT_VERSION>` PR advances dev after this candidate
+  is cut, and is merged before further development.
 - [ ] Plugin, package, and skill versions are coordinated at `<VERSION>`.
 - [ ] Generated OpenCode catalogs match the selected snapshot and release version.
 - [ ] Changelog notes use nonempty Changed, Removed, and Added sections in that
@@ -28,7 +30,8 @@ Selected dev snapshot: `<DEV_SHA>`
   and its notes match the approved changelog entry's notes, excluding the version
   heading and internal metadata marker.
 - [ ] Using the target repository's remote, create
-  `backport/pr-<RELEASE_PR_NUMBER>-to-dev` from updated main, retain its approved
-  `CHANGELOG.md`, remove only `opencode/`, commit, and open a PR to dev.
-- [ ] Review and merge the dev backflow PR, preserving later dev work when
-  resolving conflicts.
+  `backport/pr-<RELEASE_PR_NUMBER>-to-dev` from current dev and merge updated main
+  into it. Preserve dev's next version and newer source work, take main's approved
+  `CHANGELOG.md`, remove `opencode/`, commit, and open a PR to dev.
+- [ ] Review and merge the dev backflow PR with a merge commit, not squash or
+  rebase, preserving both branches' ancestry.

@@ -1,6 +1,6 @@
 import { isUtf8 } from "node:buffer";
 import { fullSha } from "./git.mjs";
-import { onlyVersionChanges, parseVersion } from "./versions.mjs";
+import { onlyVersionChanges, parseVersion, versionSnapshot } from "./versions.mjs";
 import { repositoryUrl } from "./github.mjs";
 
 const notesPattern = /^<!-- aspire-skills-changelog(-done)? from=([0-9a-f]{40}) to=([0-9a-f]{40}) base=([0-9A-Za-z.+-]*) -->$/;
@@ -46,6 +46,28 @@ export function latestRelease(changelog, { optional = false } = {}) {
     baselineVersion: notes[4],
     notesState: notes[1] === "-done" ? "finalized" : "pending", entry
   });
+}
+
+export function publishedBaseline(repo, main) {
+  const changelog = readChangelog(repo, main);
+  const version = versionSnapshot(repo, main).version;
+  const release = latestRelease(changelog, { optional: true });
+  if (release) {
+    if (release.version !== version || release.notesState !== "finalized") {
+      throw new Error("Main must identify its finalized published version.");
+    }
+    return release;
+  }
+  const heading = /^## .+$/m.exec(changelog)?.[0] ?? "";
+  if (!heading.startsWith(`## [${version}]`) || /\bUnreleased\b/.test(heading)) {
+    throw new Error("The legacy baseline must have finalized changelog notes for main's version.");
+  }
+  const source = repo.sha(`refs/tags/v${version}`);
+  repo.requireFirstParent(source, main);
+  if (versionSnapshot(repo, source).version !== version) {
+    throw new Error("The legacy release tag must identify the coordinated published version.");
+  }
+  return Object.freeze({ version, source, notesState: "finalized" });
 }
 
 export function changelogStateMarker(context, state) {
