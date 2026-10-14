@@ -101,3 +101,47 @@ test("catalog parity does not depend on release manifests or installed packages"
   const result = f.check();
   assert.equal(result.status, 0, result.stderr);
 });
+
+test("catalog generation leaves literal links in code spans and fenced blocks untouched", t => {
+  const f = fixture(t);
+  const examples = [
+    "Real [entry](../SKILL.md) link.",
+    "",
+    "Inline `[Entry](SKILL.md)` and ``[Missing](missing.md)`` examples.",
+    "",
+    "```md",
+    "[Example](example.md)",
+    "[ref]: ../SKILL.md",
+    "```",
+    "",
+    "~~~",
+    "[Other](missing.md)",
+    "~~~",
+    ""
+  ].join("\n");
+  f.write("skills/aspire/references/examples.md", examples);
+  buildCatalog(f.root);
+  const generated = readFileSync(join(f.root, "opencode", "v2", "aspire", "references", "examples.md"), "utf8");
+  assert.equal(generated, examples.replace("[entry](../SKILL.md)", "[entry](../aspire.md)"));
+});
+
+test("catalog generation still rejects broken links outside code", t => {
+  const f = fixture(t);
+  f.write("skills/aspire/references/broken.md", "`[Ok](missing.md)` but [broken](missing.md).\n");
+  assert.throws(() => buildCatalog(f.root), /Broken relative Markdown link/);
+});
+
+test("regeneration replaces a file with a directory and back", t => {
+  const f = fixture(t);
+  const guide = join(f.root, "skills", "aspire", "guide");
+  f.write("skills/aspire/guide", "File.\n");
+  buildCatalog(f.root);
+  rmSync(guide);
+  f.write("skills/aspire/guide/usage.md", "Directory.\n");
+  buildCatalog(f.root);
+  assert.equal(readFileSync(join(f.root, "opencode", "v2", "aspire", "guide", "usage.md"), "utf8"), "Directory.\n");
+  rmSync(guide, { recursive: true });
+  f.write("skills/aspire/guide", "File.\n");
+  buildCatalog(f.root);
+  assert.equal(readFileSync(join(f.root, "opencode", "v2", "aspire", "guide"), "utf8"), "File.\n");
+});

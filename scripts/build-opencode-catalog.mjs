@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { isUtf8 } from "node:buffer";
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -9,6 +9,18 @@ const excludedDirectories = new Set(["evals", "tests", "node_modules", "__pycach
 const inlineLink = /(\]\([ \t]*)(<[^<>\n]*>|[^\s()<>]+)((?:[ \t]+(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\((?:\\.|[^)\\])*\)))?[ \t]*\))/g;
 const referenceLink = /^([ ]{0,3}\[(?:\\.|[^\]\\\n])+\]:[ \t]*)(<[^<>\n]*>|[^\s()<>]+)((?:[ \t]+(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\((?:\\.|[^)\\])*\)))?[ \t]*)$/gm;
 const markdownLink = new RegExp(`${inlineLink.source}|${referenceLink.source}`, "gm");
+const fencedCode = /^ {0,3}(`{3,}|~{3,})[^\n]*(?:\n(?:[\s\S]*?\n)? {0,3}\1[`~]*[ \t]*$|[\s\S]*)/gm;
+const inlineCode = /(?<![`\\])(`+)(?!`)(?:(?!\n[ \t]*\n)[\s\S])*?(?<!`)\1(?!`)/g;
+
+function findCodeRanges(markdown) {
+  const ranges = [];
+  const blanked = markdown.replace(fencedCode, (match, _fence, offset) => {
+    ranges.push([offset, offset + match.length]);
+    return match.replace(/[^\n]/g, " ");
+  });
+  for (const match of blanked.matchAll(inlineCode)) ranges.push([match.index, match.index + match[0].length]);
+  return ranges;
+}
 
 export function isDevelopmentPath(path) {
   return path.split("/").some(part => part.startsWith(".") || excludedDirectories.has(part));
@@ -76,7 +88,11 @@ function readPublishedSkills(root, format) {
       if (path.endsWith(".md") && !contents.includes(0) && isUtf8(contents)) {
         const markdown = contents.toString("utf8");
         const frontmatter = /^---\n[\s\S]*?\n---(?:\n|$)/.exec(markdown)?.[0] ?? "";
+        const text = markdown.slice(frontmatter.length);
+        const codeRanges = findCodeRanges(text);
         const relocate = (match, ...groups) => {
+          const offset = groups.at(-2);
+          if (codeRanges.some(([start, end]) => offset >= start && offset < end)) return match;
           const [before, token, after] = groups.slice(groups[0] === undefined ? 3 : 0);
           const enclosed = token.startsWith("<");
           const destination = enclosed ? token.slice(1, -1) : token;
@@ -97,8 +113,7 @@ function readPublishedSkills(root, format) {
           }
           return `${before}${enclosed ? `<${relocated}>` : relocated}${after}`;
         };
-        const body = markdown.slice(frontmatter.length).replace(markdownLink, relocate);
-        contents = Buffer.from(frontmatter + body);
+        contents = Buffer.from(frontmatter + text.replace(markdownLink, relocate));
       }
       files.set(target, contents);
     }
@@ -133,14 +148,11 @@ export function buildCatalog(root) {
   const v1 = createCatalog(root, { format: "v1" });
   for (const [path, contents] of v1.files) outputFiles.set(`v1/${path}`, contents);
   const outputRoot = join(root, "opencode");
-  const existingPaths = existsSync(outputRoot) ? listFiles(outputRoot) : [];
+  rmSync(outputRoot, { recursive: true, force: true });
   for (const [path, contents] of outputFiles) {
     const target = join(outputRoot, ...path.split("/"));
     mkdirSync(dirname(target), { recursive: true });
     writeFileSync(target, contents);
-  }
-  for (const path of existingPaths) {
-    if (!outputFiles.has(path)) unlinkSync(join(outputRoot, ...path.split("/")));
   }
   return index;
 }
