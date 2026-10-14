@@ -4,10 +4,14 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 
 ## [0.0.4] - Unreleased
 
-### Fixed
+### Changed
 - Fixed Aspire AppHosts canvas browser navigation in CLI hosts: endpoint,
   Dashboard, and resource-diagnostic links now use the default system browser
   when no integrated browser canvas is registered.
+
+### Added
+- Added `copilot-app` attribution to both canonical telemetry hooks when
+  `AI_AGENT=github_copilot_app_agent`, before generic Copilot CLI detection.
 
 ## [0.0.3] - 2026-09-23
 
