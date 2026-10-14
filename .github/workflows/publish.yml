@@ -95,6 +95,11 @@ jobs:
               echo "::error::$RELEASE_TAG points to a different commit; tags must not move." >&2
               exit 1
             fi
+            if [[ "$(git for-each-ref --format='%(objecttype)' "$ref")" != tag ||
+              "$(git for-each-ref --format='%(contents)' "$ref")" != "$(cat "$RUNNER_TEMP/release-notes.md")" ]]; then
+              echo "::error::$RELEASE_TAG must be an annotated tag with the approved release notes." >&2
+              exit 1
+            fi
           else
             git -c user.name='github-actions[bot]' \
               -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
