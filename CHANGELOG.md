@@ -12,6 +12,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   `aspire.exe` path. Bare native `ASPIRE_CLI` names retain `.exe` completion,
   including names containing periods. Executable lookup and execution share the
   existing timeout.
+ 
+### Added
+- Added `copilot-app` attribution to both canonical telemetry hooks when
+  `AI_AGENT=github_copilot_app_agent`, before generic Copilot CLI detection.
 
 ## [0.0.3] - 2026-09-23
 
