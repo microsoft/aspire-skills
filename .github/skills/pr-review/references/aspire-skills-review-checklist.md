@@ -154,6 +154,9 @@ For a release PR prepared by the release skill, verify:
 - The linked version heading, release metadata, and finalized notes describe the
   selected range while preserving earlier entries. New notes use nonempty Changed,
   Removed, and Added sections in that order.
+- Display versions without a `v` prefix and link to the actual `v<version>` tag.
+  Include only new user-visible behavior, not already published features,
+  version-bump housekeeping, repository inventory metadata, or test-only changes.
 - The candidate contains the selected dev snapshot plus only coordinated version,
   changelog, and catalog changes.
 - The version is newer than main's version, the branch is `release/<version>`,
@@ -247,6 +250,36 @@ Two questions to ask on every change:
    misroute a request?"** If yes, fix the phrasing before approving.
 
 These are the questions Phase 2 of the review workflow exists to answer.
+
+## 13. Release preparation and publication
+
+Choose the release contract from the reviewed revision, not a different branch's
+workflow. Use [the legacy release guide](../../../../CONTRIBUTING.md#preparing-and-publishing-a-release)
+through `0.0.4`, and [the dev-based guide](../../../../docs/development.md)
+after the bootstrap.
+
+For the legacy main-based release, verify:
+
+- The exact previous published tag-to-source range supplies the new user-visible
+  notes, with tag-linked headings and unchanged historical note bodies.
+- Versions, mirror symlinks, tests, bundle builds, and skill/eval checks agree.
+  Distinguish local evidence from CI results.
+- Tagging selects the exact approved final main commit after merge, not the
+  preparation branch tip or whichever commit happens to be latest on main.
+- Merging, tagging, manual publication dispatch, and editing release notes remain
+  separately authorized. The legacy workflow does not tag or publish on PR merge.
+- Tag pushes upload skills only; extensions require manual opt-in against the
+  same version tag. Both archives are built and attested.
+- Instructions acknowledge generic release notes and asset-overwriting reruns.
+
+For subsequent dev-based releases, apply section 7 and the Release Checklist.
+The maintainer's approved release-PR merge authorizes the post-merge publisher;
+do not add a manual tag step or assume a token-created tag triggers another job.
+Verify the exact reviewed main squash, approved changelog notes, immutable tag,
+and version-preserving backflow.
+
+**Severity:** `important` for inaccurate guidance or missing validation evidence;
+`blocking` for source/version mismatches or publication of unapproved code.
 
 ## Quick-scan order
 

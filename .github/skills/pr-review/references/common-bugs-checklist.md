@@ -109,8 +109,8 @@ Files: `package.json`, `package-lock.json`, `.plugin/plugin.json`, `.claude-plug
 `gemini-extension.json`, `.mcp.json`.
 
 - [ ] Valid JSON (no trailing commas, no comments — these silently break some loaders).
-- [ ] Release versions are consistent across canonical manifests, both lockfile
-      root versions, and `metadata.version` in all seven shipped skills (see
+- [ ] Target versions are consistent across canonical JSON values, both root lockfile
+      version fields, and `metadata.version` in all seven shipped skills (see
       `aspire-skills-review-checklist.md` §6).
 - [ ] Plugin entries are named `aspire`; the package and marketplaces are named
       `aspire-skills`. Select marketplace entries by name, not array position.

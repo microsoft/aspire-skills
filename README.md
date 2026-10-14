@@ -259,6 +259,11 @@ After a `release/<version>` PR merges into main, the
 publishes its approved changelog notes, builds and attests both bundles, and
 uploads only the `aspire-skills` bundle.
 
+The final main-based `0.0.4` release uses the legacy, separately authorized
+tag-triggered process documented in
+[Preparing and Publishing a Release](CONTRIBUTING.md#preparing-and-publishing-a-release).
+Complete that release before switching to the dev-based flow.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.

@@ -19,12 +19,15 @@ Use `blocking` when the PR…
 
 - Removes or weakens a documented safety guardrail (e.g., the `dotnet run` →
   `aspire start` mapping disappears from `skills/aspire-orchestration/SKILL.md`).
-- Leaves canonical manifests, either lockfile root, or the seven shipped skills out of release-version sync (see
+- Leaves canonical manifest values, either root lockfile field, or any of the seven shipped skills
+  out of target-version sync (see
   `aspire-skills-review-checklist.md` §6).
 - Adds OpenCode catalogs to dev, edits its changelog in an ordinary PR or copies
   unapproved history during backflow, changes dev's version in an ordinary PR,
   drops dev work during a manual backport, leaves canonical version fields
   inconsistent, or publishes a candidate with unselected source changes.
+- Tags the wrong final main commit or publishes without the authorization
+  required by the applicable legacy or dev-based release contract (§13).
 - Drops or shadows the project-local override deference block (`§8`).
 - Introduces a routing change with no `trigger_tests.yaml` update **and** the change is
   likely to drop accuracy below the per-skill threshold.
