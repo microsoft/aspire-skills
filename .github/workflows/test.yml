@@ -20,6 +20,91 @@ permissions:
   contents: read
 
 jobs:
+  token-permissions-probe:
+    name: Actions token permission probe
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.number == 69 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'ellahathaway-release-workflow-bootstrap'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Probe comments and draft PR creation, then clean up
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const branch = `actions-token-probe/${context.runId}-${process.env.GITHUB_RUN_ATTEMPT}`;
+            const results = [];
+            let comment;
+            let branchCreated = false;
+            let pull;
+            let unexpectedError;
+            try {
+              try {
+                comment = (await github.rest.issues.createComment({
+                  owner, repo, issue_number,
+                  body: 'Checking Actions token comment and PR-creation permissions. Any diagnostic draft PR will be closed and its temporary branch deleted.'
+                })).data;
+                results.push('PR comments: **allowed** (created with `github.token`).');
+              } catch (error) {
+                if (error.status !== 403) throw error;
+                results.push(`PR comments: **denied** (HTTP 403: ${error.message}).`);
+                core.warning(results.at(-1));
+              }
+              await github.rest.git.createRef({
+                owner, repo, ref: `refs/heads/${branch}`,
+                sha: context.payload.pull_request.head.sha
+              });
+              branchCreated = true;
+              try {
+                pull = (await github.rest.pulls.create({
+                  owner, repo, head: branch,
+                  base: context.payload.pull_request.base.ref,
+                  draft: true,
+                  title: 'Actions token permission probe - do not merge',
+                  body: 'Temporary diagnostic for #69. Created using the Actions GITHUB_TOKEN solely to verify PR-creation permissions; the same job closes this draft and deletes its branch. No merge, tag, or release is authorized.'
+                })).data;
+                results.push(`PR creation: **allowed** (diagnostic draft #${pull.number}).`);
+              } catch (error) {
+                if (error.status !== 403) throw error;
+                results.push(`PR creation: **denied** (HTTP 403: ${error.message}).`);
+                core.warning(results.at(-1));
+              }
+            } catch (error) {
+              unexpectedError = error;
+              results.push(`Probe incomplete: ${error.message}`);
+            } finally {
+              if (pull) {
+                try {
+                  await github.rest.pulls.update({ owner, repo, pull_number: pull.number, state: 'closed' });
+                  results.push(`Diagnostic draft #${pull.number}: closed.`);
+                } catch (error) {
+                  core.setFailed(`Cannot close diagnostic draft #${pull.number}: ${error.message}`);
+                }
+              }
+              if (branchCreated) {
+                try {
+                  await github.rest.git.deleteRef({ owner, repo, ref: `heads/${branch}` });
+                  results.push('Temporary diagnostic branch: deleted.');
+                } catch (error) {
+                  core.setFailed(`Cannot delete diagnostic branch ${branch}: ${error.message}`);
+                }
+              }
+              const body = `### Actions token permission results\n\nSource: \`${context.payload.pull_request.head.sha}\`\n\n${results.join('\n\n')}\n\n[Actions run](${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId})`;
+              await core.summary.addRaw(body).write();
+              if (comment) {
+                await github.rest.issues.updateComment({ owner, repo, comment_id: comment.id, body });
+              }
+            }
+            if (unexpectedError) throw unexpectedError;
+
   dev-source-check:
     name: Dev source-only check
     if: >-
