@@ -7,6 +7,19 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { Repository } from "../scripts/release-git.mjs";
 import { buildCatalog } from "../scripts/build-opencode-catalog.mjs";
+import { parse } from "yaml";
+
+test("catalog parity runs on every PR, supported pushes, and merge groups without skips", () => {
+  const workflow = parse(readFileSync(new URL("../.github/workflows/catalog-check.yml", import.meta.url), "utf8"));
+  assert.ok(Object.hasOwn(workflow.on, "merge_group"));
+  assert.equal(workflow.on.pull_request.branches, undefined);
+  assert.equal(workflow.on.pull_request.paths, undefined);
+  assert.deepEqual(workflow.on.push, { branches: ["main", "dev", "release/**"] });
+  const job = workflow.jobs["catalog-check"];
+  assert.equal(job.name, "OpenCode catalog check");
+  assert.equal(job.if, undefined);
+  assert.ok(job.steps.every(step => step.if === undefined && step["continue-on-error"] === undefined));
+});
 
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "catalog-parity-"));

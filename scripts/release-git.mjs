@@ -29,16 +29,13 @@ export class Repository {
     const actual = realpathSync.native(this.run(["rev-parse", "--show-toplevel"]).trim());
     const comparable = path => process.platform === "win32" ? path.toLowerCase() : path;
     if (comparable(actual) !== comparable(this.root)) {
-      throw new Error("RELEASE_REPO must be the Git repository root.");
+      throw new Error("The working directory must be the Git repository root.");
     }
     this.blobs = new Map();
     this.trees = new Map();
-    this.commits = new Set();
-    this.parentLists = new Map();
-    this.firstParentHistories = new Map();
   }
 
-  run(args, { statuses = [0], binary = false, input } = {}) {
+  run(args, { binary = false, input } = {}) {
     const environment = gitEnvironment();
     const result = spawnSync("git", [
       "-c", `safe.directory=${this.root}`, "-c", "core.hooksPath=/dev/null",
@@ -50,69 +47,14 @@ export class Repository {
       maxBuffer: 64 * 1024 * 1024, input
     });
     if (result.error) throw result.error;
-    if (!statuses.includes(result.status)) {
+    if (result.status !== 0) {
       throw new Error(`git ${args[0]} failed: ${result.stderr.toString().trim() || result.stdout.toString().trim()}`);
     }
-    return statuses.length === 1 ? result.stdout : result;
+    return result.stdout;
   }
 
   sha(ref) {
-    const sha = fullSha(this.run(["rev-parse", "--verify", `${ref}^{commit}`]).trim());
-    this.commits.add(sha);
-    return sha;
-  }
-
-  selected(value, label) {
-    const sha = fullSha(value, label);
-    if (!this.commits.has(sha) && this.sha(sha) !== sha) throw new Error(`${label} must identify a commit, not a tag.`);
-    return sha;
-  }
-
-  hasRef(ref) {
-    return this.run(["show-ref", "--verify", "--quiet", ref], { statuses: [0, 1] }).status === 0;
-  }
-
-  ancestor(older, newer) {
-    return this.run(["merge-base", "--is-ancestor", older, newer], { statuses: [0, 1] }).status === 0;
-  }
-
-  requireAncestor(older, newer) {
-    if (!this.ancestor(older, newer)) throw new Error(`${older} must be an ancestor of ${newer}.`);
-  }
-
-  firstParentAncestor(older, newer) {
-    fullSha(newer);
-    if (!this.firstParentHistories.has(newer)) {
-      this.firstParentHistories.set(newer, new Set(this.run(["rev-list", "--first-parent", newer]).trim().split("\n")));
-    }
-    return this.firstParentHistories.get(newer).has(older);
-  }
-
-  requireFirstParent(older, newer) {
-    if (!this.firstParentAncestor(older, newer)) {
-      throw new Error(`${older} must be on ${newer}'s first-parent development history.`);
-    }
-  }
-
-  mergeTree(first, second) {
-    const result = this.run(["merge-tree", "--write-tree", "--name-only", "-z", first, second], { statuses: [0, 1] });
-    const separator = result.stdout.indexOf("\0");
-    const tree = fullSha(result.stdout.slice(0, separator), "merge tree");
-    const end = result.stdout.indexOf("\0\0", separator);
-    const conflicts = result.status === 0 ? []
-      : result.stdout.slice(separator + 1, end).split("\0").filter(Boolean);
-    if (result.status !== 0 && (end < 0 || !conflicts.length)) {
-      throw new Error("Git merge failed without identifying conflicted paths.");
-    }
-    return { tree, conflicts };
-  }
-
-  parents(sha) {
-    fullSha(sha);
-    if (!this.parentLists.has(sha)) {
-      this.parentLists.set(sha, this.run(["show", "-s", "--format=%P", sha]).trim().split(" ").filter(Boolean));
-    }
-    return this.parentLists.get(sha);
+    return fullSha(this.run(["rev-parse", "--verify", `${ref}^{commit}`]).trim());
   }
 
   files(sha, paths = []) {
@@ -156,12 +98,5 @@ export class Repository {
       throw new Error(`Expected a regular committed file: ${path}`);
     }
     return this.contents([entry]).get(entry.oid);
-  }
-
-  sameTree(source, ref, { exclude = [] } = {}) {
-    return this.run([
-      "diff", "--no-ext-diff", "--no-textconv", "--quiet",
-      source, ref, "--", ".", ...exclude.map(path => `:(top,exclude)${path}`)
-    ], { statuses: [0, 1] }).status === 0;
   }
 }

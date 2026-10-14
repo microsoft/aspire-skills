@@ -6,7 +6,6 @@ const manifestPaths = [
   ".claude-plugin/marketplace.json", ".cursor-plugin/marketplace.json", "gemini-extension.json",
   "package-lock.json"
 ];
-const snapshots = new WeakMap();
 
 export function parseVersion(value) {
   const match = typeof value === "string"
@@ -117,24 +116,10 @@ export function versionManifests(repo, sha) {
 }
 
 export function versionSnapshot(repo, sha) {
-  if (!snapshots.has(repo)) snapshots.set(repo, new Map());
-  const cache = snapshots.get(repo);
-  if (cache.has(sha)) return cache.get(sha);
   const manifests = versionManifests(repo, sha);
   const versions = [...manifests].map(([path, contents]) => versionTokens(contents, path).version);
   if (versions.some(version => version !== versions[0])) {
     throw new Error("Package, lockfile, plugin, and skill versions must be synchronized.");
   }
-  const snapshot = Object.freeze({ version: versions[0], manifests });
-  cache.set(sha, snapshot);
-  return snapshot;
-}
-
-export function onlyVersionChanges(repo, before, after) {
-  const previous = versionSnapshot(repo, before);
-  const selected = versionSnapshot(repo, after);
-  if (previous.manifests.size !== selected.manifests.size
-    || !repo.sameTree(before, after, { exclude: ["CHANGELOG.md", "opencode", ...previous.manifests.keys()] })) return false;
-  return [...previous.manifests].every(([path, contents]) =>
-    selected.manifests.get(path)?.equals(updateVersion(contents, path, selected.version)));
+  return { version: versions[0], manifests };
 }

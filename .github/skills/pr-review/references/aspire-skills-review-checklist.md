@@ -91,8 +91,9 @@ Six canonical JSON files, both lockfile root versions, and all seven shipped
 skills share one version within a branch. Check them together whenever release
 versions change. Ordinary feature and release-fix PRs preserve dev's current version:
 
-Dedicated `bump-dev/<version>` PRs advance dev's coordinated version without
-source or changelog edits and regenerate catalogs for the new version.
+Dedicated `bump-dev/<version>` PRs advance dev's coordinated version, add its
+changelog heading, and regenerate catalogs. They preserve source and existing
+changelog entries.
 
 | File | Field |
 |------|-------|
@@ -120,7 +121,7 @@ the shipped skill set.
 
 **Severity for version skew or unrelated manifest edits:** `blocking`.
 
-## 7. Generated release content
+## 7. CHANGELOG
 
 For release PRs, compare the previous published tag with the release branch.
 The new entry must cover user-visible changes since that tag, not features
@@ -143,48 +144,11 @@ without a `v` prefix, but keep the actual tag name in the link target, for examp
 `## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)`.
 Preserve historical release note bodies when updating headings or references.
 
-Only `release/<version>` PRs author new `CHANGELOG.md` entries. Dev retains
-published changelog history copied from main through release backflow and
-generated `opencode/` catalogs matching its current shipped source. Regenerate
-both formats whenever that source changes. Ordinary dev PRs cannot add, edit,
-or delete the changelog.
+Dev PRs keep the current version's `CHANGELOG.md` entry up to date as changes
+land, preserving earlier entries. Version-bump PRs add the next version's
+heading; `release/<version>` PRs finalize the notes for the selected snapshot.
 
-For a dev-based release PR, verify:
-
-- The linked version heading and finalized notes describe the
-  selected range while preserving earlier entries. New notes use nonempty Changed,
-  Removed, and Added sections in that order.
-- Display versions without a `v` prefix and link to the actual `v<version>` tag.
-  Include only new user-visible behavior, not already published features,
-  version-bump housekeeping, repository inventory metadata, or test-only changes.
-- The branch starts directly at the selected dev snapshot. Later source fixes
-  are deliberate backports, not unrelated newer dev work.
-- The version is newer than main's version, the branch is `release/<version>`,
-  and the PR targets main using an allowed merge method.
-- The PR records the selected dev SHA and backports and uses the Release
-  Checklist. Only verified items are checked.
-- The newest changelog entry is finalized before merging. No pending placeholder
-  remains when ready to merge.
-- No pending/done metadata marker or prescribed commit message is required.
-  Publication verifies the merged PR and tags its exact merged main commit,
-  not the release head or a later main tip.
-- The post-merge workflow builds and attests both bundles, creates or reuses the
-  immutable tag and GitHub release, and uploads only the skills bundle. GitHub
-  release notes match the changelog notes; the tag annotation remains brief.
-- Required checks pass and needed documentation changes are reviewed and ready.
-  Maintainer approval, merge, publication verification, and dev backflow remain
-  human steps tracked in the release PR.
-
-**Severity for mismatched release versions or rewritten published history:** `blocking`.
-Unclear release notes are `important`.
-
-Release backflows start from current dev and merge updated main, retain main's
-approved `CHANGELOG.md`, regenerate `opencode/`, and target dev. Their merge must
-preserve dev's next version and later source work, including non-version manifest
-content. Merge them with a merge commit, not squash or rebase.
-
-**Severity for hand-edited catalogs or unrelated release-candidate changes:**
-`blocking`.
+**Severity:** `important`.
 
 ## 8. Project-local override pattern
 
@@ -231,7 +195,7 @@ adds a new reference file:
 
 ## 11. MCP
 
-- `.mcp.json` changes need a descriptive commit subject **and** a quick
+- `.mcp.json` changes need a CHANGELOG note **and** a quick
   scan for shell-injection or path-traversal risk in any new shell snippet.
 - New MCP commands must use `--non-interactive` on Aspire CLI calls and must not
   swallow errors.
@@ -253,29 +217,26 @@ These are the questions Phase 2 of the review workflow exists to answer.
 
 ## 13. Release preparation and publication
 
-Choose the release contract from the reviewed revision, not a different branch's
-workflow. Through `0.0.4`, inspect the legacy publisher directly. After the
-bootstrap, use [the dev-based guide](../../../../docs/development.md).
+Apply section 7 and the [development guide](../../../../docs/development.md).
+For a release PR, verify:
 
-For the legacy main-based release, verify:
+- `release/<version>` starts at the selected dev commit, records that SHA and
+  deliberate backports, and targets main. Coordinated versions match the branch
+  and are newer than main's version.
+- Changelog notes are finalized in nonempty Changed, Removed, and Added sections,
+  in that order, omitting empty sections and preserving published history.
+- Committed V1 and V2 catalogs match the shipped source. Dev retains these
+  catalogs too; regenerate them whenever shipped source changes.
+- Tests, bundle builds and attestations, skills-only upload, and required checks
+  agree. Distinguish local evidence from CI results.
+- Maintainer approval and merge authorize the publisher to tag the exact merged
+  main commit and publish matching changelog notes. Reruns preserve that tag and
+  those notes; no manual tag step or token-triggered follow-up job is needed.
 
-- The exact previous published tag-to-source range supplies the new user-visible
-  notes, with tag-linked headings and unchanged historical note bodies.
-- Versions, mirror symlinks, tests, bundle builds, and skill/eval checks agree.
-  Distinguish local evidence from CI results.
-- Tagging selects the exact approved final main commit after merge, not the
-  preparation branch tip or whichever commit happens to be latest on main.
-- Merging, tagging, manual publication dispatch, and editing release notes remain
-  separately authorized. The legacy workflow does not tag or publish on PR merge.
-- Tag pushes upload skills only; extensions require manual opt-in against the
-  same version tag. Both archives are built and attested.
-- Instructions acknowledge generic release notes and asset-overwriting reruns.
-
-For subsequent dev-based releases, apply section 7 and the development guide.
-The maintainer's approved release-PR merge authorizes the post-merge publisher;
-do not add a manual tag step or assume a token-created tag triggers another job.
-Verify the exact merged main commit, approved changelog notes, immutable tag,
-and version-preserving backflow.
+Backflow starts from current dev and merges main. Keep dev's next version,
+current changelog notes, and newer work, including non-version manifest changes;
+bring in main's approved changelog history and regenerate catalogs. Target dev
+and merge with a merge commit, not squash or rebase.
 
 **Severity:** `important` for inaccurate guidance or missing validation evidence;
 `blocking` for source/version mismatches or publication of unapproved code.
@@ -291,6 +252,7 @@ first:
 4. Eval coverage (§3) + grader patterns (§4).
 5. SKILL.md frontmatter (§1) + token budget (§2).
 6. Fixtures (§5).
-7. Generated release content (§7).
-8. MCP (§11).
-9. References hygiene (§10).
+7. CHANGELOG (§7).
+8. Release preparation and publication (§13).
+9. MCP (§11).
+10. References hygiene (§10).

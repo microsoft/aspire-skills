@@ -158,7 +158,7 @@ specific** — adjust the focus column to what the file actually demands.
 | Plugin manifests | `package.json`, `package-lock.json`, `.plugin/plugin.json`, `.claude-plugin/*.json`, `.cursor-plugin/marketplace.json`, `gemini-extension.json` | Aligned branch versions, including both lockfile roots and all seven shipped skills; select the `aspire` marketplace entry by name; coordinated release/backport updates; valid JSON; host-specific metadata; `skills` glob unchanged at `./skills/` |
 | Published plugin mirror | `.github/plugins/aspire-skills/**` | Manifest and runtime skill/extension symlinks resolve to root sources; internal author skills stay out of the published plugin |
 | MCP | `.mcp.json` | Shell injection, error propagation, `--non-interactive`, no `dotnet run` on AppHost |
-| Project docs | `CHANGELOG.md`, `README.md`, `CONTRIBUTING.md`, `docs/development.md` | Accuracy only; user-visible notes with tag-linked, unprefixed version headings; historical note bodies preserved; installation and release instructions agree with the applicable legacy or dev-based flow |
+| Project docs | `CHANGELOG.md`, `README.md`, `CONTRIBUTING.md`, `docs/development.md` | Accuracy only; user-visible notes with tag-linked, unprefixed version headings; historical note bodies preserved; installation and release instructions agree with the release flow |
 | Author skills | `.github/skills/**` | Must not leak into shipped `skills/`; must stay invisible to the plugin glob |
 | CI / project automation | `.github/workflows/**`, `scripts/**`, `.github/CODEOWNERS` | Declarative workflows or attributed upstream copies, directly tested modules, and least-privilege permissions |
 
@@ -199,10 +199,10 @@ Only flag concrete, high-confidence problems. Categories:
 6. **Bugs** — invalid YAML/JSON, broken cross-skill links (`../<wrong-name>/SKILL.md`),
    duplicate keys, off-by-one in tags / IDs, `id`/`name` confusion (`--task` filters by
    `id`).
-7. **Release history** — stale or missing `opencode/` catalogs, changelog edits in ordinary
-   dev PRs or backflow that differs from main's approved history, release source
-   changes outside the selected snapshot, edits beyond maintainer finalization of
-   the newest notes entry, or inconsistent canonical versions. Check documentation
+7. **Release history** — stale or missing `opencode/` catalogs, edits to earlier
+   changelog entries, backflow that loses current dev notes or main's approved
+   history, release source changes outside the selected snapshot, unfinished
+   release notes, or inconsistent canonical versions. Check documentation
    readiness and maintainer publication/dev-backflow steps in the Release Checklist.
 8. **13.5 staleness** — treating legacy `apphost.ts` as current, inspecting resources
    through `aspire ps`, using obsolete `.ServiceProvider` / `PublishAsConnectionString`,
@@ -214,8 +214,7 @@ Only flag concrete, high-confidence problems. Categories:
 10. **Release-contract mismatch** — inaccurate release instructions, wrong approved
     source commit, or publication that bypasses authorization. Apply
     [the release checklist](references/aspire-skills-review-checklist.md#13-release-preparation-and-publication)
-    for the flow in the reviewed revision: legacy publication through `0.0.4`
-    differs from the subsequent dev-based flow.
+    for the release flow.
 
 ### What NOT to flag
 

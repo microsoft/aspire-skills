@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
+import { compareVersions, parseVersion, updateVersion } from "../scripts/release-versions.mjs";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const readJson = path => JSON.parse(readFileSync(join(repoRoot, path), "utf8"));
@@ -38,4 +39,17 @@ test("every shipped skill version matches the package", () => {
     assert.ok(frontmatter, `${skill.name} must have frontmatter`);
     assert.equal(parse(frontmatter[1]).metadata.version, version, skill.name);
   }
+});
+
+test("version updates preserve formatting and unrelated version-like text", () => {
+  const input = Buffer.from('{\r\n  "version": "0.0.4", "description": "0.0.4"\r\n}\r\n');
+  assert.equal(updateVersion(input, "package.json", "0.0.5").toString(),
+    '{\r\n  "version": "0.0.5", "description": "0.0.4"\r\n}\r\n');
+});
+
+test("development versions use SemVer ordering and reject malformed inputs", () => {
+  assert.equal(compareVersions("0.0.5", "0.0.4"), 1);
+  assert.equal(compareVersions("0.0.5-preview.1", "0.0.5"), -1);
+  assert.equal(compareVersions("0.0.5+build", "0.0.5"), 0);
+  for (const value of ["v0.0.5", "0.0.5\n", "01.0.0"]) assert.throws(() => parseVersion(value));
 });

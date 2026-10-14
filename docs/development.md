@@ -13,7 +13,8 @@ Dev retains `CHANGELOG.md` and generated `opencode/` catalogs. Regenerate catalo
 with `npm run catalog` after changing shipped skills, references, or assets,
 and commit them with the source changes. Run `npm run catalog:check` to check
 the committed tree. CI rejects missing, extra, or stale V1 and V2 catalog files.
-Ordinary feature PRs preserve its version and changelog.
+Feature PRs update the current version's changelog notes and preserve earlier
+entries and the coordinated version.
 
 The **OpenCode catalog check** runs on every PR, including stacked PRs, on
 main/dev/release pushes, and on merge-queue candidates. Require this check in
@@ -24,7 +25,8 @@ the branch protection rules or rulesets for main, dev, and release branches.
 1. **Cut the release.** Create `release/<version>` at the chosen dev commit.
 2. **Advance dev.** Create `bump-dev/<next-version>` from current dev, run
    `npm run version:dev -- <next-version>`, and open a PR to dev. The command
-   updates coordinated versions and regenerates catalogs.
+   updates coordinated versions, adds the new changelog heading without changing
+   existing entries, and regenerates catalogs.
 3. **Prepare the candidate.** Backport needed fixes, finalize the changelog,
    regenerate catalogs with `npm run catalog`, and run `npm test`.
 4. **Release to main.** Open the release PR to main. Maintainers approve and
@@ -32,8 +34,9 @@ the branch protection rules or rulesets for main, dev, and release branches.
    release, and uploads the skills bundle.
 5. **Merge back to dev.** Create `backport/pr-<release-pr>-to-dev` from current
    dev and merge main into it. Keep dev's next version and newer work, preserve
-   non-version manifest changes, copy main's approved changelog, and regenerate
-   catalogs. Open a PR to dev and merge it with a merge commit.
+   non-version manifest changes and dev's current changelog entry, update earlier
+   entries from main's approved changelog, and regenerate catalogs. Open a PR to dev
+   and merge it with a merge commit.
 
 ## Publication
 
