@@ -224,6 +224,12 @@ Present a resource graph **before editing**. Ask clarifying questions:
 - "Your React app hardcodes `http://localhost:5000` — replace with Aspire service discovery (`endpoint.url`)?"
 - "Your API has an `/admin` endpoint — exclude it from `WithReference()` so consumers don't see it?"
 
+When scanning JS/TS monorepos, detect the workspace-shared package build pattern and call out [Shared library packages in monorepos](references/javascript-apps.md#shared-library-packages-in-monorepos) during Propose when all are true:
+
+- Root `package.json` has a `workspaces` field.
+- At least one workspace package `package.json` has `main` or `exports` pointing at `dist/`.
+- That workspace package is depended on by another workspace package.
+
 ### 3. Edit
 
 Apply the proposed graph. Use the right authoring style for the AppHost language.
