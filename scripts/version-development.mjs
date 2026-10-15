@@ -22,11 +22,17 @@ export function prepareDevelopmentVersion(repo, version) {
   const newline = previous.match(/\r?\n/)?.[0] ?? "\n";
   const changelog = previous.slice(0, start)
     + `## [${version}](${url}${version})${newline}${newline}` + previous.slice(start);
-  for (const [path, contents] of snapshot.manifests) {
-    writeFileSync(join(repo.root, ...path.split("/")), updateVersion(contents, path, version));
+  const originals = [...snapshot.manifests, ["CHANGELOG.md", contents]];
+  try {
+    for (const [path, contents] of snapshot.manifests) {
+      writeFileSync(join(repo.root, ...path.split("/")), updateVersion(contents, path, version));
+    }
+    writeFileSync(join(repo.root, "CHANGELOG.md"), changelog);
+    buildCatalog(repo.root);
+  } catch (error) {
+    for (const [path, original] of originals) writeFileSync(join(repo.root, ...path.split("/")), original);
+    throw error;
   }
-  writeFileSync(join(repo.root, "CHANGELOG.md"), changelog);
-  buildCatalog(repo.root);
   repo.run(["add", "--", ...snapshot.manifests.keys(), "CHANGELOG.md", "opencode"]);
   return { version };
 }

@@ -62,3 +62,13 @@ for (const newline of ["\n", "\r\n"]) {
     assert.equal(f.repo.run(["diff", "--name-only"]), "");
   });
 }
+
+test("a failed catalog build leaves the working tree clean so the bump can be retried", t => {
+  const f = fixture(t);
+  mkdirSync(join(f.root, "skills", "aspire", "references"), { recursive: true });
+  writeFileSync(join(f.root, "skills", "aspire", "references", "broken.md"), "[Missing](missing.md)\n");
+  f.repo.run(["add", "--all"]);
+  f.repo.run(["commit", "--quiet", "-m", "Add a broken link"]);
+  assert.throws(() => prepareDevelopmentVersion(f.repo, "0.0.5"), /Broken relative Markdown link/);
+  assert.equal(f.repo.run(["status", "--porcelain"]), "");
+});
