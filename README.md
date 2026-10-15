@@ -173,6 +173,39 @@ apm install microsoft/aspire-skills
 opencode
 ```
 
+#### Skill catalogs
+
+As an alternative to APM, configure OpenCode to load the skills directly from
+an HTTP catalog. Add the configuration for your OpenCode version to
+`opencode.json` or `opencode.jsonc`, preserving any existing settings.
+
+**OpenCode V2:**
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": [
+    "https://raw.githubusercontent.com/microsoft/aspire-skills/main/opencode/v2/"
+  ]
+}
+```
+
+**OpenCode V1:**
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": {
+    "urls": [
+      "https://raw.githubusercontent.com/microsoft/aspire-skills/main/opencode/v1/"
+    ]
+  }
+}
+```
+
+See OpenCode's [skill sources documentation](https://opencode.ai/v2/docs/skills#sources)
+for configuration guidance.
+
 ### Ollama + Copilot CLI
 
 **Launch Copilot with Ollama:**
@@ -209,6 +242,7 @@ In that command, `-a github-copilot` selects the target agent, `-g` installs glo
 | Path | Purpose |
 |------|---------|
 | `skills/` | Source skill files, references, and evals |
+| `opencode/` | Generated OpenCode V1 and V2 skill catalogs |
 | `docs/` | Documentation |
 | `extensions/` | Source GitHub Copilot app canvas extensions |
 | `hooks/scripts/` | Canonical Aspire CLI agent telemetry hooks |
@@ -217,6 +251,17 @@ In that command, `-a github-copilot` selects the target agent, `-g` installs glo
 | `evals/` | Shared evaluation fixtures and helpers |
 
 ## Development
+
+Regenerate the OpenCode catalogs after changing shipped skills, references, or
+assets, and commit the output with the source changes:
+
+```bash
+npm run catalog
+npm run catalog:check
+```
+
+The catalog check verifies that the committed V1 and V2 catalogs match the
+committed skill source, including file lists and SHA-512 content versions.
 
 ```bash
 npm run bundle

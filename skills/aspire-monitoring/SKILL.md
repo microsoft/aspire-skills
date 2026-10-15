@@ -16,7 +16,7 @@ description: >-
 license: MIT
 metadata:
   author: Microsoft
-  version: "0.0.4"
+  version: "0.0.5"
 ---
 
 # Aspire Monitoring
