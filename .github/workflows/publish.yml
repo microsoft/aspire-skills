@@ -22,8 +22,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      id-token: write
-      attestations: write
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_COMMIT: ${{ github.event.pull_request.merge_commit_sha }}
@@ -64,22 +62,6 @@ jobs:
           writeFileSync(`${process.env.RUNNER_TEMP}/release-notes.md`, `${notes}\n`);
           appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\ntag=v${version}\n`);
           NODE
-
-      - name: Build bundles
-        env:
-          RELEASE_VERSION: ${{ steps.release.outputs.version }}
-        run: >-
-          npm run bundle --
-          --version "$RELEASE_VERSION"
-          --out dist
-          --source-commit "$RELEASE_COMMIT"
-
-      - name: Attest bundles
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
-        with:
-          subject-path: |
-            dist/aspire-skills-v${{ steps.release.outputs.version }}.tgz
-            dist/aspire-extensions-v${{ steps.release.outputs.version }}.tgz
 
       - name: Publish tag and release
         env:
@@ -124,11 +106,3 @@ jobs:
             cat "$RUNNER_TEMP/release-error.txt" >&2
             exit 1
           fi
-
-      - name: Upload skills bundle
-        env:
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-          RELEASE_VERSION: ${{ steps.release.outputs.version }}
-        run: >-
-          gh release upload "$RELEASE_TAG" "dist/aspire-skills-v$RELEASE_VERSION.tgz"
-          --repo "$GITHUB_REPOSITORY" --clobber
