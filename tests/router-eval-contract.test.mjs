@@ -35,7 +35,7 @@ for (const [index, owner] of owners.entries()) {
     Array.isArray(owner) ? owner : owner ? [owner] : ["aspire"];
 }
 
-test("router evaluations retain all cases, executor, run count and threshold", () => {
+test("router evaluations preserve cases, run count, threshold and the approved executor", () => {
   const names = [...Object.keys(named), "router-reject-001",
     ...Array.from({ length: 6 }, (_, index) => `should_not_trigger_${String(index + 1).padStart(2, "0")}`)];
   assert.deepEqual(spec.stimuli.map(stimulus => stimulus.name).sort(), names.sort());

@@ -48,6 +48,56 @@ stimuli:
           scoring: binary
           prompt: Does the assistant's response satisfy the exact resource/file assessment and approval boundary, including C# null exclusion and experimental API/package evidence?
 
+  - name: project-v2-sdk-removal-capability-stop
+    prompt: |
+      Invoke the appropriate migration skill and assess removing Aspire.AppHost.Sdk
+      from app/Migration.AppHost. I want to keep the selected Aspire version.
+      The provided capability-evidence.json establishes Project v2 resource APIs
+      only; it does not establish that the selected AppHost package sets
+      IsAspireHost or supports a package-only AppHost.
+      Keep the original resources and all files unchanged. Do not restore, run,
+      upgrade packages, inject IsAspireHost, or use preview-source documentation
+      as proof of an installed package capability.
+    tags: { priority: p0, area: sdk-capability }
+    environment: { files: *runnable }
+    rubric:
+      - The response activates aspire-project-v2-migration and stops SDK removal on unresolved exact AppHost package capability.
+      - Resource API availability and CLI version are not treated as proof of package-only host support; no package upgrade or injected IsAspireHost is proposed as a workaround.
+      - The functional SDK, original resources and every file remain unchanged.
+    graders:
+      - type: diff-empty
+      - type: skill-invocation
+        config: { required: [aspire-project-v2-migration], disallowed: [aspire-init, aspireify] }
+      - type: prompt
+        name: blocks-unproven-package-only-host
+        config:
+          scoring: binary
+          prompt: Does the response stop SDK removal because exact package-only AppHost capability is unresolved, preserve the selected version and original resources, and avoid upgrading packages or injecting IsAspireHost?
+
+  - name: project-v2-sdk-warning-is-not-edit-approval
+    prompt: |
+      Invoke the appropriate skill to explain ASPIRE012 and assess a future
+      migration off Aspire.AppHost.Sdk for app/Migration.AppHost. I have not
+      approved any SDK, package, ProjectReference or resource API edit.
+      Explain whether AddProject is deprecated and whether upgrading only the
+      CLI migrates the project. Use the supplied API evidence only within its
+      stated offline scope; do not restore, run, publish or edit.
+    tags: { priority: p0, area: sdk-approval }
+    environment: { files: *runnable }
+    rubric:
+      - The response invokes aspire-project-v2-migration and keeps the assessment read-only.
+      - SDK deprecation is distinguished from AddProject deprecation; retained SDK and original resources remain available for staged migration.
+      - A CLI-only upgrade does not rewrite SDK or resources, and a warning is not edit approval.
+    graders:
+      - type: diff-empty
+      - type: skill-invocation
+        config: { required: [aspire-project-v2-migration], disallowed: [aspire-init, aspireify] }
+      - type: prompt
+        name: preserves-sdk-approval-boundary
+        config:
+          scoring: binary
+          prompt: Does the response distinguish the suppressible SDK warning from AddProject deprecation, explain that CLI upgrades do not migrate source declarations, and retain all files pending explicit approval?
+
   - name: project-v2-approved-csharp-edit
     turns:
       - |

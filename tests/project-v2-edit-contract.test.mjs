@@ -163,6 +163,38 @@ test("file apps preserve AOT and the negative TypeScript input remains handle-on
   assert.doesNotMatch(handle, /interface DotnetProjectOptions/);
 });
 
+test("SDK removal stays capability-gated and separately approved", () => {
+  const skill = readFileSync(new URL("../skills/aspire-project-v2-migration/SKILL.md", import.meta.url), "utf8");
+  const reference = readFileSync(new URL("../skills/aspire-project-v2-migration/references/apphost-sdk-migration.md", import.meta.url), "utf8");
+  assert.match(skill, /apphost-sdk-migration\.md/);
+  assert.match(skill, /does not require removing `Aspire\.AppHost\.Sdk`/);
+  assert.match(skill, /Do not upgrade packages or deprecate `AddProject`/);
+  assert.match(skill, /For an explicit SDK-removal request, still inspect the SDK/);
+  assert.match(reference, /Never infer approval from an `ASPIRE012` warning/);
+  assert.match(reference, /preview source provenance, not proof of a released package/);
+  assert.match(reference, /Keep the explicit AppHost reference/);
+  assert.match(reference, /`NoWarn` cannot make opt-out work/);
+  assert.match(reference, /AppHost-only builds no longer\s+prove the service projects compile/);
+  assert.match(reference, /Reassess to prove idempotence/);
+});
+
+test("SDK assessments route to migration and have no-edit evaluation guards", () => {
+  const router = readFileSync(new URL("../skills/aspire/SKILL.md", import.meta.url), "utf8");
+  assert.match(router, /Package-only C# AppHost/);
+  assert.match(router, /Package-only file-based C# AppHost/);
+  assert.match(router, /explicitly requests `ASPIRE012` assessment/);
+  const spec = parse(readFileSync(new URL("../skills/aspire-project-v2-migration/evals/eval.yaml", import.meta.url), "utf8"));
+  for (const name of ["project-v2-sdk-removal-capability-stop", "project-v2-sdk-warning-is-not-edit-approval"]) {
+    const stimulus = spec.stimuli.find(item => item.name === name);
+    assert.ok(stimulus, `Missing SDK assessment case: ${name}`);
+    assert.ok(stimulus.graders.some(grader => grader.type === "diff-empty"));
+    assert.ok(stimulus.graders.some(grader =>
+      grader.type === "skill-invocation" && grader.config.required.includes("aspire-project-v2-migration")));
+    assert.equal(stimulus.tags.priority, "p0");
+    assert.equal(stimulus.tags.integration, undefined);
+  }
+});
+
 test("source contract tolerates layout/attribute order/lambda naming without weakening scope", t => {
   const { before, after } = fixture(t);
   mutateCsharp(after);
