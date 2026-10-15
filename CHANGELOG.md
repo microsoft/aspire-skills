@@ -2,6 +2,8 @@
 
 All notable changes to the aspire-skills plugin will be documented in this file.
 
+## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
+
 ## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)
 
 ### Changed
