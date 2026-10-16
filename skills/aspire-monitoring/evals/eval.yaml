@@ -28,6 +28,7 @@ environment:
   # INVOKES targets — azure-diagnostics, kubectl — are external to this plugin).
   skills:
     - ../../aspire-monitoring
+    - ../../aspire-terminals
 stimuli:
   - name: mon-newer-version-graph-crash-001
     prompt: >
