@@ -10,6 +10,7 @@ on:
       - "scripts/redact-eval-artifacts.mjs"
       - "scripts/check-eval-results.mjs"
       - "evals/grade-routing-entry.mjs"
+      - "evals/large-systems/**"
 
 permissions:
   contents: read
@@ -84,6 +85,10 @@ jobs:
           if printf '%s\n' "$changed_files" | grep -Eq '^evals/grade-routing-entry\.mjs$'; then
             routing_helper_changed=true
           fi
+          monitoring_fixture_changed=false
+          if printf '%s\n' "$changed_files" | grep -Eq '^evals/large-systems/'; then
+            monitoring_fixture_changed=true
+          fi
 
           # Global suite config change -> evaluate everything.
           if printf '%s\n' "$changed_files" | grep -Eq '^\.vally\.yaml$'; then
@@ -118,6 +123,10 @@ jobs:
           if [ "$routing_helper_changed" = true ] \
               && ! printf '%s\n' $matched | grep -qx 'aspire'; then
             matched="${matched} aspire"
+          fi
+          if [ "$monitoring_fixture_changed" = true ] \
+              && ! printf '%s\n' $matched | grep -qx 'aspire-monitoring'; then
+            matched="${matched} aspire-monitoring"
           fi
 
           if [ -z "$matched" ] && [ "$workflow_changed" = true ]; then

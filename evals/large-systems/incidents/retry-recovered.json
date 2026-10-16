@@ -1,0 +1,10 @@
+{
+  "request": "Commerce worker retried m-22. The first attempt was red; did retries definitely resolve the customer's missing receipt?",
+  "resource": "worker",
+  "evidence": [
+    {"id":"attempt-one","resource":"worker","kind":"log","messageId":"m-22","attempt":1,"message":"smtp timed out"},
+    {"id":"attempt-two","resource":"worker","kind":"log","messageId":"m-22","attempt":2,"message":"SMTP accepted message; ack=true"},
+    {"id":"receipt-gap","resource":"worker","kind":"coverage","message":"no delivery receipt or customer-visible confirmation captured"},
+    {"id":"other-delivered","resource":"notification-worker","kind":"log","messageId":"m-23","message":"delivered"}
+  ]
+}

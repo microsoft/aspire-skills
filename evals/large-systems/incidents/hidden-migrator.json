@@ -1,0 +1,11 @@
+{
+  "request": "Commerce API is waiting although orders-db is Running. Normal describe omits helper jobs. Diagnose using the expanded snapshot; do not rebuild the API.",
+  "resource": "api",
+  "evidence": [
+    {"id":"api-wait","resource":"api","kind":"state","state":"Waiting","waitForCompletion":"db-migrator"},
+    {"id":"migration-failed","resource":"db-migrator","kind":"state","hidden":true,"state":"Exited","exitCode":1},
+    {"id":"migration-schema","resource":"db-migrator","kind":"console","message":"permission denied for schema public"},
+    {"id":"seed-complete","resource":"seed","kind":"state","hidden":true,"state":"Exited","exitCode":0},
+    {"id":"database-running","resource":"orders-db","kind":"state","state":"Running"}
+  ]
+}

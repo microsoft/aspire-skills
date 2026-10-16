@@ -313,6 +313,28 @@ test("an ordinary skill-only change selects only that skill", t => {
     "run_full=false\nhas_specs=true\nmatched=aspire-init\nexpected_runs=aspire-init\n");
 });
 
+for (const path of ["evals/large-systems/incident-contract.mjs", "evals/large-systems/incidents/async-link.json"]) {
+  test(`${path}: shared incident changes select the monitoring evaluation`, t => {
+    assert.ok(readWorkflow("skill-eval.yml").includes('- "evals/large-systems/**"'));
+    assert.equal(runChangedSpecSelection(t, [path], ["aspire-monitoring"]),
+      "run_full=false\nhas_specs=true\nmatched=aspire-monitoring\nexpected_runs=aspire-monitoring\n");
+  });
+}
+
+test("shared incident changes add monitoring to another changed skill", t => {
+  assert.equal(runChangedSpecSelection(t,
+    ["evals/large-systems/topology.json", "skills/aspire-init/SKILL.md"],
+    ["aspire-init", "aspire-monitoring"]),
+    "run_full=false\nhas_specs=true\nmatched=aspire-init aspire-monitoring\nexpected_runs=aspire-init aspire-monitoring\n");
+});
+
+test("shared incident changes de-duplicate an explicitly changed monitoring spec", t => {
+  assert.equal(runChangedSpecSelection(t,
+    ["evals/large-systems/topology.json", "skills/aspire-monitoring/evals/eval.yaml"],
+    ["aspire-monitoring"]),
+    "run_full=false\nhas_specs=true\nmatched=aspire-monitoring\nexpected_runs=aspire-monitoring\n");
+});
+
 test("a global eval config change selects one full-suite expected run", t => {
   const root = mkdtempSync(join(tmpdir(), "aspire-ci-full-selection-"));
   t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 3 }));

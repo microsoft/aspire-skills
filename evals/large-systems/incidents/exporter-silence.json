@@ -1,0 +1,10 @@
+{
+  "request": "Commerce worker has zero structured errors. Can we declare the processing incident healthy?",
+  "resource": "worker",
+  "evidence": [
+    {"id":"empty-otel","resource":"worker","kind":"query","rows":[],"window":"10:00-10:05Z","coverage":"unknown"},
+    {"id":"exporter-failed","resource":"worker","kind":"console","message":"OTLP export failed: collector connection refused; dropped 120 records"},
+    {"id":"worker-running","resource":"worker","kind":"state","state":"Running","health":"Unknown"},
+    {"id":"other-health","resource":"invoice-worker","kind":"state","health":"Healthy"}
+  ]
+}

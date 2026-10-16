@@ -1,0 +1,11 @@
+{
+  "request": "Commerce storefront returns 502. Follow its resource graph rather than blaming every red resource. What is the observed failure chain?",
+  "resource": "storefront",
+  "evidence": [
+    {"id":"front-502","resource":"storefront","kind":"log","traceId":"222222222222222222222222222222aa","message":"gateway returned 502"},
+    {"id":"orders-chain","resource":"orders","kind":"span","traceId":"222222222222222222222222222222aa","status":"Error","message":"orders-db connection rejected: SQLSTATE 28P01"},
+    {"id":"db-auth","resource":"orders-db","kind":"console","message":"password authentication failed for role orders_app"},
+    {"id":"redis-unrelated","resource":"redis","kind":"log","message":"catalog cache miss","severity":"Warning"},
+    {"id":"search-unrelated","resource":"search-worker","kind":"log","traceId":"999999999999999999999999999999aa","message":"index rebuild failed"}
+  ]
+}

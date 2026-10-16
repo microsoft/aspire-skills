@@ -1,0 +1,9 @@
+{
+  "request": "Commerce orders-db writes connection errors only to stdout. What evidence source and bounded search should I use next?",
+  "resource": "orders-db",
+  "evidence": [
+    {"id":"db-console-error","resource":"orders-db","kind":"console","message":"connection timeout while opening replication connection"},
+    {"id":"db-no-otel","resource":"orders-db","kind":"coverage","message":"this container does not emit structured OTel logs"},
+    {"id":"app-warning","resource":"orders","kind":"log","severity":"Warning","message":"retry completed"}
+  ]
+}

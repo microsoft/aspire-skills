@@ -36,7 +36,7 @@
     },
     {
       "name": "aspire-monitoring",
-      "version": "sha512-02b86d1af686502def50cf32f64d8630723093d4b0df19c5ad4e4e7a86347371303430f6f0e6ef2d0ae715680c2be29cad5e007f31e42da84a729c6c736622bb",
+      "version": "sha512-a25431e6e6a2aeda43addc57147470469275a06df36a4d42d68644b67bc09cc16ae0d0834ee006d4f883f663ded79c3be33b5822c0fea2287d3163f63807994d",
       "files": [
         "SKILL.md",
         "references/diagnostics-bridge.md",
