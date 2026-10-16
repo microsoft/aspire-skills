@@ -194,6 +194,39 @@ stimuli:
         name: does-not-claim-current-apphost-ts
         config:
           substring: creates apphost.ts
+  - name: init-no-mcp-136-001
+    prompt: >
+      I ran `aspire init --language csharp --non-interactive` with Aspire 13.6 in this
+      repository. It succeeded and installed the aspireify skill, but there is no Aspire
+      MCP server configuration for my agent. Is init broken, and what should happen next?
+      Do not run any commands.
+    tags:
+      priority: p1
+      area:
+        - agent-setup
+        - aspire-13-6
+    graders:
+      - type: prompt
+        name: treats-missing-mcp-as-expected
+        config:
+          prompt: >
+            Does the assistant's response explain that missing MCP configuration after a
+            successful Aspire 13.6 init is expected, because chained agent setup installs
+            recommended skills but does not offer MCP, and that init is not broken? It
+            should continue by handing off wiring to aspireify rather than repairing MCP.
+            Answer based on intent.
+      - type: prompt
+        name: mcp-only-on-explicit-request
+        config:
+          prompt: >
+            Does the assistant's response avoid configuring MCP automatically, and make
+            clear that MCP is an opt-in step (for example `aspire agent init --mcp`)
+            only when the user explicitly wants it? It must not re-run `aspire init`
+            with an MCP option. Answer based on intent.
+      - type: output-not-contains
+        name: no-init-mcp-flag
+        config:
+          substring: aspire init --mcp
   - name: init-new-001
     prompt: I'm starting a brand-new distributed app from scratch. Scaffold an Aspire starter project
       for me.

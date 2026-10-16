@@ -1,0 +1,86 @@
+{
+  "skills": [
+    {
+      "name": "aspire",
+      "version": "sha512-d1c3c7e6298ddee24b20aa5e80ff450091aec53562140589a09e5ee3b01900c35327ec5a0f73391e8f337912a2f24ee326a0c5c4ed43bf3d575997b141097509",
+      "files": [
+        "SKILL.md",
+        "references/aspire-13-3-breaking-changes.md",
+        "references/aspire-13-5-breaking-changes.md"
+      ]
+    },
+    {
+      "name": "aspire-deployment",
+      "version": "sha512-54a4d4f086323f163f4721d02d1dac0b180ba0043019831b16ccce9cb6f44dd962b28a622d235428b04544a4ef0719af21803dd11a0dc8c8c0e98cc65b5b126e",
+      "files": [
+        "SKILL.md",
+        "references/aws.md",
+        "references/azure.md",
+        "references/cicd.md",
+        "references/docker-compose.md",
+        "references/github-actions-azure-csharp.yml",
+        "references/github-actions-azure-typescript.yml",
+        "references/javascript.md",
+        "references/kubernetes.md",
+        "references/preflight.md"
+      ]
+    },
+    {
+      "name": "aspire-init",
+      "version": "sha512-d8704c21d60d04c5382074c9f9a63c0783ac8af300d25fb4ee5525435ae783ab07c4bc4c98bf7b10ddcc905b12a1241d3c0e1ac678ffc37e26c9b733df6052d7",
+      "files": [
+        "SKILL.md",
+        "references/init-workflow.md",
+        "references/templates.md"
+      ]
+    },
+    {
+      "name": "aspire-monitoring",
+      "version": "sha512-02b86d1af686502def50cf32f64d8630723093d4b0df19c5ad4e4e7a86347371303430f6f0e6ef2d0ae715680c2be29cad5e007f31e42da84a729c6c736622bb",
+      "files": [
+        "SKILL.md",
+        "references/diagnostics-bridge.md",
+        "references/monitoring.md",
+        "references/playwright-handoff.md"
+      ]
+    },
+    {
+      "name": "aspire-orchestration",
+      "version": "sha512-ce9162b842479d608c1a160e1da65c21c8864900c6cb366e93cf8ca0b0391de84701f06cc67c1c767a49f476455c25833bf6448c2b23c277823768eb63e3c740",
+      "files": [
+        "SKILL.md",
+        "references/agent-workflows.md",
+        "references/app-commands.md",
+        "references/detection.md",
+        "references/resource-management.md",
+        "references/safety-guardrails.md"
+      ]
+    },
+    {
+      "name": "aspire-project-v2-migration",
+      "version": "sha512-e47ae66573337aa35765198bd28188cadb5b9e17ab96f1718112fac9e1ddcc839e5341fd51363e7e779d620b4f74d260a996154c2ab02c5e5724c3afa852ccab",
+      "files": [
+        "SKILL.md",
+        "references/compatibility-and-validation.md",
+        "references/migration-patterns.md"
+      ]
+    },
+    {
+      "name": "aspireify",
+      "version": "sha512-6ab5f50e0818ed35f3285077f5ea8c1752cfc2349b04c77306d5d8a5269480d4c4820cf9a56f3719c551c1186ab7fe535ab67411f9e9b0afce491d67e868383f",
+      "files": [
+        "SKILL.md",
+        "references/apphost-wiring.md",
+        "references/csharp-authoring.md",
+        "references/docker-compose.md",
+        "references/full-solution-apphosts.md",
+        "references/javascript-apps.md",
+        "references/opentelemetry.md",
+        "references/scan-and-propose.md",
+        "references/service-defaults.md",
+        "references/typescript-authoring.md",
+        "references/validation.md"
+      ]
+    }
+  ]
+}

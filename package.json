@@ -1,10 +1,13 @@
 {
   "name": "aspire-skills",
-  "version": "0.0.3",
+  "version": "0.0.5",
   "private": true,
   "type": "module",
   "scripts": {
+    "version:dev": "node scripts/version-development.mjs",
     "test": "node --test tests/*.test.mjs tests/aspireify/*.test.mjs",
+    "catalog": "node scripts/build-opencode-catalog.mjs",
+    "catalog:check": "node scripts/check-opencode-catalog.mjs",
     "bundle": "node scripts/build-aspire-bundles.mjs",
     "bundle:skills": "node scripts/build-aspire-bundles.mjs --bundle skills",
     "bundle:extensions": "node scripts/build-aspire-bundles.mjs --bundle extensions"

@@ -2,7 +2,40 @@
 
 All notable changes to the aspire-skills plugin will be documented in this file.
 
-## [0.0.3] - Unreleased
+## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
+
+### Added
+- Added OpenCode V1 and V2 catalogs for all seven shipped skills, including
+  reference files and SHA-512 content versions.
+
+## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)
+
+### Changed
+- Aligned agent setup guidance with Aspire 13.6: `aspire new` and `aspire init`
+  preselect recommended skills without offering MCP configuration. Standalone
+  `aspire agent init --mcp` configures MCP only when explicitly requested; Aspire
+  13.5 users must select MCP interactively.
+- Clarified missing-`aspireify` recovery to preserve explicit skill and location
+  selections without enabling MCP.
+- Hardened Windows launches in the AppHosts and Doctor extensions by resolving
+  the Aspire CLI and Explorer to fully qualified executable paths. Relative
+  `ASPIRE_CLI` paths are no longer supported, and Doctor no longer accepts
+  `.cmd`/`.bat` wrappers. Migrate overrides to a fully qualified native
+  `aspire.exe` path. Bare native `ASPIRE_CLI` names retain `.exe` completion,
+  including names containing periods. Executable lookup and execution share the
+  existing timeout.
+- Fixed Aspire AppHosts canvas browser navigation in CLI hosts: endpoint,
+  Dashboard, and resource-diagnostic links now use the default system browser
+  when no integrated browser canvas is registered.
+
+### Added
+- Added `copilot-app` attribution to both canonical telemetry hooks when
+  `AI_AGENT=github_copilot_app_agent`, before generic Copilot CLI detection.
+
+### Removed
+- Removed dangling hook links from the published plugin mirror.
+
+## [0.0.3](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.3)
 
 ### Changed
 - Bumped the plugin and all seven shipped skills to `0.0.3`.
@@ -38,7 +71,7 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   contracts; EF overload diagnostics, Dockerfile/prebuilt ownership, file-app AOT,
   and Blazor publishing differences have explicit validation boundaries.
 
-## [0.0.2] - 2026-09-18
+## [0.0.2](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.2)
 
 ### Changed
 - Aligned the shipped skill family and bundle compatibility metadata with Aspire 13.5.3.
@@ -132,7 +165,7 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   `--skip-grade`, `--workers`, `--runs`, etc.) and documented `vally serve`
   (local dashboard) and `vally ingest` (SQLite store) workflows.
 
-## [0.0.1] - 2026-05-27
+## [0.0.1](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.1)
 
 ### Added
 - Initial `aspire` skill with detection, safety guardrails, diagnostics bridge

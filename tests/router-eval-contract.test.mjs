@@ -18,6 +18,8 @@ function readSkill(name) {
 const named = {
   "router-ordinary-wiring-preserves-136-001": ["aspire"],
   "router-init-001": ["aspire"],
+  "router-agent-init-default-no-mcp-136-001": ["aspire"],
+  "router-agent-init-explicit-mcp-136-001": ["aspire"],
   "router-azdiag-001": ["aspire", "aspire-monitoring"],
   "router-deploy-001": ["aspire-deployment"],
   "router-mon-001": ["aspire-monitoring"],
@@ -37,7 +39,7 @@ test("router evaluations retain all cases, executor, run count and threshold", (
   const names = [...Object.keys(named), "router-reject-001",
     ...Array.from({ length: 6 }, (_, index) => `should_not_trigger_${String(index + 1).padStart(2, "0")}`)];
   assert.deepEqual(spec.stimuli.map(stimulus => stimulus.name).sort(), names.sort());
-  assert.equal(spec.defaults.model, "gpt-5.6-sol-fast");
+  assert.equal(spec.defaults.model, "gpt-5.6-sol");
   assert.equal(spec.defaults.runs, 3);
   assert.equal(spec.defaults.timeout, "180s");
   assert.equal(spec.defaults.judge_model, "gpt-5.6-sol");

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { lstatSync, readFileSync, readdirSync, readlinkSync } from "node:fs";
-import { dirname, join, relative, sep } from "node:path";
+import { existsSync, lstatSync, readFileSync, readdirSync, readlinkSync } from "node:fs";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -27,6 +27,25 @@ test("published plugin mirrors every extension file with a relative symlink", ()
     indexRoot: ".github/plugins/aspire-skills/extensions",
     kind: "extension"
   });
+});
+
+test("published plugin contains no dangling Git symlinks", () => {
+  const indexEntries = readMirrorIndexEntries(".github/plugins/aspire-skills");
+
+  for (const [indexPath, indexEntry] of indexEntries) {
+    if (indexEntry.mode !== "120000") {
+      continue;
+    }
+
+    const mirrorPath = join(repoRoot, indexPath);
+    if (!lstatSync(mirrorPath, { throwIfNoEntry: false })) {
+      continue;
+    }
+
+    const target = readGitBlob(indexEntry.object);
+    const targetPath = resolve(repoRoot, dirname(indexPath), target);
+    assert.ok(existsSync(targetPath), `${indexPath} must resolve to ${target}`);
+  }
 });
 
 function assertMirror({ sourceRoot, mirrorRoot, indexRoot, kind }) {

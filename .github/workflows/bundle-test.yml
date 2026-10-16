@@ -13,14 +13,22 @@ on:
       - "hooks/**"
       - "package.json"
       - "package-lock.json"
+      - ".plugin/plugin.json"
+      - ".claude-plugin/plugin.json"
+      - ".claude-plugin/marketplace.json"
+      - ".cursor-plugin/marketplace.json"
+      - "gemini-extension.json"
       - "evals/project-v2-migration/**"
       - "evals/grade-routing-entry.mjs"
+      - "skills/*/SKILL.md"
       - "skills/aspire-project-v2-migration/**"
       - "scripts/**"
       - "tests/**"
   push:
     branches:
       - main
+      - dev
+      - release/**
     paths:
       - ".gitattributes"
       - ".github/workflows/bundle-test.yml"
@@ -32,8 +40,14 @@ on:
       - "hooks/**"
       - "package.json"
       - "package-lock.json"
+      - ".plugin/plugin.json"
+      - ".claude-plugin/plugin.json"
+      - ".claude-plugin/marketplace.json"
+      - ".cursor-plugin/marketplace.json"
+      - "gemini-extension.json"
       - "evals/project-v2-migration/**"
       - "evals/grade-routing-entry.mjs"
+      - "skills/*/SKILL.md"
       - "skills/aspire-project-v2-migration/**"
       - "scripts/**"
       - "tests/**"
