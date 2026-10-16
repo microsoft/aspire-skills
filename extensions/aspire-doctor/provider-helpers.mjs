@@ -1,3 +1,6 @@
+import { stat } from "node:fs/promises";
+import { win32 } from "node:path";
+
 export const MAX_BODY_BYTES = 64 * 1024;
 
 export class RequestBodyError extends Error {
@@ -10,6 +13,61 @@ export class RequestBodyError extends Error {
 
 export function requestErrorStatus(error) {
     return error instanceof RequestBodyError ? error.statusCode : 400;
+}
+
+// win32.isAbsolute also accepts drive-dependent paths such as \aspire.exe.
+const fullyQualified = (value) => win32.isAbsolute(value) && win32.parse(value).root.length > 1;
+
+// Keep aligned with AppHosts' resolver; extension bundles install independently.
+export async function resolveCliExecutable(command, env = process.env) {
+    if (process.platform !== "win32") {
+        return command;
+    }
+
+    const extension = win32.extname(command).toLowerCase();
+    if ([".cmd", ".bat"].includes(extension)) {
+        throw new Error("ASPIRE_CLI batch wrappers (.cmd/.bat) are unsupported on Windows. Set ASPIRE_CLI to the Aspire executable (.exe).");
+    }
+
+    const commandPath = win32.normalize(command);
+    if (fullyQualified(commandPath)) {
+        return commandPath;
+    }
+    if (/[\\/]/.test(command) || win32.parse(command).root) {
+        throw new Error("ASPIRE_CLI must name an executable on PATH or a fully qualified executable path on Windows. Relative executable paths are unsupported.");
+    }
+
+    const executableNames = extension ? [command, `${command}.exe`] : [`${command}.exe`];
+    const pathKey = Object.keys(env).sort().find((key) => key.toUpperCase() === "PATH");
+    const searchPath = pathKey === undefined ? "" : env[pathKey];
+    for (const entry of String(searchPath ?? "").split(";")) {
+        const directory = win32.normalize(entry.trim().replace(/^"(.*)"$/, "$1"));
+        if (!fullyQualified(directory)) {
+            continue;
+        }
+        for (const executableName of executableNames) {
+            const candidate = win32.join(directory, executableName);
+            try {
+                if ((await stat(candidate)).isFile()) {
+                    return candidate;
+                }
+            } catch (error) {
+                if (error.code !== "ENOENT" && error.code !== "ENOTDIR") {
+                    throw error;
+                }
+            }
+        }
+    }
+    throw new Error(`Could not find '${command}' in fully qualified PATH directories. Set ASPIRE_CLI to the full path of the Aspire executable (.exe).`);
+}
+
+// Explorer lives in the Windows directory; a bare name would be looked up in the working directory first.
+export function windowsExplorerExecutable(env = process.env) {
+    const windowsDirectory = env.SystemRoot ?? "";
+    if (!fullyQualified(windowsDirectory)) {
+        throw new Error("SystemRoot must be a fully qualified path to locate explorer.exe on Windows.");
+    }
+    return win32.join(windowsDirectory, "explorer.exe");
 }
 
 export function windowsExplorerInvocation(absolutePath, isFile) {

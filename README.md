@@ -173,6 +173,39 @@ apm install microsoft/aspire-skills
 opencode
 ```
 
+#### Skill catalogs
+
+As an alternative to APM, configure OpenCode to load the skills directly from
+an HTTP catalog. Add the configuration for your OpenCode version to
+`opencode.json` or `opencode.jsonc`, preserving any existing settings.
+
+**OpenCode V2:**
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": [
+    "https://raw.githubusercontent.com/microsoft/aspire-skills/main/opencode/v2/"
+  ]
+}
+```
+
+**OpenCode V1:**
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": {
+    "urls": [
+      "https://raw.githubusercontent.com/microsoft/aspire-skills/main/opencode/v1/"
+    ]
+  }
+}
+```
+
+See OpenCode's [skill sources documentation](https://opencode.ai/v2/docs/skills#sources)
+for configuration guidance.
+
 ### Ollama + Copilot CLI
 
 **Launch Copilot with Ollama:**
@@ -209,6 +242,8 @@ In that command, `-a github-copilot` selects the target agent, `-g` installs glo
 | Path | Purpose |
 |------|---------|
 | `skills/` | Source skill files, references, and evals |
+| `opencode/` | Generated OpenCode V1 and V2 skill catalogs |
+| `docs/` | Documentation |
 | `extensions/` | Source GitHub Copilot app canvas extensions |
 | `hooks/scripts/` | Canonical Aspire CLI agent telemetry hooks |
 | `.plugin/`, `.claude-plugin/`, `.cursor-plugin/` | Plugin metadata for marketplaces |
@@ -217,11 +252,22 @@ In that command, `-a github-copilot` selects the target agent, `-g` installs glo
 
 ## Development
 
+Regenerate the OpenCode catalogs after changing shipped skills, references, or
+assets, and commit the output with the source changes:
+
+```bash
+npm run catalog
+npm run catalog:check
+```
+
+The catalog check verifies that the committed V1 and V2 catalogs match the
+committed skill source, including file lists and SHA-512 content versions.
+
 ```bash
 npm run bundle
 ```
 
-`npm run bundle` builds both published release artifacts:
+`npm run bundle` builds both bundle artifacts:
 
 | Artifact | Contents |
 |----------|----------|
@@ -231,6 +277,10 @@ npm run bundle
 The skills manifest records the release commit and LF-normalized SHA-512 hash for
 each file under `hooks/scripts/`. Downstream consumers can copy the `hooks` object
 directly instead of maintaining hook provenance separately.
+
+The hooks attribute `AI_AGENT=github_copilot_app_agent` to `copilot-app` before
+checking `COPILOT_CLI=1` or a CLI-compatible `toolArgs` payload. Without the app
+marker, Copilot CLI, VS Code, and Claude Code attribution stays unchanged.
 
 Use `npm run bundle:skills` or `npm run bundle:extensions` to build one bundle type.
 
@@ -248,15 +298,17 @@ does not provide per-skill installation-time version filtering.
 
 ### Publishing releases
 
-The publish workflow builds and attests both bundles, but uploads only
-`aspire-skills` by default. Manual runs on an existing version tag can select
-`include_skills` (default `true`) and `include_extensions` (default `false`); at
-least one must be selected. Tag pushes use the defaults. The workflow does not
-create Git tags.
+Merging a same-repository `release/<version>` PR into `main` runs
+[the publisher](.github/workflows/publish.yml). It tags the exact merged commit,
+copies the approved changelog notes into the GitHub release, builds and attests
+both bundles, and uploads only the skills bundle. It uses `GITHUB_TOKEN`, not a
+repo bot or stored personal token. Reruns preserve the tag's commit and notes.
+See [the development guide](docs/development.md) for the release flow.
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
+See the [development guide](docs/development.md) for local development.
 
 ## License
 
