@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import { readFile, readdir, stat } from "node:fs/promises";
-import { basename, dirname, extname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, normalize, relative, resolve, sep, win32 } from "node:path";
+import { performance } from "node:perf_hooks";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
@@ -1655,7 +1656,52 @@ export async function discoverConfiguredAppHosts(workingDirectory) {
     return [...new Map(scanned.map((value) => [normalizePathKey(value), normalize(value)])).values()];
 }
 
-export function runProcess(command, args, {
+// Doctor keeps the same policy in its helpers because extensions install independently.
+async function resolveCliExecutable(command, env = process.env) {
+    if (process.platform !== "win32") {
+        return command;
+    }
+
+    const extension = win32.extname(command).toLowerCase();
+    if ([".cmd", ".bat"].includes(extension)) {
+        throw new Error("ASPIRE_CLI batch wrappers (.cmd/.bat) are unsupported on Windows. Set ASPIRE_CLI to the Aspire executable (.exe).");
+    }
+
+    // win32.isAbsolute also accepts drive-dependent paths such as \aspire.exe.
+    const fullyQualified = (value) => win32.isAbsolute(value) && win32.parse(value).root.length > 1;
+    const commandPath = win32.normalize(command);
+    if (fullyQualified(commandPath)) {
+        return commandPath;
+    }
+    if (/[\\/]/.test(command) || win32.parse(command).root) {
+        throw new Error("ASPIRE_CLI must name an executable on PATH or a fully qualified executable path on Windows. Relative executable paths are unsupported.");
+    }
+
+    const executableNames = extension ? [command, `${command}.exe`] : [`${command}.exe`];
+    const pathKey = Object.keys(env).sort().find((key) => key.toUpperCase() === "PATH");
+    const searchPath = pathKey === undefined ? "" : env[pathKey];
+    for (const entry of String(searchPath ?? "").split(";")) {
+        const directory = win32.normalize(entry.trim().replace(/^"(.*)"$/, "$1"));
+        if (!fullyQualified(directory)) {
+            continue;
+        }
+        for (const executableName of executableNames) {
+            const candidate = win32.join(directory, executableName);
+            try {
+                if ((await stat(candidate)).isFile()) {
+                    return candidate;
+                }
+            } catch (error) {
+                if (error.code !== "ENOENT" && error.code !== "ENOTDIR") {
+                    throw error;
+                }
+            }
+        }
+    }
+    throw new Error(`Could not find '${command}' in fully qualified PATH directories. Set ASPIRE_CLI to the full path of the Aspire executable (.exe).`);
+}
+
+export async function runProcess(command, args, {
     cwd,
     timeoutMs = DEFAULT_TIMEOUT_MS,
     maxOutputBytes = DEFAULT_MAX_OUTPUT_BYTES,
@@ -1741,46 +1787,10 @@ export function runProcess(command, args, {
             return next;
         };
 
-        try {
-            const spawnOptions = { cwd, env, windowsHide: true };
-            const commandExtension = extname(command).toLowerCase();
-            if (process.platform === "win32" && [".cmd", ".bat"].includes(commandExtension)) {
-                finish({
-                    ok: false, code: null, stdout, stderr,
-                    error: "ASPIRE_CLI batch wrappers (.cmd/.bat) are unsupported on Windows. Set ASPIRE_CLI to the Aspire executable (.exe).",
-                });
-                return;
-            }
-            child = spawn(command, args, spawnOptions);
-        } catch (error) {
-            finish({ ok: false, code: null, stdout, stderr, error: `Failed to launch Aspire CLI: ${error.message}` });
-            return;
-        }
-
-        child.stdout?.setEncoding("utf8");
-        child.stderr?.setEncoding("utf8");
-        child.stdout?.on("data", (chunk) => {
-            stdout = append(stdout, chunk);
-        });
-        child.stderr?.on("data", (chunk) => {
-            stderr = append(stderr, chunk);
-        });
-        child.once("error", (error) => {
-            finish({ ok: false, code: null, stdout, stderr, error: `Failed to run Aspire CLI: ${error.message}` });
-        });
-        child.once("close", (code) => {
-            finish({
-                ok: code === 0,
-                code,
-                stdout,
-                stderr,
-                error: code === 0 ? undefined : stderr || stdout || `Aspire CLI exited with code ${code}.`,
-            });
-        });
-
-        timer = setTimeout(() => {
+        const deadline = performance.now() + timeoutMs;
+        const onTimeout = () => {
             try {
-                child.kill();
+                child?.kill();
             } catch {
                 // The process may already have exited.
             }
@@ -1791,8 +1801,55 @@ export function runProcess(command, args, {
                 stderr,
                 error: `Aspire CLI timed out after ${Math.round(timeoutMs / 1000)} seconds.`,
             });
-        }, timeoutMs);
+        };
+        timer = setTimeout(onTimeout, timeoutMs);
         timer.unref?.();
+
+        resolveCliExecutable(command, env).then((executable) => {
+            if (settled) {
+                return;
+            }
+            if (performance.now() >= deadline) {
+                onTimeout();
+                return;
+            }
+            try {
+                child = spawn(executable, args, { cwd, env, shell: false, windowsHide: true });
+            } catch (error) {
+                finish({ ok: false, code: null, stdout, stderr, error: `Failed to launch Aspire CLI: ${error.message}` });
+                return;
+            }
+
+            child.stdout?.setEncoding("utf8");
+            child.stderr?.setEncoding("utf8");
+            child.stdout?.on("data", (chunk) => {
+                stdout = append(stdout, chunk);
+            });
+            child.stderr?.on("data", (chunk) => {
+                stderr = append(stderr, chunk);
+            });
+            child.once("error", (error) => {
+                finish({ ok: false, code: null, stdout, stderr, error: `Failed to run Aspire CLI: ${error.message}` });
+            });
+            child.once("close", (code) => {
+                finish({
+                    ok: code === 0,
+                    code,
+                    stdout,
+                    stderr,
+                    error: code === 0 ? undefined : stderr || stdout || `Aspire CLI exited with code ${code}.`,
+                });
+            });
+        }, (error) => {
+            if (settled) {
+                return;
+            }
+            if (performance.now() >= deadline) {
+                onTimeout();
+                return;
+            }
+            finish({ ok: false, code: null, stdout, stderr, error: `Failed to launch Aspire CLI: ${error.message}` });
+        });
     });
 }
 

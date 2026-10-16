@@ -1,114 +1,134 @@
-name: Publish Aspire bundles
+name: Publish release
 
 on:
-  push:
-    tags:
-      - "v*"
-      - "[0-9]*"
-  workflow_dispatch:
-    inputs:
-      include_skills:
-        description: Include aspire-skills
-        type: boolean
-        default: true
-      include_extensions:
-        description: Include aspire-extensions
-        type: boolean
-        default: false
+  pull_request:
+    branches: [main]
+    types: [closed]
 
 permissions:
-  contents: write
-  id-token: write
-  attestations: write
+  contents: read
+
+concurrency:
+  group: aspire-skills-release-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
 
 jobs:
   publish:
-    name: Publish bundles
+    name: Publish reviewed release
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.head.ref, 'release/')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_COMMIT: ${{ github.event.pull_request.merge_commit_sha }}
+      RELEASE_BRANCH: ${{ github.event.pull_request.head.ref }}
     steps:
-      - name: Validate bundle selection
-        if: ${{ github.event_name == 'workflow_dispatch' && !inputs.include_skills && !inputs.include_extensions }}
-        shell: bash
-        run: |
-          echo "::error::Select at least one bundle: aspire-skills or aspire-extensions." >&2
-          exit 1
-
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Checkout the exact merged main commit
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
-          node-version: 22
+          node-version: "22"
 
-      - name: Install test dependencies
+      - name: Install release dependencies
         run: npm ci --ignore-scripts
 
-      - name: Read version from tag
-        id: version
-        shell: bash
+      - name: Check release contents
+        id: release
         run: |
-          set -euo pipefail
-          if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
-            echo "This workflow must run from a version tag such as v0.0.1." >&2
-            exit 1
-          fi
-
-          version="${GITHUB_REF_NAME#v}"
-          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Tag '${GITHUB_REF_NAME}' is not a supported semantic version tag." >&2
-            exit 1
-          fi
-
-          source_commit="$(git rev-parse 'HEAD^{commit}')"
-          echo "source_commit=$source_commit" >> "$GITHUB_OUTPUT"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "skills_asset=dist/aspire-skills-v$version.tgz" >> "$GITHUB_OUTPUT"
-          echo "extensions_asset=dist/aspire-extensions-v$version.tgz" >> "$GITHUB_OUTPUT"
-
-      - name: Test bundles
-        run: npm test
+          npm test
+          npm run catalog:check
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+          import { parseVersion } from "./scripts/release-versions.mjs";
+          const { version } = JSON.parse(readFileSync("package.json", "utf8"));
+          parseVersion(version);
+          if (process.env.RELEASE_BRANCH !== `release/${version}`) throw new Error("Release branch and version disagree.");
+          const changelog = readFileSync("CHANGELOG.md", "utf8").replaceAll("\r\n", "\n");
+          const entry = changelog.split(/^## /m)[1];
+          const heading = `[${version}](https://github.com/${process.env.GITHUB_REPOSITORY}/releases/tag/v${version})`;
+          if (!entry?.startsWith(`${heading}\n`)) throw new Error("The newest changelog heading must match the release.");
+          const notes = entry.slice(heading.length).trim();
+          if (!notes) throw new Error("Finalize the release notes before publishing.");
+          writeFileSync(`${process.env.RUNNER_TEMP}/release-notes.md`, `${notes}\n`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\ntag=v${version}\n`);
+          NODE
 
       - name: Build bundles
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
         run: >-
           npm run bundle --
-          --version "${{ steps.version.outputs.version }}"
+          --version "$RELEASE_VERSION"
           --out dist
-          --source-commit "${{ steps.version.outputs.source_commit }}"
+          --source-commit "$RELEASE_COMMIT"
 
       - name: Attest bundles
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
         with:
           subject-path: |
-            ${{ steps.version.outputs.skills_asset }}
-            ${{ steps.version.outputs.extensions_asset }}
+            dist/aspire-skills-v${{ steps.release.outputs.version }}.tgz
+            dist/aspire-extensions-v${{ steps.release.outputs.version }}.tgz
 
-      - name: Publish GitHub release
+      - name: Publish tag and release
         env:
-          GH_TOKEN: ${{ github.token }}
-          TAG_NAME: ${{ github.ref_name }}
-          VERSION: ${{ steps.version.outputs.version }}
-          SKILLS_ASSET: ${{ steps.version.outputs.skills_asset }}
-          EXTENSIONS_ASSET: ${{ steps.version.outputs.extensions_asset }}
-          INCLUDE_SKILLS: ${{ github.event_name == 'push' || inputs.include_skills }}
-          INCLUDE_EXTENSIONS: ${{ github.event_name == 'workflow_dispatch' && inputs.include_extensions }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
-          assets=()
-          if [[ "$INCLUDE_SKILLS" == "true" ]]; then
-            assets+=("$SKILLS_ASSET")
-          fi
-          if [[ "$INCLUDE_EXTENSIONS" == "true" ]]; then
-            assets+=("$EXTENSIONS_ASSET")
-          fi
-          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
-            gh release upload "$TAG_NAME" "${assets[@]}" --clobber
+          [[ "$(git rev-parse 'HEAD^{commit}')" == "$RELEASE_COMMIT" ]]
+          ref="refs/tags/$RELEASE_TAG"
+          if git show-ref --verify --quiet "$ref"; then
+            if [[ "$(git rev-parse "$ref^{commit}")" != "$RELEASE_COMMIT" ]]; then
+              echo "::error::$RELEASE_TAG points to a different commit; tags must not move." >&2
+              exit 1
+            fi
+            if [[ "$(git for-each-ref --format='%(objecttype)' "$ref")" != tag ||
+              "$(git for-each-ref --format='%(contents)' "$ref")" != "$(cat "$RUNNER_TEMP/release-notes.md")" ]]; then
+              echo "::error::$RELEASE_TAG must be an annotated tag with the approved release notes." >&2
+              exit 1
+            fi
           else
-            gh release create "$TAG_NAME" "${assets[@]}" \
-              --verify-tag \
-              --title "$TAG_NAME" \
-              --notes "Aspire bundles $VERSION"
+            git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              tag --annotate --no-sign --cleanup=verbatim --file "$RUNNER_TEMP/release-notes.md" "$RELEASE_TAG" "$RELEASE_COMMIT"
           fi
+          gh auth setup-git --hostname github.com
+          git -c push.followTags=false push origin "$ref"
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json body,isDraft \
+            --jq 'if .isDraft then error("The existing release is a draft.") else .body end' \
+            > "$RUNNER_TEMP/published-notes.md" 2> "$RUNNER_TEMP/release-error.txt"; then
+            if [[ "$(cat "$RUNNER_TEMP/published-notes.md")" != "$(cat "$RUNNER_TEMP/release-notes.md")" ]]; then
+              echo "::error::The existing release notes differ from the approved changelog." >&2
+              exit 1
+            fi
+          elif [[ "$(cat "$RUNNER_TEMP/release-error.txt")" == "release not found" ]]; then
+            options=()
+            if [[ "${RELEASE_VERSION%%+*}" == *-* ]]; then options+=(--prerelease); fi
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --verify-tag --target "$RELEASE_COMMIT" --title "$RELEASE_TAG" \
+              --notes-file "$RUNNER_TEMP/release-notes.md" "${options[@]}"
+          else
+            cat "$RUNNER_TEMP/release-error.txt" >&2
+            exit 1
+          fi
+
+      - name: Upload skills bundle
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: >-
+          gh release upload "$RELEASE_TAG" "dist/aspire-skills-v$RELEASE_VERSION.tgz"
+          --repo "$GITHUB_REPOSITORY" --clobber

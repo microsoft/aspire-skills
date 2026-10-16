@@ -13,9 +13,15 @@ on:
       - "hooks/**"
       - "package.json"
       - "package-lock.json"
+      - ".plugin/plugin.json"
+      - ".claude-plugin/plugin.json"
+      - ".claude-plugin/marketplace.json"
+      - ".cursor-plugin/marketplace.json"
+      - "gemini-extension.json"
       - "evals/project-v2-migration/**"
       - "evals/terminals/**"
       - "evals/grade-routing-entry.mjs"
+      - "skills/*/SKILL.md"
       - "skills/aspire-project-v2-migration/**"
       - "skills/aspire-terminals/**"
       - ".github/plugins/aspire-skills/skills/aspire-terminals/**"
@@ -24,6 +30,8 @@ on:
   push:
     branches:
       - main
+      - dev
+      - release/**
     paths:
       - ".gitattributes"
       - ".github/workflows/bundle-test.yml"
@@ -35,9 +43,15 @@ on:
       - "hooks/**"
       - "package.json"
       - "package-lock.json"
+      - ".plugin/plugin.json"
+      - ".claude-plugin/plugin.json"
+      - ".claude-plugin/marketplace.json"
+      - ".cursor-plugin/marketplace.json"
+      - "gemini-extension.json"
       - "evals/project-v2-migration/**"
       - "evals/terminals/**"
       - "evals/grade-routing-entry.mjs"
+      - "skills/*/SKILL.md"
       - "skills/aspire-project-v2-migration/**"
       - "skills/aspire-terminals/**"
       - ".github/plugins/aspire-skills/skills/aspire-terminals/**"
