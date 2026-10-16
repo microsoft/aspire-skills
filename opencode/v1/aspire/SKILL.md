@@ -91,9 +91,10 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 - Use `aspire resource <resource-name> <command>` for resource operations such as `stop`, `start`, or `rebuild` when available
 - Treat `aspire stop --force` as data-destructive: it permanently removes persistent
   resources without another prompt, but preserves persistent volumes. Use it only after
-  explicit confirmation for one exact AppHost. `aspire stop --force --volumes` also
-  deletes every named volume Aspire created for that AppHost; require approval for that
-  AppHost-wide data scope and never add it to routine shutdown or lock recovery.
+  explicit confirmation for one exact AppHost. With Aspire CLI 13.6 or later,
+  `aspire stop --force --volumes` also deletes every named volume Aspire created for
+  that AppHost; require approval for that AppHost-wide data scope and never add it to
+  routine shutdown or lock recovery.
 - Do not stop or restart the whole AppHost just because one resource changed
 - Use `features.defaultWatchEnabled` only for Aspire default watch; do not treat it as per-resource rebuild, restart, or hot reload
 - Prefer a resource's own framework/runtime hot reload, HMR, or watch workflow when it already handles the change

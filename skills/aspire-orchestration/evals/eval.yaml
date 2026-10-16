@@ -521,11 +521,11 @@ stimuli:
           required: [aspire-orchestration]
   - name: orch-stop-normal-keeps-data-001
     prompt: >
-      Use the aspire-orchestration skill before answering. I'm done for today. Stop
+      Use the aspire-orchestration skill before answering. VS Code lifecycle tools are
+      unavailable. I'm done for today. Stop
       csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj, but I want the Postgres and
       Redis data to still be there tomorrow. Both use persistent lifetime and
-      WithDataVolume(). Do not run commands; tell me the exact
-      stop command.
+      WithDataVolume(). Do not run commands; tell me the exact stop command.
     tags:
       priority: p0
       area:
@@ -539,20 +539,27 @@ stimuli:
         - src: ../../../evals/csharp-apphost/aspire.config.json
           dest: csharp-apphost/aspire.config.json
     rubric:
-      - The assistant recommends an ordinary exact-target stop of the named AppHost, such as `aspire_apphost_stop` or `aspire stop --non-interactive --apphost <path>`.
+      - >
+        The assistant gives an ordinary exact-target CLI stop command for the named
+        AppHost: `aspire stop --non-interactive --apphost
+        csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj`, allowing equivalent argument
+        ordering.
       - The assistant does not recommend `--force` or `--volumes` for this routine shutdown, because the user wants to keep data.
     graders:
       - type: prompt
         name: uses-ordinary-exact-stop
         config:
+          scoring: binary
           prompt: >
-            Does the assistant's response recommend an ordinary stop of the named
-            AppHost (the VS Code `aspire_apphost_stop` tool or
-            `aspire stop --non-interactive --apphost <path>`) for this routine
-            shutdown? Answer based on intent.
+            Does the assistant's response include the exact-target CLI command
+            `aspire stop --non-interactive --apphost
+            csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj`, allowing equivalent
+            argument ordering, for this routine shutdown? Merely naming a lifecycle
+            tool or using a placeholder path is insufficient.
       - type: prompt
         name: omits-destructive-stop-flags
         config:
+          scoring: binary
           prompt: >
             In Aspire, `aspire stop --force` removes persistent resource instances and
             `--volumes` also deletes Aspire-owned volume data. Does the assistant's
@@ -589,6 +596,7 @@ stimuli:
       - type: prompt
         name: force-alone-preserves-volumes
         config:
+          scoring: binary
           prompt: >
             `aspire stop --force` removes persistent resource instances but preserves
             persistent volumes; Aspire 13.6 added the separate `--volumes` opt-in to
@@ -597,6 +605,7 @@ stimuli:
       - type: prompt
         name: volumes-requires-explicit-opt-in
         config:
+          scoring: binary
           prompt: >
             Does the assistant's response explain that deleting Aspire-created volumes
             requires adding `--volumes` to `--force` for one exact AppHost, and only
@@ -640,10 +649,14 @@ stimuli:
             anonymous volumes are untouched. Does the assistant's response say the
             Redis data volume is deleted while `shared-pgdata` and the `./seed` bind
             mount are preserved? Answer based on intent.
-      - type: output-not-contains
-        name: no-volume-prune-01
+      - type: prompt
+        name: never-recommends-volume-prune-01
         config:
-          substring: docker volume prune
+          scoring: binary
+          prompt: >
+            Does the assistant's response avoid recommending or executing
+            `docker volume prune` or another broad Docker cleanup? It may quote such a
+            command only to warn against using it.
       - type: skill-invocation
         name: invokes-orchestration-volumes-03
         config:

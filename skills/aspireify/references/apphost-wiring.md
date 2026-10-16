@@ -362,12 +362,17 @@ To fix it, choose the least destructive option the user approves:
 1. **Keep the data.** If the previous password is still available (for example, the old
    `Parameters:<resource>-password` user-secret value), restore it so the AppHost matches
    the existing volume. No data is deleted.
-2. **Reset only the failing resource.** Stop the AppHost through `aspire-orchestration`,
-   identify the exact stale container and volume, and get explicit approval naming them
-   before removing only those targets (`docker rm -f <container>`, then
-   `docker volume rm <volume>`). This is also the path for data outside Aspire's volume
-   ownership: bind mounts, anonymous volumes, and named volumes that existed before the
-   AppHost first mounted them (including volumes created by an older AppHost).
+2. **Reset only the failing resource.** Stop the AppHost through `aspire-orchestration`
+   and identify its exact container and storage target.
+   - For a named or anonymous Docker volume, get explicit approval naming the container
+     and volume before removing only those targets (`docker rm -f <container>`, then
+     `docker volume rm <volume>`). This also covers named volumes outside Aspire's
+     ownership, including volumes created before the AppHost first mounted them.
+   - For a bind mount, `docker volume rm` does not reset the data because it lives at a
+     host path. Prefer restoring the previous password. Otherwise, verify that the
+     mounted host directory is dedicated to this one resource and get explicit approval
+     naming that exact path before removing the container and resetting only that
+     directory's data. Do not remove or clear a parent directory.
 3. **Reset all Aspire-owned volume data for the AppHost.**
    `aspire stop --force --volumes --apphost <filesystem-path>` removes the AppHost's
    persistent resources and every named volume Aspire created for it. In an AppHost with
