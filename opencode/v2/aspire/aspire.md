@@ -90,8 +90,10 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
   or `aspire ps --include-hidden`.
 - Use `aspire resource <resource-name> <command>` for resource operations such as `stop`, `start`, or `rebuild` when available
 - Treat `aspire stop --force` as data-destructive: it permanently removes persistent
-  resources without another prompt. Use it only after explicit confirmation for one
-  exact AppHost.
+  resources without another prompt, but preserves persistent volumes. Use it only after
+  explicit confirmation for one exact AppHost. `aspire stop --force --volumes` also
+  deletes every named volume Aspire created for that AppHost; require approval for that
+  AppHost-wide data scope and never add it to routine shutdown or lock recovery.
 - Do not stop or restart the whole AppHost just because one resource changed
 - Use `features.defaultWatchEnabled` only for Aspire default watch; do not treat it as per-resource rebuild, restart, or hot reload
 - Prefer a resource's own framework/runtime hot reload, HMR, or watch workflow when it already handles the change
@@ -183,7 +185,8 @@ preserving supported behavior and removing only proven-obsolete AppHost referenc
 ### aspire-orchestration
 Lifecycle management: start, stop, wait, resource commands, default watch/HMR guidance, and file-lock recovery.
 Safety guardrails that prevent agent self-harm. Owns `aspire ps` for AppHost discovery,
-`aspire describe` for resource inspection, destructive `aspire stop --force` safeguards,
+`aspire describe` for resource inspection, destructive `aspire stop --force` and
+`--volumes` safeguards,
 CLI-driven legacy TypeScript migration, and CLI upgrades (`aspire update --self`). It
 hands back to `aspireify` only when AppHost source authoring remains after migration.
 

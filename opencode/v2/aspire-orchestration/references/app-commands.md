@@ -15,8 +15,13 @@ aspire stop
 - To restart after AppHost changes, rerun the same start command.
 - Use `aspire stop` when cleanup is explicitly requested, ports/locks need to be released, or you are finished with a started instance that the user did not ask to keep running.
 - `aspire stop --force` also permanently deletes persistent resource instances without
-  another confirmation. Require explicit data-destructive intent for one exact AppHost;
-  never combine it with `--all`.
+  another confirmation, but preserves persistent volumes. Require explicit
+  data-destructive intent for one exact AppHost; never combine it with `--all`.
+- `aspire stop --force --volumes` additionally deletes every named volume Aspire created
+  for that AppHost, which can include several databases. Use it only after the user
+  approves that exact AppHost and data scope. It leaves anonymous volumes, bind mounts,
+  and pre-existing named volumes intact. See
+  [safety-guardrails.md](safety-guardrails.md#destructive-persistent-resource-cleanup).
 - Avoid `aspire run` in agent workflows — it blocks the terminal.
 
 ### `aspire run` vs `aspire start`

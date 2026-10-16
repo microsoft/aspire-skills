@@ -357,7 +357,32 @@ Recommend persistent lifetime for databases and caches during local development.
 
 **⚠️ Stale persistent volumes can cause auth failures.** Typed integrations like `AddSqlServer()`, `AddPostgres()`, `AddRedis()`, and `AddMySql()` auto-generate passwords on first run. Those passwords are stored inside the container's data volume. If the AppHost is recreated or its user-secrets are reset, Aspire generates a *new* password — but the persistent volume still has the *old* one. The symptom is repeated `Login failed` or `password authentication failed` errors in the container logs.
 
-To fix: stop the AppHost, remove the stale container and its volume (`docker rm -f <name>; docker volume rm <volume>`), then restart. Aspire will recreate both with a matching password. Mention this to the user if they see auth failures on persistent infrastructure containers after recreating the AppHost.
+To fix it, choose the least destructive option the user approves:
+
+1. **Keep the data.** If the previous password is still available (for example, the old
+   `Parameters:<resource>-password` user-secret value), restore it so the AppHost matches
+   the existing volume. No data is deleted.
+2. **Reset only the failing resource.** Stop the AppHost through `aspire-orchestration`,
+   identify the exact stale container and volume, and get explicit approval naming them
+   before removing only those targets (`docker rm -f <container>`, then
+   `docker volume rm <volume>`). This is also the path for data outside Aspire's volume
+   ownership: bind mounts, anonymous volumes, and named volumes that existed before the
+   AppHost first mounted them (including volumes created by an older AppHost).
+3. **Reset all Aspire-owned volume data for the AppHost.**
+   `aspire stop --force --volumes --apphost <filesystem-path>` removes the AppHost's
+   persistent resources and every named volume Aspire created for it. In an AppHost with
+   several databases or caches, that deletes their data too, not just the failing one.
+   Offer it only as a broader alternative, and run it only after the user approves that
+   exact AppHost and AppHost-wide data scope. It requires Aspire CLI 13.6 or later. It
+   does not remove bind mounts, anonymous volumes, or pre-existing named volumes, and
+   older non-bundle AppHosts may not have the ownership records it needs; see `aspire-orchestration`'s destructive-cleanup guardrails.
+
+Then restart through `aspire-orchestration`; Aspire recreates removed containers and
+volumes with a matching password. `aspire stop --force` without `--volumes` does not fix
+this problem because it preserves the stale volume. Never recommend
+`docker volume prune`, `docker system prune`, or an unrequested reset of other resources.
+Mention these options if the user sees auth failures on persistent infrastructure
+containers after recreating the AppHost or resetting its secrets.
 
 ## Explicit start (manual start)
 
