@@ -1,0 +1,53 @@
+name: Validate agentic workflows
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/*.md"
+      - ".github/workflows/*.lock.yml"
+      - ".github/workflows/agentics-maintenance*.yml"
+      - ".github/workflows/validate-agentic-workflows.yml"
+      - ".github/aw/actions-lock.json"
+      - ".gitattributes"
+      - "scripts/aspire-release-update.mjs"
+      - "scripts/release-versions.mjs"
+      - "tests/aspire-release-update.test.mjs"
+      - "package.json"
+      - "package-lock.json"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: Install pinned agentic workflow compiler
+        uses: github/gh-aw-actions/setup-cli@f3b81cdb3070066a47faa9bdf440f4f1dc78b1f0 # v0.89.17
+        with:
+          version: v0.89.17
+
+      - name: Compile agentic workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh aw compile --purge --validate --no-check-update --schedule-seed microsoft/aspire-skills
+
+      - name: Reject generated-file drift
+        shell: bash
+        run: |
+          set -euo pipefail
+          changes=$(git status --porcelain --untracked-files=all -- \
+            '.gitattributes' '.github/aw/actions-lock.json' \
+            '.github/workflows/*.lock.yml' '.github/workflows/agentics-maintenance*.yml')
+          if [[ -n "$changes" ]]; then
+            printf 'Regenerate agentic workflows with the pinned compiler:\n%s\n' "$changes"
+            exit 1
+          fi
+
+      - name: Lint generated workflows
+        run: gh aw lint --shellcheck

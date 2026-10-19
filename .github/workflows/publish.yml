@@ -15,6 +15,8 @@ concurrency:
 jobs:
   publish:
     name: Publish reviewed release
+    outputs:
+      version: ${{ steps.release.outputs.version }}
     if: >-
       github.event.pull_request.merged == true &&
       github.event.pull_request.head.repo.full_name == github.repository &&
@@ -132,3 +134,23 @@ jobs:
         run: >-
           gh release upload "$RELEASE_TAG" "dist/aspire-skills-v$RELEASE_VERSION.tgz"
           --repo "$GITHUB_REPOSITORY" --clobber
+
+  update-aspire:
+    name: Propose Aspire bundle and telemetry update
+    needs: publish
+    if: needs.publish.result == 'success' && github.repository == 'microsoft/aspire-skills'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch source-hosted agentic update after publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.publish.outputs.version }}
+          RELEASE_COMMIT: ${{ github.event.pull_request.merge_commit_sha }}
+        run: >-
+          gh workflow run update-aspire.lock.yml
+          --repo "$GITHUB_REPOSITORY" --ref main
+          --field "version=$RELEASE_VERSION"
+          --field "source_commit=$RELEASE_COMMIT"
