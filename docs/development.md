@@ -140,6 +140,8 @@ Commit `.github/workflows/update-aspire.lock.yml`,
 `.github/aw/actions-lock.json`, and the generated `.gitattributes` declaration
 with source changes. The compiler's maintenance workflow has only manual and
 reusable-workflow triggers; privileged operations require a maintainer check.
-It does not schedule updates or merge PRs. Dedicated CI recompiles, rejects
-generated-file drift, and lints; `npm test` covers release preparation, ownership
-boundaries, publication outcomes, and workflow wiring without creating real PRs.
+It does not schedule updates or merge PRs. Dedicated CI runs the focused
+release-update tests, recompiles, rejects generated-file drift, and lints.
+Edits limited to agentic workflows do not trigger bundle builds. `npm test`
+also covers release preparation, ownership boundaries, publication outcomes,
+and workflow wiring without creating real PRs.

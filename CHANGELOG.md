@@ -5,9 +5,6 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
 ### Added
-- Added a source-hosted agentic release workflow that refreshes Aspire's embedded
-  skills bundle and proposes reviewed telemetry adaptations in one draft PR,
-  after the Aspire-side ownership prerequisites are met.
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
   reference files and SHA-512 content versions.
 - Added the default-selected `aspire-terminals` skill for resource PTYs, persistent

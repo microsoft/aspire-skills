@@ -406,6 +406,10 @@ test("only successful publication dispatches the updater, with least-privilege A
 
 test("dedicated CI recompiles with Aspire's pinned compiler and rejects generated drift", () => {
   const steps = validation.jobs.validate.steps;
+  assert.equal(steps.find(step => step.name === "Setup Node").with["node-version"], "22");
+  assert.equal(steps.find(step => step.name === "Install helper test dependencies").run, "npm ci --ignore-scripts");
+  assert.equal(steps.find(step => step.name === "Test release update workflow").run,
+    "node --test tests/aspire-release-update.test.mjs");
   const compiler = steps.find(step => step.name === "Install pinned agentic workflow compiler");
   assert.equal(compiler.with.version, "v0.89.17");
   assert.match(steps.find(step => step.name === "Compile agentic workflows").run,
