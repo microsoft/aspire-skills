@@ -111,13 +111,17 @@ test("terminal authoring handoffs no longer declare aspireify as the owner", () 
   assert.deepEqual(activation.config.disallowed, ["aspireify"]);
 });
 
-test("terminal guidance does not enable the removed CLI feature flag", () => {
+test("terminal guidance scopes feature enablement to Aspire 13.5", () => {
   for (const path of [
     "skills/aspire-terminals/SKILL.md",
     "skills/aspire-terminals/references/automation-and-cli.md",
     "skills/aspire/references/aspire-13-5-breaking-changes.md"
   ]) {
-    assert.doesNotMatch(read(path), /terminalCommandsEnabled/);
-    assert.match(read(path), /aspire terminal --help/);
+    const contents = read(path);
+    assert.match(contents, /Aspire 13\.5|13\.5 CLI/);
+    assert.match(contents, /aspire config set features\.terminalCommandsEnabled true --non-interactive/);
+    assert.match(contents, /newer CLI/i);
+    assert.match(contents, /aspire --version/);
+    assert.match(contents, /aspire terminal --help/);
   }
 });

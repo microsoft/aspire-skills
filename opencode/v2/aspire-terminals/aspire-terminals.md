@@ -88,9 +88,12 @@ recommend, including headless alternatives:
    TypeScript** in this baseline. Do not invent TS equivalents or edit generated
    `.aspire/modules/`. Supported TS entry points are `withTerminal()` and the
    applicable integration's `withRepl()`.
-6. Check `aspire terminal --help` for the installed CLI. Terminal commands no
-   longer require feature-flag enablement. If a command is absent, check the
-   installed version and help rather than setting the removed flag.
+6. Check `aspire --version` and `aspire terminal --help` for the installed CLI.
+   Aspire 13.5 keeps terminal commands behind a feature flag; enable them only
+   for that CLI line with
+   `aspire config set features.terminalCommandsEnabled true --non-interactive`.
+   Newer CLIs no longer require or support that flag. If a command remains
+   absent, treat it as unavailable rather than guessing alternative syntax.
 
 The references are qualified against Aspire `release/13.6` commit
 `34db30a7d3733229da64a403dfc4e4e4d7a1a43b` (terminal code also present in main

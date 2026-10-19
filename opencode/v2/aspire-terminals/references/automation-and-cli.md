@@ -35,11 +35,19 @@ connects lazily as a secondary peer and does not resize, start or stop the workl
 
 ## Check capabilities, then discover owners
 
-Terminal commands no longer require feature-flag enablement. If commands are
-absent, check the installed version and help rather than setting the removed
-flag or guessing alternative syntax.
+Aspire 13.5 keeps terminal commands behind a feature flag. For that CLI line
+only, enable them noninteractively before discovery:
 
 ```sh
+aspire config set features.terminalCommandsEnabled true --non-interactive
+```
+
+Newer CLIs no longer require or support that flag. Check the installed version
+and help; if commands remain absent, treat them as unavailable rather than
+guessing alternative syntax.
+
+```sh
+aspire --version
 aspire terminal --help
 aspire terminal ps --format json --verbose --apphost <apphost-path> --non-interactive
 ```

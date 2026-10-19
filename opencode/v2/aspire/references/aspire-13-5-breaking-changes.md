@@ -79,8 +79,15 @@ with `ASPIRE_PROXYLESS_ENDPOINT_PORT_RANGE=start-end`.
   under `ASPIREINTERACTION001`.
 - In 13.5, `WithTerminal()` and `aspire terminal` are experimental. C# callers
   suppress `ASPIRETERMINAL001`. The 13.5 CLI required a terminal-command feature
-  flag; that flag has since been removed, so current CLIs need no enablement
-  command. Check `aspire terminal --help` for installed capabilities.
+  flag:
+
+  ```bash
+  aspire config set features.terminalCommandsEnabled true --non-interactive
+  ```
+
+  That flag was removed from newer CLIs, so do not set it outside the 13.5 CLI
+  line. Check `aspire --version` and `aspire terminal --help` for installed
+  capabilities.
   Do not invent a `TerminalOptions.Shell` property.
 
 ## CLI and lifecycle
