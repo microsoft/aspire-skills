@@ -120,6 +120,7 @@ require its matching `aspire-skills-v<version>.tgz` asset.
 ## Refresh the embedded bundle
 
 Read the current embedded metadata and relevant bundle/installer code.
+Record its version and release tag before running the updater.
 Never downgrade a newer embedded version; emit one `noop` explaining that
 the release is superseded and stop.
 
@@ -149,11 +150,25 @@ Read the managed `AgentTelemetryHook`, `AgentTelemetryCatalog`,
 `aspire agent telemetry --hook` directly; shell and PowerShell scripts are
 compatibility paths, not the primary implementation.
 
-Compare the previous and refreshed bundle manifests and release notes to
-identify required telemetry adaptations. Fetch additional source evidence
-only at the release commit in `microsoft/aspire-skills`, and only for the
-affected behavior. Keep research targeted and reserve the final tool calls
-for publication.
+Compare the previous and refreshed bundle manifests and file contents,
+including changed skill instructions and references. Also inspect the
+corresponding release-source diff in `microsoft/aspire-skills` for relevant
+agent/client integration changes outside the bundle. Resolve the previous
+embedded release's tag to its source commit and compare with the exact new
+source commit above; keep additional source research pinned to those commits.
+
+This review is required even when inventory is unchanged or release notes
+are empty or generic. Map relevant behavior changes, including client
+attribution and precedence, skill/reference classification, and tool names,
+to Aspire's managed implementation and both compatibility scripts.
+`microsoft/aspire` owns the hook implementations and tests; do not require
+hook sources or tests in `microsoft/aspire-skills`, or treat their removal as
+a telemetry behavior change. If release evidence cannot be inspected, report
+a blocker rather than concluding telemetry is unchanged.
+
+If the bundle is already current, still check its released behavior against
+Aspire before deciding no changes are needed. Keep research targeted and
+reserve the final tool calls for publication.
 
 Make the smallest necessary telemetry changes and associated tests. Keep both
 compatibility scripts consistent with the released inventory and managed
@@ -192,6 +207,8 @@ Prepare a title and body that include:
 - The exact source release URL, full source commit, and
   `<!-- aspire-skills-release:${{ env.RELEASE_COMMIT }} -->`.
 - The previous and new embedded versions and released skill/reference changes.
+- The release changes reviewed, their impact on Aspire telemetry, and any
+  behavior already covered by Aspire.
 - Separate bundle-refresh and telemetry-change summaries, explicitly stating
   when telemetry needed no code changes.
 - Commands run, outcomes, and any remaining cross-platform review needs.
