@@ -77,13 +77,17 @@ with `ASPIRE_PROXYLESS_ENDPOINT_PORT_RANGE=start-end`.
 - Interaction inputs and file uploads are stable. C# reads uploaded `InteractionFile`
   content; TypeScript receives an on-disk `filePath`. Progress dialogs remain experimental
   under `ASPIREINTERACTION001`.
-- `WithTerminal()` and `aspire terminal` are experimental. C# callers suppress
-  `ASPIRETERMINAL001`; enable CLI commands with:
+- In 13.5, `WithTerminal()` and `aspire terminal` are experimental. C# callers
+  suppress `ASPIRETERMINAL001`. The 13.5 CLI required a terminal-command feature
+  flag:
 
   ```bash
-  aspire config set features.terminalCommandsEnabled true
+  aspire config set features.terminalCommandsEnabled true --non-interactive
   ```
 
+  That flag was removed from newer CLIs, so do not set it outside the 13.5 CLI
+  line. Check `aspire --version` and `aspire terminal --help` for installed
+  capabilities.
   Do not invent a `TerminalOptions.Shell` property.
 
 ## CLI and lifecycle

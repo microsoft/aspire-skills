@@ -2,7 +2,7 @@
   "skills": [
     {
       "name": "aspire",
-      "version": "sha512-282709a6c5676faca8b29ebe6537c71a99884dc9d53e6f961c1503fa1e1d69803b2d1e0c48872b96ee072b1bbc8e49610ca987220a6a80e960a51206b6ca9aeb",
+      "version": "sha512-bebf0b6369fb14bd6aa69808dcf5796465358a207021c551fd4ade31a87f944aa1e1c61767052593fe056268cc06aee271fb0ef8f8034dbfadbc4efe83ac1755",
       "files": [
         "aspire.md",
         "references/aspire-13-3-breaking-changes.md",
@@ -36,7 +36,7 @@
     },
     {
       "name": "aspire-monitoring",
-      "version": "sha512-9960b785e31695bf649a615b08f01e5047bd9a3681331eda282cef78545dc9db1042ce67370ecc3e29a504225b798644e30d76674449f37a824b14d7b64251d4",
+      "version": "sha512-eedd983512cf2ff46a0aafe9df570f8422cefbb1fc2395afb605cd663a65585d71e3d3b1a9f520a99323f0654abf4be43f697032f4849599d8854a94c93ac270",
       "files": [
         "aspire-monitoring.md",
         "references/diagnostics-bridge.md",
@@ -46,7 +46,7 @@
     },
     {
       "name": "aspire-orchestration",
-      "version": "sha512-ea6c56ae891307621575d3ee2b736526fc97dc23f27d3a38e15b7addd8093225b70c0daebb67a63fe4e8cae607264dc219a9d276737ead88956e03de68aa6f56",
+      "version": "sha512-c44ba8f0a18c714803b4e04aaa3de03de0b679ff4b1dcef9c73dc55173e6df20ea73d77672fa0c48c7aecdc88bd3a0a9445bec3ac2389b9252c2af35212f1a39",
       "files": [
         "aspire-orchestration.md",
         "references/agent-workflows.md",
@@ -58,7 +58,7 @@
     },
     {
       "name": "aspire-project-v2-migration",
-      "version": "sha512-c89020b8d9060fd97ebaa6934ef168707725f7dd9403813dd34b3e7288da1fa0b0263385bd45ed3ab2416ed0057fa052c1686ddbae926dcd8e8d996e1c7cc6be",
+      "version": "sha512-6bd9cb22eca8eee31deb4d5f366c097a413e97903f2a626f273945fdd240ab1bc70d32ebfac5ff7f8da7aeae23872ccd1201f29f1550ac44074b4edcdd3b0d9e",
       "files": [
         "aspire-project-v2-migration.md",
         "references/compatibility-and-validation.md",
@@ -66,8 +66,19 @@
       ]
     },
     {
+      "name": "aspire-terminals",
+      "version": "sha512-92705ce60632e0954fa27ba9e0316fc8e807eefd78488a071da45e6956f59079dd56c20458fab2dfc7153c072e2c8e519456235e6a647105991b995f9681a50d",
+      "files": [
+        "aspire-terminals.md",
+        "references/apphost-terminals.md",
+        "references/automation-and-cli.md",
+        "references/resource-terminals.md",
+        "references/tapes.md"
+      ]
+    },
+    {
       "name": "aspireify",
-      "version": "sha512-461fbba4df5f995ad831f65cd3d24d308409bab5d1139410fb192da734ee44cc8a16fcee0e23d563574f53d1d51076390fde2f1764076b5ab402b0d3eb8a5ec2",
+      "version": "sha512-14ba41c45db3cb6e271b0c5441d2267d9c40e72664d8a8283748562af15f878418c50d75b69e7f75913b6c47cb1c860278c4328ed29856dc04f1c246e91a20cd",
       "files": [
         "aspireify.md",
         "references/apphost-wiring.md",

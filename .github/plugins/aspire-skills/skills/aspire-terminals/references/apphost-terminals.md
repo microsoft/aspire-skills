@@ -1,0 +1,1 @@
+../../../../../../skills/aspire-terminals/references/apphost-terminals.md

@@ -28,6 +28,7 @@ environment:
   # VS Code supplies lifecycle tools and the Aspire CLI is its fallback.
   skills:
     - ../../aspire-orchestration
+    - ../../aspire-terminals
 stimuli:
   - name: orch-vscode-stop-tool-001
     prompt: >
