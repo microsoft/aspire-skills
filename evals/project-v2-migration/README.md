@@ -117,11 +117,3 @@ that the SDK's unmodified image inference works. Do not broadly scrub configurat
 to force equality.
 Raw workspaces/caches/archives are not safe upload artifacts; apply credential
 review and the repository's redaction safeguards to curated evidence.
-
-## Inspecting uncommitted bundle changes
-
-Bundle tests require hook bytes to match a real source commit. If unchanged hook
-bytes already exist in another fetched commit, `ASPIRE_TEST_SOURCE_COMMIT` can
-select that matching commit for local tests. Production byte/provenance checks
-still run. This neither creates a commit nor authorizes publishing. PowerShell
-is required by cross-shell hook tests on macOS as well.
