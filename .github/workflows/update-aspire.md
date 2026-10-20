@@ -2,6 +2,7 @@
 name: Update Aspire from skills release
 description: Refresh Aspire's embedded skills bundle and propose release-driven agent telemetry changes.
 on:
+  bots: ["aspire-repo-bot[bot]"]
   release:
     types: [published]
 if: github.repository == 'microsoft/aspire-skills'
@@ -67,7 +68,7 @@ safe-outputs:
     client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
     private-key: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
     owner: microsoft
-    repositories: [aspire]
+    repositories: [aspire-skills, aspire]
   create-pull-request:
     target-repo: microsoft/aspire
     base-branch: main

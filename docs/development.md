@@ -56,4 +56,5 @@ another workflow. Reruns must preserve the tag's commit and approved notes.
 `.github/workflows/update-aspire.md` runs on published releases and opens draft
 PRs in `microsoft/aspire` for bundle and telemetry updates. Aspire must own its
 telemetry scripts and retire its old bundle updater before enabling this flow.
+`aspire-repo-bot[bot]` is allowlisted; the App must cover both repositories.
 Regenerate the compiled workflow after editing its Markdown source.
