@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
@@ -41,5 +41,69 @@ test("safe-output tokens cover downstream PRs and source-repository failure repo
     assert.equal(token.with.owner, "microsoft");
     assert.deepEqual(token.with.repositories.split(/[\s,]+/).filter(Boolean).sort(), repositories);
     assert.equal(token.with["permission-issues"], "write");
+  }
+});
+
+test("bundle commands use a GitHub CLI proxy without exposing its App token to the agent", () => {
+  const tokenReference = "${{ steps.github-read-token.outputs.token }}";
+  assert.equal(source.tools.github.mode, "gh-proxy");
+  assert.equal(source.tools.github["github-token"], tokenReference);
+
+  const steps = compiled.jobs.agent.steps;
+  const proxy = steps.find((step) => step.run?.includes("start_cli_proxy.sh"));
+  assert.ok(proxy, "start the authenticated CLI proxy before running bundle scripts");
+  assert.equal(proxy.env.GH_TOKEN, tokenReference);
+
+  const token = steps.find((step) => step.id === "github-read-token");
+  assert.ok(token);
+  assert.equal(token.with.owner, "microsoft");
+  for (const permission of ["contents", "issues", "pull-requests"]) {
+    assert.equal(token.with[`permission-${permission}`], "read");
+  }
+  assert.deepEqual(
+    token.with.repositories.split(/[\s,]+/).filter(Boolean).sort(),
+    ["aspire", "aspire-skills"]
+  );
+  assert.ok(steps.indexOf(token) < steps.indexOf(proxy));
+
+  const policy = JSON.parse(proxy.env.CLI_PROXY_POLICY)["allow-only"];
+  assert.equal(policy["min-integrity"], source.tools.github["min-integrity"]);
+  assert.deepEqual(policy.repos, source.tools.github["allowed-repos"]);
+
+  const execution = steps.find((step) => step.id === "agentic_execution");
+  assert.ok(execution);
+  assert.ok(steps.indexOf(proxy) < steps.indexOf(execution));
+  assert.match(execution.run, /--difc-proxy-host awmg-cli-proxy:18443/);
+  assert.match(execution.run, /--exclude-env GH_TOKEN\s/);
+  assert.match(execution.run, /--exclude-env GITHUB_MCP_SERVER_TOKEN/);
+  assert.notEqual(execution.env?.GH_TOKEN, proxy.env.GH_TOKEN);
+
+  const cleanup = steps.find((step) => step.run?.includes("stop_cli_proxy.sh"));
+  assert.ok(cleanup, "stop the CLI proxy even when the agent fails");
+  assert.match(cleanup.if, /always\(\)/);
+});
+
+test("bundle attestation verification can fetch both trusted roots through the firewall", () => {
+  const execution = compiled.jobs.agent.steps.find((step) => step.id === "agentic_execution");
+  const domains = /\\"allowDomains\\":(\[[^\]]+\])/.exec(execution.run);
+  assert.ok(domains, "the agent must have an explicit firewall domain allowlist");
+  const allowedDomains = JSON.parse(domains[1].replace(/\\"/g, '"'));
+
+  for (const host of ["tuf-repo.github.com", "tuf-repo-cdn.sigstore.dev"]) {
+    assert.ok(source.network.allowed.includes(host), `${host} must be allowed in the source`);
+    assert.ok(allowedDomains.includes(host), `${host} must be allowed in the sandbox`);
+  }
+});
+
+test("optional maintenance stays disabled in authored configuration and generated workflows", () => {
+  const configPath = join(workflowDirectory, "aw.json");
+  assert.ok(existsSync(configPath), "disable maintenance through the compiler configuration");
+  assert.equal(JSON.parse(readFileSync(configPath, "utf8")).maintenance, false);
+
+  for (const workflow of [
+    "agentics-maintenance.yml",
+    "agentics-maintenance-microsoft-aspire.yml"
+  ]) {
+    assert.equal(existsSync(join(workflowDirectory, workflow)), false, workflow);
   }
 });

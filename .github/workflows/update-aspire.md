@@ -35,18 +35,17 @@ network:
     - defaults
     - github
     - dotnet
+    - tuf-repo.github.com
+    - tuf-repo-cdn.sigstore.dev
 tools:
   edit:
   bash: ["*"]
   github:
+    mode: gh-proxy
+    github-token: ${{ steps.github-read-token.outputs.token }}
     toolsets: [repos, issues, pull_requests]
     min-integrity: approved
     allowed-repos: [microsoft/aspire-skills, microsoft/aspire]
-    github-app:
-      client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
-      private-key: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
-      owner: microsoft
-      repositories: [aspire-skills, aspire]
 pre-agent-steps:
   - name: Require Aspire-owned telemetry
     shell: pwsh
@@ -63,6 +62,17 @@ pre-agent-steps:
     uses: actions/setup-dotnet@v6.0.0
     with:
       global-json-file: global.json
+  - name: Generate read-only GitHub token
+    id: github-read-token
+    uses: actions/create-github-app-token@v3.2.0
+    with:
+      client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
+      private-key: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
+      owner: microsoft
+      repositories: aspire-skills,aspire
+      permission-contents: read
+      permission-issues: read
+      permission-pull-requests: read
 safe-outputs:
   github-app:
     client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
