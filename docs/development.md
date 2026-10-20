@@ -50,3 +50,13 @@ Publishing uses `GITHUB_TOKEN`; no repo bot or stored automation credentials
 are needed. Maintainers create PRs and approve merges. Tags and releases are
 published in the same run because workflow-token tag pushes do not trigger
 another workflow. Reruns must preserve the tag's commit and approved notes.
+
+## Release-driven Aspire updates
+
+`.github/workflows/update-aspire.md` runs on published releases and opens draft
+PRs in `microsoft/aspire` for bundle and telemetry updates. Aspire must own its
+telemetry scripts and retire its old bundle updater before enabling this flow.
+`aspire-repo-bot[bot]` is allowlisted; the App must cover both repositories.
+Bundle commands use a read-only GitHub CLI proxy. Optional maintenance is
+disabled in `.github/workflows/aw.json`.
+Regenerate the compiled workflow after editing its source or configuration.
