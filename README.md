@@ -219,6 +219,12 @@ an HTTP catalog. Add the configuration for your OpenCode version to
 See OpenCode's [skill sources documentation](https://opencode.ai/v2/docs/skills#sources)
 for configuration guidance.
 
+For merged development skills, use the HTTP catalogs under
+`https://raw.githubusercontent.com/microsoft/aspire-skills/opencode-dev/opencode/v1/`
+or `.../opencode/v2/`. For unmerged changes, use a local checkout's `skills/`
+directory. See [development testing](docs/development.md#testing-development-skills)
+for source provenance and publication details; stable catalog URLs remain unchanged.
+
 ### Ollama + Copilot CLI
 
 **Launch Copilot with Ollama:**
@@ -316,7 +322,9 @@ Merging a same-repository `release/<version>` PR into `main` runs
 copies the approved changelog notes into the GitHub release, builds and attests
 both bundles, and uploads only the skills bundle. It uses `GITHUB_TOKEN`, not a
 repo bot or stored personal token. Reruns preserve the tag's commit and notes.
-See [the development guide](docs/development.md) for the release flow.
+Release preparation, dev bumps, catalog refreshes, and Arcade patch backports use
+the Aspire repository GitHub App to open reviewable PRs and run normal checks.
+See [the development guide](docs/development.md) for the release flow and setup.
 
 ## Contributing
 

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { assertSafePath, createCatalog, isDevelopmentPath } from "./build-opencode-catalog.mjs";
 
-export function expectedCatalog(repo, source) {
+export function expectedCatalog(repo, source, options = {}) {
   const snapshot = mkdtempSync(join(tmpdir(), "aspire-release-source-"));
   try {
     mkdirSync(join(snapshot, "skills"));
@@ -31,7 +31,7 @@ export function expectedCatalog(repo, source) {
     }
     const files = new Map();
     for (const format of ["v1", "v2"]) {
-      for (const [path, contents] of createCatalog(snapshot, { format }).files) {
+      for (const [path, contents] of createCatalog(snapshot, { ...options, format }).files) {
         files.set(`opencode/${format}/${path}`, contents);
       }
     }

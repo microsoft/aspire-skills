@@ -52,6 +52,10 @@ jobs:
           node --input-type=module <<'NODE'
           import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
           import { parseVersion } from "./scripts/release-versions.mjs";
+          import { Repository } from "./scripts/release-git.mjs";
+          import { validateRelease } from "./scripts/release-automation.mjs";
+          const repo = new Repository(process.cwd());
+          validateRelease(repo, repo.sha("HEAD"), repo.sha("HEAD^"), process.env.RELEASE_BRANCH);
           const { version } = JSON.parse(readFileSync("package.json", "utf8"));
           parseVersion(version);
           if (process.env.RELEASE_BRANCH !== `release/${version}`) throw new Error("Release branch and version disagree.");
