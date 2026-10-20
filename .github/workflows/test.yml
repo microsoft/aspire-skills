@@ -5,6 +5,7 @@ on:
     branches: [main, dev, release/**]
   push:
     branches: [main, dev, release/**]
+  merge_group:
 
 permissions:
   contents: read

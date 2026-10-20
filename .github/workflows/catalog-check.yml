@@ -26,6 +26,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Setup Node
@@ -33,5 +34,30 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Reject catalog drift
-        run: npm run catalog:check
+      - name: Validate source or final release snapshot
+        env:
+          REQUIRE_PARITY: ${{ (github.event_name == 'pull_request' && github.base_ref == 'main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main') || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+        shell: bash
+        run: |
+          if [[ "$REQUIRE_PARITY" == true ]]; then
+            npm run catalog:check
+          else
+            npm run catalog:check -- --source-only
+          fi
+
+      - name: Install release validation dependencies
+        if: (github.event_name == 'pull_request' && github.base_ref == 'main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        run: npm ci --ignore-scripts
+
+      - name: Validate coordinated release and published history
+        if: (github.event_name == 'pull_request' && github.base_ref == 'main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          RELEASE_BRANCH: ${{ github.head_ref }}
+        run: |
+          node --input-type=module <<'NODE'
+          import {Repository, fullSha} from "./scripts/release-git.mjs";
+          import {validateRelease} from "./scripts/release-automation.mjs";
+          const repo = new Repository(process.cwd());
+          validateRelease(repo, repo.sha("HEAD"), fullSha(process.env.BASE_SHA), process.env.RELEASE_BRANCH || undefined);
+          NODE

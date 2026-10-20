@@ -1,0 +1,50 @@
+name: Publish development catalogs
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: opencode-dev-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'microsoft/aspire-skills' && (github.event_name == 'push' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout trusted automation
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "22"
+      - run: npm ci --ignore-scripts
+      - name: Generate Aspire App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
+          private-key: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
+          permission-contents: write
+      - name: Publish exact development source
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SOURCE_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin dev
+          source="${SOURCE_SHA:-$(git rev-parse refs/remotes/origin/dev)}"
+          echo "Publishing development catalogs from $source" >> "$GITHUB_STEP_SUMMARY"
+          node scripts/release-automation.mjs publish-dev "$source"
+      - name: Report publication failure
+        if: failure()
+        run: echo "::error::Development catalog publication failed. See this run for its source SHA; retry this workflow from main to publish the current dev tip."

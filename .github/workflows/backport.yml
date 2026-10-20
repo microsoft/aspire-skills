@@ -1,0 +1,101 @@
+# Aspire's local copy of Arcade backport-base.yml, adapted to dispatch/merged-PR triggers.
+# Source: microsoft/aspire@6bcd0302e2fb4a6dea2b1c3eedb8ab1caa4bb75c
+# Upstream: dotnet/arcade/.github/workflows/backport-base.yml@66269f6a88f6062f2cccf6eb84660a8a6f5cc5ec
+# The patch/PR flow lives in scripts/backport.mjs. Keep its git am conflict behavior.
+name: Backport PR to branch
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_pr:
+        description: Merged dev PR number
+        required: true
+        type: string
+      target_branch:
+        description: Target release branch
+        required: true
+        type: string
+  pull_request:
+    branches: [main]
+    types: [closed]
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+
+concurrency:
+  group: backport-${{ github.event.pull_request.number || inputs.source_pr }}-${{ github.event_name == 'pull_request' && 'dev' || inputs.target_branch }}
+  cancel-in-progress: false
+
+jobs:
+  backport:
+    if: >-
+      github.repository == 'microsoft/aspire-skills' &&
+      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify dispatch permission
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const {data} = await github.rest.repos.getCollaboratorPermissionLevel({
+              ...context.repo, username: context.actor
+            });
+            if (!["admin", "maintain", "write"].includes(data.permission)) {
+              throw new Error("Backporting requires repository write access.");
+            }
+      - name: Unlock comments if the source PR is locked
+        id: source-pr
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          SOURCE_PR: ${{ github.event.pull_request.number || inputs.source_pr }}
+        with:
+          script: |
+            if (!/^[1-9]\d*$/.test(process.env.SOURCE_PR)) throw new Error("Invalid source PR number.");
+            const issue_number = Number(process.env.SOURCE_PR);
+            const {data} = await github.rest.pulls.get({...context.repo, pull_number: issue_number});
+            core.setOutput("number", issue_number);
+            if (data.locked) {
+              await github.rest.issues.unlock({...context.repo, issue_number});
+              core.setOutput("unlocked", "true");
+            }
+      - name: Checkout trusted automation
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "22"
+      - run: npm ci --ignore-scripts
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
+          private-key: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: write
+      - name: Run Arcade patch backport
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SOURCE_PR: ${{ github.event.pull_request.number || inputs.source_pr }}
+          TARGET_BRANCH: ${{ github.event_name == 'pull_request' && 'dev' || inputs.target_branch }}
+          MODE: ${{ github.event_name == 'pull_request' && 'automatic' || 'manual' }}
+        run: node scripts/backport.mjs "$SOURCE_PR" "$TARGET_BRANCH" "$MODE"
+      - name: Re-lock source PR comments
+        if: always() && steps.source-pr.outputs.unlocked == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          SOURCE_PR: ${{ steps.source-pr.outputs.number }}
+        with:
+          script: |
+            await github.rest.issues.lock({
+              ...context.repo, issue_number: Number(process.env.SOURCE_PR), lock_reason: "resolved"
+            });

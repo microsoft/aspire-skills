@@ -6,10 +6,10 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { Repository } from "../scripts/release-git.mjs";
-import { buildCatalog } from "../scripts/build-opencode-catalog.mjs";
+import { buildCatalog, createCatalog } from "../scripts/build-opencode-catalog.mjs";
 import { parse } from "yaml";
 
-test("catalog parity runs on every PR, supported pushes, and merge groups without skips", () => {
+test("catalog validation runs on every PR, supported pushes, and merge groups without skipping source validation", () => {
   const workflow = parse(readFileSync(new URL("../.github/workflows/catalog-check.yml", import.meta.url), "utf8"));
   assert.ok(Object.hasOwn(workflow.on, "merge_group"));
   assert.equal(workflow.on.pull_request.branches, undefined);
@@ -18,7 +18,11 @@ test("catalog parity runs on every PR, supported pushes, and merge groups withou
   const job = workflow.jobs["catalog-check"];
   assert.equal(job.name, "OpenCode catalog check");
   assert.equal(job.if, undefined);
-  assert.ok(job.steps.every(step => step.if === undefined && step["continue-on-error"] === undefined));
+  const validation = job.steps.find(step => step.name === "Validate source or final release snapshot");
+  assert.equal(validation.if, undefined);
+  assert.ok(job.steps.every(step => step["continue-on-error"] === undefined));
+  assert.match(validation.run, /--source-only/);
+  assert.match(validation.env.REQUIRE_PARITY, /github\.base_ref == 'main'/);
 });
 
 function fixture(t) {
@@ -40,7 +44,7 @@ function fixture(t) {
     repo.run(["commit", "--quiet", "-m", "Select catalog tree"]);
   };
   const script = fileURLToPath(new URL("../scripts/check-opencode-catalog.mjs", import.meta.url));
-  const check = () => spawnSync(process.execPath, [script], { cwd: root, encoding: "utf8", timeout: 30_000 });
+  const check = (...args) => spawnSync(process.execPath, [script, ...args], { cwd: root, encoding: "utf8", timeout: 30_000 });
   const skill = "---\nname: aspire\nmetadata:\n  version: 0.0.4\n---\n\n# Aspire\n";
   write("skills/aspire/SKILL.md", skill);
   write("skills/aspire/references/usage.md", "[Entry](../SKILL.md#usage)\n");
@@ -100,6 +104,36 @@ test("catalog parity does not depend on release manifests or installed packages"
   f.commit();
   const result = f.check();
   assert.equal(result.status, 0, result.stderr);
+});
+
+test("source-only validation accepts missing or stale released snapshots without writing files", t => {
+  const f = fixture(t);
+  f.repo.run(["rm", "-r", "--", "opencode"]);
+  f.write("skills/aspire/SKILL.md", f.skill + "\nA new development instruction.\n");
+  f.commit();
+  const before = f.repo.run(["status", "--porcelain"]);
+  const result = f.check("--source-only");
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(f.repo.run(["status", "--porcelain"]), before);
+  assert.equal(f.check().status, 1);
+  f.write("skills/aspire/broken.md", "[Missing](missing.md)\n");
+  f.commit();
+  assert.equal(f.check("--source-only").status, 1);
+});
+
+test("both development formats pin cross-skill links while stable links remain on main", t => {
+  const f = fixture(t);
+  f.write("skills/other/SKILL.md", "---\nname: other\n---\n\n# Other\n");
+  f.write("skills/aspire/links.md", "[Other](../other/SKILL.md#usage)\n");
+  const sourceRef = "a".repeat(40);
+  for (const format of ["v1", "v2"]) {
+    const dev = createCatalog(f.root, { format, sourceRef });
+    assert.match(dev.files.get("aspire/links.md").toString(), new RegExp(`/blob/${sourceRef}/skills/other/SKILL.md#usage`));
+    const stable = createCatalog(f.root, { format });
+    assert.match(stable.files.get("aspire/links.md").toString(), /\/blob\/main\/skills\//);
+    assert.notEqual(dev.index.skills[0].version, stable.index.skills[0].version);
+  }
+  assert.throws(() => createCatalog(f.root, { sourceRef: "../../dev" }), /source ref/);
 });
 
 test("catalog generation leaves literal links in code spans and fenced blocks untouched", t => {

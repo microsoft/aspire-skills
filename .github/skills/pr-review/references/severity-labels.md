@@ -22,10 +22,13 @@ Use `blocking` when the PR…
 - Leaves canonical manifest values, either root lockfile field, or any of the seven shipped skills
   out of target-version sync (see
   `aspire-skills-review-checklist.md` §6).
-- Leaves dev's catalogs stale, rewrites earlier changelog entries or loses dev's
+- Leaves release-candidate catalogs stale, rewrites earlier changelog entries or loses dev's
   current notes during backflow, changes dev's version in an ordinary PR, drops
   dev work during a backport, leaves canonical version fields inconsistent, or
   publishes a candidate with unselected source changes.
+- Regenerates main-to-dev catalogs against unreleased dev skills instead of
+  carrying the approved release snapshot. Ordinary dev source PRs do not need
+  generated catalogs; the development HTTP catalogs are published separately.
 - Tags the wrong final main commit or publishes without the authorization
   required by the release flow (§13).
 - Drops or shadows the project-local override deference block (`§8`).
