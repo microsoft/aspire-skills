@@ -1,8 +1,9 @@
 # Shared canvas UI
 
-Aspire AppHosts, Aspire Doctor, and Aspireify share Aspireify's compact visual
-language: neutral surfaces, restrained accents, a single type scale, and consistent
-controls and branding. They do not depend on another extension at runtime.
+All canvases should use the shared theme, typography, controls, branding, and
+SVG icon set. Use neutral surfaces, restrained accents, and the common type
+scale while preserving each canvas's workflow. Canvas extensions should not
+depend on another extension at runtime.
 Each extension's source links directly to the canonical
 [theme](../assets/canvas/theme.css) and [SVG sprite](../assets/canvas/icons.svg).
 
@@ -128,8 +129,8 @@ follow the same contract.
 ## Browser review
 
 Use each canvas's normal workflow to review its loading, empty, error,
-populated, and long-content states. Open Aspireify only during its skill's
-Step 3, after discovery and clarification have produced a proposal.
+populated, and long-content states. Respect that workflow's discovery,
+confirmation, and execution boundaries.
 
 Review each state at 320px and wide desktop widths in light and dark mode.
 While a populated page remains open, switch `data-color-mode` on the root or
@@ -140,11 +141,9 @@ paths and labels for overflow.
 
 ## Intentional differences
 
-All three canvases use the same `--surface` page background.
+All canvases should use the shared `--surface` page background.
 
-AppHosts keeps its operational board, dense labels, resource
-cards, and relationship graph. Doctor keeps its severity-ordered diagnostic
-report, summary pills, and expandable details. Aspireify keeps resource-kind
-colors, mapping and relationship editors, and its immutable confirmation
-boundary. These differences express each workflow; they do not introduce
-separate base themes, font families, or icon sets.
+Workflow-specific layouts, content density, resource colors, navigation,
+graphs, reports, and editing interactions can differ when needed. Keep those
+differences local; do not introduce separate base themes, font families, or
+icon sets.
