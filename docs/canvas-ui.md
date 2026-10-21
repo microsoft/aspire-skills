@@ -23,9 +23,10 @@ Packaged extensions remain self-contained and need no repository-relative
 assets at runtime. Other installers that copy an extension folder must also
 dereference its links rather than preserve links outside that folder.
 
-Tests enforce the canonical symlink targets, standalone bundle contents, valid
-icon references, host-token ownership, fallback contrast, static asset responses,
-and the published plugin's relative Git symlinks.
+Tests cover canonical symlink targets, standalone bundle contents, static icon
+references, unique sprite identifiers, host-token ownership, base fallback
+contrast, static asset responses, and the published plugin's relative Git
+symlinks.
 
 ## Theme ownership
 
@@ -53,9 +54,9 @@ Use semantic roles in component styles rather than fixed light/dark palettes.
 Keep text and action-label contrast at least 4.5:1 and focus/control boundaries
 at least 3:1 against adjacent surfaces. On tinted surfaces, mix label colors
 toward `--text` rather than reusing a hue intended for a plain background.
-The fallback-palette tests cover both themes, including tinted labels and
-relationship hover states; custom host colors still need visual and contrast
-review.
+The fallback-palette tests cover base text and filled-action colors in both
+themes. Check tinted surfaces and custom host colors in the browser against
+their rendered foregrounds and backgrounds.
 
 ## Typography and controls
 

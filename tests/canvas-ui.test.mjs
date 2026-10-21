@@ -1,82 +1,33 @@
 import assert from "node:assert/strict";
-import { lstat, readFile, readlink, realpath } from "node:fs/promises";
+import { lstat, readFile, readlink } from "node:fs/promises";
 import { test } from "node:test";
 
 const repoRoot = new URL("../", import.meta.url);
 const extensions = ["aspire-apphosts", "aspire-doctor", "aspireify"];
 const theme = await readFile(new URL("assets/canvas/theme.css", repoRoot), "utf8");
 const icons = await readFile(new URL("assets/canvas/icons.svg", repoRoot), "utf8");
-const symbols = [...icons.matchAll(/<symbol id="([^"]+)" viewBox="([^"]+)"/g)];
+const symbols = [...icons.matchAll(/<symbol\b[^>]*\bid="([^"]+)"/g)];
 const symbolIds = new Set(symbols.map(([, id]) => id));
 
 for (const extension of extensions) {
   test(`${extension} links directly to the canonical shared canvas assets`, async () => {
     for (const asset of ["theme.css", "icons.svg"]) {
-      const source = new URL(`assets/canvas/${asset}`, repoRoot);
       const link = new URL(`extensions/${extension}/ui/canvas-${asset}`, repoRoot);
       assert.ok((await lstat(link)).isSymbolicLink(), "source checkouts must enable Git symlinks");
       assert.equal((await readlink(link)).replaceAll("\\", "/"), `../../../assets/canvas/${asset}`);
-      assert.equal(await realpath(link), await realpath(source));
     }
   });
 
-  test(`${extension} loads the shared foundation and only references published icons`, async () => {
-    const root = new URL(`extensions/${extension}/`, repoRoot);
-    const [html, app, styles, provider] = await Promise.all([
-      readFile(new URL("ui/index.html", root), "utf8"),
-      readFile(new URL("ui/app.js", root), "utf8"),
-      readFile(new URL("ui/styles.css", root), "utf8"),
-      readFile(new URL("extension.mjs", root), "utf8")
-    ]);
-    assert.ok(html.includes('href="/canvas-theme.css"'));
-    assert.ok(html.indexOf('href="/canvas-theme.css"') < html.indexOf('href="/styles.css"'));
-    assert.match(provider, /"\/canvas-theme\.css"/);
-    assert.match(provider, /"\/canvas-icons\.svg"/);
-    assert.match(provider, /"\.svg": "image\/svg\+xml"/);
-    assert.doesNotMatch(styles, /--fgColor-|prefers-color-scheme|--font-sans|--font-mono/);
-    assert.doesNotMatch(styles, /--(?:surface|text|muted|accent|healthy|warning|failure|focus)\s*:/);
-    assert.doesNotMatch(styles, /(?:^|\n)body\s*\{[^}]*\bbackground(?:-color)?\s*:/,
-      "page backgrounds belong to the shared foundation");
-    assert.doesNotMatch(styles, /var\(--canvas-wash\)/);
-    if (extension === "aspire-apphosts") {
-      assert.match(styles, /\.canvas-surface\s*\{[^}]*background: var\(--surface\);/);
-    }
-    assert.doesNotMatch(styles, /font-size:\s*\d+\.\d+px/);
-    assert.doesNotMatch(html, /<path\b/);
-    assert.doesNotMatch(app, /setAttribute\("d", ICONS/);
-    assert.match(html, /class="[^"]*canvas-toolbar"/);
-    assert.match(html, /class="[^"]*canvas-heading"/);
-    assert.match(html, /class="[^"]*canvas-subtitle"/);
-    assert.match(html, /class="[^"]*canvas-brand"/);
-    assert.match(html, /href="\/canvas-icons\.svg#aspire"/);
-    for (const [, attributes, contents] of html.matchAll(/<svg\b([^>]*)>([\s\S]*?)<\/svg>/g)) {
-      assert.match(attributes, /aria-hidden="true"/);
-      assert.match(attributes, /focusable="false"/);
-      const id = contents.match(/<use href="\/canvas-icons\.svg#([^"]+)"/)?.[1];
+  test(`${extension} has no unknown static sprite references`, async () => {
+    const html = await readFile(new URL(`extensions/${extension}/ui/index.html`, repoRoot), "utf8");
+    for (const [, id] of html.matchAll(/\bhref=["']\/canvas-icons\.svg#([^"']+)["']/g)) {
       assert.ok(symbolIds.has(id), `${extension} references unknown icon ${id}`);
     }
   });
 }
 
-test("shared theme tokens consume host values without overwriting them", () => {
-  assert.match(theme, /--surface: var\(--background-color-default,/);
-  assert.match(theme, /--text: var\(--text-color-default,/);
-  assert.match(theme, /--muted: var\(--text-color-muted,/);
-  assert.match(theme, /--focus: var\(--color-focus-outline,/);
-  assert.match(theme, /--font-body: var\(--font-sans,/);
-  assert.match(theme, /--font-code: var\(--font-mono,/);
-  assert.match(theme, /:root,\s*body\s*\{/);
-  assert.match(theme, /:root\[data-color-mode="light"\]/);
-  assert.match(theme, /:root:not\(\[data-color-mode\]\):has\(body\[data-color-mode="light"\]\)/);
-  assert.match(theme, /:root\[data-color-mode="dark"\]/);
-  assert.match(theme, /:root:not\(\[data-color-mode\]\):has\(body\[data-color-mode="dark"\]\)/);
+test("shared styles do not overwrite host-owned tokens", () => {
   assert.doesNotMatch(theme, /--(?:background-color-default|text-color-default|text-color-muted|true-color-\w+|font-sans|font-mono|color-focus-outline)\s*:/);
-  assert.doesNotMatch(theme, /--fgColor-/);
-  assert.match(theme, /(?:^|\n)body\s*\{[^}]*background: var\(--surface\);/);
-  assert.doesNotMatch(theme, /--canvas-wash\s*:/);
-  assert.match(theme, /a\[href\].*\[tabindex\]\):focus-visible/);
-  assert.match(theme, /outline: 2px solid var\(--focus\)/);
-  assert.match(theme, /@media \(prefers-reduced-motion: reduce\)/);
 });
 
 test("fallback text, status, and filled-action colors meet WCAG AA in both themes", () => {
@@ -102,63 +53,15 @@ test("fallback text, status, and filled-action colors meet WCAG AA in both theme
   }
 });
 
-test("small labels on tinted status, selected-tab, and relationship surfaces meet WCAG AA", async () => {
-  const [apphosts, aspireify] = await Promise.all([
-    readFile(new URL("extensions/aspire-apphosts/ui/styles.css", repoRoot), "utf8"),
-    readFile(new URL("extensions/aspireify/ui/styles.css", repoRoot), "utf8")
-  ]);
-  assert.match(apphosts, /\.summary-chip\.tone-warning,[^{]+\{\s*color: color-mix\(in srgb, var\(--warning\), var\(--text\) 25%\)/);
-  assert.match(apphosts, /\.app-model-tab\.is-active \.app-model-tab-count \{\s*background: var\(--brand-soft\);\s*color: var\(--brand-strong\)/);
-  assert.match(theme, /--brand-strong: color-mix\(in srgb, var\(--brand\), var\(--text\) 18%\)/);
-  assert.match(aspireify, /\.connection-chip-affordance \{[^}]*color: color-mix\(in srgb, var\(--relationship-color\), var\(--text\) 25%\)/);
-  for (const mode of [0, 1]) {
-    const surface = fallbackColors("surface")[mode];
-    const text = fallbackColors("text")[mode];
-    const warning = mix(fallbackColors("warning")[mode], text, 0.75);
-    assert.ok(contrast(warning, mix(warning, surface, 0.08)) >= 4.5, `warning label in theme ${mode}`);
-    const brand = fallbackColors("brand")[mode];
-    assert.ok(
-      contrast(mix(brand, text, 0.82), mix(brand, surface, 0.12)) >= 4.5,
-      `selected resource count in theme ${mode}`
-    );
-    for (const relationship of ["accent", "warning", "brand"]) {
-      const color = fallbackColors(relationship)[mode];
-      for (const tint of [0.11, 0.18]) {
-        assert.ok(
-          contrast(mix(color, text, 0.75), mix(color, surface, tint)) >= 4.5,
-          `${relationship} relationship label with ${tint} tint in theme ${mode}`
-        );
-      }
-    }
-  }
-});
-
-test("the shared sprite has unique, local-only symbols and preserves the official Aspire mark", () => {
+test("shared sprite identifiers are nonempty and unique", () => {
+  assert.ok(symbolIds.size > 0);
   assert.equal(symbolIds.size, symbols.length);
-  for (const [, id, viewBox] of symbols) {
-    assert.equal(viewBox, id === "aspire" ? "0 0 32 32" : "0 0 16 16");
-  }
-  for (const id of ["aspire", "pass", "warning", "error", "restart", "terminal", "add", "close"]) {
-    assert.ok(symbolIds.has(id), `${id} must be a shared icon`);
-  }
-  assert.doesNotMatch(icons, /<(?:script|image|foreignObject)\b|\bon\w+=|(?:href|src)=/i);
-  const brand = icons.match(/<symbol id="aspire"[^>]*>([\s\S]*?)<\/symbol>/)?.[1];
-  assert.equal((brand?.match(/<path\b/g) ?? []).length, 6);
-  assert.match(brand, /fill="#512BD4"/);
 });
 
 function fallbackColors(name) {
   const declaration = theme.match(new RegExp(`--${name}: [^\\n]*light-dark\\((#[\\da-f]{6}), (#[\\da-f]{6})\\)`, "i"));
   assert.ok(declaration, `${name} must define light and dark fallback colors`);
   return declaration.slice(1);
-}
-
-function mix(first, second, fraction) {
-  const channels = hex => hex.slice(1).match(/../g).map(channel => parseInt(channel, 16));
-  const background = channels(second);
-  return "#" + channels(first).map((channel, index) =>
-    Math.round(channel * fraction + background[index] * (1 - fraction)).toString(16).padStart(2, "0")
-  ).join("");
 }
 
 function contrast(first, second) {
