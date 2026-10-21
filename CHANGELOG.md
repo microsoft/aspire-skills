@@ -13,6 +13,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   `.ascii` output contracts, capability gates, routing and lifetime evaluations.
   Aspire CLI delivery requires refreshing its embedded skill bundle and metadata.
 
+### Changed
+- Unified canvas styling and icons with shared assets that respect host themes.
+
 ## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)
 
 ### Changed

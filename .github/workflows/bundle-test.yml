@@ -9,6 +9,7 @@ on:
       - ".github/workflows/skill-eval*.yml"
       - ".github/workflows/skill-experiment.yml"
       - ".github/plugins/aspire-skills/extensions/**"
+      - "assets/canvas/**"
       - "extensions/**"
       - "hooks/**"
       - "package.json"
@@ -39,6 +40,7 @@ on:
       - ".github/workflows/skill-eval*.yml"
       - ".github/workflows/skill-experiment.yml"
       - ".github/plugins/aspire-skills/extensions/**"
+      - "assets/canvas/**"
       - "extensions/**"
       - "hooks/**"
       - "package.json"
@@ -73,6 +75,10 @@ jobs:
           - windows-latest
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Enable Git symlinks on Windows
+        if: runner.os == 'Windows'
+        run: git config --global core.symlinks true
+
       - name: Checkout
         # actions/checkout@v6.0.2
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd

@@ -24,7 +24,8 @@ test("bundle tests run on Linux, macOS, and Windows", () => {
   assert.match(workflow, /runs-on: \$\{\{ matrix\.os \}\}/);
 });
 
-test("extension source and plugin mirror changes trigger pull request and main tests", () => {
+test("shared assets, extension source, and plugin mirrors trigger pull request and main tests", () => {
+  assert.equal(workflow.match(/- "assets\/canvas\/\*\*"/g)?.length, 2);
   assert.equal(workflow.match(/- "extensions\/\*\*"/g)?.length, 2);
   assert.equal(
     workflow.match(/- "\.github\/plugins\/aspire-skills\/extensions\/\*\*"/g)?.length,

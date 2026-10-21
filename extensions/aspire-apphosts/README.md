@@ -122,6 +122,13 @@ bounded request bodies.
 - Older CLI compatibility retries only when the optional disabled-command flag
   is actually unsupported and marks the resulting model accordingly.
 
+## Shared canvas UI
+
+The workbench uses the shared canvas theme, typography, controls, and local SVG
+sprite. Its resource board and dense operational labels remain specific to
+AppHosts. See [Shared canvas UI](../../docs/canvas-ui.md) before changing the
+canonical assets linked by `ui/canvas-theme.css` and `ui/canvas-icons.svg`.
+
 ## Regression coverage
 
 Run `npm test` from the repository root. It includes the AppHosts model,

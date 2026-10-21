@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { publishTelemetryHooks, resolveSourceCommit } from "./telemetry-hook-bundle.mjs";
@@ -155,7 +155,7 @@ function buildExtension(extensionDirectory) {
     const sourcePath = join(sourceRoot, relativePath);
     const targetPath = join(targetRoot, relativePath);
     mkdirSync(dirname(targetPath), { recursive: true });
-    cpSync(sourcePath, targetPath);
+    copyFileSync(sourcePath, targetPath);
 
     files.push({
       relativePath: toManifestPath(relativePath),
