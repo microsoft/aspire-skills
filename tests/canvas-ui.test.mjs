@@ -1,9 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { lstat, readFile, readlink, realpath } from "node:fs/promises";
 import { test } from "node:test";
 
 const repoRoot = new URL("../", import.meta.url);
@@ -14,11 +10,13 @@ const symbols = [...icons.matchAll(/<symbol id="([^"]+)" viewBox="([^"]+)"/g)];
 const symbolIds = new Set(symbols.map(([, id]) => id));
 
 for (const extension of extensions) {
-  test(`${extension} ships exact, self-contained copies of the shared canvas assets`, async () => {
+  test(`${extension} links directly to the canonical shared canvas assets`, async () => {
     for (const asset of ["theme.css", "icons.svg"]) {
-      const source = await readFile(new URL(`assets/canvas/${asset}`, repoRoot));
-      const copy = await readFile(new URL(`extensions/${extension}/ui/canvas-${asset}`, repoRoot));
-      assert.deepEqual(copy, source, `${extension}: run npm run canvas:sync after editing ${asset}`);
+      const source = new URL(`assets/canvas/${asset}`, repoRoot);
+      const link = new URL(`extensions/${extension}/ui/canvas-${asset}`, repoRoot);
+      assert.ok((await lstat(link)).isSymbolicLink(), "source checkouts must enable Git symlinks");
+      assert.equal((await readlink(link)).replaceAll("\\", "/"), `../../../assets/canvas/${asset}`);
+      assert.equal(await realpath(link), await realpath(source));
     }
   });
 
@@ -59,43 +57,6 @@ for (const extension of extensions) {
     }
   });
 }
-
-test("the canvas asset check does not require a build or external dependencies", () => {
-  const result = spawnSync(process.execPath, [
-    fileURLToPath(new URL("scripts/sync-canvas-assets.mjs", repoRoot)), "--check"
-  ], { cwd: fileURLToPath(repoRoot), encoding: "utf8" });
-  assert.equal(result.status, 0, result.stderr);
-});
-
-test("asset synchronization detects drift without writing and repairs all standalone copies", async (t) => {
-  const directory = await mkdtemp(join(tmpdir(), "aspire-canvas-assets-"));
-  t.after(() => rm(directory, { recursive: true, force: true }));
-  await mkdir(join(directory, "scripts"));
-  await mkdir(join(directory, "assets", "canvas"), { recursive: true });
-  await Promise.all(extensions.map(extension =>
-    mkdir(join(directory, "extensions", extension, "ui"), { recursive: true })
-  ));
-  await copyFile(
-    new URL("scripts/sync-canvas-assets.mjs", repoRoot),
-    join(directory, "scripts", "sync-canvas-assets.mjs")
-  );
-  for (const name of ["theme.css", "icons.svg"]) {
-    await copyFile(new URL(`assets/canvas/${name}`, repoRoot), join(directory, "assets", "canvas", name));
-  }
-  const run = (...args) => spawnSync(process.execPath, [
-    join(directory, "scripts", "sync-canvas-assets.mjs"), ...args
-  ], { cwd: directory, encoding: "utf8" });
-  assert.equal(run("--check").status, 1, "missing copies must fail the check");
-  assert.equal(run().status, 0);
-  const stale = join(directory, "extensions", "aspireify", "ui", "canvas-theme.css");
-  await writeFile(stale, "stale fixture");
-  assert.equal(run("--check").status, 1);
-  assert.equal(await readFile(stale, "utf8"), "stale fixture", "check mode must not rewrite drift");
-  assert.equal(run().status, 0);
-  assert.equal(await readFile(stale, "utf8"), theme);
-  assert.equal(run("--check").status, 0);
-  assert.notEqual(run("--unknown").status, 0);
-});
 
 test("shared theme tokens consume host values without overwriting them", () => {
   assert.match(theme, /--surface: var\(--background-color-default,/);

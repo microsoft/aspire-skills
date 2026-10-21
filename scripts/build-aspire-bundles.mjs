@@ -155,7 +155,7 @@ function buildExtension(extensionDirectory) {
     const sourcePath = join(sourceRoot, relativePath);
     const targetPath = join(targetRoot, relativePath);
     mkdirSync(dirname(targetPath), { recursive: true });
-    cpSync(sourcePath, targetPath);
+    cpSync(sourcePath, targetPath, { dereference: true });
 
     files.push({
       relativePath: toManifestPath(relativePath),

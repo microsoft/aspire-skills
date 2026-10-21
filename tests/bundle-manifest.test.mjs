@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { lstatSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
@@ -73,6 +73,17 @@ test("bundle manifests support Aspire 13.5 and 13.6 with compatible SHA-256/SHA-
         aspireSdk: ">=13.5.0 <13.7.0"
       }
     });
+    for (const extension of ["aspire-apphosts", "aspire-doctor", "aspireify"]) {
+      for (const asset of ["theme.css", "icons.svg"]) {
+        const assetPath = join(outputRoot, "aspire-extensions-v9.9.9", "extensions", extension, "ui", `canvas-${asset}`);
+        assert.ok(lstatSync(assetPath).isFile(), `${extension}: bundles must contain regular asset files, not repository symlinks`);
+        assert.deepEqual(
+          readFileSync(assetPath),
+          readFileSync(join(repoRoot, "assets", "canvas", asset)),
+          `${extension}: standalone assets must match the canonical source`
+        );
+      }
+    }
   }
   finally {
     rmSync(outputRoot, { recursive: true, force: true });

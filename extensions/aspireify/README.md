@@ -67,8 +67,7 @@ AppHost editor, deployment controls, initialization flow, or validation workflow
 Aspireify uses the shared canvas theme, typography, controls, and local SVG
 sprite. Resource-kind colors and review layouts stay local; the confirmation
 boundary is unchanged. See [Shared canvas UI](../../docs/canvas-ui.md) for asset
-ownership, synchronization, and read-only previews that do not open a real
-Aspireify workflow.
+ownership, relative symlinks, standalone packaging, and visual review guidance.
 
 ## Troubleshooting
 

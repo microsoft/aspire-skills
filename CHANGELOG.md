@@ -15,10 +15,11 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 
 ### Changed
 - Unified AppHosts, Doctor, and Aspireify themes, typography, controls, and icons
-  through shared canonical assets shipped with each standalone extension.
+  through symlinks to shared canonical assets, included as regular files in
+  each standalone extension bundle.
   Explicit host themes now take precedence over system fallback colors.
-  Added asset-drift, icon, contrast, and provider regression coverage, plus
-  read-only browser fixtures and canvas authoring guidance.
+  Added symlink, packaging, icon, contrast, and provider regression coverage,
+  plus canvas authoring guidance.
 
 ## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)
 

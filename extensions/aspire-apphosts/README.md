@@ -127,7 +127,7 @@ bounded request bodies.
 The workbench uses the shared canvas theme, typography, controls, and local SVG
 sprite. Its resource board and dense operational labels remain specific to
 AppHosts. See [Shared canvas UI](../../docs/canvas-ui.md) before changing the
-generated `ui/canvas-theme.css` or `ui/canvas-icons.svg` assets.
+canonical assets linked by `ui/canvas-theme.css` and `ui/canvas-icons.svg`.
 
 ## Regression coverage
 

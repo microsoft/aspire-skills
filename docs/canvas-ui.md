@@ -3,25 +3,28 @@
 Aspire AppHosts, Aspire Doctor, and Aspireify share Aspireify's compact visual
 language: neutral surfaces, restrained accents, a single type scale, and consistent
 controls and branding. They do not depend on another extension at runtime.
-Each extension ships local copies of
-the canonical [theme](../assets/canvas/theme.css) and
-[SVG sprite](../assets/canvas/icons.svg).
+Each extension's source links directly to the canonical
+[theme](../assets/canvas/theme.css) and [SVG sprite](../assets/canvas/icons.svg).
 
-## Edit and synchronize
+## Shared sources and packaging
 
-Edit the canonical assets, not the generated `ui/canvas-theme.css` or
-`ui/canvas-icons.svg` files. Then run from the repository root:
+Edit the canonical assets directly. Each extension's `ui/canvas-theme.css` and
+`ui/canvas-icons.svg` are relative Git symlinks to those files, not generated
+copies. No synchronization command or separate asset build is required.
 
-```powershell
-npm run canvas:sync
-npm run canvas:check
-npm test
-```
+Running the extensions or tests from source requires a symlink-capable checkout.
+On Windows, enable Developer Mode or the required symlink privilege and check
+out the repository with `core.symlinks=true`. A checkout with
+`core.symlinks=false` contains text placeholders instead of usable asset links.
 
-Commit the canonical assets and all generated copies together. The check command
-reports missing or stale copies without changing files. Tests also enforce exact
-copies, valid icon references, host-token ownership, fallback contrast, static
-asset responses, and the published plugin's relative Git symlinks.
+The extension bundle generator dereferences symlinks into regular files.
+Packaged extensions remain self-contained and need no repository-relative
+assets at runtime. Other installers that copy an extension folder must also
+dereference its links rather than preserve links outside that folder.
+
+Tests enforce the canonical symlink targets, standalone bundle contents, valid
+icon references, host-token ownership, fallback contrast, static asset responses,
+and the published plugin's relative Git symlinks.
 
 ## Theme ownership
 
@@ -109,35 +112,24 @@ follow the same contract.
 
 ## Adopt the foundation
 
-1. Add the extension to the target list in
-   [sync-canvas-assets.mjs](../scripts/sync-canvas-assets.mjs) and synchronize.
+1. Add `ui/canvas-theme.css` and `ui/canvas-icons.svg` as relative Git symlinks
+   to the canonical files under `assets/canvas/`.
 2. Load `/canvas-theme.css` before the component stylesheet. Serve it and
    `/canvas-icons.svg` through the provider's exact static allowlist, with
    `text/css` and `image/svg+xml` MIME types. Preserve existing authorization,
    path containment, and Content Security Policy.
 3. Consume shared roles and remove duplicate base palettes, font stacks, resets,
    and icon geometry. Keep resource-kind palettes and component layout local.
-4. Add the generated files to the published plugin mirror as relative Git
+4. Add the linked asset entries to the published plugin mirror as relative Git
    symlinks (mode `120000`), matching the other extension files.
 5. Add the extension to the shared asset tests and review the browser states
    below.
 
 ## Browser review
 
-Run the read-only preview from the repository root:
-
-```powershell
-node tests\fixtures\canvas-preview.mjs
-```
-
-It prints one loopback URL per extension and serves the shipped UI with synthetic
-API and event data. It does not load the SDK, run the CLI, or open a real
-Aspireify confirmation. Resource mutations and external actions are disabled;
-AppHosts refresh only replays the fixture, and selection only acknowledges focus.
-
-Add `&state=loading`, `empty`, `error`, `long`, or `populated` to a printed URL.
-Aspireify also supports `confirmed` for its read-only submitted state. Stop the
-preview with Ctrl+C.
+Use each canvas's normal workflow to review its loading, empty, error,
+populated, and long-content states. Open Aspireify only during its skill's
+Step 3, after discovery and clarification have produced a proposal.
 
 Review each state at 320px and wide desktop widths in light and dark mode.
 While a populated page remains open, switch `data-color-mode` on the root or
