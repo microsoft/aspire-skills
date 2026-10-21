@@ -13,6 +13,13 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   `.ascii` output contracts, capability gates, routing and lifetime evaluations.
   Aspire CLI delivery requires refreshing its embedded skill bundle and metadata.
 
+### Changed
+- Unified AppHosts, Doctor, and Aspireify themes, typography, controls, and icons
+  through shared canonical assets shipped with each standalone extension.
+  Explicit host themes now take precedence over system fallback colors.
+  Added asset-drift, icon, contrast, and provider regression coverage, plus
+  read-only browser fixtures and canvas authoring guidance.
+
 ## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)
 
 ### Changed

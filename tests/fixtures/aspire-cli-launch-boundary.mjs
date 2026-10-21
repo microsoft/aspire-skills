@@ -401,6 +401,16 @@ const runDiagnostics = (options) => withDoctorCanvas(options, ({ canvas, instanc
 
 const revealed = fileURLToPath(import.meta.url);
 
+test("Doctor serves the standalone shared theme and SVG sprite", async () => {
+    await withDoctorCanvas({ files: withLocalCopies }, async ({ url }) => {
+        for (const [name, type] of [["canvas-theme.css", "text/css"], ["canvas-icons.svg", "image/svg+xml"]]) {
+            const response = await fetch(new URL(`/${name}`, url));
+            assert.equal(response.status, 200);
+            assert.ok(response.headers.get("content-type").startsWith(type));
+        }
+    });
+});
+
 const revealPath = (options) => withDoctorCanvas(options, async ({ url }) => {
     const response = await fetch(new URL("/api/open-path", url), {
         method: "POST",

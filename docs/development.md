@@ -16,6 +16,11 @@ the committed tree. CI rejects missing, extra, or stale V1 and V2 catalog files.
 Feature PRs update the current version's changelog notes and preserve earlier
 entries and the coordinated version.
 
+Canvas extensions share canonical theme and icon assets. After editing those
+assets, run `npm run canvas:sync` and commit the generated extension copies.
+See [Shared canvas UI](canvas-ui.md) for token ownership, typography, icons,
+standalone packaging, and read-only browser previews.
+
 The **OpenCode catalog check** runs on every PR, including stacked PRs, on
 main/dev/release pushes, and on merge-queue candidates.
 

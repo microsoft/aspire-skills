@@ -6,6 +6,8 @@
   "scripts": {
     "version:dev": "node scripts/version-development.mjs",
     "test": "node --test tests/*.test.mjs tests/aspireify/*.test.mjs",
+    "canvas:sync": "node scripts/sync-canvas-assets.mjs",
+    "canvas:check": "node scripts/sync-canvas-assets.mjs --check",
     "catalog": "node scripts/build-opencode-catalog.mjs",
     "catalog:check": "node scripts/check-opencode-catalog.mjs",
     "bundle": "node scripts/build-aspire-bundles.mjs",

@@ -27,6 +27,13 @@ summary, and the CLI installations detected on the machine.
 - **Loading UX** — shaped skeletons that mirror the real layout, shimmer, and
   View-Transition cross-fades (respecting `prefers-reduced-motion`).
 
+## Shared canvas UI
+
+Doctor uses the same theme tokens, typography, controls, and local SVG sprite
+as AppHosts and Aspireify, while retaining its diagnostic report layout.
+See [Shared canvas UI](../../docs/canvas-ui.md) for the canonical assets,
+synchronization commands, accessibility rules, and browser previews.
+
 ## How it works
 
 Each open canvas instance runs a small loopback HTTP server (`127.0.0.1`, random
@@ -77,7 +84,9 @@ aspire-doctor/
   extension.mjs          wiring: server, routes, canvas + action + tool, hooks
   provider-helpers.mjs   request limits, loopback startup, result revisions
   ui/index.html          renderer markup (toolbar + diagnostics + installations)
-  ui/styles.css          og-preview-derived design system + app-theme chrome
+  ui/canvas-theme.css    generated shared theme, typography, and controls
+  ui/canvas-icons.svg    generated shared SVG sprite
+  ui/styles.css          Doctor-specific report layout and component styles
   ui/app.js              client logic (fetch, render, SSE, controls, actions)
   ui/model.mjs           result normalization and freshness rules
 ```
