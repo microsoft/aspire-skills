@@ -22,7 +22,7 @@ This skill wins over generic cloud deployment skills when both conditions are tr
 1. The user asks to deploy, publish, generate deployment artifacts, create Bicep/Helm/Compose/CDK output, host on Azure or AWS, deploy to Azure, AWS, Kubernetes, Docker Compose, or Radius, tear down deployed resources, or validate a deployment.
 2. The workspace has Aspire markers:
    - Aspire workspace configuration
-   - C# or TypeScript AppHost files
+   - C#, TypeScript, or Go AppHost files
    - an AppHost project
    - AppHost code using Aspire distributed application builder APIs
 
@@ -46,15 +46,16 @@ aspire docs get "deploy-to-azure-kubernetes-service-aks"
 aspire docs get "<slug-from-search-results>"
 ```
 
-When you need exact C# or TypeScript API shape, use API docs too. Search both languages when you are not sure which AppHost language the repo uses:
+When you need exact C#, TypeScript, or Go API shape, use API docs too. Search each language that could apply when you are not sure which AppHost language the repo uses. Go AppHosts require Aspire 17.0 or later, and `--language go` needs the 17.0 CLI:
 
 ```bash
 aspire docs api search "<deployment API or concept>" --language csharp
 aspire docs api search "<deployment API or concept>" --language typescript
+aspire docs api search "<deployment API or concept>" --language go
 aspire docs api get "<id-from-api-search>"
 ```
 
-Do not invent package names, builder methods, overloads, or deployment commands. API shapes differ between C# and TypeScript AppHosts.
+Do not invent package names, builder methods, overloads, or deployment commands. API shapes differ between C#, TypeScript, and Go AppHosts.
 
 ### Prefer Aspire-native deployment
 
@@ -135,7 +136,7 @@ Migrate obsolete 13.5 surfaces while editing deployment code:
 1. **Orient to the Aspire workspace.**
    - Start with `aspire ls` to list AppHosts in the current scope, then use `aspire.config.json`, AppHost project files, or `aspire ps` if more context is needed.
    - If no AppHost exists, stop deployment work and invoke the `aspireify` skill to initialize/wire the AppHost before continuing.
-   - Identify C# vs TypeScript AppHost.
+   - Identify the AppHost language: C#, TypeScript, or Go (`apphost.go`).
    - Prefer Aspire CLI commands for discovery and state inspection.
 2. **Clarify or infer the deployment target.**
    - If the user named Docker Compose, Kubernetes, Azure Container Apps, Azure App Service, Azure Kubernetes Service (AKS), or AWS, load that target reference without asking again.
@@ -157,7 +158,7 @@ Migrate obsolete 13.5 surfaces while editing deployment code:
 5. **Apply the target code changes.**
    - Run the target's `aspire add ...` command if the integration is missing.
    - Add the deployment environment resource to the AppHost.
-   - Do not add explicit compute-environment assignment for the common single-environment case. Only disambiguate when the AppHost has multiple deployment environments. In C# this is usually `WithComputeEnvironment(...)`; for TypeScript AppHosts, verify the current language-specific docs before assuming an equivalent.
+   - Do not add explicit compute-environment assignment for the common single-environment case. Only disambiguate when the AppHost has multiple deployment environments. In C# or Go this is usually `WithComputeEnvironment(...)`; for TypeScript AppHosts, verify the current language-specific docs before assuming an equivalent.
    - Add only the target-specific customization APIs the deployment needs, such as endpoint exposure, Helm settings, Compose file customization, Azure site/container app customization, or AWS publish target overrides.
 6. **Preflight the deployment model.**
    - Confirm the target integration package exists in the AppHost.

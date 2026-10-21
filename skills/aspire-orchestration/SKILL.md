@@ -47,12 +47,15 @@ Activate when ANY signal is present:
 | C# AppHost | `.csproj` containing `Aspire.AppHost.Sdk` | ✅ Definitive |
 | File-based C# AppHost | `apphost.cs` or `.cs` file with `#:sdk Aspire.AppHost.Sdk` | ✅ Definitive |
 | TypeScript AppHost | Current `apphost.mts` or legacy `apphost.ts` file in project | ✅ Definitive |
+| Go AppHost | `apphost.go` next to an `aspire.config.json` whose `appHost.language` is `go` | ✅ Definitive |
 | Aspire config | `aspire.config.json` in project root | High |
 | Aspire settings | `.aspire/` directory present | High |
-| Generated TS modules | `.aspire/modules/` directory present | High |
+| Generated TS or Go modules | `.aspire/modules/` directory present | High |
 | Service defaults | `Aspire.ServiceDefaults` in project references | Medium |
 
-See [detection.md](references/detection.md) for detailed fingerprinting.
+See [detection.md](references/detection.md) for detailed fingerprinting. Go AppHosts require
+Aspire 17.0 or later. A Go service wired into a C# or TypeScript AppHost does not make it a
+Go AppHost.
 
 ## VS Code AppHost Lifecycle
 
@@ -171,7 +174,7 @@ See [safety-guardrails.md](references/safety-guardrails.md) for detailed rules a
 | Environment maintenance | `aspire cache clear`, `aspire certs trust`, `aspire certs clean` |
 | Diagnose environment | `aspire doctor` |
 | Machine-readable output | `--format Json` (supported: `ps`, `describe`, `start`) |
-| Look up API reference | `aspire docs api search <query> --language csharp\|typescript` |
+| Look up API reference | `aspire docs api search <query> --language csharp\|typescript\|go` (`go` needs Aspire 17.0 or later) |
 | Browse API entries | `aspire docs api list <scope>` |
 | Get API detail | `aspire docs api get <id>` |
 
@@ -263,6 +266,12 @@ Current rules to apply when handing off:
 | Never edit `.aspire/modules/` directly | Generated; use `aspire add <package>` to regenerate and `aspire restore` to recover missing files |
 | Use `aspire docs api search <query> --language typescript` for API lookup | TS surface differs from C# |
 
+## Go AppHost Note
+
+Go AppHost authoring is delegated to `aspireify`. Never edit `.aspire/modules/` (the
+generated Go SDK); use `aspire add <package>` to add integrations and `aspire restore` to
+recover missing files, such as after a fresh clone.
+
 ## Skill Routing — In-Plugin Sibling Skills
 
 After `aspire init` drops a skeleton AppHost + `aspire.config.json`, route AppHost wiring
@@ -289,4 +298,4 @@ for AppHost wiring instead of the in-plugin sibling. Same precedence rule as the
 - [detection.md](references/detection.md) — Project fingerprinting
 - [app-commands.md](references/app-commands.md) — App lifecycle and bootstrap commands
 - [resource-management.md](references/resource-management.md) — Resource wait, restart, and operations
-- [agent-workflows.md](references/agent-workflows.md) — Common agent investigation, integration, TypeScript, and handoff workflows
+- [agent-workflows.md](references/agent-workflows.md) — Common agent investigation, integration, TypeScript, Go, and handoff workflows

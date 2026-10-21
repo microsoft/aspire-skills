@@ -35,6 +35,7 @@ Shared fixtures live at the **repo-root** `evals/` directory and are referenced 
 evals/
 ├── csharp-apphost/      # Wired C# AppHost (Aspire.AppHost.Sdk + Program.cs)
 ├── ts-apphost/          # TypeScript AppHost (apphost.mts + .aspire/modules/)
+├── go-apphost/          # Go AppHost shaped like aspire-go-starter (apphost.go + aspire.config.json + go.mod; no api/ service or generated .aspire/modules/)
 ├── non-aspire/          # Non-Aspire .NET project (for "should not trigger" stimuli)
 ├── project-v2-migration/ # Legacy inputs, captured-edit contracts, and qualification guidance
 ├── terminals/           # Terminal authoring fixtures, captured-edit checks and example compilation
@@ -204,14 +205,14 @@ Use `--workers 4` to fan stimuli out and shave wall-clock time; expect higher co
 
 | Skill | Task stimuli | Routing stimuli | Focus |
 |-------|--------------|-----------------|-------|
-| `aspire` (router) | 2 | 23 | Routing precision to sub-skills; preserve selected release family |
-| `aspire-init` | 6 | 15 | Skeleton drop, `aspire new` / `aspire init` decision, aspireify handoff |
-| `aspireify` | 14 | 19 | AppHost wiring (C# / file-based C# / TS), package-manager resolution, validation, never edit `.aspire/modules/` |
-| `aspire-orchestration` | 29 | 24 | Lifecycle tools, file lock recovery, `--include-hidden`, `aspire update --self` |
+| `aspire` (router) | 6 | 24 | Routing precision to sub-skills; preserve selected release family |
+| `aspire-init` | 11 | 16 | Skeleton drop, `aspire new` / `aspire init` decision, aspireify handoff |
+| `aspireify` | 19 | 20 | AppHost wiring (C# / file-based C# / TS / Go), package-manager resolution, validation, never edit `.aspire/modules/` |
+| `aspire-orchestration` | 32 | 24 | Lifecycle tools, file lock recovery, `--include-hidden`, `aspire update --self` |
 | `aspire-deployment` | 11 | 22 | Multi-target deploy, `aspire destroy`, JS publishing, pipeline previews |
 | `aspire-monitoring` | 8 | 23 | Diagnostics bridge, standalone dashboard, browser logs, `--include-hidden` |
 | `aspire-project-v2-migration` | 16 | 6 | Approval/capability stops, bounded actual edits, idempotence, and explicit migration intent |
-| **Total** | **86** | **132** | **218 stimuli** |
+| **Total** | **103** | **135** | **238 stimuli** |
 
 Routing counts include `routing` in either a scalar or array `area` tag.
 

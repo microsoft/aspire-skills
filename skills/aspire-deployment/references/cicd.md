@@ -69,15 +69,16 @@ jobs:
           aspire deploy --list-steps
 ```
 
-Add one or both setup blocks before Aspire commands:
+Add each setup block that applies before Aspire commands:
 
 | AppHost/resources | Setup guidance |
 |-------------------|----------------|
 | C# AppHost or .NET project resources | Install .NET with `actions/setup-dotnet`, then use the repo's restore/build command. |
 | TypeScript AppHost or JavaScript resources | Install Node with `actions/setup-node`, then run the repo's package-manager install/build commands. |
-| Mixed C#/TypeScript graph | Use both setup blocks so the AppHost and all compute resources can be restored, built, and published. |
+| Go AppHost (Aspire 17.0 or later) | Install Go with `actions/setup-go`. The CLI runs the AppHost with `go run .`, so the AppHost needs no separate build step. |
+| Mixed C#/TypeScript/Go graph | Use each setup block that applies so the AppHost and all compute resources can be restored, built, and published. |
 
-Match the example toolchain versions to the repo's SDK and Node requirements.
+Match the example toolchain versions to the repo's SDK, Node, and Go requirements.
 
 C# AppHost setup:
 
@@ -107,7 +108,17 @@ TypeScript AppHost setup:
     npm run build --if-present
 ```
 
-Use repository-specific setup instead of the generic snippets when the repo already has wrapper scripts, a local SDK restore step, a package manager other than npm, an AppHost `package.json` in a subdirectory, or a required build command.
+Go AppHost setup:
+
+```yaml
+- name: Setup Go
+  # actions/setup-go@v7
+  uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+  with:
+    go-version-file: go.mod
+```
+
+Use repository-specific setup instead of the generic snippets when the repo already has wrapper scripts, a local SDK restore step, a package manager other than npm, an AppHost `package.json` or `go.mod` in a subdirectory (point `go-version-file` at it), or a required build command.
 
 ## Parameters and secrets
 
@@ -308,8 +319,9 @@ Create a GitHub Environment named `production` and store deployment values there
 Adapt the example instead of copying it blindly:
 
 - Start from the external `.yml` reference that matches the AppHost language, then adjust paths, package manager commands, package-manager caching, target branch, and parameter names.
-- Use `--apphost <path>` when the workflow should pin a specific AppHost, such as a single-file `apphost.cs`, current `apphost.mts`, legacy `apphost.ts`, or an AppHost project file.
+- Use `--apphost <path>` when the workflow should pin a specific AppHost, such as a single-file `apphost.cs`, current `apphost.mts`, legacy `apphost.ts`, `apphost.go`, or an AppHost project file.
 - For current TypeScript AppHosts, replace the .NET setup with Node/package-manager setup, deploy with `--apphost <path-to-apphost.mts> --non-interactive`, and provide deployment settings and AppHost parameters through the deploy step's `env:`.
+- For Go AppHosts (Aspire 17.0 or later), start from the TypeScript reference, replace its Node setup and install/build steps with the Go setup above, and deploy with `--apphost <path-to-apphost.go> --non-interactive`.
 - Keep `id-token: write` for Azure OIDC login.
 - Put non-secret deployment settings in GitHub Environment variables when possible, such as `AZURE_LOCATION` and `AZURE_RESOURCE_GROUP`.
 - Put secret AppHost parameters in GitHub Environment secrets and pass them as `Parameters__*`.

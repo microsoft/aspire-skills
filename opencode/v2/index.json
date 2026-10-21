@@ -2,7 +2,7 @@
   "skills": [
     {
       "name": "aspire",
-      "version": "sha512-bebf0b6369fb14bd6aa69808dcf5796465358a207021c551fd4ade31a87f944aa1e1c61767052593fe056268cc06aee271fb0ef8f8034dbfadbc4efe83ac1755",
+      "version": "sha512-d165cddc391cefb6c52585e8f3640e66fdc193a5abaa31fb2e5d9f426dad5b955c5a861647b7c77685606f92941853b82796a2fa7f89b247977fd044276540ec",
       "files": [
         "aspire.md",
         "references/aspire-13-3-breaking-changes.md",
@@ -11,7 +11,7 @@
     },
     {
       "name": "aspire-deployment",
-      "version": "sha512-e615718c9982da541a6a16b853748673cce210b81a17fdff6603c32fcce327fd25a1ed43ee204600c41a76ce4f20fc11be32da5ffc0623859a67a140454853a8",
+      "version": "sha512-95d56d1268011ce2a8d00e004ac430a649bbd0c132dd776cbb72e88522526723f9068899e25746c16c57de9c4c3526ebcf587e544459854af29da67476f3d325",
       "files": [
         "aspire-deployment.md",
         "references/aws.md",
@@ -27,7 +27,7 @@
     },
     {
       "name": "aspire-init",
-      "version": "sha512-fdc8eea2457585b03d92aaa04081abfacd3286cd8903cb8762de366e4720ea69881c63125d5f48c318fcd6b13b77ecf65cebf3d09037dd4d283a9c9d75e033f8",
+      "version": "sha512-e88f0c3faaa2e209f0e904660a53fcbaadcc00e63fdf35ea9d51cca7a477aa7fd4e44f4b0013d4e35c24cae5dde7eaaa2da52cbe93158dee81f1cf5c7b7e0b8a",
       "files": [
         "aspire-init.md",
         "references/init-workflow.md",
@@ -46,7 +46,7 @@
     },
     {
       "name": "aspire-orchestration",
-      "version": "sha512-c44ba8f0a18c714803b4e04aaa3de03de0b679ff4b1dcef9c73dc55173e6df20ea73d77672fa0c48c7aecdc88bd3a0a9445bec3ac2389b9252c2af35212f1a39",
+      "version": "sha512-bfe86190018bd05f594a793146a8db721cc5dddc076a2d1612ccfdd50194106a2aa53ba95679c6124337264c936f913875c492fef13d7c0ba31e648581213b73",
       "files": [
         "aspire-orchestration.md",
         "references/agent-workflows.md",
@@ -78,13 +78,14 @@
     },
     {
       "name": "aspireify",
-      "version": "sha512-14ba41c45db3cb6e271b0c5441d2267d9c40e72664d8a8283748562af15f878418c50d75b69e7f75913b6c47cb1c860278c4328ed29856dc04f1c246e91a20cd",
+      "version": "sha512-74bae718f1558ff48633f45768fc5144a3f0874d52b98ddd5cf58552a25fb830121f786a6a3224c6df3a9154dd3143544d5670b9226106135086e0279ea74ed0",
       "files": [
         "aspireify.md",
         "references/apphost-wiring.md",
         "references/csharp-authoring.md",
         "references/docker-compose.md",
         "references/full-solution-apphosts.md",
+        "references/go-authoring.md",
         "references/javascript-apps.md",
         "references/opentelemetry.md",
         "references/scan-and-propose.md",

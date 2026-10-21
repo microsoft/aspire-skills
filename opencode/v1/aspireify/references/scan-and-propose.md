@@ -9,12 +9,13 @@ Heuristics for the **scan** and **propose** phases of `aspireify`.
 | .NET projects | `find . -name '*.csproj' -not -path '*/bin/*' -not -path '*/obj/*'` |
 | Top-level Node services | `find . -maxdepth 4 -name 'package.json' -not -path '*/node_modules/*'` |
 | Python services | `find . -maxdepth 4 -name 'pyproject.toml' -o -name 'requirements.txt'` |
+| Go services | `find . -maxdepth 4 -name 'go.mod' -not -path '*/.aspire/*'` |
 | Container deps | `cat docker-compose*.y*ml compose*.y*ml 2>/dev/null` |
 | Connection strings | `grep -rIE '(Postgres\|Redis\|Mongo\|RabbitMQ\|Cosmos\|ServiceBus\|AMQP)' --include='*.json' --include='.env*' --include='*.config'` |
-| Hardcoded URLs | `grep -rIE 'http://localhost:[0-9]+' --include='*.ts' --include='*.tsx' --include='*.js' --include='*.cs'` |
-| Existing integration packages | `dotnet list package` per `.csproj`; `jq .dependencies package.json` per Node project |
-| Existing endpoints | `launchSettings.json`, `next.config.js`, `vite.config.ts`, `apphost.mts` |
-| Existing AppHost references | `apphost.cs` / `Program.cs` / current `apphost.mts` / legacy `apphost.ts` — what's already wired? |
+| Hardcoded URLs | `grep -rIE 'http://localhost:[0-9]+' --include='*.ts' --include='*.tsx' --include='*.js' --include='*.cs' --include='*.go'` |
+| Existing integration packages | `dotnet list package` per `.csproj`; `jq .dependencies package.json` per Node project; the `require` block of each Go `go.mod` |
+| Existing endpoints | `launchSettings.json`, `next.config.js`, `vite.config.ts`, `apphost.mts`, `apphost.go` |
+| Existing AppHost references | `apphost.cs` / `Program.cs` / `apphost.go` / current `apphost.mts` / legacy `apphost.ts` — what's already wired? |
 
 ## Heuristics
 
@@ -27,6 +28,7 @@ Heuristics for the **scan** and **propose** phases of `aspireify`.
 | `package.json` has `"vite"` + `.output/server/index.mjs` (TanStack/SvelteKit) | `AddViteApp` (dev) + `PublishAsNodeServer` (publish) |
 | `package.json` has Remix / Astro / Nitro Next | `PublishAsPackageScript` |
 | `pyproject.toml` with FastAPI/Flask | `AddPythonApp` (or model under TS AppHost) |
+| `go.mod` with a `main` package (a Go service, not the AppHost's own `go.mod`) | Aspire 13.4+: `AddGoApp` (`aspire add go`). Aspire older than 13.4, or Toolkit `AddGolangApp` already in the AppHost: keep the Toolkit; never migrate it unprompted |
 | `Program.cs` reads `ConnectionStrings:Postgres*` / DI calls `AddNpgsql*` | `AddPostgres('pg').AddDatabase('appdb')` + `WithReference` |
 | `Program.cs` calls `AddStackExchangeRedisCache` | `AddRedis('cache')` + `WithReference` |
 | MongoClient / `MongoDB.Driver` | `AddMongoDB('mongo')` |
@@ -36,6 +38,8 @@ Heuristics for the **scan** and **propose** phases of `aspireify`.
 | Frontend hardcodes `http://localhost:5000` | Replace with service discovery: `endpoint.url` (TS) or `WithReference(api)` |
 
 ## Integration Catalog
+
+The tables show C# and TypeScript shapes; Go AppHost method names come from the generated SDK (see [go-authoring.md](go-authoring.md)).
 
 ### Datastores
 
@@ -72,6 +76,13 @@ Heuristics for the **scan** and **propose** phases of `aspireify`.
 | Plain Node | `AddNodeApp("api", "server.js")` | `PublishAsNodeServer` |
 
 Bun, Yarn, and pnpm are first-class in TS AppHosts (npm remains the default).
+
+### Go services
+
+| Pattern | Add |
+|---------|-----|
+| Go module with a `main` package, Aspire 13.4+ | `AddGoApp("api", "./api")` after `aspire add go` (TS: `addGoApp('api', '../api')`; Go AppHost: `builder.AddGoApp("api", "./api")`) |
+| Aspire older than 13.4, or Toolkit already in the AppHost | Toolkit `AddGolangApp` (`aspire add communitytoolkit-golang`); do not migrate unprompted |
 
 ### AI / Foundry
 
