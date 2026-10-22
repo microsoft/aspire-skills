@@ -2,7 +2,7 @@
 
 Use this reference when writing Step 5 (Wire up the AppHost) or when you need to look up Aspire APIs, integration packages, or wiring patterns.
 
-> **⚠️ Always look up APIs before writing code.** Do not guess builder method names or parameter shapes. Use `aspire docs search "<topic>"` and `aspire docs get "<slug>"` for documented patterns, then `aspire docs api search "<query>" --language csharp|typescript` and `aspire docs api get "<id>"` to confirm the exact reference entry for the API you are about to call.
+> **⚠️ Always look up APIs before writing code.** Do not guess builder method names or parameter shapes. Use `aspire docs search "<topic>"` and `aspire docs get "<slug>"` for documented patterns, then `aspire docs api search "<query>" --language csharp|typescript|go` (`go` needs the 17.0 CLI) and `aspire docs api get "<id>"` to confirm the exact reference entry for the API you are about to call.
 
 ## Looking up APIs and integrations
 
@@ -18,6 +18,7 @@ Packages named `Aspire.Hosting.*` — maintained by the Aspire team and ship wit
 |---------|---------|
 | `Aspire.Hosting.Python` | `AddPythonApp()`, `AddUvicornApp()` |
 | `Aspire.Hosting.JavaScript` | `AddJavaScriptApp()`, `AddNodeApp()`, `AddViteApp()`, `.WithYarn()`, `.WithPnpm()` |
+| `Aspire.Hosting.Go` | `AddGoApp()`, `.WithModTidy()` |
 | `Aspire.Hosting.PostgreSQL` | `AddPostgres()`, `AddDatabase()` |
 | `Aspire.Hosting.Redis` | `AddRedis()` |
 
@@ -33,6 +34,8 @@ Packages named `CommunityToolkit.Aspire.Hosting.*` — maintained by the communi
 
 These provide typed APIs with proper endpoint handling, health checks, and dashboard integration — significantly better than raw executables.
 
+**Go apps:** on Aspire 13.4 or later, prefer first-party `Aspire.Hosting.Go` (`AddGoApp`, Tier 1) over the Toolkit's `AddGolangApp`. Keep the Toolkit on Aspire older than 13.4 or when the user deliberately uses it, and never migrate an existing Toolkit-based AppHost unprompted.
+
 #### Tier 3: Raw fallbacks (last resort)
 
 `AddExecutable()`, `AddDockerfile()`, `AddContainer()` — use only when no Tier 1 or Tier 2 package exists for the technology, or when the user's setup is too custom for a typed integration.
@@ -47,7 +50,7 @@ aspire docs search "python uvicorn"
 
 # Get a specific doc page by slug (returned from search results)
 aspire docs get "redis-integration"
-aspire docs get "go-integration"
+aspire docs get "set-up-go-apps-in-the-apphost"
 
 # Find the exact C# / TypeScript API reference entry for a builder method
 aspire docs api search "AddRedis" --language csharp
@@ -61,7 +64,7 @@ aspire integration search postgres --format Json
 
 Use `aspire docs search` / `aspire docs get` to find the right builder methods, configuration options, and patterns. Use `aspire docs api search` / `aspire docs api get` when you need the exact reference entry (parameter shapes, return types, overloads) for the API you are about to call. Use `aspire integration list` and `aspire integration search <query>` to discover packages you might not have known about.
 
-**Don't invent APIs** — if docs search and integration list don't return it, it doesn't exist. Fall back to Tier 3 and note the limitation to the user. **API shapes differ between C# and TypeScript** — always check the correct language docs.
+**Don't invent APIs** — if docs search and integration list don't return it, it doesn't exist. Fall back to Tier 3 and note the limitation to the user. **API shapes differ between C#, TypeScript, and Go** — always check the correct language docs. For Go, if the API search finds nothing, check the generated SDK (see `go-authoring.md`) before concluding an API is missing.
 
 ## Package compatibility and interaction rules
 
@@ -115,13 +118,14 @@ To add an integration package (which unlocks typed builder methods):
 aspire add redis
 aspire add python
 aspire add nodejs
+aspire add go
 
 # Community Toolkit
 aspire add communitytoolkit-golang
 aspire add communitytoolkit-rust
 ```
 
-After adding, run `aspire restore` (TypeScript) or `dotnet restore` (C#) to update available APIs, then check what methods are now available.
+After adding, run `aspire restore` (TypeScript or Go) or `dotnet restore` (C#) to update available APIs, then check what methods are now available.
 
 **Always prefer a typed integration over raw `AddExecutable`/`AddContainer`.** Typed integrations handle working directories, port injection, health checks, and dashboard integration automatically.
 
@@ -241,6 +245,7 @@ var frontend = builder.AddViteApp("frontend", "../frontend")
 **Port injection**: Many frameworks (Express, Vite, Flask) need to know which port to listen on. Use the `env:` parameter:
 - `withHttpsEndpoint({ env: "PORT" })` (TypeScript)
 - `.WithHttpsEndpoint(env: "PORT")` (C#)
+- `.WithHttpsEndpoint(&aspire.WithHttpsEndpointOptions{Env: aspire.StringPtr("PORT")})` (Go)
 
 Aspire assigns a port and injects it as the specified environment variable. The service should read it and listen on that port.
 

@@ -2,7 +2,7 @@
 
 Use this reference when the user asks to deploy an Aspire app to AWS or to generate AWS CDK/CloudFormation deployment artifacts.
 
-AWS deployment is currently a preview path driven by the AWS Aspire integrations. Treat the AWS repository as the source of truth, verify the installed package/API shape before editing, and do not invent TypeScript deployment APIs. AWS deployment has no TypeScript AppHost support yet.
+AWS deployment is currently a preview path driven by the AWS Aspire integrations. Treat the AWS repository as the source of truth, verify the installed package/API shape before editing, and do not invent TypeScript or Go deployment APIs. AWS deployment has no TypeScript or Go AppHost support yet.
 
 ## Source of truth and docs lookup
 
@@ -49,7 +49,7 @@ Make these changes in the C# AppHost when the AWS integration docs still show th
 4. Keep `WithReference(...)` relationships between resources. The AWS deployment system uses references for environment variables, VPC attachment, and security group connectivity where supported.
 5. Add AWS-specific resources only when the app actually needs them and the AWS docs show the current shape, such as `AddAWSLambdaFunction` for Lambda projects/handlers.
 6. Add publish override methods only when the user asks for a specific AWS shape or the default mapping is wrong. For example, use an ECS Fargate/ALB publish target only after verifying the current method name in the AWS deployment design document.
-7. Do not invent a TypeScript AWS deployment environment. If the AppHost is TypeScript, stop and report that the current AWS deployment integration is C# AppHost-focused.
+7. Do not invent a TypeScript or Go AWS deployment environment. If the AppHost is TypeScript or Go, stop and report that the current AWS deployment integration is C# AppHost-focused.
 
 Do not add AWS CDK constructs directly as the first approach. Start with Aspire resources and references, then use AWS construct callbacks or custom CDK stacks only for explicit infrastructure customization.
 

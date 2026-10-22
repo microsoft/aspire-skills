@@ -31,7 +31,7 @@ const named = {
 };
 const owners = [["aspire", "aspire-orchestration"], "aspire-deployment", "aspire-monitoring",
   "aspire-orchestration", undefined, "aspireify", "aspireify", "aspire-orchestration",
-  "aspire-init", "aspire-deployment"];
+  "aspire-init", "aspire-deployment", "aspireify"];
 for (const [index, owner] of owners.entries()) {
   named[`should_trigger_${String(index + 1).padStart(2, "0")}`] =
     Array.isArray(owner) ? owner : owner ? [owner] : ["aspire"];

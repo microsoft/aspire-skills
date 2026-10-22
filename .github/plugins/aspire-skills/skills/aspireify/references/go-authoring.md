@@ -1,0 +1,1 @@
+../../../../../../skills/aspireify/references/go-authoring.md
