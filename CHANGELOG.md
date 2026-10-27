@@ -9,6 +9,8 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   initialization, preserving root approvals and generated files. Added regression
   coverage for missing root config and CLI success output that still reports
   ignored dependency builds.
+- Switched the init and Aspireify evaluation executors from unavailable
+  `gpt-5-mini` to `gpt-5.6-sol`.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
