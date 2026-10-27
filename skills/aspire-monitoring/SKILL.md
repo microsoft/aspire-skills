@@ -6,17 +6,17 @@ description: >-
   Aspire CLI, AKS workload diagnostics, and deployed Azure resource health.
   USE FOR: aspire logs, aspire otel logs, aspire otel traces, aspire otel spans, aspire
   describe, aspire ps, aspire export, aspire dashboard run, describe --include-hidden,
-  browser logs in dashboard, terminal view, DevTunnel URLs, WithBrowserLogs, App Insights
+  browser logs in dashboard, DevTunnel URLs, WithBrowserLogs, App Insights
   query, AKS pod logs, container app logs.
   DO NOT USE FOR: start/stop/wait (use aspire-orchestration), deploy/publish/destroy (use
   aspire-deployment), AppHost code edits like WithBrowserLogs() (use aspireify), Azure
-  provisioning (use azure-prepare).
+  provisioning (use azure-prepare), terminal authoring/input/tapes (use aspire-terminals).
   INVOKES: aspire CLI, azure-diagnostics (deployed Azure), kubectl + Container Insights.
   FOR SINGLE OPERATIONS: Run the aspire CLI command directly for quick log or describe lookups.
 license: MIT
 metadata:
   author: Microsoft
-  version: "0.0.2"
+  version: "0.0.5"
 ---
 
 # Aspire Monitoring
@@ -106,11 +106,16 @@ aspire describe --apphost ./src/MyApp.AppHost/
 
 ## Version-Specific Diagnostics
 
-| Symptom | 13.5.3 guidance |
+Check the running dashboard version and actual error before applying a historical fix.
+An older fix does not establish that downgrading a newer dashboard is a working
+mitigation, even temporarily or in an isolated test.
+
+| Symptom | Guidance |
 |---------|-----------------|
 | Resource missing from `aspire describe` | Re-run `aspire describe --include-hidden`; do not use removed `aspire ps --include-hidden`. |
-| DevTunnel is healthy but has no public URL on 13.5.0-13.5.2 | Upgrade the CLI/SDK to 13.5.3 before changing endpoint configuration; 13.5.3 restores the URL. |
-| Dashboard Graph crashes for a resource such as Azure Blob | Upgrade to 13.5.3; multi-path resource icons are fixed there. |
+| DevTunnel is healthy but has no public URL on 13.5.0-13.5.2 | Fixed in 13.5.3. Use a compatible release containing the fix before changing endpoint configuration. |
+| Known multi-path icon Graph crash on 13.5.0-13.5.2 | Fixed in 13.5.3. Use a compatible release containing the fix. |
+| Dashboard Graph crashes on 13.5.3 or later | Keep the selected version. Capture the browser console stack trace and dashboard logs to diagnose a separate cause or regression; do not recommend installing 13.5.3 as a workaround. |
 
 > **Resolved in 13.3**: The standalone-dashboard workaround for [#16236](https://github.com/microsoft/aspire/issues/16236) is obsolete — use `aspire dashboard run` (see below).
 
@@ -189,7 +194,8 @@ Agents inspecting a running dashboard should know:
 - **13.5 filtering** — filter telemetry by timestamp, use `==` / `!=` for exact numeric
   values, and search console-log text while streams continue updating.
 - **Terminal view** — resources configured with experimental `WithTerminal()` open as
-  interactive sessions in the dashboard.
+  interactive sessions in the dashboard. Invoke `aspire-terminals` for terminal
+  authoring, input, dock/dialog lifetimes and tapes; logs/traces remain here.
 - **No dashboard AI Assistant** — it was removed in 13.5. Use `aspire agent init` and the
   AppHost/CLI agent integration instead.
 - **VS Code launch is opt-in** — the Aspire extension no longer opens the dashboard

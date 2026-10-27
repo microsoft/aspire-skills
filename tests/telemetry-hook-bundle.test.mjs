@@ -15,7 +15,7 @@ import {
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const artifactsParentRoot = join(repoRoot, ".test-artifacts");
 const artifactsRoot = join(artifactsParentRoot, "telemetry-hook-bundle");
-const sourceCommit = resolveSourceCommit(undefined, repoRoot);
+const sourceCommit = resolveSourceCommit(process.env.ASPIRE_TEST_SOURCE_COMMIT, repoRoot);
 const hookFileNames = ["track-telemetry.sh", "track-telemetry.ps1"];
 const testGitEnv = createSanitizedGitEnvironment();
 
@@ -79,7 +79,7 @@ function createSanitizedGitEnvironment() {
   }
 
   environment.GIT_CONFIG_NOSYSTEM = "1";
-  environment.GIT_CONFIG_GLOBAL = process.platform === "win32" ? "NUL" : "/dev/null";
+  environment.GIT_CONFIG_GLOBAL = "/dev/null";
   environment.GIT_ATTR_NOSYSTEM = "1";
   environment.GIT_NO_REPLACE_OBJECTS = "1";
   return environment;

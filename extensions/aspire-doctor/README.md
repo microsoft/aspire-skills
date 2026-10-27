@@ -11,8 +11,11 @@ summary, and the CLI installations detected on the machine.
   shown first so the most useful call-to-action is visible immediately.
 - **Status at a glance** — a toolbar subtitle and pass/warning/fail summary
   pills reflect the overall health of the environment.
+- **Focused review controls** — hide passing checks or collapse details when a
+  large report makes the failures harder to scan.
 - **Actionable fixes** — every warning/failure offers **Ask Copilot** and
-  **Open terminal** actions; after Copilot finishes an **Ask Copilot** turn, the
+  **Open terminal** actions, plus a local **Copy command/fix** action when a
+  suggestion is available; after Copilot finishes an **Ask Copilot** turn, the
   canvas refreshes diagnostics automatically.
 - **Detected installations** — an always-visible section listing the CLI
   installations found on the machine, each with its path, version, channel,
@@ -32,16 +35,21 @@ port) that serves the static UI from `ui/` and a JSON API:
 | Route | Purpose |
 | --- | --- |
 | `GET /` | Renderer page |
-| `GET /api/diagnostics` | Run `aspire doctor`, parse it, return results JSON |
+| `GET /api/diagnostics` | Run `aspire doctor`, parse it, return revisioned results JSON |
 | `POST /api/ask-copilot` | Send a check to the current Copilot session |
 | `POST /api/open-terminal` | Open a terminal canvas for a check |
 | `POST /api/open-path` | Open a detected path |
-| `GET /events` | Server-Sent Events used to push diagnostics after agent-driven re-runs |
+| `GET /events` | Server-Sent Events used to push diagnostics after agent-driven re-runs and replay the latest result to late subscribers |
 
 Diagnostics are produced by shelling out to
 `aspire doctor --format Json --non-interactive --nologo` and parsing the JSON.
 `aspire` is resolved from `PATH`; set the `ASPIRE_CLI` environment variable to
-an explicit executable path if the CLI is not on `PATH`.
+an explicit executable path if the CLI is not on `PATH`. On Windows, the CLI is
+launched by its fully qualified path, so an `ASPIRE_CLI` path must be fully
+qualified and name an executable rather than a `.cmd` or `.bat` wrapper.
+Bare `ASPIRE_CLI` names on `PATH` support `.exe` completion, including names
+containing periods.
+Executable lookup and diagnostics share a 60-second timeout.
 
 ## Agent actions & tools
 
@@ -66,8 +74,10 @@ fits the moment.
 
 ```
 aspire-doctor/
-  extension.mjs        wiring: server, routes, canvas + action + tool, hooks
-  ui/index.html        renderer markup (toolbar + diagnostics + installations)
-  ui/styles.css        og-preview-derived design system + app-theme chrome
-  ui/app.js            client logic (fetch, render, SSE, path/fix actions, transitions)
+  extension.mjs          wiring: server, routes, canvas + action + tool, hooks
+  provider-helpers.mjs   request limits, loopback startup, result revisions
+  ui/index.html          renderer markup (toolbar + diagnostics + installations)
+  ui/styles.css          og-preview-derived design system + app-theme chrome
+  ui/app.js              client logic (fetch, render, SSE, controls, actions)
+  ui/model.mjs           result normalization and freshness rules
 ```

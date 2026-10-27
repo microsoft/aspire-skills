@@ -19,8 +19,15 @@ Use `blocking` when the PR…
 
 - Removes or weakens a documented safety guardrail (e.g., the `dotnet run` →
   `aspire start` mapping disappears from `skills/aspire-orchestration/SKILL.md`).
-- Leaves the four plugin manifests out of version sync (see
+- Leaves canonical manifest values, either root lockfile field, or any of the seven shipped skills
+  out of target-version sync (see
   `aspire-skills-review-checklist.md` §6).
+- Leaves dev's catalogs stale, rewrites earlier changelog entries or loses dev's
+  current notes during backflow, changes dev's version in an ordinary PR, drops
+  dev work during a backport, leaves canonical version fields inconsistent, or
+  publishes a candidate with unselected source changes.
+- Tags the wrong final main commit or publishes without the authorization
+  required by the release flow (§13).
 - Drops or shadows the project-local override deference block (`§8`).
 - Introduces a routing change with no `trigger_tests.yaml` update **and** the change is
   likely to drop accuracy below the per-skill threshold.
@@ -45,9 +52,8 @@ Use `important` when the PR…
 - Has a SKILL.md frontmatter `INVOKES:` list that lies about what the skill calls.
 - Pushes SKILL.md past the 5000-token authoring budget without splitting into
   `references/`.
-- Bumps no plugin version on a user-visible change (even if all four manifests agree at
-  the current value).
-- Lacks a CHANGELOG entry for a user-visible change.
+- Uses unclear commit subjects for user-visible changes in generated release notes.
+- Uses stale release-status or skill-version references in documentation.
 - Uses a bare `not_contains` substring (e.g., `"azd"`) instead of full command tokens.
 - Omits the "the assistant's response" anchor in a `prompt` grader.
 - Copies fixtures per-skill instead of reusing the shared `evals/` baseline.

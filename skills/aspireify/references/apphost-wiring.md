@@ -20,7 +20,6 @@ Packages named `Aspire.Hosting.*` — maintained by the Aspire team and ship wit
 | `Aspire.Hosting.JavaScript` | `AddJavaScriptApp()`, `AddNodeApp()`, `AddViteApp()`, `.WithYarn()`, `.WithPnpm()` |
 | `Aspire.Hosting.PostgreSQL` | `AddPostgres()`, `AddDatabase()` |
 | `Aspire.Hosting.Redis` | `AddRedis()` |
-| `Aspire.Hosting.Valkey` | `AddValkey()` |
 
 #### Tier 2: Community Toolkit packages (use when no first-party exists)
 
@@ -43,14 +42,11 @@ These provide typed APIs with proper endpoint handling, health checks, and dashb
 ```bash
 # Search for documentation on a topic
 aspire docs search "redis"
-aspire docs search "valkey"
 aspire docs search "golang"
 aspire docs search "python uvicorn"
 
 # Get a specific doc page by slug (returned from search results)
 aspire docs get "redis-integration"
-aspire docs api search "AddValkey" --language csharp
-aspire docs api search "addValkey" --language typescript
 aspire docs get "go-integration"
 
 # Find the exact C# / TypeScript API reference entry for a builder method
@@ -67,10 +63,10 @@ Use `aspire docs search` / `aspire docs get` to find the right builder methods, 
 
 **Don't invent APIs** — if docs search and integration list don't return it, it doesn't exist. Fall back to Tier 3 and note the limitation to the user. **API shapes differ between C# and TypeScript** — always check the correct language docs.
 
-## Aspire 13.5 migration and interaction rules
+## Package compatibility and interaction rules
 
 Before changing an existing AppHost, verify that its SDK and every `Aspire.Hosting.*`
-package use the same 13.5 package family. Do not mix 13.4 and 13.5 packages.
+package use the same release family. Do not mix incompatible package versions.
 
 | Area | Current rule |
 |------|--------------|
@@ -79,7 +75,7 @@ package use the same 13.5 package family. Do not mix 13.4 and 13.5 packages.
 | Command input | Prefer `CommandOptions.Arguments`; values become dashboard fields and CLI `--<name>` options. |
 | Direct interaction prompt | Check `IInteractionService.IsAvailable` (or TS equivalent) and provide a noninteractive path before prompting. |
 | File upload / progress | File inputs are stable; progress dialogs remain experimental under `ASPIREINTERACTION001`. |
-| Interactive terminal | `WithTerminal()` is experimental (`ASPIRETERMINAL001`); TypeScript uses parameterless defaults, and `TerminalOptions.Shell` no longer exists. |
+| Interactive terminal | Invoke `aspire-terminals` for `WithTerminal`, auxiliary dock/dialog/headless processes, terminal prompts, REPLs and automation. |
 | AI integration | Migrate deprecated `Aspire.Hosting.GitHub.Models` usage to Azure AI Foundry. |
 | Existing .NET project by path | `AddDotnetProject` moved to experimental `Aspire.Hosting.Dotnet` (`ASPIREDOTNETPROJECT001`). |
 | Dev tunnel region | Use normalized names such as `DevTunnelRegion.UKSouth` and `SoutheastAsia`. |
@@ -108,7 +104,6 @@ Common auto-managed values (do NOT model these manually):
 | `AddPostgres()` | Password, host, port, connection string |
 | `AddSqlServer()` | SA password, host, port, connection string |
 | `AddRedis()` | Connection string, port |
-| `AddValkey()` | Connection string, port |
 | `AddMySql()` | Root password, host, port, connection string |
 | `AddRabbitMQ()` | Username, password, host, port, connection string |
 | `AddMongoDB()` | Connection string, port |
@@ -118,7 +113,6 @@ To add an integration package (which unlocks typed builder methods):
 ```bash
 # First-party
 aspire add redis
-aspire add valkey
 aspire add python
 aspire add nodejs
 

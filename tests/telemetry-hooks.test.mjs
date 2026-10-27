@@ -92,6 +92,7 @@ function runHook(kind, payload, options = {}) {
     timeout: options.outerTimeoutMs,
     env: {
       ...process.env,
+      AI_AGENT: "",
       COPILOT_CLI: "",
       ASPIRE_CLI_COMMAND: command,
       ASPIRE_CLI_TELEMETRY_OPTOUT: "",
@@ -206,6 +207,73 @@ test("the Bash timeout override accepts only exact values from 1 through 10", ()
 });
 
 for (const kind of hookKinds) {
+  for (const copilotCli of ["", "1"]) {
+    test(`${kind.name}: Copilot app marker overrides ${copilotCli ? "COPILOT_CLI" : "toolArgs fallback"}`, () => {
+      const run = runHook(
+        kind,
+        String.raw`{"toolName":"skill","sessionId":"03d6f9f8-a6e0-4f4d-b175-6737106eaf73","toolArgs":"{\"skill\":\"aspire\"}"}`,
+        { env: { AI_AGENT: "github_copilot_app_agent", COPILOT_CLI: copilotCli } }
+      );
+
+      assertArg(run.args, "--event-type", "skill_invocation");
+      assertArg(run.args, "--client-name", "copilot-app");
+      assertArg(run.args, "--skill-name", "aspire");
+      assertArg(run.args, "--session-id", "03d6f9f8-a6e0-4f4d-b175-6737106eaf73");
+    });
+  }
+
+  for (const fixture of [
+    {
+      name: "MCP payloads without client hints",
+      payload: '{"toolName":"aspire-list_resources"}',
+      toolName: "aspire-list_resources"
+    },
+    {
+      name: "VS Code-compatible MCP payloads",
+      payload: '{"hook_event_name":"PostToolUse","tool_use_id":"toolu_123__vscode","tool_name":"mcp_aspire_list_resources","tool_input":{}}',
+      toolName: "mcp_aspire_list_resources"
+    }
+  ]) {
+    test(`${kind.name}: Copilot app marker identifies ${fixture.name}`, () => {
+      const run = runHook(kind, fixture.payload, { env: { AI_AGENT: "github_copilot_app_agent" } });
+
+      assertArg(run.args, "--event-type", "tool_invocation");
+      assertArg(run.args, "--client-name", "copilot-app");
+      assertArg(run.args, "--tool-name", fixture.toolName);
+    });
+  }
+
+  test(`${kind.name}: other agent markers retain Copilot CLI attribution`, () => {
+    const run = runHook(
+      kind,
+      '{"toolName":"skill","toolArgs":{"skill":"aspire"}}',
+      { env: { AI_AGENT: "another_agent" } }
+    );
+
+    assertArg(run.args, "--client-name", "copilot-cli");
+    assertArg(run.args, "--skill-name", "aspire");
+  });
+
+  test(`${kind.name}: VS Code payloads retain VS Code attribution`, () => {
+    for (const clientHint of [
+      { tool_use_id: "toolu_123__vscode" },
+      { transcript_path: "C:\\Users\\test\\AppData\\Roaming\\Code\\User\\transcript.json" }
+    ]) {
+      const run = runHook(
+        kind,
+        JSON.stringify({
+          hook_event_name: "PostToolUse",
+          tool_name: "mcp_aspire_list_resources",
+          ...clientHint
+        })
+      );
+
+      assertArg(run.args, "--event-type", "tool_invocation");
+      assertArg(run.args, "--client-name", "vscode");
+      assertArg(run.args, "--tool-name", "mcp_aspire_list_resources");
+    }
+  });
+
   test(`${kind.name}: Copilot string toolArgs forwards an Aspire skill`, () => {
     const run = runHook(
       kind,
@@ -374,13 +442,15 @@ for (const kind of hookKinds) {
   });
 
   test(`${kind.name}: opt-out does not invoke the CLI`, () => {
-    const run = runHook(
-      kind,
-      '{"toolName":"skill","toolArgs":{"skill":"aspire"}}',
-      { env: { COPILOT_CLI: "1", ASPIRE_CLI_TELEMETRY_OPTOUT: "true" } }
-    );
+    for (const aiAgent of ["", "github_copilot_app_agent"]) {
+      const run = runHook(
+        kind,
+        '{"toolName":"skill","toolArgs":{"skill":"aspire"}}',
+        { env: { AI_AGENT: aiAgent, COPILOT_CLI: "1", ASPIRE_CLI_TELEMETRY_OPTOUT: "true" } }
+      );
 
-    assert.equal(run.args, undefined);
+      assert.equal(run.args, undefined);
+    }
   });
 
   test(`${kind.name}: malformed input still returns exactly one continuation response`, () => {

@@ -14,6 +14,7 @@ defaults:
   timeout: 600s
   executor: copilot-sdk
   model: gpt-5-mini
+  judge_model: gpt-5.6-sol
 scoring:
   # Score each stimulus by the weighted share of graders that pass, then gate on
   # the aggregate (>= threshold) instead of demanding every grader pass on every
@@ -29,6 +30,7 @@ environment:
     - ../../aspire-init
     - ../../aspireify
     - ../../aspire-orchestration
+    - ../../aspire-terminals
 stimuli:
   - name: init-cli-install-001
     prompt: I tried `aspire init` but it says command not found. How do I install the Aspire CLI?
@@ -37,7 +39,7 @@ stimuli:
       area: prerequisites
     graders:
       - type: prompt
-        name: suggests_supported_install
+        name: suggests-supported-install
         config:
           prompt: Does the assistant's response suggest a supported Aspire 13.5 CLI install path, such as
             `npm install -g @microsoft/aspire-cli`, `dotnet tool install -g Aspire.Cli`, or the
@@ -45,12 +47,12 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet workload install aspire
-        name: no_obsolete_workload
+        name: no-obsolete-workload
       - type: output-not-contains
         config:
           substring: dotnet workload install Aspire
       - type: prompt
-        name: mentions_doctor_or_prereqs
+        name: mentions-doctor-or-prereqs
         config:
           prompt: After installing the CLI, does the assistant's response also tell the user how to verify the
             install (for example, `aspire doctor`, `aspire --version`, or re-running `aspire init`)?
@@ -61,7 +63,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet new aspire-py-starter
-        name: never_dotnet_new_aspire
+        name: never-dotnet-new-aspire
       - type: output-not-contains
         config:
           substring: dotnet new aspire-starter
@@ -83,13 +85,13 @@ stimuli:
           dest: csharp-apphost/aspire.config.json
     graders:
       - type: prompt
-        name: detects_existing_apphost
+        name: detects-existing-apphost
         config:
           prompt: The assistant's response should detect that an AppHost already exists in the repo (the
             `.csproj` references `Aspire.AppHost.Sdk` and `aspire.config.json` is present) and
             explicitly say `aspire init` is NOT needed.
       - type: prompt
-        name: routes_to_correct_skill
+        name: routes-to-correct-skill
         config:
           prompt: The assistant's response should route the user to either `aspireify` (for adding/changing
             resources in the existing AppHost) or `aspire-orchestration` (for starting and managing
@@ -97,7 +99,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: Run `aspire init`
-        name: no_init_or_new
+        name: no-init-or-new
       - type: output-not-contains
         config:
           substring: run aspire init
@@ -113,7 +115,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet new aspire-py-starter
-        name: never_dotnet_new_aspire
+        name: never-dotnet-new-aspire-2
       - type: output-not-contains
         config:
           substring: dotnet new aspire-starter
@@ -127,13 +129,13 @@ stimuli:
       area: core-flow
     graders:
       - type: prompt
-        name: runs_aspire_init
+        name: runs-aspire-init
         config:
           prompt: Does the assistant's response recommend running `aspire init` (not `aspire new`) to
             bootstrap the existing repository? It should pick init because the repo already contains
             services. Answer based on intent, not exact string matching.
       - type: prompt
-        name: hands_off_to_aspireify
+        name: hands-off-to-aspireify
         config:
           prompt: Does the assistant's response explicitly hand off the resource-wiring step to the
             `aspireify` skill (or the project-local `aspireify` skill installed by `aspire init`)?
@@ -142,7 +144,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet workload install aspire
-        name: no_obsolete_workload
+        name: no-obsolete-workload-2
       - type: output-contains
         config:
           substring: aspire init
@@ -158,7 +160,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet new aspire-py-starter
-        name: never_dotnet_new_aspire
+        name: never-dotnet-new-aspire-3
       - type: output-not-contains
         config:
           substring: dotnet new aspire-starter
@@ -167,33 +169,22 @@ stimuli:
           substring: dotnet workload install aspire
   - name: init-typescript-brownfield-135-001
     prompt: >
-      Use the aspire-init skill before answering. My existing Node repository already has a
-      root package.json and no Aspire AppHost.
+      My existing Node repository already has a root package.json and no Aspire AppHost.
       Explain the TypeScript `aspire init` command and the files/layout Aspire 13.5 will
-      create. State the generated entry-point filename and whether it is nested. Do not run
-      the command.
+      create. Do not run the command.
     tags:
       priority: p1
       area:
         - core-flow
         - aspire-13-5
         - typescript
-    rubric:
-      - The assistant uses aspire init --language typescript for this existing Node repository without running it.
-      - The assistant explains that Aspire 13.5 creates a nested aspire-apphost package with apphost.mts and records that location in the root aspire.config.json.
-      - The assistant does not describe apphost.ts as the generated TypeScript AppHost entry point.
     graders:
-      - type: skill-invocation
-        name: invokes_aspire_init
-        config:
-          required:
-            - aspire-init
       - type: output-contains
-        name: uses_typescript_init
+        name: uses-typescript-init
         config:
           substring: aspire init --language typescript
       - type: prompt
-        name: explains_nested_current_layout
+        name: explains-nested-current-layout
         config:
           prompt: >
             Does the assistant's response explain that, because the existing repository
@@ -201,66 +192,42 @@ stimuli:
             package containing apphost.mts and points the root aspire.config.json at it?
             Answer based on intent.
       - type: output-not-contains
-        name: does_not_claim_current_apphost_ts
+        name: does-not-claim-current-apphost-ts
         config:
           substring: creates apphost.ts
-  - name: init-pnpm-policy-partial-recovery-135-001
+  - name: init-no-mcp-136-001
     prompt: >
-      Use the aspire-init skill before answering. `aspire init --language typescript` exited
-      nonzero after creating the shown
-      aspire.config.json, nested AppHost file, and package.json. The root pnpm
-      workspace denies esbuild builds. Do not run commands. Explain the safe recovery with
-      the exact policy-file path and pnpm command, then state the next handoff.
+      I ran `aspire init --language csharp --non-interactive` with Aspire 13.6 in this
+      repository. It succeeded and installed the aspireify skill, but there is no Aspire
+      MCP server configuration for my agent. Is init broken, and what should happen next?
+      Do not run any commands.
     tags:
       priority: p1
       area:
-        - core-flow
-        - aspire-13-5
-        - pnpm
-        - recovery
-    environment:
-      files:
-        - src: ../../../evals/ts-apphost-pnpm-policy/aspire.config.json
-          dest: partial-init/aspire.config.json
-        - src: ../../../evals/ts-apphost-pnpm-policy/pnpm-workspace.yaml
-          dest: partial-init/pnpm-workspace.yaml
-        - src: ../../../evals/ts-apphost-pnpm-policy/aspire-apphost/apphost.mts
-          dest: partial-init/aspire-apphost/apphost.mts
-        - src: ../../../evals/ts-apphost-pnpm-policy/aspire-apphost/package.json
-          dest: partial-init/aspire-apphost/package.json
-        - src: ../../../evals/ts-apphost-pnpm-policy/aspire-apphost/pnpm-workspace.yaml
-          dest: partial-init/aspire-apphost/pnpm-workspace.yaml
-    rubric:
-      - The assistant detects partial initialization from the metadata-selected nested AppHost and does not advise rerunning init or deleting generated files.
-      - The assistant preserves the root pnpm-workspace.yaml and puts a minimal esbuild approval in aspire-apphost/pnpm-workspace.yaml.
-      - The assistant creates a self-contained nested workspace and runs pnpm with its workspaceDir set to that AppHost, then ensures aspireify is installed or runs aspire agent init --skills aspireify before handing off resource wiring.
+        - agent-setup
+        - aspire-13-6
     graders:
-      - type: skill-invocation
-        name: invokes_aspire_init
-        config:
-          required:
-            - aspire-init
-      - type: output-contains
-        name: preserves_root_policy_with_nested_recovery
-        config:
-          substring: aspire-apphost/pnpm-workspace.yaml
-      - type: output-contains
-        name: repairs_nested_apphost_dependencies
-        config:
-          substring: pnpm --config.workspaceDir
       - type: prompt
-        name: retains_root_security_boundary
+        name: treats-missing-mcp-as-expected
         config:
           prompt: >
-            Does the assistant's response preserve the root pnpm policy while allowing only
-            esbuild in the nested AppHost policy? Answer based on intent.
+            Does the assistant's response explain that missing MCP configuration after a
+            successful Aspire 13.6 init is expected, because chained agent setup installs
+            recommended skills but does not offer MCP, and that init is not broken? It
+            should continue by handing off wiring to aspireify rather than repairing MCP.
+            Answer based on intent.
       - type: prompt
-        name: does_not_rerun_partial_init
+        name: mcp-only-on-explicit-request
         config:
           prompt: >
-            Does the assistant avoid recommending another aspire init invocation or deleting
-            the generated partial-initialization artifacts? It may explicitly say "do not
-            rerun aspire init" as correct recovery guidance. Answer based on intent.
+            Does the assistant's response avoid configuring MCP automatically, and make
+            clear that MCP is an opt-in step (for example `aspire agent init --mcp`)
+            only when the user explicitly wants it? It must not re-run `aspire init`
+            with an MCP option. Answer based on intent.
+      - type: output-not-contains
+        name: no-init-mcp-flag
+        config:
+          substring: aspire init --mcp
   - name: init-new-001
     prompt: I'm starting a brand-new distributed app from scratch. Scaffold an Aspire starter project
       for me.
@@ -269,14 +236,14 @@ stimuli:
       area: core-flow
     graders:
       - type: prompt
-        name: uses_aspire_new
+        name: uses-aspire-new
         config:
           prompt: Does the assistant's response recommend `aspire new aspire-starter` (or a similar `aspire
             new` template) to scaffold a brand-new project? Answer based on intent.
       - type: output-not-contains
         config:
           substring: dotnet new aspire-starter
-        name: no_dotnet_new_template
+        name: no-dotnet-new-template
       - type: output-not-contains
         config:
           substring: dotnet new aspire-empty
@@ -284,7 +251,7 @@ stimuli:
         config:
           substring: dotnet new aspire-ts-starter
       - type: prompt
-        name: no_init_for_greenfield
+        name: no-init-for-greenfield
         config:
           prompt: For a brand-new, empty project, the assistant's response should pick `aspire new` rather
             than `aspire init`. The `aspire init` command is for existing repositories that already
@@ -305,7 +272,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet new aspire-py-starter
-        name: never_dotnet_new_aspire
+        name: never-dotnet-new-aspire-4
       - type: output-not-contains
         config:
           substring: dotnet new aspire-starter
@@ -321,13 +288,13 @@ stimuli:
         - 13.3-breaking
     graders:
       - type: prompt
-        name: uses_aspire_new_py_starter
+        name: uses-aspire-new-py-starter
         config:
           prompt: Does the assistant's response use `aspire new aspire-py-starter` (the Aspire 13.3 path) and
             NOT `dotnet new aspire-py-starter` (which was removed in 13.3)? It should also explain
             that the AppHost will be TypeScript and orchestrates the Python service.
       - type: prompt
-        name: includes_redis_flag
+        name: includes-redis-flag
         config:
           prompt: Since the user asked for Redis, the assistant's response should include the
             `--use-redis-cache true` template option (or note that this option exists for the
@@ -335,7 +302,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet new aspire-py-starter
-        name: no_dotnet_new
+        name: no-dotnet-new
       - type: output-not-contains
         config:
           substring: dotnet new aspire-py
@@ -351,7 +318,7 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet new aspire-py-starter
-        name: never_dotnet_new_aspire
+        name: never-dotnet-new-aspire-5
       - type: output-not-contains
         config:
           substring: dotnet new aspire-starter
@@ -368,7 +335,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_init
+        name: invokes-aspire-init
         config:
           required:
             - aspire-init
@@ -383,7 +350,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_init
+        name: invokes-aspire-init-2
         config:
           required:
             - aspire-init
@@ -395,7 +362,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_init
+        name: invokes-aspire-init-3
         config:
           required:
             - aspire-init
@@ -410,7 +377,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_init
+        name: invokes-aspire-init-4
         config:
           required:
             - aspire-init
@@ -425,7 +392,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_init
+        name: invokes-aspire-init-5
         config:
           required:
             - aspire-init
@@ -437,7 +404,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_init
+        name: invokes-aspire-init-6
         config:
           required:
             - aspire-init
@@ -452,7 +419,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_init
+        name: invokes-aspire-init-7
         config:
           required:
             - aspire-init
@@ -464,7 +431,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes_aspire_init
+        name: invokes-aspire-init-8
         config:
           required:
             - aspire-init
@@ -479,7 +446,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_init
+        name: does-not-invoke-aspire-init
         config:
           disallowed:
             - aspire-init
@@ -491,7 +458,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_init
+        name: does-not-invoke-aspire-init-2
         config:
           disallowed:
             - aspire-init
@@ -503,7 +470,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_init
+        name: does-not-invoke-aspire-init-3
         config:
           disallowed:
             - aspire-init
@@ -515,7 +482,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_init
+        name: does-not-invoke-aspire-init-4
         config:
           disallowed:
             - aspire-init
@@ -527,7 +494,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_init
+        name: does-not-invoke-aspire-init-5
         config:
           disallowed:
             - aspire-init
@@ -539,7 +506,7 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_init
+        name: does-not-invoke-aspire-init-6
         config:
           disallowed:
             - aspire-init
@@ -554,7 +521,53 @@ stimuli:
       area: routing
     graders:
       - type: skill-invocation
-        name: does_not_invoke_aspire_init
+        name: does-not-invoke-aspire-init-7
         config:
           disallowed:
             - aspire-init
+  - name: init-pnpm-partial-recovery-001
+    prompt: >
+      Use the aspire-init skill before answering. My TypeScript initialization failed;
+      the supplied files are what it left behind. There is no root aspire.config.json.
+      How should I recover without changing the application's build policy?
+      Keep this read-only: inspect files, but do not edit or run init, install, restore,
+      or start commands. Explain any approval needed before making changes.
+    tags:
+      priority: p1
+      area:
+        - pnpm-recovery
+        - typescript
+    environment:
+      files:
+        - src: ../../../evals/ts-apphost-pnpm-policy/package.json
+          dest: pnpm-repro/package.json
+        - src: ../../../evals/ts-apphost-pnpm-policy/pnpm-workspace.yaml
+          dest: pnpm-repro/pnpm-workspace.yaml
+        - src: ../../../evals/ts-apphost-pnpm-policy/aspire-apphost/apphost.mts
+          dest: pnpm-repro/aspire-apphost/apphost.mts
+        - src: ../../../evals/ts-apphost-pnpm-policy/aspire-apphost/package.json
+          dest: pnpm-repro/aspire-apphost/package.json
+        - src: ../../../evals/ts-apphost-pnpm-policy/init-output.txt
+          dest: pnpm-repro/init-output.txt
+    rubric:
+      - The assistant identifies partial initialization caused by pnpm blocking esbuild, even though root aspire.config.json is missing. It preserves generated artifacts rather than rerunning init, deleting files, or fabricating metadata.
+      - The assistant requests approval for an esbuild-only exception in the standalone nested AppHost's pnpm-workspace.yaml, containing only that package. It preserves the root esbuild denial and does not approve unrelated builds or change package managers.
+      - The assistant recommends installing from the AppHost directory with an explicit workspaceDir pointing there, without using --ignore-workspace for this recovery.
+      - The assistant distinguishes dependency repair from the remaining CLI resolver bug and hands off the unwired AppHost to aspireify, confirming skill installation without adding MCP or discarding explicit skill/location selections.
+    graders:
+      - type: skill-invocation
+        name: invokes-init-for-pnpm-recovery
+        config:
+          required:
+            - aspire-init
+      - type: prompt
+        name: recovers-partial-init-with-scoped-approval
+        config:
+          prompt: >
+            Evaluate the assistant's response against the rubric. It must preserve the
+            partial AppHost despite missing root config, request approval for only the
+            nested esbuild build, retain root policy, explain a workspaceDir-scoped
+            install rather than --ignore-workspace, and preserve the Aspireify handoff
+            without claiming that the CLI resolver itself is fixed.
+      - type: diff-empty
+        name: keeps-pnpm-init-guidance-read-only

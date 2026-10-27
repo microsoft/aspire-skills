@@ -6,19 +6,55 @@ on:
       - ".gitattributes"
       - ".github/workflows/bundle-test.yml"
       - ".github/workflows/publish.yml"
+      - ".github/workflows/skill-eval*.yml"
+      - ".github/workflows/skill-experiment.yml"
+      - ".github/plugins/aspire-skills/extensions/**"
+      - "extensions/**"
       - "hooks/**"
       - "package.json"
+      - "package-lock.json"
+      - ".plugin/plugin.json"
+      - ".claude-plugin/plugin.json"
+      - ".claude-plugin/marketplace.json"
+      - ".cursor-plugin/marketplace.json"
+      - "gemini-extension.json"
+      - "evals/project-v2-migration/**"
+      - "evals/terminals/**"
+      - "evals/grade-routing-entry.mjs"
+      - "skills/*/SKILL.md"
+      - "skills/aspire-project-v2-migration/**"
+      - "skills/aspire-terminals/**"
+      - ".github/plugins/aspire-skills/skills/aspire-terminals/**"
       - "scripts/**"
       - "tests/**"
   push:
     branches:
       - main
+      - dev
+      - release/**
     paths:
       - ".gitattributes"
       - ".github/workflows/bundle-test.yml"
       - ".github/workflows/publish.yml"
+      - ".github/workflows/skill-eval*.yml"
+      - ".github/workflows/skill-experiment.yml"
+      - ".github/plugins/aspire-skills/extensions/**"
+      - "extensions/**"
       - "hooks/**"
       - "package.json"
+      - "package-lock.json"
+      - ".plugin/plugin.json"
+      - ".claude-plugin/plugin.json"
+      - ".claude-plugin/marketplace.json"
+      - ".cursor-plugin/marketplace.json"
+      - "gemini-extension.json"
+      - "evals/project-v2-migration/**"
+      - "evals/terminals/**"
+      - "evals/grade-routing-entry.mjs"
+      - "skills/*/SKILL.md"
+      - "skills/aspire-project-v2-migration/**"
+      - "skills/aspire-terminals/**"
+      - ".github/plugins/aspire-skills/skills/aspire-terminals/**"
       - "scripts/**"
       - "tests/**"
 
@@ -48,6 +84,9 @@ jobs:
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: "22"
+
+      - name: Install test dependencies
+        run: npm ci --ignore-scripts
 
       - name: Test
         run: npm test

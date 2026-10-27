@@ -1,0 +1,30 @@
+name: Release branch check
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - edited
+  merge_group:
+
+permissions: {}
+
+jobs:
+  release-branch-check:
+    name: Release branch check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require a release branch
+        if: github.event_name == 'pull_request'
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          if [[ "$HEAD_REPO" != "$GITHUB_REPOSITORY" || ! "$HEAD_REF" =~ ^release/[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::PRs into main must come from a release/<version> branch in this repository."
+            exit 1
+          fi

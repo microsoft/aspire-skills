@@ -1,6 +1,0 @@
-{
-  "name": "docs-preview",
-  "scripts": {
-    "dev": "vitepress dev"
-  }
-}

@@ -52,12 +52,15 @@ builder.AddProject("api", "../Api/Api.csproj")
 
 Top of file uses `#:sdk` and `#:package` directives — no `.csproj` required:
 
+Replace the version placeholders with package versions compatible with the AppHost's
+selected Aspire release.
+
 ```csharp
 #:sdk Aspire.AppHost.Sdk
 #:property AspireUseCliBundle=true
-#:package Aspire.Hosting.PostgreSQL@13.5.3
-#:package Aspire.Hosting.Redis@13.5.3
-#:package Aspire.Hosting.JavaScript@13.5.3
+#:package Aspire.Hosting.PostgreSQL@<postgres-package-version>
+#:package Aspire.Hosting.Redis@<redis-package-version>
+#:package Aspire.Hosting.JavaScript@<javascript-package-version>
 
 var builder = DistributedApplication.CreateBuilder(args);
 
@@ -221,16 +224,8 @@ noninteractive path before calling prompt APIs.
 
 ## Experimental Terminals
 
-`WithTerminal()` exposes an interactive dashboard/CLI terminal. Suppress
-`ASPIRETERMINAL001`, keep `Columns` and `Rows` positive, and do not generate the removed
-`TerminalOptions.Shell` property:
-
-```csharp
-#pragma warning disable ASPIRETERMINAL001
-builder.AddContainer("repl", "my-repl")
-    .WithTerminal(options =>
-    {
-        options.Columns = 120;
-        options.Rows = 30;
-    });
-```
+Invoke [`aspire-terminals`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-terminals/SKILL.md)
+for resource `WithTerminal`, auxiliary `TerminalService` dock/dialog/headless
+sessions, terminal prompts, REPLs and automation. It owns the capability checks,
+narrowly paired `ASPIRETERMINAL001` suppression and process lifetimes.
+Nonterminal Interaction Service prompts remain in this skill.

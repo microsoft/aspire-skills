@@ -1,0 +1,31 @@
+{
+  "kind": "offline-api-fixture",
+  "sourceCommit": "f856e006130459c4e11ed8cecd0b09e7e3873311",
+  "source": "https://github.com/microsoft/aspire/tree/f856e006130459c4e11ed8cecd0b09e7e3873311",
+  "includes": ["microsoft/aspire#19997", "microsoft/aspire#20157"],
+  "fixturePackageVersion": "13.6.0-dev",
+  "notice": "This is source-backed capability input for an offline evaluation, not evidence that a public release or the machine's installed packages contain these APIs. The integration runner must independently qualify its real toolchain and generate the TypeScript module.",
+  "csharp": {
+    "AddDotnetProject": ["name", "projectPath", "Action<ProjectResourceOptions>?"],
+    "options": ["LaunchProfileName", "ExcludeLaunchProfile", "ExcludeKestrelEndpoints"],
+    "specializedGateway": "AddDotnetProjectBlazorGateway",
+    "efMigrationsProject": "WithMigrationsProject<TProject>()",
+    "efMigrationsDiagnostic": "AddEFMigrations(IResourceBuilder<IDotnetProgramResource>, string) requires ASPIREPROJECTS001 suppression; the legacy ProjectResource overload does not.",
+    "experimentalDiagnostics": ["ASPIREDOTNETPROJECT001", "ASPIREBLAZOR001", "ASPIREPROJECTS001"],
+    "publishing": "AddDotnetProject opts into DotnetProgramPublishing; SDK images, Dockerfile overrides, and prebuilt image ownership are distinct."
+  },
+  "typescript": {
+    "target": "addDotnetProject(name: string, path: string, options?: DotnetProjectOptions)",
+    "DotnetProjectOptions": {
+      "launchProfileName": "optional string | null",
+      "excludeLaunchProfile": "optional boolean",
+      "excludeKestrelEndpoints": "optional boolean"
+    },
+    "legacy": "addProject/addCSharpApp still accept the ProjectResourceOptions RPC handle via launchProfileOrOptions; it is NOT this DTO.",
+    "semantics": [
+      "Omitted options, null options, {}, or launchProfileName:null select the default profile.",
+      "excludeLaunchProfile:true wins over launchProfileName.",
+      "excludeKestrelEndpoints is independent; it only changes Aspire endpoint derivation."
+    ]
+  }
+}

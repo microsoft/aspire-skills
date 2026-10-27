@@ -6,8 +6,7 @@ description: >-
   off to `aspireify` for resource wiring.
   USE FOR: aspire init, aspire new, aspire-starter, aspire-ts-starter, aspire-py-starter,
   add Aspire to existing repo, scaffold Aspire app, bootstrap Aspire, no AppHost detected,
-  install aspireify, apphost.mts, apphost.run.json, generated .aspire/modules,
-  pnpm build-policy recovery.
+  install aspireify, apphost.mts, generated .aspire/modules.
   DO NOT USE FOR: AppHost wiring on an existing AppHost (use aspireify), start/stop/wait
   (use aspire-orchestration), deploy/publish (use aspire-deployment), logs/traces (use
   aspire-monitoring), repo that already has an AppHost.
@@ -16,7 +15,7 @@ description: >-
 license: MIT
 metadata:
   author: Microsoft
-  version: "0.0.2"
+  version: "0.0.5"
 ---
 
 # Aspire Init
@@ -46,18 +45,11 @@ of the following before running `aspire init`:
 
 | Signal | How to Detect | Meaning |
 |--------|---------------|---------|
-| AppHost metadata | `aspire.config.json` names an `appHost.path`; resolve it relative to the config file | Existing AppHost — do not init |
-| Launch metadata | `apphost.run.json` beside an AppHost source file | Existing AppHost scaffolding — do not init |
 | No C# AppHost | No `.csproj` containing `Aspire.AppHost.Sdk` | OK to init |
 | No file-based AppHost | No `apphost.cs` with `#:sdk Aspire.AppHost.Sdk` | OK to init |
 | No TypeScript AppHost | No current `apphost.mts` or legacy `apphost.ts` in the repo | OK to init |
 | No Aspire config | No `aspire.config.json` in repo root | OK to init |
 | User intent | Explicit "add Aspire", "scaffold Aspire", "aspire init" | OK to init |
-
-Inspect AppHost metadata before filename heuristics. `aspire.config.json` `appHost.path` is
-authoritative and can name a nested or nonstandard authoring file. `apphost.run.json` is
-launch-profile metadata, not an authoring target; recognize it when determining whether
-scaffolding already exists, but never edit it in place of the configured source file.
 
 If **any** AppHost signal is already present, **do not run `aspire init`**. Route to
 [`aspireify`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md) (re-wire) or
@@ -107,7 +99,11 @@ and need an AppHost added alongside them:
      generated `.aspire/modules/` folder)
    - AppHost configuration describing language + AppHost path
    - The **`aspireify`** agent skill into the project's skill directory (same one
-     `aspire agent init` uses)
+     `aspire agent init` uses). In 13.6+, the chained agent setup preselects the
+     recommended skills, including `aspireify`, and does **not** offer Aspire MCP server
+     configuration. If MCP config is missing after a successful init, that is expected and
+     isn't a defect. MCP is a separate opt-in; see the `aspire` router's *Skills vs. MCP*
+     guidance.
 4. **Hand off to `aspireify`** — `aspire init` does **not** wire resources, projects, or
    integrations on its own.
 5. After `aspireify` finishes wiring, validate via `aspire start`
@@ -117,16 +113,6 @@ In 13.5, a TypeScript init inside a repo that already has a root `package.json` 
 nested `aspire-apphost/` package and points the root `aspire.config.json` at
 `aspire-apphost/apphost.mts`. A solution-backed C# repo can receive a project-based AppHost;
 new C# AppHosts enable `AspireUseCliBundle=true` by default. Preserve these generated choices.
-
-If TypeScript init exits nonzero after creating `aspire.config.json`, the metadata-selected
-AppHost, and its package manifest, recover that partial initialization instead of rerunning
-init. Do not alter the root `pnpm-workspace.yaml`. For a nested `aspire-apphost/`, create
-`aspire-apphost/pnpm-workspace.yaml` with `packages: ["."]` and only
-`allowBuilds.esbuild: true`, then run `pnpm --config.workspaceDir="$PWD" install` from
-that nested directory. Do not use `--ignore-workspace`: it ignores the scoped policy and
-suppresses `esbuild`'s postinstall. Use `aspire restore` if modules are absent, install
-`aspireify` with `aspire agent init --skills aspireify` if needed, and hand off the
-still-unwired AppHost to `aspireify`.
 
 See [references/init-workflow.md](references/init-workflow.md) for the full sequence
 including what `aspire.config.json` contains and what to do if `aspire init` fails partway.
@@ -158,13 +144,14 @@ copy and warn.
 |---------|-------|--------|
 | `aspire init` reports AppHost already exists | Repo already has an AppHost | Stop. Route to `aspireify` (re-wire) or `aspire-orchestration` (lifecycle) |
 | `aspire init` fails in non-interactive mode without `--language` | Multiple language paths available | Re-run with `--language csharp` or `--language typescript` |
+| TypeScript init fails with `ERR_PNPM_IGNORED_BUILDS` after creating an AppHost | Partial initialization; pnpm blocked a dependency build script | Preserve the generated files, even if root config is missing. Follow [pnpm recovery](references/init-workflow.md#partial-typescript-init-with-pnpm); do not rerun init |
 | `aspire new` rejects `--output` path | Path exists and is non-empty | Use a different `--output` or empty the directory |
 | `aspire` command not found | CLI not installed | `dotnet tool install -g Aspire.Cli` (.NET 10) or `curl -sSL https://aspire.dev/install.sh \| bash` |
 | `aspire doctor` reports missing .NET 10 | SDK missing | Install .NET 10 SDK before retrying |
-| `aspire init` succeeded but no `aspireify` skill installed | Agent skill directory not detected | Run `aspire agent init` to install `aspireify`, then continue wiring |
+| `aspire init` succeeded but no `aspireify` skill installed | Agent skill directory not detected, or `aspireify` not selected (13.5 doesn't preselect it) | Run `aspire agent init --non-interactive --skills aspireify` (append `aspireify` to any explicit `--skills` list, keep any `--skill-locations`, and don't add `--mcp`), then continue wiring |
+| `aspire init` succeeded but no MCP config was written | Expected in 13.6+ — chained agent setup does not offer MCP | Don't repair it. Configure MCP only when the user explicitly asks for it (`aspire agent init --mcp` on 13.6+) |
 | Skeleton dropped but resources not wired | Expected — `aspire init` does not wire | Hand off to `aspireify` |
 | Existing TypeScript AppHost still uses `apphost.ts` | Legacy entry point and package graph | Hand off to `aspire-orchestration`, which owns approval and `aspire update --migrate --yes --non-interactive`; return to aspireify only for later source authoring |
-| pnpm rejects `esbuild` during TypeScript init | Parent `pnpm-workspace.yaml` build policy has `allowBuilds.esbuild: false` or an `onlyBuiltDependencies` allow-list without `esbuild` | Follow the scoped recovery in [init-workflow.md](references/init-workflow.md); never weaken the root policy |
 
 ## References
 
@@ -172,4 +159,4 @@ copy and warn.
 - [init-workflow.md](references/init-workflow.md) — `aspire init` flow, `aspire.config.json`
   layout, and `aspireify` handoff
 - [aspire-13-5-breaking-changes.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire/references/aspire-13-5-breaking-changes.md) —
-  13.5.3 versions, migrations, and CLI-bundle behavior
+  13.5 migrations, CLI-bundle behavior, and fixes for affected releases

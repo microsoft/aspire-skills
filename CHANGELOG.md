@@ -2,7 +2,83 @@
 
 All notable changes to the aspire-skills plugin will be documented in this file.
 
-## [0.0.2] - Unreleased
+## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
+
+### Fixed
+- Documented scoped pnpm build-policy recovery after partial TypeScript AppHost
+  initialization, preserving root approvals and generated files. Added regression
+  coverage for missing root config and CLI success output that still reports
+  ignored dependency builds.
+
+### Added
+- Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
+  reference files and SHA-512 content versions.
+- Added the default-selected `aspire-terminals` skill for resource PTYs, persistent
+  dock sessions, terminal prompts, headless automation and integration REPLs.
+  Includes Aspire-specific VHS tape syntax/examples and stdout, `.txt` and
+  `.ascii` output contracts, capability gates, routing and lifetime evaluations.
+  Aspire CLI delivery requires refreshing its embedded skill bundle and metadata.
+
+## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)
+
+### Changed
+- Aligned agent setup guidance with Aspire 13.6: `aspire new` and `aspire init`
+  preselect recommended skills without offering MCP configuration. Standalone
+  `aspire agent init --mcp` configures MCP only when explicitly requested; Aspire
+  13.5 users must select MCP interactively.
+- Clarified missing-`aspireify` recovery to preserve explicit skill and location
+  selections without enabling MCP.
+- Hardened Windows launches in the AppHosts and Doctor extensions by resolving
+  the Aspire CLI and Explorer to fully qualified executable paths. Relative
+  `ASPIRE_CLI` paths are no longer supported, and Doctor no longer accepts
+  `.cmd`/`.bat` wrappers. Migrate overrides to a fully qualified native
+  `aspire.exe` path. Bare native `ASPIRE_CLI` names retain `.exe` completion,
+  including names containing periods. Executable lookup and execution share the
+  existing timeout.
+- Fixed Aspire AppHosts canvas browser navigation in CLI hosts: endpoint,
+  Dashboard, and resource-diagnostic links now use the default system browser
+  when no integrated browser canvas is registered.
+
+### Added
+- Added `copilot-app` attribution to both canonical telemetry hooks when
+  `AI_AGENT=github_copilot_app_agent`, before generic Copilot CLI detection.
+
+### Removed
+- Removed dangling hook links from the published plugin mirror.
+
+## [0.0.3](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.3)
+
+### Changed
+- Bumped the plugin and all seven shipped skills to `0.0.3`.
+- Clarified agent installation and update instructions in `README.md`.
+- Aligned PR review guidance with supported agent hosts, release versioning, and
+  the published plugin mirror.
+- Clarified routing between Project v2 migration, legacy TypeScript AppHost
+  migration, and ordinary AppHost wiring.
+- Clarified Aspire skill descriptions and package guidance to avoid exact-release
+  restrictions while retaining prerequisites and version-specific migration notes.
+  Graph diagnostics distinguish affected 13.5.0-13.5.2 dashboards from newer failures
+  without recommending speculative downgrade workarounds.
+- Clarified that Docker Compose deployments run the modeled resources, not the AppHost.
+- Updated evaluation CI with bounded retries and result-integrity checks.
+- Set an explicit supported judge model in every skill evaluation to avoid
+  falling back to an unavailable model.
+
+### Added
+- Added regression coverage for version-preserving wiring, deployment, and dashboard
+  diagnostics, plus a version-neutral router description check.
+- Added the approval-first `aspire-project-v2-migration` skill for eligible Aspire
+  13.6+ AppHosts and experimental Project v2 APIs, with explicit per-file/resource
+  approval, capability checks, conservative reference cleanup, routing and telemetry
+  registration, and no-edit/actual-edit evaluation fixtures. Its narrower eligibility
+  gate remains in force when the bundle is installed on Aspire 13.5.
+- Added captured actual-edit migration contracts and offline mutation controls,
+  keeping runtime/publishing harness development in a separate follow-up.
+  Qualified API evidence covers the merged publishing and flat TypeScript options
+  contracts; EF overload diagnostics, Dockerfile/prebuilt ownership, file-app AOT,
+  and Blazor publishing differences have explicit validation boundaries.
+
+## [0.0.2](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.2)
 
 ### Changed
 - Aligned the shipped skill family and bundle compatibility metadata with Aspire 13.5.3.
@@ -16,7 +92,7 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   resolved to exact CLI filesystem paths for CLI fallbacks, bounded recovery
   for unknown controllers, explicit multi-AppHost disambiguation, and isolated
   CLI starts in worktrees.
-- Reset all skill `metadata.version` values to `0.0.1` ahead of the initial release.
+- Aligned all skill `metadata.version` values with plugin version `0.0.2`.
 - Synced `aspire-deployment` skill routing description with
   [microsoft/aspire#17209](https://github.com/microsoft/aspire/pull/17209).
   Replaced the verbose `USE FOR:` / `DO NOT USE FOR:` folded-scalar description with the
@@ -43,8 +119,14 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   (AWS deploy, deployment-plan validation, `--list-steps` pipeline preview).
 
 ### Added
+- Added the `aspire-apphosts` GitHub App canvas extension for Workspace and Global
+  AppHost discovery, live resource state, endpoints, health, commands, Dashboard
+  diagnostics, and a read-only relationship graph with Copilot context.
 - Added the `aspire-doctor` GitHub App canvas extension for viewing `aspire doctor`
   results as a live checklist in a side panel.
+- Added the `aspireify` GitHub App canvas extension for reviewing and confirming
+  the proposed AppHost resource plan before AppHost wiring begins, including
+  generated-value reset and bounded undo/redo for saved proposal edits.
 - Added a release bundle generator and `publish.yml` workflow for the verified
   `aspire-skills-v<version>.tgz` and `aspire-extensions-v<version>.tgz` GitHub
   release assets consumed by `aspire agent init`.
@@ -90,7 +172,7 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   `--skip-grade`, `--workers`, `--runs`, etc.) and documented `vally serve`
   (local dashboard) and `vally ingest` (SQLite store) workflows.
 
-## [0.0.1] - 2026-05-27
+## [0.0.1](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.1)
 
 ### Added
 - Initial `aspire` skill with detection, safety guardrails, diagnostics bridge

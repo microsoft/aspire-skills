@@ -1,8 +1,7 @@
 # TypeScript AppHost Authoring
 
-Patterns for editing the metadata-selected TypeScript AppHost entry point (normally
-`apphost.mts`). **Never edit `.aspire/modules/`** — that directory is generated and any
-changes will be clobbered. Hand legacy `apphost.ts`
+Patterns for editing current `apphost.mts`. **Never edit `.aspire/modules/`** — that
+directory is generated and any changes will be clobbered. Hand legacy `apphost.ts`
 migration to `aspire-orchestration`; it owns approval and
 `aspire update --migrate --yes --non-interactive`. Return here only if source authoring
 remains after migration.
@@ -32,7 +31,7 @@ AppHost and any edits get clobbered on the next build / `aspire add` / `aspire s
 
 The right place to make this change is apphost.mts. Here is the equivalent edit:
 
-  // <the path in aspire.config.json appHost.path>
+  // apphost.mts
   builder.addPostgres('pg', { /* the options you wanted to set */ });
 
 If you wanted to add a new integration, run `aspire add <package>` and Aspire will
@@ -45,18 +44,12 @@ these get the same refusal-plus-redirect.
 
 | ❌ NEVER | ✅ ALWAYS |
 |---------|----------|
-| Edit `.aspire/modules/postgres.module.ts` | Edit the configured AppHost `addPostgres('pg', {...})` |
-| Edit `.aspire/modules/api.module.ts` | Edit the configured AppHost `addProject('api', '...')` |
-| Comment out lines in any `.aspire/modules/*` file | Remove / guard the declaration in the configured AppHost |
+| Edit `.aspire/modules/postgres.module.ts` | Edit `apphost.mts` `addPostgres('pg', {...})` |
+| Edit `.aspire/modules/api.module.ts` | Edit `apphost.mts` `addProject('api', '...')` |
+| Comment out lines in any `.aspire/modules/*` file | Remove / guard the declaration in `apphost.mts` |
 | Run codegen against `.aspire/modules/` and patch the output | Add the integration via `aspire add <package>` |
 
 ## Skeleton
-
-Before editing, read `aspire.config.json` and resolve `appHost.path` relative to that file.
-That exact path is the AppHost source, even when it is a nested
-`aspire-apphost/apphost.mts`. `apphost.run.json` is launch-profile metadata; recognize it
-when present but never edit it as an AppHost or let it override `appHost.path`. The example
-below uses the default `apphost.mts` name only as an example.
 
 ```ts
 import { createBuilder } from './.aspire/modules/aspire.mjs';
@@ -80,10 +73,10 @@ await builder.addNextJsApp('web', '../web')
 await builder.build().run();
 ```
 
-## Aspire 13.5 AppHost APIs
+## AppHost APIs
 
 TypeScript AppHosts are generally available; remove stale `ASPIREATS001` suppressions.
-Use generated 13.5 APIs only after checking the TypeScript API reference.
+Use generated APIs only after checking the TypeScript API reference.
 
 ### Custom health checks and container files
 
@@ -142,15 +135,12 @@ if (await interaction.isAvailable()) {
 
 Prefer command arguments when input must work in both environments.
 
-`withTerminal()` is experimental and uses default dimensions in TypeScript:
-
-```ts
-await builder.addContainer('repl', 'my-repl').withTerminal();
-```
-
-Enable `aspire terminal` commands separately with
-`aspire config set features.terminalCommandsEnabled true`. Do not generate TypeScript
-terminal dimension options or the removed `TerminalOptions.Shell`.
+For terminal authoring, invoke
+[`aspire-terminals`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-terminals/SKILL.md).
+TypeScript exposes parameterless `withTerminal()` and supported integration
+`withRepl()` methods, not general `TerminalService`/terminal-prompt APIs in the
+inspected baseline. Do not invent dimension options or `TerminalOptions.Shell`.
+Nonterminal Interaction Service prompts remain in this skill.
 
 ## Unified `withEnvironment` API
 
@@ -258,15 +248,13 @@ requires it. These commands diagnose dependencies and toolchains; they do not re
 | pnpm | `pnpm install` | `pnpm exec tsc --noEmit -p tsconfig.apphost.json` | `pnpm exec tsx --tsconfig tsconfig.apphost.json apphost.mts` |
 
 `apphost.mts` is the default entry point. When the AppHost configuration selects a
-different file, use that configured entry point instead. Do not rename it to match a
-conventional filename.
+different file, use that configured entry point instead.
 
-For an ordinary pnpm AppHost, use `pnpm install`. If a partial brownfield initialization
-is blocked by a root build policy, follow the isolated-workspace recovery in
-`javascript-apps.md`: create a nested `pnpm-workspace.yaml` that includes only `.`,
-approves only `esbuild`, and use `pnpm --config.workspaceDir="$PWD" install` from that
-directory. Do not use `--ignore-workspace` for that recovery because it ignores the
-nested approval policy.
+Affected Aspire CLIs invoke `pnpm install --ignore-workspace` to keep generated
+brownfield AppHosts out of the parent workspace. This also ignores an AppHost-local
+`pnpm-workspace.yaml`, including its build approvals. It is not a recovery command
+for blocked build scripts; use [pnpm build-policy recovery](#pnpm-build-policy-recovery)
+instead. Do not generalize the resolver's flag to application dependency installs.
 
 Yarn Classic is unsupported for TypeScript AppHosts. If `packageManager` is `yarn@1...`
 or the first lines of `yarn.lock` identify lockfile v1, stop and tell the user to upgrade
@@ -293,6 +281,58 @@ await builder.addViteApp('web', '../web')
 await builder.addViteApp('web', '../web')
     .publishAsPackageScript({ scriptName: 'start' });
 ```
+
+### pnpm build-policy recovery
+
+Use this procedure for a generated, standalone nested TypeScript AppHost when
+pnpm reports `ERR_PNPM_IGNORED_BUILDS` for `esbuild`. This failure reproduces on
+Aspire CLI 13.6.4 with pnpm 11.25.0 and 12.14.0. It can interrupt `aspire init`
+after scaffolding, before root configuration or agent setup is complete. Do not
+rerun init or delete the generated files.
+
+1. Inspect the selected pnpm version, AppHost package, and workspace policies.
+   Keep the root `pnpm-workspace.yaml`, package-manager metadata, dependencies,
+   lockfile, and AppHost source unchanged. If this AppHost already owns a workspace,
+   preserve its members and approvals; do not replace it with a single-package recipe.
+2. Ask for approval to run `esbuild`'s build script in the generated AppHost only.
+   If approved and no local workspace exists, create
+   `aspire-apphost/pnpm-workspace.yaml`:
+
+   ```yaml
+   packages:
+     - "."
+   allowBuilds:
+     esbuild: true
+   ```
+
+   pnpm 11+ uses `allowBuilds`; pnpm 10.26+ also supports it. For older pnpm
+   versions that use `onlyBuiltDependencies`, retain `packages: ["."]` and
+   allow only `esbuild` there. Do not relax the root policy, approve unrelated
+   scripts, or use `dangerouslyAllowAllBuilds`.
+3. From the generated AppHost directory, honor that local policy explicitly:
+
+   ```powershell
+   pnpm --config.workspaceDir="$PWD" install --frozen-lockfile
+   pnpm exec tsc --noEmit -p tsconfig.apphost.json
+   pnpm exec tsx --eval 'console.log("tsx transform succeeded")'
+   ```
+
+   Use `--frozen-lockfile` when the generated lockfile exists; omit it only if
+   initialization did not produce one. Substitute the absolute AppHost directory
+   for `$PWD` in shells that do not expand it to a path. Confirm installation
+   succeeds, `esbuild`'s required postinstall completes, and the toolchain works.
+   Do not substitute `--ignore-workspace`, which discards the approval being tested.
+4. Report the scope of recovery accurately. This repairs installed dependencies;
+   it does **not** fix the CLI resolver. An affected `aspire restore` or
+   `aspire start` may still invoke `--ignore-workspace` and repeat the ignored-build
+   error. Inspect output as well as the exit code: `aspire restore` can report
+   success despite this dependency error. Stop and report that remaining failure,
+   rather than looping, disabling build-policy checks, or claiming init completed.
+
+Related upstream bug: [microsoft/aspire#18012](https://github.com/microsoft/aspire/issues/18012).
+The CLI fix is tracked in
+[microsoft/aspire#19919](https://github.com/microsoft/aspire/pull/19919);
+do not assume it is included in an installed release.
 
 ## Docker Compose Hooks
 
@@ -388,7 +428,7 @@ await builder.addViteApp('frontend', '../frontend')
 
 | Rule | Why |
 |------|-----|
-| **Never edit `.aspire/modules/`** | Generated; edits are clobbered. Edit the metadata-selected AppHost source |
+| **Never edit `.aspire/modules/`** | Generated; edits are clobbered. Edit current `apphost.mts` (or configured legacy `apphost.ts`) |
 | Use unified `withEnvironment(name, value)` | Per-kind helpers are deprecated |
 | Use `addNextJsApp` / `addViteApp` over hand-rolled Dockerfiles | First-class lifecycle + publish helpers |
 | Use `publishAs*` for JS publish — never raw Dockerfile when a helper fits | Maintained, tested, and works with `aspire deploy` |

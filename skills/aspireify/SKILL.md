@@ -4,20 +4,21 @@ description: >-
   **WORKFLOW SKILL** - Wire Aspire AppHosts or repair TypeScript AppHost toolchains.
   Scans the repo, proposes a resource graph, edits C#, file-based C#, or TypeScript
   AppHosts, wires ServiceDefaults + OTel, validates with `aspire start`, then stops.
-  USE FOR: wire/scaffold AppHost, add Postgres/Redis/Valkey/Rabbit/Mongo, connect frontend
-  to API, after `aspire init`, AddNextJsApp, AddViteApp, WithBrowserLogs, WithTerminal,
+  USE FOR: wire/scaffold AppHost, add Postgres/Redis/Rabbit/Mongo, connect frontend
+  to API, after `aspire init`, AddNextJsApp, AddViteApp, WithBrowserLogs,
   Interaction Service, command arguments, apphost.cs, apphost.mts, unified
   withEnvironment, .aspire/modules refusal, config/secrets,
   TS dependency restore, pnpm/yarn/bun, or Yarn Classic.
   DO NOT USE FOR: skeleton drop (aspire-init), lifecycle-only start/stop/wait/restart
   or `aspire update --migrate` (aspire-orchestration), publish/deploy/destroy
-  (aspire-deployment), logs/traces (aspire-monitoring).
+  (aspire-deployment), logs/traces (aspire-monitoring), terminal authoring or
+  automation (aspire-terminals).
   INVOKES: aspire CLI, AppHost source edits, ServiceDefaults wiring.
   FOR SINGLE OPERATIONS: Run `aspire add PACKAGE` directly for a one-off integration.
 license: MIT
 metadata:
   author: Microsoft
-  version: "0.0.2"
+  version: "0.0.5"
 ---
 
 # Aspireify
@@ -25,7 +26,7 @@ metadata:
 > **One-time wiring skill.** `aspire init` drops a skeleton; `aspireify` turns
 > that skeleton into a working AppHost by scanning the repo, proposing a resource
 > graph, editing the AppHost, wiring `Aspire.ServiceDefaults`, and validating end
-> to end. Self-deactivates after a clean `aspire start`. Aligned with Aspire 13.5.3.
+> to end. Self-deactivates after a clean `aspire start`.
 
 ## 🚫 Hard Refusal: Never Edit `.aspire/modules/`
 
@@ -40,22 +41,21 @@ metadata:
 > 1. **Refuse the edit** with a clear "I won't edit `.aspire/modules/`" statement.
 > 2. **Explain** that `.aspire/modules/` is generated and any changes are clobbered.
 > 3. **Redirect** the requested change to the configured AppHost entry point:
->    the path from `aspire.config.json` `appHost.path` (or the discovered current
->    `apphost.mts` / legacy `apphost.ts` when metadata is absent).
+>    current `apphost.mts`, or legacy `apphost.ts`.
 > 4. If the user wants a new integration, suggest `aspire add <package>`; if they want
 >    to change configuration, show the equivalent edit in the AppHost entry point.
 
 | ❌ Wrong | ✅ Right |
 |----------|---------|
-| Open `.aspire/modules/postgres.module.ts` and tweak the connection options | Edit the configured AppHost source and change `addPostgres('pg', { ... })` there |
-| Modify a generated `.aspire/modules/*` file directly | Re-run `aspire add <package>` after updating the configured AppHost |
-| Comment out a line in `.aspire/modules/` to disable a resource | Remove or guard the resource declaration in the configured AppHost |
+| Open `.aspire/modules/postgres.module.ts` and tweak the connection options | Edit `apphost.mts` and change `addPostgres('pg', { ... })` options there |
+| Modify a generated `.aspire/modules/*` file directly | Re-run `aspire add <package>` after updating `apphost.mts` |
+| Comment out a line in `.aspire/modules/` to disable a resource | Remove or guard the resource declaration in `apphost.mts` |
 
 This rule applies even if the user insists, even for "one-line" changes, even for
 "just to test something." The TS AppHost regenerates `.aspire/modules/` deterministically;
 edits are unrecoverable noise.
 
-## Guiding Principles From Aspire 13.5
+## Guiding Principles
 
 ### Minimize changes to the user's code
 
@@ -102,15 +102,6 @@ health checks fail with SSL/TLS handshake errors, do not fall back to `AddContai
 Use `WithoutHttpsCertificate()` on the Redis resource when the consuming app expects
 plain Redis.
 
-### AppHost metadata before source discovery
-
-Resolve `aspire.config.json` before scanning conventional filenames. Its `appHost.path`,
-resolved relative to the configuration file, is the authoring target and may be a nested
-`aspire-apphost/apphost.mts`. Recognize `apphost.run.json` as adjacent launch-profile
-metadata, but never edit it as an AppHost source or allow it to override
-`aspire.config.json`. Only when metadata is absent may discovery fall back to current
-`apphost.mts` or legacy `apphost.ts`.
-
 ## Project-Local Override
 
 If `.agents/skills/aspireify/SKILL.md` exists (installed by `aspire init` or
@@ -138,9 +129,8 @@ declared beyond the stub):
 | Signal | How to Detect | Confidence |
 |--------|---------------|------------|
 | Skeleton just dropped | `aspire init` just ran in this session | ✅ Definitive |
-| Configured AppHost stub | Resolve `aspire.config.json` `appHost.path`; source only contains `Build().Run()` | ✅ Definitive |
-| Legacy launch metadata | `apphost.run.json` beside the configured or discovered source | High |
-| `aspire.config.json` without resources | Config present, resolved AppHost has no `AddProject`/`addProject` | High |
+| Empty AppHost stub | `apphost.cs` / `Program.cs` / current `apphost.mts` (or legacy `apphost.ts`) only contains `Build().Run()` | ✅ Definitive |
+| `aspire.config.json` without resources | Config present, AppHost has no `AddProject`/`addProject` | High |
 | User asks to "wire" / "scaffold resource graph" | Verb match: wire, scaffold, integrate, hook up, add Postgres/Redis/etc. | High |
 | User asks "what next after aspire init" | Direct handoff request | ✅ Definitive |
 | Existing repo with services + new AppHost | Repo has `.csproj`/`package.json` projects but AppHost references none | High |
@@ -154,7 +144,7 @@ the app → `aspire-orchestration`. If the user wants to **deploy** → `aspire-
 |---------------|-----------|-------------|
 | **C# SDK-style** | `.csproj` containing `<Sdk Name="Aspire.AppHost.Sdk" />` | `Program.cs` (top-level statements) |
 | **File-based C#** | `apphost.cs` with `#:sdk Aspire.AppHost.Sdk` and `#:package` directives | `apphost.cs` itself |
-| **TypeScript** | Metadata-selected `.mts` entry point (normally `apphost.mts`) or legacy `apphost.ts`, with generated `.aspire/modules/` | Configured AppHost entry point only — **never edit `.aspire/modules/`** |
+| **TypeScript** | Current `apphost.mts` or legacy `apphost.ts` with generated `.aspire/modules/` | Configured AppHost entry point only — **never edit `.aspire/modules/`** |
 
 See [references/csharp-authoring.md](references/csharp-authoring.md) and
 [references/typescript-authoring.md](references/typescript-authoring.md).
@@ -181,11 +171,14 @@ An AppHost-local marker takes precedence over every parent marker. If neither di
 a recognized marker, Aspire defaults to npm. Report the selected manager and marker.
 
 Use the selected manager only to repair dependencies or diagnose the toolchain. The resolver
-commands are `npm install`, `bun install`, `yarn install`, and `pnpm install`. A partial
-brownfield pnpm initialization blocked by its root build policy needs the scoped recovery
-described below, not `--ignore-workspace`. Yarn Classic (`yarn@1...` or a v1 lockfile) is
-unsupported: stop and ask the user to upgrade to Yarn 4+ or explicitly migrate to npm, pnpm,
-or Bun.
+commands are `npm install`, `bun install`, and `yarn install`; a generated brownfield pnpm
+AppHost uses `pnpm install --ignore-workspace`, while other pnpm dependency installs use
+`pnpm install`. **Do not use `--ignore-workspace` to repair blocked build scripts:**
+it ignores local approvals too. For `ERR_PNPM_IGNORED_BUILDS`, follow
+[pnpm build-policy recovery](references/typescript-authoring.md#pnpm-build-policy-recovery)
+without weakening the root policy or assuming a successful CLI exit cleared the error.
+Yarn Classic (`yarn@1...` or a v1 lockfile) is unsupported: stop and ask the user to
+upgrade to Yarn 4+ or explicitly migrate to npm, pnpm, or Bun.
 
 Do not change `packageManager` or create, replace, or regenerate a lockfile merely to
 influence detection or switch managers. Preserve existing files until the user explicitly
@@ -193,15 +186,6 @@ chooses an upgrade or migration. Start the AppHost with `aspire start --non-inte
 not a raw package-manager launcher. See
 [references/typescript-authoring.md](references/typescript-authoring.md) for the full
 command matrix and resolver details.
-
-Before running pnpm for a generated TypeScript AppHost, inspect the applicable
-`pnpm-workspace.yaml` build policy. `allowBuilds.esbuild: false`, or an older
-`onlyBuiltDependencies` list without `esbuild`, can leave `aspire init` nearly complete but
-nonzero. Preserve root policy. When the generated AppHost is nested, scope the necessary
-single-package approval in its own `pnpm-workspace.yaml`, including `packages: ["."]`.
-From that directory, recover with `pnpm --config.workspaceDir="$PWD" install`. Do not use
-`--ignore-workspace`, because it also ignores the scoped `allowBuilds` policy. Then hand off
-the still-unwired skeleton to this skill.
 
 ## Workflow Phases
 
@@ -230,7 +214,7 @@ Walk the repo and inventory:
 | .NET projects | `find . -name '*.csproj' -not -path '*/bin/*' -not -path '*/obj/*'` |
 | Node services | `find . -name 'package.json' -not -path '*/node_modules/*'` |
 | Python services | `find . -name 'pyproject.toml' -o -name 'requirements.txt'` |
-| Container deps in compose | Every `compose*.yaml` / `docker-compose*.yaml`, profiles, `extends`, and scripts that select files/profiles |
+| Container deps in compose | `docker-compose.yml`, `compose.yaml` (Postgres? Redis? Rabbit?) |
 | Connection strings | grep `appsettings*.json`, `.env*`, `config/*` for `Postgres`, `Redis`, `Mongo`, `RabbitMQ`, `Cosmos`, `ServiceBus` |
 | Integration packages | `dotnet list package` per project; package.json `dependencies` |
 | Existing endpoints | hardcoded ports in `launchSettings.json`, `next.config.js`, `vite.config.ts` |
@@ -244,8 +228,6 @@ Present a resource graph **before editing**. Ask clarifying questions:
 - "I see Postgres in `docker-compose.yml` — should I model it as `AddPostgres('db')` or use Azure Database for PostgreSQL?"
 - "Your React app hardcodes `http://localhost:5000` — replace with Aspire service discovery (`endpoint.url`)?"
 - "Your API has an `/admin` endpoint — exclude it from `WithReference()` so consumers don't see it?"
-- "I found multiple Compose launch modes and package scripts. Which command/profile is the
-  authority for the normal local stack? I will not merge them by filename alone."
 
 ### 3. Edit
 
@@ -280,7 +262,6 @@ catalog.
 |----------|----|----|
 | Postgres in compose / `Npgsql` package | `AddPostgres("pg").AddDatabase("db")` | `addPostgres('pg').addDatabase('db')` |
 | Redis in compose / `StackExchange.Redis` | `AddRedis("cache")` | `addRedis('cache')` |
-| Valkey in compose / app config | `Aspire.Hosting.Valkey` + `AddValkey("cache")` | `addValkey('cache')` |
 | RabbitMQ | `AddRabbitMQ("mq")` (v7 client w/ pub-sub tracing) | `addRabbitMQ('mq')` |
 | MongoDB | `AddMongoDB("mongo")` | `addMongoDB('mongo')` |
 | Cosmos DB | `AddAzureCosmosDB("cosmos")` | `addAzureCosmosDB('cosmos')` |
@@ -299,15 +280,15 @@ catalog.
 | Use `PublishAsStaticWebsite` / `PublishAsNodeServer` / `PublishAsPackageScript` for JS publish | Replaces hand-rolled Dockerfiles; SPA → static, SSR Node → NodeServer, package-script SSR → PackageScript |
 | Add `WithBrowserLogs()` to frontend resources for browser console + screenshots in dashboard | `Aspire.Hosting.Browsers` surfaces browser telemetry in the dashboard |
 | Bind every resource to a compute environment with `WithComputeEnvironment(env)` when multiple environments exist | Multi-environment deploys require explicit binding |
-| **Never edit `.aspire/modules/`** in TS AppHosts | Generated; edits get clobbered. Edit the metadata-selected AppHost source only |
+| **Never edit `.aspire/modules/`** in TS AppHosts | Generated; edits get clobbered. Edit the configured `apphost.mts` (or legacy `apphost.ts`) only |
 | Use `WithEndpoint("name", e => ...)` to update endpoints | Endpoint callbacks update existing endpoints rather than throwing on duplicates |
 | Mark admin endpoints with `ExcludeReferenceEndpoint = true` | Prevents consumers from receiving admin URLs via `WithReference()` |
 | Look up unfamiliar API: `aspire docs api search <query> --language csharp\|typescript` | Don't guess overloads or builder chains |
 | Use context `.Services` / `await ctx.services().getInteractionService()` | `.ServiceProvider` is obsolete, and `ctx.services()` alone returns a services accessor |
 | Use `AddConnectionString` for external connection strings | `PublishAsConnectionString` is obsolete |
 | Check `IInteractionService.IsAvailable` before prompting | CLI-invoked commands may be noninteractive; prefer command arguments for dashboard + CLI input |
-| Treat `WithTerminal()` as experimental | Suppress `ASPIRETERMINAL001`; do not generate removed `TerminalOptions.Shell` or TypeScript dimension options |
-| Keep all Aspire SDK and `Aspire.Hosting.*` packages on the same 13.5 family | Mixed 13.4/13.5 graphs can fail at startup |
+| Route terminal authoring to `aspire-terminals` | Owns `WithTerminal`, `TerminalService`, dock/dialog/headless lifetimes, terminal prompts, REPLs and tapes; nonterminal interactions remain here |
+| Keep all Aspire SDK and `Aspire.Hosting.*` packages on the same release family | Mixed release families can fail at startup |
 | Migrate GitHub Models integrations to Azure AI Foundry | `Aspire.Hosting.GitHub.Models` is deprecated and absent from integration discovery |
 | Use `WithModule(RedisModules.*)` for Redis 8 modules | Prefer typed JSON, Search, Bloom Filter, and TimeSeries constants over raw module paths |
 | Use Foundry `AsHostedAgent(...)` for hosted executable/container agents | Current Azure AI Foundry path replaces deprecated GitHub Models |
@@ -354,7 +335,7 @@ builder.AddNextJsApp("web", "./web")
 | `aspire start` fails with build error | Fix code, re-run `aspire start` |
 | File-lock errors during edit | Hand off to `aspire-orchestration` → `aspire stop` → retry |
 | Resource missing from `aspire describe` | Re-run `aspire describe --include-hidden`; `aspire ps` is AppHost-level |
-| TS AppHost change ignored | Confirm you edited the metadata-selected AppHost source, not `.aspire/modules/` |
+| TS AppHost change ignored | Confirm you edited the configured `apphost.mts` (or legacy `apphost.ts`), not `.aspire/modules/` |
 | Mixed JSON output from `aspire start` | Strip non-JSON lines before parsing ([#15843](https://github.com/microsoft/aspire/issues/15843)) |
 
 Full flow in [references/validation.md](references/validation.md).
@@ -390,4 +371,4 @@ Full flow in [references/validation.md](references/validation.md).
 - [typescript-authoring.md](references/typescript-authoring.md) — TS AppHost patterns + parity APIs
 - [service-defaults.md](references/service-defaults.md) — Wire OTel, health checks, service discovery
 - [validation.md](references/validation.md) — End-to-end validation + recovery
-- [aspire-13-5-breaking-changes.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire/references/aspire-13-5-breaking-changes.md) — 13.5.3 migrations, command changes, and experimental surfaces
+- [aspire-13-5-breaking-changes.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire/references/aspire-13-5-breaking-changes.md) — Breaking changes introduced in 13.5 and fixes for affected releases

@@ -77,6 +77,8 @@ Add one or both setup blocks before Aspire commands:
 | TypeScript AppHost or JavaScript resources | Install Node with `actions/setup-node`, then run the repo's package-manager install/build commands. |
 | Mixed C#/TypeScript graph | Use both setup blocks so the AppHost and all compute resources can be restored, built, and published. |
 
+Match the example toolchain versions to the repo's SDK and Node requirements.
+
 C# AppHost setup:
 
 ```yaml
