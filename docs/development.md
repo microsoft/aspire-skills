@@ -72,6 +72,8 @@ Configure `ASPIRE_BOT_APP_ID` and `ASPIRE_BOT_PRIVATE_KEY` as repository secrets
 Source research uses a read-only GitHub CLI proxy. Optional maintenance is
 disabled in `.github/workflows/aw.json`. Regenerate the compiled workflow with
 gh-aw v0.89.17 after editing its source or configuration.
+Dependency restore must succeed before targeted tests begin. Restore failures
+retain diagnostics and produce an incomplete outcome rather than an unverified PR.
 
 ### Manual runs
 
