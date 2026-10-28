@@ -16,7 +16,7 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 
 ### Removed
 - Removed duplicate `track-telemetry.sh` and `track-telemetry.ps1` scripts from
-  the plugin. The Aspire CLI owns and installs telemetry hooks.
+  the plugin.
 
 ## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)
 
