@@ -33,6 +33,8 @@ test("the temporary workflow runs only on its isolated branch", () => {
 test("publication and diagnostic issues are unconditionally disabled", () => {
   const outputs = source["safe-outputs"];
   assert.equal(outputs.staged, true);
+  assert.equal(outputs["github-token"], "${{ secrets.GITHUB_TOKEN }}");
+  assert.equal(outputs["github-app"], undefined);
   assert.equal(outputs["report-failure-as-issue"], false);
   assert.equal(outputs["report-failed-jobs"], false);
   assert.equal(outputs["missing-tool"]["create-issue"], false);
@@ -45,6 +47,18 @@ test("publication and diagnostic issues are unconditionally disabled", () => {
   for (const permission of ["contents", "issues", "pull-requests"]) {
     assert.equal(token.with[`permission-${permission}`], "read");
   }
+});
+
+test("temporary verification permits the package feed and stops after restore failures", () => {
+  assert.ok(source.network.allowed.includes("dnceng.pkgs.visualstudio.com"));
+  assert.ok(!source.network.allowed.includes("*"));
+  const verification = markdown.split("## Step 4: Write and Verify Telemetry Changes")[1]
+    .split("## Step 5:")[0];
+  assert.match(verification, /restore procedure as a separate command/);
+  assert.match(verification, /check its\s+exit code before starting tests/);
+  assert.match(verification, /If restore fails, stop and emit `report_incomplete`/);
+  assert.match(verification, /Do not suppress diagnostics or mask the exit\s+code/);
+  assert.match(verification, /After restore succeeds, run the existing targeted Aspire CLI tests/);
 });
 
 test("the approved Aspire prerequisite is pinned without bypassing ownership checks", () => {

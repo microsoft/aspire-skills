@@ -41,6 +41,7 @@ network:
     - defaults
     - github
     - dotnet
+    - dnceng.pkgs.visualstudio.com
 tools:
   edit:
   bash: ["*"]
@@ -122,6 +123,7 @@ pre-agent-steps:
         }));
 safe-outputs:
   staged: true
+  github-token: ${{ secrets.GITHUB_TOKEN }}
   report-failure-as-issue: false
   report-failed-jobs: false
   missing-tool:
@@ -129,11 +131,6 @@ safe-outputs:
   report-incomplete:
     max: 1
     create-issue: false
-  github-app:
-    client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
-    private-key: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
-    owner: microsoft
-    repositories: [aspire-skills, aspire]
   create-pull-request:
     target-repo: microsoft/aspire
     base-branch: ellahathaway-hook-only-maintenance
@@ -280,9 +277,15 @@ proposal instead. A no-op also requires the offline regression test to pass.
 
 ## Step 4: Write and Verify Telemetry Changes
 
-Run the existing targeted Aspire CLI tests for the managed hook, catalog,
-command, and both compatibility scripts, using the repository's restore
-procedure first. Do not weaken tests to make an update pass.
+Run the repository's restore procedure as a separate command and check its
+exit code before starting tests. Keep restore diagnostics in the output or
+a readable log. If restore fails, stop and emit `report_incomplete` with the
+command and relevant error. Do not suppress diagnostics or mask the exit
+code with a pipeline or a command that continues after failure.
+
+After restore succeeds, run the existing targeted Aspire CLI tests for the
+managed hook, catalog, command, and both compatibility scripts. Do not weaken
+tests to make an update pass.
 
 Stage only intentional telemetry code, scripts, tests, and documentation.
 Never stage `.agents`, `.github`, or `AGENTS.md`; these contain runtime
