@@ -223,16 +223,90 @@ test("the assessment covers extensions and requires canonical MCP regression cov
   assert.match(markdown, /mismatch must[\s\S]+never `noop`/);
 });
 
-test("verification permits the required package feed and stops after restore failures", () => {
+test("workflow-owned verification requires restore and all telemetry test classes", () => {
   assert.ok(source.network.allowed.includes("dnceng.pkgs.visualstudio.com"));
   assert.ok(!source.network.allowed.includes("*"));
+  const step = source["post-steps"].find(item => item.id === "telemetry-verification");
+  assert.ok(step);
+  assert.equal(step.if, "success()");
+  assert.equal(step.shell, "bash");
+  assert.equal(step["continue-on-error"], undefined);
+  assert.match(step.run, /^set -euo pipefail$/m);
+  assert.match(step.run, /XDG_RUNTIME_DIR="\$RUNNER_TEMP\/aspire-telemetry-runtime"/);
+  assert.match(step.run, /pwsh -NoLogo -NoProfile -NonInteractive/);
+  assert.ok(step.run.indexOf("./restore.sh") < step.run.indexOf("dotnet test"));
+  assert.doesNotMatch(step.run, /\|\s*(head|tail|tee)\b|\|\|\s*true/);
+  for (const name of [
+    "AgentTelemetryCatalogTests", "AgentTelemetryHookTests", "AgentTelemetryCommandTests",
+    "TelemetryHookConfiguratorTests", "TelemetryHookInstallerTests", "TelemetryHookScriptTests"
+  ]) {
+    assert.ok(step.run.includes(`--filter-class '*.${name}'`), `${name} must run`);
+  }
   const verification = markdown.split("## Step 4: Write and Verify Telemetry Changes")[1]
     .split("## Step 5:")[0];
-  assert.match(verification, /restore procedure as a separate command/);
-  assert.match(verification, /check its\s+exit code before starting tests/);
-  assert.match(verification, /If restore fails, stop and emit `report_incomplete`/);
-  assert.match(verification, /Do not suppress diagnostics or mask the exit\s+code/);
-  assert.match(verification, /After restore succeeds, run the existing targeted Aspire CLI tests/);
+  assert.match(verification, /outside the agent sandbox/);
+  assert.match(verification, /Do not run restore or this required test suite inside the agent sandbox/);
+  assert.match(verification, /failed agent job replaces any proposal or no-op with\s+`report_incomplete`/);
+});
+
+test("failed agent or verification jobs replace proposals and no-ops with an incomplete outcome", async () => {
+  const step = source["safe-outputs"].steps.find(item => item.id === "telemetry-verification-gate");
+  assert.ok(step);
+  const shouldRun = new Function("needs", "cancelled", `return (${step.if});`);
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+  for (const [result, cancelled, expected] of [
+    ["success", false, false],
+    ["failure", false, true],
+    ["cancelled", false, true],
+    ["failure", true, false]
+  ]) {
+    assert.equal(shouldRun({ agent: { result } }, () => cancelled), expected);
+    if (!expected) continue;
+    for (const type of ["create_pull_request", "noop"]) {
+      let output = { items: [{ type }], errors: [] };
+      const warnings = [];
+      await new AsyncFunction("require", "process", "core", step.with.script)(
+        name => {
+          assert.equal(name, "node:fs");
+          return {
+            writeFileSync(path, content) {
+              assert.equal(path, "/tmp/gh-aw/agent_output.json");
+              output = JSON.parse(content);
+            }
+          };
+        },
+        { env: {
+          GITHUB_SERVER_URL: "https://github.com",
+          GITHUB_REPOSITORY: "microsoft/aspire-skills",
+          GITHUB_RUN_ID: "123"
+        } },
+        { warning(message) { warnings.push(message); } }
+      );
+      assert.equal(output.items.length, 1);
+      assert.equal(output.items[0].type, "report_incomplete");
+      assert.match(output.items[0].reason, /verification.*failed/);
+      assert.match(output.items[0].details, /actions\/runs\/123/);
+      assert.deepEqual(output.errors, []);
+      assert.equal(warnings.length, 1);
+    }
+  }
+});
+
+test("staged previews get a read-only Aspire checkout without affecting live publication", () => {
+  const step = source["safe-outputs"].steps.find(item => item.name === "Checkout Aspire for staged preview");
+  assert.ok(step);
+  assert.equal(step.uses, "actions/checkout@v6.0.2");
+  assert.equal(step.with.repository, "microsoft/aspire");
+  assert.equal(step.with.ref, "main");
+  assert.equal(step.with["persist-credentials"], false);
+  const shouldRun = new Function("env", "needs", `return (${step.if});`);
+  for (const [staged, result, expected] of [
+    ["true", "success", true],
+    ["false", "success", false],
+    ["true", "failure", false]
+  ]) {
+    assert.equal(shouldRun({ GH_AW_SAFE_OUTPUTS_STAGED: staged }, { agent: { result } }), expected);
+  }
 });
 
 test("repository-scoped App credentials use the configured bot secrets", () => {
