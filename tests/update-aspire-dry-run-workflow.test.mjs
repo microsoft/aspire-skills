@@ -49,16 +49,65 @@ test("publication and diagnostic issues are unconditionally disabled", () => {
   }
 });
 
-test("temporary verification permits the package feed and stops after restore failures", () => {
+test("temporary verification runs all required telemetry tests in a fail-fast runner step", () => {
   assert.ok(source.network.allowed.includes("dnceng.pkgs.visualstudio.com"));
   assert.ok(!source.network.allowed.includes("*"));
+  const step = source["post-steps"].find(item => item.id === "telemetry-verification");
+  assert.ok(step);
+  assert.equal(step.if, "success()");
+  assert.equal(step.shell, "bash");
+  assert.equal(step["continue-on-error"], undefined);
+  assert.match(step.run, /^set -euo pipefail$/m);
+  assert.match(step.run, /pwsh -NoLogo -NoProfile -NonInteractive/);
+  assert.ok(step.run.indexOf("./restore.sh") < step.run.indexOf("dotnet test"));
+  for (const name of [
+    "AgentTelemetryCatalogTests", "AgentTelemetryHookTests", "AgentTelemetryCommandTests",
+    "TelemetryHookConfiguratorTests", "TelemetryHookInstallerTests", "TelemetryHookScriptTests"
+  ]) {
+    assert.ok(step.run.includes(`--filter-class '*.${name}'`));
+  }
   const verification = markdown.split("## Step 4: Write and Verify Telemetry Changes")[1]
     .split("## Step 5:")[0];
-  assert.match(verification, /restore procedure as a separate command/);
-  assert.match(verification, /check its\s+exit code before starting tests/);
-  assert.match(verification, /If restore fails, stop and emit `report_incomplete`/);
-  assert.match(verification, /Do not suppress diagnostics or mask the exit\s+code/);
-  assert.match(verification, /After restore succeeds, run the existing targeted Aspire CLI tests/);
+  assert.match(verification, /outside the agent sandbox/);
+  assert.match(verification, /failed agent job replaces any proposal or no-op with\s+`report_incomplete`/);
+});
+
+test("failed verification replaces the staged proposal with an incomplete signal", async () => {
+  const step = source["safe-outputs"].steps.find(item => item.id === "telemetry-verification-gate");
+  const shouldRun = new Function("needs", "cancelled", `return (${step.if});`);
+  assert.equal(shouldRun({ agent: { result: "failure" } }, () => false), true);
+  assert.equal(shouldRun({ agent: { result: "success" } }, () => false), false);
+  let output;
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+  await new AsyncFunction("require", "process", "core", step.with.script)(
+    name => {
+      assert.equal(name, "node:fs");
+      return {
+        writeFileSync(path, content) {
+          assert.equal(path, "/tmp/gh-aw/agent_output.json");
+          output = JSON.parse(content);
+        }
+      };
+    },
+    { env: {
+      GITHUB_SERVER_URL: "https://github.com",
+      GITHUB_REPOSITORY: "microsoft/aspire-skills",
+      GITHUB_RUN_ID: "456"
+    } },
+    { warning() {} }
+  );
+  assert.equal(output.items.length, 1);
+  assert.equal(output.items[0].type, "report_incomplete");
+  assert.match(output.items[0].reason, /verification.*failed/);
+  assert.match(output.items[0].details, /actions\/runs\/456/);
+});
+
+test("staged output processing checks out the approved Aspire pin without retaining credentials", () => {
+  const step = source["safe-outputs"].steps.find(item => item.name === "Checkout Aspire for staged preview");
+  assert.equal(step.uses, "actions/checkout@v6.0.2");
+  assert.equal(step.with.repository, "microsoft/aspire");
+  assert.equal(step.with.ref, "89b715e7941b8e538410210e4b244c8f1d4a95a0");
+  assert.equal(step.with["persist-credentials"], false);
 });
 
 test("the approved Aspire prerequisite is pinned without bypassing ownership checks", () => {

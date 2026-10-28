@@ -121,6 +121,28 @@ pre-agent-steps:
             filename, status, additions, deletions
           }))
         }));
+post-steps:
+  - name: Verify Aspire telemetry
+    id: telemetry-verification
+    if: success()
+    shell: bash
+    timeout-minutes: 20
+    run: |
+      set -euo pipefail
+      git --no-pager log -1 --format='Verifying Aspire commit %H'
+      export XDG_RUNTIME_DIR="$RUNNER_TEMP/aspire-telemetry-runtime"
+      install -d -m 700 "$XDG_RUNTIME_DIR"
+      pwsh -NoLogo -NoProfile -NonInteractive -Command '$ErrorActionPreference = "Stop"; Write-Output $PSVersionTable.PSVersion'
+      ./restore.sh
+      dotnet test --project tests/Aspire.Cli.Tests/Aspire.Cli.Tests.csproj --no-launch-profile -- \
+        --filter-class '*.AgentTelemetryCatalogTests' \
+        --filter-class '*.AgentTelemetryHookTests' \
+        --filter-class '*.AgentTelemetryCommandTests' \
+        --filter-class '*.TelemetryHookConfiguratorTests' \
+        --filter-class '*.TelemetryHookInstallerTests' \
+        --filter-class '*.TelemetryHookScriptTests' \
+        --filter-not-trait quarantined=true \
+        --filter-not-trait outerloop=true
 safe-outputs:
   staged: true
   github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -131,6 +153,33 @@ safe-outputs:
   report-incomplete:
     max: 1
     create-issue: false
+  steps:
+    - name: Reject unverified telemetry proposals
+      id: telemetry-verification-gate
+      if: "!cancelled() && needs.agent.result != 'success'"
+      uses: actions/github-script@v9.0.0
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const fs = require("node:fs");
+          const reason = "Required telemetry verification or an earlier agent step failed.";
+          const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+          fs.writeFileSync("/tmp/gh-aw/agent_output.json", JSON.stringify({
+            items: [{
+              type: "report_incomplete",
+              reason,
+              details: `No proposal or no-op is accepted. Inspect the agent job's restore and test logs: ${runUrl}`
+            }],
+            errors: []
+          }));
+          core.warning(reason);
+    - name: Checkout Aspire for staged preview
+      if: env.GH_AW_SAFE_OUTPUTS_STAGED == 'true' && needs.agent.result == 'success'
+      uses: actions/checkout@v6.0.2
+      with:
+        repository: microsoft/aspire
+        ref: 89b715e7941b8e538410210e4b244c8f1d4a95a0
+        persist-credentials: false
   create-pull-request:
     target-repo: microsoft/aspire
     base-branch: ellahathaway-hook-only-maintenance
@@ -260,7 +309,8 @@ Do not modify telemetry uploading, exporters, dependencies, or unrelated code.
 Apply these rules in order. An unresolved canonical MCP coverage mismatch must
 end in a fix or `report_incomplete`, never `noop`. If an existing Aspire
 proposal prevents the required fix, report it as incomplete and link the
-proposal instead. A no-op also requires the offline regression test to pass.
+proposal instead. Both proposals and no-ops require the workflow-owned
+verification in Step 4, including the offline regression test.
 
 1. Missing prerequisites or required evidence, failed required checks, and
    necessary changes outside the safe-output allowlist are blockers. Use
@@ -269,23 +319,25 @@ proposal instead. A no-op also requires the offline regression test to pass.
    closed without merging, does not cover the selected source commit, or an
    unresolved canonical MCP mismatch remains, use `report_incomplete` linking
    it. Otherwise, emit `noop` linking the existing proposal.
-3. If no updates are needed, existing telemetry covers the source PR's
-   behavior, the canonical MCP coverage check has no mismatches, and its
-   offline regression test passes, emit `noop` explaining the inspected evidence.
-4. Otherwise, verify the necessary telemetry changes and prepare the draft PR
-   as described below.
+3. If no updates are needed and existing telemetry covers the source PR's
+   behavior with no canonical MCP coverage mismatches, prepare `noop`
+   explaining the inspected evidence for workflow-owned verification.
+4. Otherwise, prepare the necessary telemetry changes and draft PR request
+   for workflow-owned verification as described below.
 
 ## Step 4: Write and Verify Telemetry Changes
 
-Run the repository's restore procedure as a separate command and check its
-exit code before starting tests. Keep restore diagnostics in the output or
-a readable log. If restore fails, stop and emit `report_incomplete` with the
-command and relevant error. Do not suppress diagnostics or mask the exit
-code with a pipeline or a command that continues after failure.
+The workflow's `Verify Aspire telemetry` post-step runs on the runner after
+the agent finishes, outside the agent sandbox. It checks PowerShell, runs
+the repository's restore procedure, then runs the required catalog, managed
+hook, command, configurator, installer, and compatibility-script tests.
+Restore and test failures stop that step and retain their diagnostics in
+the job log. A failed agent job replaces any proposal or no-op with
+`report_incomplete` before safe-output processing.
 
-After restore succeeds, run the existing targeted Aspire CLI tests for the
-managed hook, catalog, command, and both compatibility scripts. Do not weaken
-tests to make an update pass.
+Do not run restore or this required test suite inside the agent sandbox.
+Do not weaken tests, skip PowerShell coverage, or dismiss failures as
+environmental. Prepare the changes for workflow-owned verification.
 
 Stage only intentional telemetry code, scripts, tests, and documentation.
 Never stage `.agents`, `.github`, or `AGENTS.md`; these contain runtime
@@ -300,8 +352,10 @@ Prepare a title and body that include:
 - The skill, extension, and canonical MCP changes reviewed, their impact on
   Aspire telemetry, and any behavior already covered by Aspire.
 - The necessary telemetry changes and associated tests.
-- Commands run, outcomes, and any remaining cross-platform review needs.
+- Commands run and any remaining cross-platform review needs. State that
+  required restore and tests run in the workflow post-step; do not claim
+  results that have not run yet.
 
-Emit `create_pull_request` exactly once, after writing and verifying the
-changes, then stop. The framework stages this request without publishing it.
-Do not retry a deterministic failure or publish manually.
+Emit `create_pull_request` exactly once after preparing the changes, then
+stop. The workflow verifies them before previewing the proposal, without
+publishing it. Do not retry a deterministic failure or publish manually.
