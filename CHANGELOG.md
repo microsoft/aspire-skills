@@ -14,6 +14,8 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   Aspire CLI delivery requires refreshing its embedded skill bundle and metadata.
 
 ### Removed
+- Removed embedded `.tgz` bundle generation and uploads. Releases now publish
+  reviewed source and approved changelog notes without generated archives.
 - Moved `track-telemetry.sh` and `track-telemetry.ps1` from this repository to
   `microsoft/aspire`.
 
