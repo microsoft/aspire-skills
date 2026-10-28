@@ -72,8 +72,12 @@ Configure `ASPIRE_BOT_APP_ID` and `ASPIRE_BOT_PRIVATE_KEY` as repository secrets
 Source research uses a read-only GitHub CLI proxy. Optional maintenance is
 disabled in `.github/workflows/aw.json`. Regenerate the compiled workflow with
 gh-aw v0.89.17 after editing its source or configuration.
-Dependency restore must succeed before targeted tests begin. Restore failures
-retain diagnostics and produce an incomplete outcome rather than an unverified PR.
+Workflow-owned post-steps run dependency restore and all targeted telemetry tests
+on the runner, outside the agent sandbox. Required PowerShell coverage is included.
+Restore must succeed before tests begin. Any failed agent or verification step
+replaces proposals and no-ops with an incomplete outcome before output processing;
+the agent cannot override a failing check. Dry-run previews use a read-only Aspire
+checkout, without persisting Git credentials or enabling publication.
 
 ### Manual runs
 
