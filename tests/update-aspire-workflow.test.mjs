@@ -223,6 +223,18 @@ test("the assessment covers extensions and requires canonical MCP regression cov
   assert.match(markdown, /mismatch must[\s\S]+never `noop`/);
 });
 
+test("verification permits the required package feed and stops after restore failures", () => {
+  assert.ok(source.network.allowed.includes("dnceng.pkgs.visualstudio.com"));
+  assert.ok(!source.network.allowed.includes("*"));
+  const verification = markdown.split("## Step 4: Write and Verify Telemetry Changes")[1]
+    .split("## Step 5:")[0];
+  assert.match(verification, /restore procedure as a separate command/);
+  assert.match(verification, /check its\s+exit code before starting tests/);
+  assert.match(verification, /If restore fails, stop and emit `report_incomplete`/);
+  assert.match(verification, /Do not suppress diagnostics or mask the exit\s+code/);
+  assert.match(verification, /After restore succeeds, run the existing targeted Aspire CLI tests/);
+});
+
 test("repository-scoped App credentials use the configured bot secrets", () => {
   const token = source["pre-agent-steps"].find(step => step.id === "github-read-token");
   assert.ok(token);
