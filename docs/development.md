@@ -51,3 +51,46 @@ Publishing uses `GITHUB_TOKEN`; no repo bot or stored automation credentials
 are needed. Maintainers create PRs and approve merges. Tags and releases are
 published in the same run because workflow-token tag pushes do not trigger
 another workflow. Reruns must preserve the tag's commit and approved notes.
+
+## Aspire telemetry maintenance
+
+`.github/workflows/update-aspire.md` runs when a PR targeting `main` merges,
+or manually for a selected PR, following Aspire's documentation-workflow
+pattern. It assesses skill and extension behavior and opens draft PRs in
+`microsoft/aspire` only when telemetry or its regression coverage needs updates.
+It reads source directly; it does not publish, acquire, or refresh embedded
+bundles. Bundle support is retired separately in
+[#74](https://github.com/microsoft/aspire-skills/pull/74), which lands first.
+Each review also checks `KnownMcpTools.All` against both compatibility scripts
+and managed-hook classification, even when skill and extension inventories
+are unchanged. An offline regression test must guard coverage before a no-op
+is allowed.
+[microsoft/aspire#20947](https://github.com/microsoft/aspire/pull/20947) is the
+prerequisite for Aspire-owned scripts and retirement of the old bundle machinery.
+`aspire-repo-bot[bot]` is allowlisted; the App must cover both repositories.
+Configure `ASPIRE_BOT_APP_ID` and `ASPIRE_BOT_PRIVATE_KEY` as repository secrets.
+Source research uses a read-only GitHub CLI proxy. Optional maintenance is
+disabled in `.github/workflows/aw.json`. Regenerate the compiled workflow with
+gh-aw v0.89.17 after editing its source or configuration.
+Workflow-owned post-steps run dependency restore and all targeted telemetry tests
+on the runner, outside the agent sandbox. Required PowerShell coverage is included.
+Restore must succeed before tests begin. Any failed agent or verification step
+replaces proposals and no-ops with an incomplete outcome before output processing;
+the agent cannot override a failing check. Dry-run previews use a read-only Aspire
+checkout, without persisting Git credentials or enabling publication.
+
+### Manual runs
+
+After the workflow is registered on `main`, open **Actions > Update Aspire
+telemetry > Run workflow** and enter `pr_number` for a PR targeting `main`.
+Like the documentation workflow, manual runs do not require a merged PR.
+Leave the optional `dry_run` checkbox unchecked (the default) for normal draft
+PR publication, or check it to stage outputs
+without publishing PRs or diagnostic issues. Both modes run the same review
+and checks; inspect the Actions summary and artifacts for dry-run previews.
+Merge-triggered runs publish normally.
+
+Source reads use the PR's merge commit when merged, or its head commit when
+unmerged, independently of the workflow branch's SHA.
+Aspire-side prerequisite checks still apply; dry runs do not bypass ownership
+or bundle-retirement gates. Failed checks remain visible as failed runs.
