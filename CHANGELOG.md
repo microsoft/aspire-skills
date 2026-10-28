@@ -5,7 +5,7 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
 ### Added
-- Added release-driven Aspire telemetry review.
+- Added Aspire agent telemetry maintenance.
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
   reference files and SHA-512 content versions.
 - Added the default-selected `aspire-terminals` skill for resource PTYs, persistent
@@ -13,6 +13,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   Includes Aspire-specific VHS tape syntax/examples and stdout, `.txt` and
   `.ascii` output contracts, capability gates, routing and lifetime evaluations.
   Aspire CLI delivery requires refreshing its embedded skill bundle and metadata.
+
+### Removed
+- Removed duplicate `track-telemetry.sh` and `track-telemetry.ps1` scripts from
+  the plugin. The Aspire CLI owns and installs telemetry hooks.
 
 ## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)
 

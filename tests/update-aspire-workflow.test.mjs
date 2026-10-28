@@ -9,23 +9,44 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const workflowDirectory = join(repoRoot, ".github", "workflows");
 const markdown = readFileSync(join(workflowDirectory, "update-aspire.md"), "utf8");
 const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---/.exec(markdown);
-assert.ok(frontmatter, "release update workflow must have frontmatter");
+assert.ok(frontmatter, "telemetry update workflow must have frontmatter");
 const source = parse(frontmatter[1]);
 
-test("release updates allow the publishing App", () => {
-  assert.deepEqual(source.on.release.types, ["published"]);
+test("telemetry updates follow the merged-main and manual PR workflow pattern", () => {
+  assert.deepEqual(source.on.pull_request.types, ["closed"]);
+  assert.deepEqual(source.on.pull_request.branches, ["main"]);
+  assert.equal(source.on["stale-check"], false);
+  assert.equal(source.on.release, undefined);
   assert.deepEqual(source.on.bots, ["aspire-repo-bot[bot]"]);
+  const shouldRun = new Function("github", `return (${source.if});`);
+  for (const [eventName, merged, expected] of [
+    ["pull_request", true, true],
+    ["pull_request", false, false],
+    ["workflow_dispatch", false, true]
+  ]) {
+    assert.equal(shouldRun({
+      repository: "microsoft/aspire-skills",
+      event_name: eventName,
+      event: { pull_request: { merged } }
+    }), expected);
+  }
+  assert.equal(shouldRun({
+    repository: "example/fork",
+    event_name: "workflow_dispatch",
+    event: { pull_request: { merged: false } }
+  }), false);
 });
 
 test("manual dispatches support an optional dry-run boolean and live runs by default", () => {
-  const input = source.on.workflow_dispatch.inputs.release_tag;
+  const input = source.on.workflow_dispatch.inputs.pr_number;
   assert.equal(input.required, true);
   assert.equal(input.type, "string");
+  assert.equal(source.on.workflow_dispatch.inputs.release_tag, undefined);
   const dryRunInput = source.on.workflow_dispatch.inputs.dry_run;
   assert.equal(dryRunInput.required, false);
   assert.equal(dryRunInput.type, "boolean");
   assert.equal(dryRunInput.default, false);
-  assert.equal(source.env.RELEASE_TAG, "${{ github.event.release.tag_name || inputs.release_tag }}");
+  assert.equal(source.env.SOURCE_PR_NUMBER, "${{ github.event.pull_request.number || inputs.pr_number }}");
   const dryRunExpression = "${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}";
   assert.equal(source.env.DRY_RUN, dryRunExpression);
   assert.equal(source["safe-outputs"].staged, dryRunExpression);
@@ -38,8 +59,8 @@ test("manual dispatches support an optional dry-run boolean and live runs by def
     ["workflow_dispatch", false, false],
     ["workflow_dispatch", true, true],
     ["workflow_dispatch", undefined, false],
-    ["release", undefined, false],
-    ["release", true, false]
+    ["pull_request", undefined, false],
+    ["pull_request", true, false]
   ]) {
     const evaluate = expression => new Function("github", "inputs", `return (${expression.slice(3, -2)});`)(
       { event_name: eventName }, { dry_run: dryRun }
@@ -52,39 +73,72 @@ test("manual dispatches support an optional dry-run boolean and live runs by def
   assert.equal(source["safe-outputs"]["report-failed-jobs"], false);
 });
 
-async function resolveReleaseContext({
-  tag = "v0.0.4",
+async function resolvePrContext({
+  value = "123",
   eventName = "workflow_dispatch",
   dryRun = false,
-  eventSha = "b".repeat(40),
-  commit = "a".repeat(40),
-  draft = false,
-  lookupError
+  merged = false,
+  headCommit = "a".repeat(40),
+  mergeCommit = "c".repeat(40),
+  eventCommit = "c".repeat(40),
+  base = "main",
+  baseRepository = "microsoft/aspire-skills",
+  changedFiles = [{
+    filename: "extensions/example/extension.mjs",
+    status: "modified",
+    additions: 2,
+    deletions: 1,
+    patch: "@@ -1 +1 @@\n-old\n+new"
+  }],
+  fileCount = changedFiles.length,
+  lookupError,
+  filesError
 } = {}) {
-  const step = source["pre-agent-steps"].find(item => item.id === "release-context");
+  const step = source["pre-agent-steps"].find(item => item.id === "source-pr");
   assert.ok(step);
   const repository = { owner: "microsoft", repo: "aspire-skills" };
   let result;
+  let cachedFiles;
   const github = {
     rest: {
-      repos: {
-        async getReleaseByTag(parameters) {
-          assert.deepEqual(parameters, { ...repository, tag });
+      pulls: {
+        async get(parameters) {
+          assert.deepEqual(parameters, { ...repository, pull_number: Number(value) });
           if (lookupError) throw lookupError;
-          return { data: { tag_name: tag, draft, html_url: `https://github.com/microsoft/aspire-skills/releases/tag/${tag}` } };
+          return {
+            data: {
+              title: "Update extension behavior",
+              body: "Adjust the extension's resource command.",
+              merged,
+              changed_files: fileCount,
+              head: { sha: headCommit },
+              merge_commit_sha: mergeCommit,
+              base: { ref: base, repo: { full_name: baseRepository } },
+              html_url: `https://github.com/microsoft/aspire-skills/pull/${value}`
+            }
+          };
         },
-        async getCommit(parameters) {
-          assert.deepEqual(parameters, { ...repository, ref: `refs/tags/${tag}` });
-          return { data: { sha: commit } };
+        listFiles() {
+          assert.fail("PR files must be fetched with pagination.");
         }
       }
+    },
+    async paginate(method, parameters) {
+      assert.equal(method, github.rest.pulls.listFiles);
+      assert.deepEqual(parameters, { ...repository, pull_number: Number(value), per_page: 100 });
+      if (filesError) throw filesError;
+      return changedFiles;
     }
   };
   const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
   await new AsyncFunction("github", "context", "process", "require", step.with.script)(
     github,
-    { eventName, sha: eventSha },
-    { env: { RELEASE_TAG: tag, DRY_RUN: String(dryRun) } },
+    {
+      eventName,
+      sha: "b".repeat(40),
+      payload: { pull_request: { merge_commit_sha: eventCommit } }
+    },
+    { env: { SOURCE_PR_NUMBER: value, DRY_RUN: String(dryRun) } },
     moduleName => {
       assert.equal(moduleName, "node:fs");
       return {
@@ -93,43 +147,80 @@ async function resolveReleaseContext({
           assert.equal(options.recursive, true);
         },
         writeFileSync(path, content) {
-          assert.equal(path, "/tmp/gh-aw/agent/release-context.json");
-          result = JSON.parse(content);
+          if (path === "/tmp/gh-aw/agent/source-pr.json") {
+            result = JSON.parse(content);
+          } else {
+            assert.equal(path, "/tmp/gh-aw/agent/source-pr-files.json");
+            cachedFiles = JSON.parse(content);
+          }
         }
       };
     }
   );
+  assert.deepEqual(cachedFiles, changedFiles);
   return result;
 }
 
-test("manual dispatch resolves the selected release and defaults to live mode", async () => {
-  const result = await resolveReleaseContext();
-  assert.equal(result.tag, "v0.0.4");
+test("manual dispatch accepts an unmerged PR and pins its head rather than the workflow commit", async () => {
+  const result = await resolvePrContext();
+  assert.equal(result.number, 123);
+  assert.equal(result.title, "Update extension behavior");
+  assert.equal(result.body, "Adjust the extension's resource command.");
   assert.equal(result.commit, "a".repeat(40));
+  assert.equal(result.merged, false);
   assert.equal(result.dryRun, false);
-  assert.equal(result.url, "https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4");
+  assert.equal(result.url, "https://github.com/microsoft/aspire-skills/pull/123");
+  assert.deepEqual(result.changed_files, [{
+    filename: "extensions/example/extension.mjs",
+    status: "modified",
+    additions: 2,
+    deletions: 1
+  }]);
+});
+
+test("manual dispatch uses the merge commit for a merged source PR", async () => {
+  const result = await resolvePrContext({ merged: true });
+  assert.equal(result.commit, "c".repeat(40));
+  assert.equal(result.merged, true);
 });
 
 test("manual dispatch records dry-run mode only when requested", async () => {
-  const result = await resolveReleaseContext({ dryRun: true });
+  const result = await resolvePrContext({ dryRun: true });
   assert.equal(result.dryRun, true);
 });
 
-test("release events retain triggering-commit verification and live mode", async () => {
-  const result = await resolveReleaseContext({ eventName: "release", eventSha: "a".repeat(40), dryRun: true });
+test("automatic PR runs require the triggering merge and retain live mode", async () => {
+  const result = await resolvePrContext({ eventName: "pull_request", merged: true, dryRun: true });
   assert.equal(result.dryRun, false);
-  await assert.rejects(resolveReleaseContext({ eventName: "release" }), /triggering commit/);
+  assert.equal(result.commit, "c".repeat(40));
+  await assert.rejects(resolvePrContext({ eventName: "pull_request" }), /requires a merged PR/);
+  await assert.rejects(resolvePrContext({
+    eventName: "pull_request",
+    merged: true,
+    eventCommit: "d".repeat(40)
+  }), /triggering merge commit/);
 });
 
-test("release context rejects invalid tags, drafts, bad commits, and lookup failures", async () => {
-  for (const tag of ["", "0.0.4", "v01.0.0", "v1.0.0-01", "v0.0.4\n", "v0.0.4;echo injected"]) {
-    await assert.rejects(resolveReleaseContext({ tag }), /SemVer/);
+test("source PR context rejects bad numbers, wrong targets, bad commits, and lookup failures", async () => {
+  for (const value of ["", "0", "-1", "01", "1.5", "1e3", "123\n", "123;echo injected", "9007199254740992"]) {
+    await assert.rejects(resolvePrContext({ value }), /positive integer/);
   }
-  await assert.rejects(resolveReleaseContext({ draft: true }), /published release/);
-  await assert.rejects(resolveReleaseContext({ commit: "not-a-commit" }), /commit SHA/);
-  await assert.rejects(resolveReleaseContext({ lookupError: new Error("Release not found") }), /Release not found/);
-  const prerelease = await resolveReleaseContext({ tag: "v1.0.0-preview.1+build.7" });
-  assert.equal(prerelease.tag, "v1.0.0-preview.1+build.7");
+  await assert.rejects(resolvePrContext({ base: "dev" }), /must target/);
+  await assert.rejects(resolvePrContext({ baseRepository: "example/fork" }), /must target/);
+  await assert.rejects(resolvePrContext({ headCommit: "not-a-commit" }), /commit SHA/);
+  await assert.rejects(resolvePrContext({ merged: true, mergeCommit: null }), /commit SHA/);
+  await assert.rejects(resolvePrContext({ lookupError: new Error("PR not found") }), /PR not found/);
+  await assert.rejects(resolvePrContext({ fileCount: 2 }), /changed-file list is incomplete/);
+  await assert.rejects(resolvePrContext({ filesError: new Error("Cannot read PR files") }), /Cannot read PR files/);
+});
+
+test("the assessment covers extensions and requires canonical MCP regression coverage before no-op", () => {
+  assert.equal(source.name, "Update Aspire telemetry");
+  assert.match(source.description, /skills, extensions/);
+  assert.match(markdown, /`skills\/`[\s\S]+`extensions\/`/);
+  assert.match(markdown, /`KnownMcpTools\.All`/);
+  assert.match(markdown, /offline regression test/);
+  assert.match(markdown, /mismatch must[\s\S]+never `noop`/);
 });
 
 test("repository-scoped App credentials use the configured bot secrets", () => {
@@ -166,6 +257,7 @@ test("downstream proposals are draft-only and exclude bundle updates", () => {
   assert.equal(publication["target-repo"], "microsoft/aspire");
   assert.equal(publication["base-branch"], "main");
   assert.equal(publication.draft, true);
+  assert.equal(publication["title-prefix"], "[telemetry] ");
   assert.deepEqual(publication["allowed-branches"], ["update-aspire-telemetry-*"]);
   assert.equal(publication["protected-files"].policy, "blocked");
   assert.ok(publication["allowed-files"].every(path =>

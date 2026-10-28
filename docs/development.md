@@ -51,13 +51,19 @@ are needed. Maintainers create PRs and approve merges. Tags and releases are
 published in the same run because workflow-token tag pushes do not trigger
 another workflow. Reruns must preserve the tag's commit and approved notes.
 
-## Release-driven Aspire updates
+## Aspire telemetry maintenance
 
-`.github/workflows/update-aspire.md` runs on published releases and opens draft
-PRs in `microsoft/aspire` only when released skills or integration changes require
-telemetry updates. It compares release source and inventory directly; it does not
-publish, acquire, or refresh embedded bundles. Bundle support is retired separately
-in [#74](https://github.com/microsoft/aspire-skills/pull/74), which lands first.
+`.github/workflows/update-aspire.md` runs when a PR targeting `main` merges,
+or manually for a selected PR, following Aspire's documentation-workflow
+pattern. It assesses skill and extension behavior and opens draft PRs in
+`microsoft/aspire` only when telemetry or its regression coverage needs updates.
+It reads source directly; it does not publish, acquire, or refresh embedded
+bundles. Bundle support is retired separately in
+[#74](https://github.com/microsoft/aspire-skills/pull/74), which lands first.
+Each review also checks `KnownMcpTools.All` against both compatibility scripts
+and managed-hook classification, even when skill and extension inventories
+are unchanged. An offline regression test must guard coverage before a no-op
+is allowed.
 [microsoft/aspire#20947](https://github.com/microsoft/aspire/pull/20947) is the
 prerequisite for Aspire-owned scripts and retirement of the old bundle machinery.
 `aspire-repo-bot[bot]` is allowlisted; the App must cover both repositories.
@@ -69,13 +75,15 @@ gh-aw v0.89.17 after editing its source or configuration.
 ### Manual runs
 
 After the workflow is registered on `main`, open **Actions > Update Aspire
-telemetry from skills release > Run workflow** and enter a published
-`release_tag`, such as `v0.0.4`. Leave the optional `dry_run` checkbox unchecked
-(the default) for normal draft PR publication, or check it to stage outputs
+telemetry > Run workflow** and enter `pr_number` for a PR targeting `main`.
+Like the documentation workflow, manual runs do not require a merged PR.
+Leave the optional `dry_run` checkbox unchecked (the default) for normal draft
+PR publication, or check it to stage outputs
 without publishing PRs or diagnostic issues. Both modes run the same review
 and checks; inspect the Actions summary and artifacts for dry-run previews.
-Release-triggered runs continue to publish normally.
+Merge-triggered runs publish normally.
 
-The selected tag is resolved independently of the workflow branch's SHA.
+Source reads use the PR's merge commit when merged, or its head commit when
+unmerged, independently of the workflow branch's SHA.
 Aspire-side prerequisite checks still apply; dry runs do not bypass ownership
 or bundle-retirement gates. Failed checks remain visible as failed runs.
