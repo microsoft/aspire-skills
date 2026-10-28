@@ -54,9 +54,14 @@ another workflow. Reruns must preserve the tag's commit and approved notes.
 ## Release-driven Aspire updates
 
 `.github/workflows/update-aspire.md` runs on published releases and opens draft
-PRs in `microsoft/aspire` for bundle and telemetry updates. Aspire must own its
-telemetry scripts and retire its old bundle updater before enabling this flow.
+PRs in `microsoft/aspire` only when released skills or integration changes require
+telemetry updates. It compares release source and inventory directly; it does not
+publish, acquire, or refresh embedded bundles. Bundle support is retired separately
+in [#74](https://github.com/microsoft/aspire-skills/pull/74), which lands first.
+[microsoft/aspire#20947](https://github.com/microsoft/aspire/pull/20947) is the
+prerequisite for Aspire-owned scripts and retirement of the old bundle machinery.
 `aspire-repo-bot[bot]` is allowlisted; the App must cover both repositories.
-Bundle commands use a read-only GitHub CLI proxy. Optional maintenance is
-disabled in `.github/workflows/aw.json`.
-Regenerate the compiled workflow after editing its source or configuration.
+Configure `ASPIRE_BOT_APP_ID` and `ASPIRE_BOT_PRIVATE_KEY` as repository secrets.
+Source research uses a read-only GitHub CLI proxy. Optional maintenance is
+disabled in `.github/workflows/aw.json`. Regenerate the compiled workflow with
+gh-aw v0.89.17 after editing its source or configuration.

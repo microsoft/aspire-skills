@@ -262,6 +262,9 @@ In that command, `-a github-copilot` selects the target agent, `-g` installs glo
 | `.github/plugins/aspire-skills/` | Published plugin mirror |
 | `evals/` | Shared evaluation fixtures and helpers |
 
+Aspire CLI owns agent telemetry hooks and their tests in `microsoft/aspire`.
+The plugins do not register telemetry hooks.
+
 ## Development
 
 Regenerate the OpenCode catalogs after changing shipped skills, references, or
@@ -283,11 +286,12 @@ npm run bundle
 
 | Artifact | Contents |
 |----------|----------|
-| `aspire-skills-v<version>.tgz` | Agent skill files and `skill-manifest.json` with SHA-256/SHA-512 file hashes |
+| `aspire-skills-v<version>.tgz` | Agent skill files, canonical telemetry hooks, and `skill-manifest.json` with hook commit/SHA-512 provenance |
 | `aspire-extensions-v<version>.tgz` | GitHub Copilot app canvas extension files and `extension-manifest.json` |
 
-Aspire CLI owns agent telemetry hooks and their tests in `microsoft/aspire`.
-This repository does not ship telemetry scripts or embed them in either bundle.
+The skills manifest records the release commit and LF-normalized SHA-512 hash for
+each file under `hooks/scripts/`. Downstream consumers can copy the `hooks` object
+directly instead of maintaining hook provenance separately.
 
 Use `npm run bundle:skills` or `npm run bundle:extensions` to build one bundle type.
 

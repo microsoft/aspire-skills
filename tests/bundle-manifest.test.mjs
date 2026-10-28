@@ -3,11 +3,13 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+const sourceArgs = process.env.ASPIRE_TEST_SOURCE_COMMIT
+  ? ["--source-commit", process.env.ASPIRE_TEST_SOURCE_COMMIT] : [];
 
 test("bundle manifests support Aspire 13.5 and 13.6 with compatible SHA-256/SHA-512 file hashes", () => {
   const outputRoot = mkdtempSync(join(tmpdir(), "aspire-bundle-manifest-"));
@@ -18,7 +20,8 @@ test("bundle manifests support Aspire 13.5 and 13.6 with compatible SHA-256/SHA-
       [
         join(repoRoot, "scripts", "build-aspire-bundles.mjs"),
         "--version", "9.9.9",
-        "--out", outputRoot
+        "--out", outputRoot,
+        ...sourceArgs
       ],
       { cwd: repoRoot, encoding: "utf8" }
     );
@@ -91,7 +94,8 @@ test("both bundles preserve independent CLI and SDK support overrides", () => {
         "--version", "9.9.9",
         "--out", outputRoot,
         "--supports-aspire-cli", supports.aspireCli,
-        "--supports-aspire-sdk", supports.aspireSdk
+        "--supports-aspire-sdk", supports.aspireSdk,
+        ...sourceArgs
       ],
       { cwd: repoRoot, encoding: "utf8" }
     );
@@ -126,17 +130,7 @@ function assertManifestHashes({
   const entries = manifest[entriesProperty];
 
   assert.deepEqual(manifest.supports, expectedSupports);
-  assert.equal(Object.hasOwn(manifest, "hooks"), false, `${manifestName} must not contain hook provenance.`);
   assert.ok(entries.length > 0, `${manifestName} must contain ${entriesProperty}.`);
-
-  const archive = spawnSync("tar", ["-tzf", `${bundleRoot}.tgz`], { encoding: "utf8" });
-  assert.equal(archive.status, 0, archive.stderr);
-  const archivedPaths = archive.stdout.replaceAll("\\", "/").trim().split(/\r?\n/);
-  const hooksPath = `${basename(bundleRoot)}/hooks`;
-  assert.ok(
-    archivedPaths.every(path => path !== hooksPath && !path.startsWith(`${hooksPath}/`)),
-    `${manifestName} archive must not contain embedded telemetry hooks.`
-  );
 
   for (const entry of entries) {
     assert.ok(entry.files.length > 0, `${entry.name} must contain files.`);
