@@ -65,3 +65,17 @@ Configure `ASPIRE_BOT_APP_ID` and `ASPIRE_BOT_PRIVATE_KEY` as repository secrets
 Source research uses a read-only GitHub CLI proxy. Optional maintenance is
 disabled in `.github/workflows/aw.json`. Regenerate the compiled workflow with
 gh-aw v0.89.17 after editing its source or configuration.
+
+### Manual runs
+
+After the workflow is registered on `main`, open **Actions > Update Aspire
+telemetry from skills release > Run workflow** and enter a published
+`release_tag`, such as `v0.0.4`. Leave the optional `dry_run` checkbox unchecked
+(the default) for normal draft PR publication, or check it to stage outputs
+without publishing PRs or diagnostic issues. Both modes run the same review
+and checks; inspect the Actions summary and artifacts for dry-run previews.
+Release-triggered runs continue to publish normally.
+
+The selected tag is resolved independently of the workflow branch's SHA.
+Aspire-side prerequisite checks still apply; dry runs do not bypass ownership
+or bundle-retirement gates. Failed checks remain visible as failed runs.

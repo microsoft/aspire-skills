@@ -17,6 +17,121 @@ test("release updates allow the publishing App", () => {
   assert.deepEqual(source.on.bots, ["aspire-repo-bot[bot]"]);
 });
 
+test("manual dispatches support an optional dry-run boolean and live runs by default", () => {
+  const input = source.on.workflow_dispatch.inputs.release_tag;
+  assert.equal(input.required, true);
+  assert.equal(input.type, "string");
+  const dryRunInput = source.on.workflow_dispatch.inputs.dry_run;
+  assert.equal(dryRunInput.required, false);
+  assert.equal(dryRunInput.type, "boolean");
+  assert.equal(dryRunInput.default, false);
+  assert.equal(source.env.RELEASE_TAG, "${{ github.event.release.tag_name || inputs.release_tag }}");
+  const dryRunExpression = "${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}";
+  assert.equal(source.env.DRY_RUN, dryRunExpression);
+  assert.equal(source["safe-outputs"].staged, dryRunExpression);
+  const issueExpressions = [
+    source["safe-outputs"]["report-failure-as-issue"],
+    source["safe-outputs"]["missing-tool"]["create-issue"],
+    source["safe-outputs"]["report-incomplete"]["create-issue"]
+  ];
+  for (const [eventName, dryRun, staged] of [
+    ["workflow_dispatch", false, false],
+    ["workflow_dispatch", true, true],
+    ["workflow_dispatch", undefined, false],
+    ["release", undefined, false],
+    ["release", true, false]
+  ]) {
+    const evaluate = expression => new Function("github", "inputs", `return (${expression.slice(3, -2)});`)(
+      { event_name: eventName }, { dry_run: dryRun }
+    );
+    assert.equal(Boolean(evaluate(source["safe-outputs"].staged)), staged);
+    for (const expression of issueExpressions) {
+      assert.equal(evaluate(expression), !staged);
+    }
+  }
+  assert.equal(source["safe-outputs"]["report-failed-jobs"], false);
+});
+
+async function resolveReleaseContext({
+  tag = "v0.0.4",
+  eventName = "workflow_dispatch",
+  dryRun = false,
+  eventSha = "b".repeat(40),
+  commit = "a".repeat(40),
+  draft = false,
+  lookupError
+} = {}) {
+  const step = source["pre-agent-steps"].find(item => item.id === "release-context");
+  assert.ok(step);
+  const repository = { owner: "microsoft", repo: "aspire-skills" };
+  let result;
+  const github = {
+    rest: {
+      repos: {
+        async getReleaseByTag(parameters) {
+          assert.deepEqual(parameters, { ...repository, tag });
+          if (lookupError) throw lookupError;
+          return { data: { tag_name: tag, draft, html_url: `https://github.com/microsoft/aspire-skills/releases/tag/${tag}` } };
+        },
+        async getCommit(parameters) {
+          assert.deepEqual(parameters, { ...repository, ref: `refs/tags/${tag}` });
+          return { data: { sha: commit } };
+        }
+      }
+    }
+  };
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+  await new AsyncFunction("github", "context", "process", "require", step.with.script)(
+    github,
+    { eventName, sha: eventSha },
+    { env: { RELEASE_TAG: tag, DRY_RUN: String(dryRun) } },
+    moduleName => {
+      assert.equal(moduleName, "node:fs");
+      return {
+        mkdirSync(path, options) {
+          assert.equal(path, "/tmp/gh-aw/agent");
+          assert.equal(options.recursive, true);
+        },
+        writeFileSync(path, content) {
+          assert.equal(path, "/tmp/gh-aw/agent/release-context.json");
+          result = JSON.parse(content);
+        }
+      };
+    }
+  );
+  return result;
+}
+
+test("manual dispatch resolves the selected release and defaults to live mode", async () => {
+  const result = await resolveReleaseContext();
+  assert.equal(result.tag, "v0.0.4");
+  assert.equal(result.commit, "a".repeat(40));
+  assert.equal(result.dryRun, false);
+  assert.equal(result.url, "https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4");
+});
+
+test("manual dispatch records dry-run mode only when requested", async () => {
+  const result = await resolveReleaseContext({ dryRun: true });
+  assert.equal(result.dryRun, true);
+});
+
+test("release events retain triggering-commit verification and live mode", async () => {
+  const result = await resolveReleaseContext({ eventName: "release", eventSha: "a".repeat(40), dryRun: true });
+  assert.equal(result.dryRun, false);
+  await assert.rejects(resolveReleaseContext({ eventName: "release" }), /triggering commit/);
+});
+
+test("release context rejects invalid tags, drafts, bad commits, and lookup failures", async () => {
+  for (const tag of ["", "0.0.4", "v01.0.0", "v1.0.0-01", "v0.0.4\n", "v0.0.4;echo injected"]) {
+    await assert.rejects(resolveReleaseContext({ tag }), /SemVer/);
+  }
+  await assert.rejects(resolveReleaseContext({ draft: true }), /published release/);
+  await assert.rejects(resolveReleaseContext({ commit: "not-a-commit" }), /commit SHA/);
+  await assert.rejects(resolveReleaseContext({ lookupError: new Error("Release not found") }), /Release not found/);
+  const prerelease = await resolveReleaseContext({ tag: "v1.0.0-preview.1+build.7" });
+  assert.equal(prerelease.tag, "v1.0.0-preview.1+build.7");
+});
+
 test("repository-scoped App credentials use the configured bot secrets", () => {
   const token = source["pre-agent-steps"].find(step => step.id === "github-read-token");
   assert.ok(token);
