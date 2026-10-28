@@ -13,6 +13,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   `.ascii` output contracts, capability gates, routing and lifetime evaluations.
   Aspire CLI delivery requires refreshing its embedded skill bundle and metadata.
 
+### Removed
+- Removed embedded `.tgz` bundle generation and uploads. Releases now publish
+  reviewed source and approved changelog notes without generated archives.
+
 ## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)
 
 ### Changed
