@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import vm from "node:vm";
+import { sanitizeCommandArgumentInputs } from "../extensions/aspire-apphosts/lib/app-model.mjs";
 
 const rendererSource = await readFile(new URL("../extensions/aspire-apphosts/ui/app.js", import.meta.url), "utf8");
 const markup = await readFile(new URL("../extensions/aspire-apphosts/ui/index.html", import.meta.url), "utf8");
@@ -527,6 +528,17 @@ test("secret-gated forms load effective non-secret defaults before Continue", as
     assert.equal(button(renderer.document.body, "Run command").disabled, false);
     button(renderer.document.body, "Run command").click();
     assert.deepEqual(renderer.request("/api/command").body.arguments, load.body.arguments);
+});
+
+test("text defaults keep their surrounding spaces in command forms and submissions", async () => {
+    const renderer = await boot();
+    const value = "  hello world  ";
+    const fields = sanitizeCommandArgumentInputs([{ name: "message", inputType: "Text", value }]);
+    await renderer.push({ type: "state", state: commandSnapshot(2, fields) });
+    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    assert.equal(renderer.document.querySelector('[name="message"]').value, value);
+    button(renderer.document.body, "Run command").click();
+    assert.deepEqual(renderer.request("/api/command").body.arguments, { message: value });
 });
 
 test("live base schema changes reload an open form and supersede pending old-schema inputs", async () => {

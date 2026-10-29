@@ -491,6 +491,43 @@ test("resource command arguments use the CLI delimiter and declared input names"
     ]);
 });
 
+test("text command defaults retain whitespace through projection, validation, and CLI arguments", () => {
+    const text = "  hello world  ";
+    const customChoice = "  custom region  ";
+    const argumentInputs = sanitizeCommandArgumentInputs([
+        { name: "message", inputType: "Text", value: text },
+        {
+            name: "region", inputType: "Choice", value: customChoice,
+            allowCustomChoice: true, options: ["west"],
+        },
+    ]);
+
+    assert.equal(argumentInputs[0].value, text);
+    assert.equal(argumentInputs[1].value, customChoice);
+    const validation = validateCommandArguments({ argumentInputs }, {
+        message: argumentInputs[0].value,
+        region: argumentInputs[1].value,
+    });
+    assert.equal(validation.ok, true);
+    assert.deepEqual(buildCommandArgumentTokens(validation.values), [
+        "--", `--message=${text}`, `--region=${customChoice}`,
+    ]);
+});
+
+test("overlength text command defaults are rejected rather than silently shortened", () => {
+    const value = "  hello  ";
+    const argumentInputs = sanitizeCommandArgumentInputs([
+        { name: "message", inputType: "Text", value, maxLength: 5 },
+    ]);
+    assert.equal(argumentInputs[0].value, value);
+    const validation = validateCommandArguments({ argumentInputs }, { message: argumentInputs[0].value });
+    assert.equal(validation.ok, false);
+    assert.deepEqual(validation.errors, [{
+        argumentName: "message",
+        errorMessage: "message must be 5 characters or fewer.",
+    }]);
+});
+
 test("redactText strips common token and secret forms", () => {
     const value = redactText(
         "\u001b[31mfailed\u001b[0m https://localhost/login?t=abc123 password=hunter2 API_KEY: value",

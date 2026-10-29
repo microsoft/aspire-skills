@@ -346,9 +346,9 @@ function sanitizeArgumentInput(raw) {
         : [];
     const options = sanitizeOptions(raw.options);
     const allowCustomChoice = raw.allowCustomChoice === true;
-    const value = inputType.toLowerCase().includes("secret")
+    const value = raw.value == null || inputType.toLowerCase().includes("secret")
         ? undefined
-        : optionalText(raw.value, Number.isFinite(maxLength) && maxLength > 0 ? Math.min(maxLength, 100_000) : 100_000);
+        : String(raw.value);
     const safeValue = value && options.length > 0 && !allowCustomChoice
         ? options.some((option) => option.value === value) ? value : undefined
         : value;

@@ -17,6 +17,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Removed embedded `.tgz` bundle generation and uploads. Releases now publish
   reviewed source and approved changelog notes without generated archives.
 
+### Fixed
+- Preserve exact non-secret AppHosts command defaults instead of trimming or
+  shortening argument data before validation and execution.
+
 ## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)
 
 ### Changed
