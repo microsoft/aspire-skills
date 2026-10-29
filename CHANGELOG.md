@@ -4,6 +4,18 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
+### Changed
+- Distinguished ordinary `aspire stop`, `aspire stop --force` (which preserves
+  persistent volumes), and explicitly approved AppHost-wide `--volumes` cleanup, including
+  its ownership and compatibility limits. Stale-password recovery now prefers restoring
+  the password or a targeted reset and treats `--volumes` as a broader, approved option.
+- Keep distinct Aspireify proposal snapshots for POSIX AppHost paths containing
+  literal backslashes instead of treating those characters as directory separators.
+- Keep AppHosts in workspace child directories beginning with `..` visible and
+  allow their source files to open without admitting paths outside the workspace.
+- Preserve non-ASCII Aspire Doctor output when UTF-8 characters span subprocess
+  chunks, including check messages, paths, and error diagnostics.
+
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
   reference files and SHA-512 content versions.
@@ -12,10 +24,6 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   Includes Aspire-specific VHS tape syntax/examples and stdout, `.txt` and
   `.ascii` output contracts, capability gates, routing and lifetime evaluations.
   Aspire CLI delivery requires refreshing its embedded skill bundle and metadata.
-
-### Changed
-- Preserve non-ASCII Aspire Doctor output when UTF-8 characters span subprocess
-  chunks, including check messages, paths, and error diagnostics.
 
 ### Removed
 - Removed embedded `.tgz` bundle generation and uploads. Releases now publish
