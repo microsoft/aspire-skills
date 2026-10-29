@@ -491,7 +491,7 @@ test("resource command arguments use the CLI delimiter and declared input names"
     ]);
 });
 
-test("text command defaults retain whitespace through projection, validation, and CLI arguments", () => {
+test("text command defaults and submissions use Hosting whitespace normalization", () => {
     const text = "  hello world  ";
     const customChoice = "  custom region  ";
     const argumentInputs = sanitizeCommandArgumentInputs([
@@ -502,30 +502,61 @@ test("text command defaults retain whitespace through projection, validation, an
         },
     ]);
 
-    assert.equal(argumentInputs[0].value, text);
-    assert.equal(argumentInputs[1].value, customChoice);
+    assert.equal(argumentInputs[0].value, "hello world");
+    assert.equal(argumentInputs[1].value, "custom region");
     const validation = validateCommandArguments({ argumentInputs }, {
-        message: argumentInputs[0].value,
-        region: argumentInputs[1].value,
+        message: text,
+        region: customChoice,
     });
     assert.equal(validation.ok, true);
     assert.deepEqual(buildCommandArgumentTokens(validation.values), [
-        "--", `--message=${text}`, `--region=${customChoice}`,
+        "--", "--message=hello world", "--region=custom region",
     ]);
 });
 
 test("overlength text command defaults are rejected rather than silently shortened", () => {
-    const value = "  hello  ";
+    const value = "  hello world  ";
     const argumentInputs = sanitizeCommandArgumentInputs([
         { name: "message", inputType: "Text", value, maxLength: 5 },
     ]);
-    assert.equal(argumentInputs[0].value, value);
+    assert.equal(argumentInputs[0].value, "hello world");
     const validation = validateCommandArguments({ argumentInputs }, { message: argumentInputs[0].value });
     assert.equal(validation.ok, false);
     assert.deepEqual(validation.errors, [{
         argumentName: "message",
         errorMessage: "message must be 5 characters or fewer.",
     }]);
+});
+
+test("text limits and fixed choices validate the Hosting-normalized value", () => {
+    const argumentInputs = sanitizeCommandArgumentInputs([
+        { name: "message", inputType: "Text", value: "\u0085  hello  \u0085", maxLength: 5 },
+        { name: "region", inputType: "Choice", value: "  west  ", options: ["west"] },
+        { name: "bom", inputType: "Text", value: "\uFEFFhello\uFEFF" },
+    ]);
+    assert.equal(argumentInputs[0].value, "hello");
+    assert.equal(argumentInputs[1].value, "west");
+    assert.equal(argumentInputs[2].value, "\uFEFFhello\uFEFF");
+    assert.deepEqual(validateCommandArguments({ argumentInputs }, {
+        message: "\u0085  hello  \u0085",
+        region: "  west  ",
+        bom: "\uFEFFhello\uFEFF",
+    }), {
+        ok: true,
+        values: { message: "hello", region: "west", bom: "\uFEFFhello\uFEFF" },
+        errors: [],
+    });
+});
+
+test("secret argument whitespace is preserved and is not treated as missing", () => {
+    const command = {
+        argumentInputs: [{ name: "token", inputType: "SecretText", required: true, maxLength: 2 }],
+    };
+    const validation = validateCommandArguments(command, { token: "  " });
+    assert.deepEqual(validation, { ok: true, values: { token: "  " }, errors: [] });
+    assert.deepEqual(buildCommandArgumentTokens(validation.values), ["--", "--token=  "]);
+    assert.equal(validateCommandArguments(command, { token: "" }).ok, false);
+    assert.equal(validateCommandArguments(command, { token: "   " }).ok, false);
 });
 
 test("redactText strips common token and secret forms", () => {

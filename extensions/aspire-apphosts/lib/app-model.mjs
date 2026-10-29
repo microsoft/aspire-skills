@@ -330,6 +330,13 @@ function sanitizeOptions(raw) {
     }));
 }
 
+function normalizeCommandValue(inputType, value) {
+    // Match .NET String.Trim: U+0085 is whitespace, but U+FEFF is not.
+    return typeof value === "string" && !inputType.toLowerCase().includes("secret")
+        ? value.replace(/^\p{White_Space}+|\p{White_Space}+$/gu, "")
+        : value;
+}
+
 function sanitizeArgumentInput(raw) {
     if (!isRecord(raw)) {
         return undefined;
@@ -348,7 +355,7 @@ function sanitizeArgumentInput(raw) {
     const allowCustomChoice = raw.allowCustomChoice === true;
     const value = raw.value == null || inputType.toLowerCase().includes("secret")
         ? undefined
-        : String(raw.value);
+        : normalizeCommandValue(inputType, String(raw.value));
     const safeValue = value && options.length > 0 && !allowCustomChoice
         ? options.some((option) => option.value === value) ? value : undefined
         : value;
@@ -1905,8 +1912,8 @@ export function validateCommandArguments(command, values) {
         if (input.disabled) {
             continue;
         }
-        const value = values[input.name];
-        const missing = value === undefined || value === null || (typeof value === "string" && value.trim() === "");
+        const value = normalizeCommandValue(input.inputType, values[input.name]);
+        const missing = value === undefined || value === null || value === "";
         if (missing) {
             if (input.required) {
                 errors.push({ argumentName: input.name, errorMessage: `${input.label || input.name} is required.` });

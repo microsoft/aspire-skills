@@ -543,7 +543,7 @@ test("loader and execution bind the same normalized number, boolean, and omitted
     assert.deepEqual(executedArgs.slice(executedArgs.indexOf("--") + 1), ["--count=1", "--flag=false"]);
 });
 
-test("describe and loaded text defaults reach command execution without rewriting", async (t) => {
+test("describe and loaded text defaults match Hosting before command execution", async (t) => {
     const h = await harness(t);
     const value = "  hello world  ";
     const fields = [{ name: "message", inputType: "Text", value }];
@@ -553,15 +553,38 @@ test("describe and loaded text defaults reach command execution without rewritin
     const request = await requestFor(h, open);
     const { state } = await h.request(open, "/api/state");
     const command = allNodes(state.roots).find((node) => node.kind === "command" && node.commandName === "deploy");
-    assert.equal(command.command.argumentInputs[0].value, value);
+    assert.equal(command.command.argumentInputs[0].value, "hello world");
     const loaded = await h.request(open, "/api/command-inputs", { ...request, arguments: { message: value } });
     assert.equal(loaded.ok, true);
-    assert.equal(loaded.inputs[0].value, value);
+    assert.equal(loaded.inputs[0].value, "hello world");
     assert.equal((await h.request(open, "/api/command", {
-        ...request, arguments: { message: loaded.inputs[0].value },
+        ...request, arguments: { message: value },
     })).ok, true);
     const executedArgs = h.commandCalls()[0].args;
-    assert.deepEqual(executedArgs.slice(executedArgs.indexOf("--") + 1), [`--message=${value}`]);
+    assert.deepEqual(executedArgs.slice(executedArgs.indexOf("--") + 1), ["--message=hello world"]);
+});
+
+test("loader and execution normalize text dependencies without trimming secrets", async (t) => {
+    const h = await harness(t);
+    const fields = [
+        { name: "message", inputType: "Text" },
+        { name: "token", inputType: "SecretText" },
+        { name: "target", inputType: "Text", dynamicLoading: { dependsOnInputs: ["message", "token"] } },
+    ];
+    h.controls.inputs = fields;
+    let loadedArgs;
+    h.controls.loader = async (args) => { loadedArgs = args; return ok(fields); };
+    const open = await h.open();
+    const request = await requestFor(h, open);
+    const body = { ...request, arguments: { message: "\u0085  hello world  \u0085", token: "  test-token  " } };
+    assert.equal((await h.request(open, "/api/command-inputs", body)).ok, true);
+    assert.ok(loadedArgs.includes("--message=hello world"));
+    assert.ok(loadedArgs.includes("--token=  test-token  "));
+    assert.equal((await h.request(open, "/api/command", body)).ok, true);
+    const executedArgs = h.commandCalls()[0].args;
+    assert.deepEqual(executedArgs.slice(executedArgs.indexOf("--") + 1), [
+        "--message=hello world", "--token=  test-token  ",
+    ]);
 });
 
 test("schema changes invalidate loaded metadata and reject in-flight old-schema results", async (t) => {

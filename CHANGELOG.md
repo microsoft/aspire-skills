@@ -18,8 +18,8 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   reviewed source and approved changelog notes without generated archives.
 
 ### Fixed
-- Preserve exact non-secret AppHosts command defaults instead of trimming or
-  shortening argument data before validation and execution.
+- Match Aspire Hosting's whitespace normalization for AppHosts command defaults
+  and submissions without silently shortening overlength values.
 
 ## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)
 

@@ -106,9 +106,11 @@ bounded request bodies.
   until matching inputs are loaded. Live schema changes and effective non-secret
   defaults are reconciled before execution; unstable metadata or an authority
   conflict exposes **Retry inputs** without automatically retrying the command.
-- Non-secret command defaults retain their exact text, including leading and
-  trailing spaces. Length limits are validated without trimming or shortening
-  defaults; secret defaults are removed before the model crosses into the renderer.
+- Non-secret command defaults and submitted values follow Aspire Hosting's
+  whitespace trimming. Forms show trimmed defaults and normalize edits when
+  committed or submitted. Length limits validate the normalized value without
+  shortening it. Secret defaults are removed before the model crosses into the
+  renderer, and submitted secret values are not trimmed.
 - Explicit Run, Stop, Deploy, Publish, and pipeline-step actions, with blocked
   operations explained in place and high-impact actions confirmed inline.
 - **View dashboard** opens the authenticated Aspire Dashboard in the registered

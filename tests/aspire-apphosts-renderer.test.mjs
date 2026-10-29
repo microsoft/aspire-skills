@@ -513,6 +513,46 @@ test("dependency edits immediately invalidate a pending load before the next deb
     assert.equal(button(renderer.document.body, "Run command").disabled, false);
 });
 
+test("committing normalized dependency text preserves pending and loaded metadata", async () => {
+    const renderer = await boot();
+    await openCommand(renderer);
+    enterField(renderer, "environment", "  production  ");
+    await renderer.advance(250);
+    const load = renderer.request("/api/command-inputs");
+    enterField(renderer, "environment", "  production  ", "change");
+    await renderer.respond(load, { ok: true, inputs: inputs() });
+    assert.equal(renderer.document.querySelector('[name="environment"]').value, "production");
+    assert.equal(button(renderer.document.body, "Run command").disabled, false);
+
+    enterField(renderer, "environment", "  production  ");
+    assert.equal(button(renderer.document.body, "Run command").disabled, false);
+    enterField(renderer, "environment", "  production  ", "change");
+    await renderer.advance(250);
+    assert.equal(renderer.requests.filter((request) => request.path === "/api/command-inputs").length, 2);
+    button(renderer.document.body, "Run command").click();
+    assert.deepEqual(renderer.request("/api/command").body.arguments, { environment: "production", target: "east" });
+});
+
+test("whitespace edits to secret dependencies still invalidate metadata", async () => {
+    const renderer = await boot();
+    const fields = inputs();
+    fields[0] = { ...fields[0], inputType: "SecretText" };
+    await renderer.push({ type: "state", state: commandSnapshot(2, fields) });
+    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
+    button(renderer.document.body, "Continue").click();
+    enterField(renderer, "environment", "  token  ");
+    await renderer.advance(250);
+    await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
+    enterField(renderer, "environment", "token");
+    assert.equal(button(renderer.document.body, "Loading inputs...").disabled, true);
+    await renderer.advance(250);
+    const load = renderer.request("/api/command-inputs");
+    assert.equal(load.body.arguments.environment, "token");
+    await renderer.respond(load, { ok: true, inputs: fields });
+    assert.equal(button(renderer.document.body, "Run command").disabled, false);
+});
+
 test("secret-gated forms load effective non-secret defaults before Continue", async () => {
     const renderer = await boot();
     const fields = [...inputs(), { name: "token", label: "Token", inputType: "SecretText", value: "never-use-default" }];
@@ -530,15 +570,54 @@ test("secret-gated forms load effective non-secret defaults before Continue", as
     assert.deepEqual(renderer.request("/api/command").body.arguments, load.body.arguments);
 });
 
-test("text defaults keep their surrounding spaces in command forms and submissions", async () => {
+test("text defaults match Hosting in command forms without shortening overlength values", async () => {
     const renderer = await boot();
-    const value = "  hello world  ";
-    const fields = sanitizeCommandArgumentInputs([{ name: "message", inputType: "Text", value }]);
+    const fields = sanitizeCommandArgumentInputs([
+        { name: "message", inputType: "Text", value: "  hello world  ", maxLength: 5 },
+    ]);
     await renderer.push({ type: "state", state: commandSnapshot(2, fields) });
     renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
-    assert.equal(renderer.document.querySelector('[name="message"]').value, value);
+    assert.equal(renderer.document.querySelector('[name="message"]').value, "hello world");
+    assert.equal(renderer.document.querySelector('[name="message"]').getAttribute("maxLength"), null);
     button(renderer.document.body, "Run command").click();
-    assert.deepEqual(renderer.request("/api/command").body.arguments, { message: value });
+    assert.deepEqual(renderer.request("/api/command").body.arguments, { message: "hello world" });
+});
+
+test("committing a text edit normalizes it without trimming spaces while typing", async () => {
+    const renderer = await boot();
+    await renderer.push({ type: "state", state: commandSnapshot(2, [
+        { name: "message", label: "Message", inputType: "Text" },
+    ]) });
+    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    enterField(renderer, "message", "  hello ");
+    assert.equal(renderer.document.querySelector('[name="message"]').value, "  hello ");
+    enterField(renderer, "message", "\u0085  hello world  \u0085", "change");
+    assert.equal(renderer.document.querySelector('[name="message"]').value, "hello world");
+    button(renderer.document.body, "Run command").click();
+    assert.deepEqual(renderer.request("/api/command").body.arguments, { message: "hello world" });
+});
+
+test("submission normalizes uncommitted text and custom choices while preserving secrets", async () => {
+    const renderer = await boot();
+    await renderer.push({ type: "state", state: commandSnapshot(2, [
+        { name: "message", label: "Message", inputType: "Text" },
+        { name: "region", label: "Region", inputType: "Choice", allowCustomChoice: true, options: [{ value: "west", label: "West" }] },
+        { name: "token", label: "Token", inputType: "SecretText" },
+    ]) });
+    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    button(renderer.document.body, "Continue").click();
+    enterField(renderer, "message", "\u0085  edited message  \u0085");
+    enterField(renderer, "region", "  \uFEFFcustom region\uFEFF  ");
+    enterField(renderer, "token", "  test-token  ");
+    renderer.document.querySelector(".command-form").dispatch("submit");
+    assert.equal(renderer.document.querySelector('[name="message"]').value, "edited message");
+    assert.equal(renderer.document.querySelector('[name="region"]').value, "\uFEFFcustom region\uFEFF");
+    assert.equal(renderer.document.querySelector('[name="token"]').value, "  test-token  ");
+    assert.deepEqual(renderer.request("/api/command").body.arguments, {
+        message: "edited message",
+        region: "\uFEFFcustom region\uFEFF",
+        token: "  test-token  ",
+    });
 });
 
 test("live base schema changes reload an open form and supersede pending old-schema inputs", async () => {
