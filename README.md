@@ -39,7 +39,7 @@ Choose the path that matches your agent host.
 ### Aspire CLI
 
 Aspire's first-party agent setup configures detected agent environments to load
-content from the [aspire-skills repository](https://github.com/microsoft/aspire-skills).
+content from the [`aspire-skills` repository](https://github.com/microsoft/aspire-skills).
 Aspire MCP server configuration is separate and opt-in.
 
 `aspire new` and `aspire init` offer agent setup without MCP configuration.
@@ -54,10 +54,6 @@ instead of copying bundled skill files.
 
 Standalone `aspire agent init` also offers MCP configuration, which is off by
 default. Non-interactive runs configure MCP only when you pass `--mcp`.
-
-Agent setup registers the Aspire plugin for GitHub Copilot or Claude Code, or
-the skill catalog for OpenCode. The agent client retrieves the content and
-controls updates.
 
 **Create a new Aspire app** and opt into agent guidance when prompted:
 
