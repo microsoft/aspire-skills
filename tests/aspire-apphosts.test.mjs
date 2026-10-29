@@ -21,6 +21,7 @@ import {
     filterTree,
     discoverConfiguredAppHosts,
     extractJsonPayload,
+    isPathWithin,
     mapWithConcurrency,
     normalizeLsPayload,
     normalizePsPayload,
@@ -48,6 +49,16 @@ function repoPath(...segments) {
 function appsPath(...segments) {
     return join(syntheticAppsRoot, ...segments);
 }
+
+test("workspace containment distinguishes dot-prefixed children from parent traversal", () => {
+    for (const child of ["..apphost", "...", "..", "src"]) {
+        const candidate = repoPath(child, "AppHost.cs");
+        assert.equal(isPathWithin(candidate, syntheticRepoRoot), child !== "..", child);
+    }
+    assert.equal(isPathWithin(syntheticRepoRoot, syntheticRepoRoot), true);
+    assert.equal(isPathWithin(appsPath("AppHost.cs"), syntheticRepoRoot), false);
+    assert.equal(isPathWithin(`${syntheticRepoRoot}-other`, syntheticRepoRoot), false);
+});
 
 test("extractJsonPayload ignores Aspire preambles and trailing text", () => {
     const payload = extractJsonPayload("Finding AppHost...\n{\n  \"resources\": [{\"name\":\"api\"}]\n}\nDone");
