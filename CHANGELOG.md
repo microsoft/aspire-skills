@@ -4,9 +4,15 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
-### Fixed
+### Changed
+- Distinguished ordinary `aspire stop`, `aspire stop --force` (which preserves
+  persistent volumes), and explicitly approved AppHost-wide `--volumes` cleanup, including
+  its ownership and compatibility limits. Stale-password recovery now prefers restoring
+  the password or a targeted reset and treats `--volumes` as a broader, approved option.
 - Keep distinct Aspireify proposal snapshots for POSIX AppHost paths containing
   literal backslashes instead of treating those characters as directory separators.
+- Keep AppHosts in workspace child directories beginning with `..` visible and
+  allow their source files to open without admitting paths outside the workspace.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
@@ -19,10 +25,6 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 
 ### Changed
 - Unified canvas styling and icons with shared assets that respect host themes.
-
-### Fixed
-- Keep AppHosts in workspace child directories beginning with `..` visible and
-  allow their source files to open without admitting paths outside the workspace.
 
 ### Removed
 - Removed embedded `.tgz` bundle generation and uploads. Releases now publish
