@@ -20,6 +20,8 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ### Fixed
 - Match Aspire Hosting's whitespace normalization for AppHosts command defaults
   and submissions without silently shortening overlength values.
+- Avoid stalls when editing command values containing long interior whitespace
+  by scanning only their ends during normalization.
 
 ## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)
 

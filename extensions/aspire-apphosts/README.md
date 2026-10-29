@@ -108,7 +108,8 @@ bounded request bodies.
   conflict exposes **Retry inputs** without automatically retrying the command.
 - Non-secret command defaults and submitted values follow Aspire Hosting's
   whitespace trimming. Forms show trimmed defaults and normalize edits when
-  committed or submitted. Length limits validate the normalized value without
+  committed or submitted. Trimming scans only the ends so long interior whitespace
+  does not stall editing. Length limits validate the normalized value without
   shortening it. Secret defaults are removed before the model crosses into the
   renderer, and submitted secret values are not trimmed.
 - Explicit Run, Stop, Deploy, Publish, and pipeline-step actions, with blocked

@@ -1933,10 +1933,16 @@ async function runAppHostOperation(appHostId, operation, step) {
 }
 
 function normalizeCommandValue(inputType, value) {
+    if (typeof value !== "string" || inputType.toLowerCase().includes("secret")) {
+        return value;
+    }
     // Match .NET String.Trim: U+0085 is whitespace, but U+FEFF is not.
-    return typeof value === "string" && !inputType.toLowerCase().includes("secret")
-        ? value.replace(/^\p{White_Space}+|\p{White_Space}+$/gu, "")
-        : value;
+    const whitespace = /\p{White_Space}/u;
+    let start = 0;
+    let end = value.length;
+    while (start < end && whitespace.test(value[start])) start++;
+    while (end > start && whitespace.test(value[end - 1])) end--;
+    return value.slice(start, end);
 }
 
 function commandDraft(node) {

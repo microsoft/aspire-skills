@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { runInNewContext } from "node:vm";
 import {
     AppHostOperationCoordinator,
     CommandInputMetadataStore,
@@ -512,6 +513,20 @@ test("text command defaults and submissions use Hosting whitespace normalization
     assert.deepEqual(buildCommandArgumentTokens(validation.values), [
         "--", "--message=hello world", "--region=custom region",
     ]);
+});
+
+test("long interior whitespace normalizes without blocking command defaults or validation", () => {
+    const value = `\u0085a${" ".repeat(64000)}b\u0085`;
+    const expected = value.slice(1, -1);
+    const result = runInNewContext(`(() => {
+        const argumentInputs = sanitizeCommandArgumentInputs([
+            { name: "message", inputType: "Text", value },
+        ]);
+        return { argumentInputs, validation: validateCommandArguments({ argumentInputs }, { message: value }) };
+    })()`, { sanitizeCommandArgumentInputs, validateCommandArguments, value }, { timeout: 1000 });
+    assert.equal(result.argumentInputs[0].value, expected);
+    assert.equal(result.validation.ok, true);
+    assert.equal(result.validation.values.message, expected);
 });
 
 test("overlength text command defaults are rejected rather than silently shortened", () => {

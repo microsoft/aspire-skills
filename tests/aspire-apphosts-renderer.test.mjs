@@ -278,7 +278,7 @@ function createRenderer({ transitions = false } = {}) {
     return {
         context, document, copied, requests, timers, frames, queuedTransitions,
         streamEvent: (name) => streams[0].handlers.get(name)(),
-        evaluate: (source) => vm.runInContext(source, context),
+        evaluate: (source, options) => vm.runInContext(source, context, options),
         state: () => vm.runInContext("modelState", context),
         request: (path) => {
             const request = requests.find((request) => request.path === path && request.resolve && !request.done);
@@ -595,6 +595,24 @@ test("committing a text edit normalizes it without trimming spaces while typing"
     assert.equal(renderer.document.querySelector('[name="message"]').value, "hello world");
     button(renderer.document.body, "Run command").click();
     assert.deepEqual(renderer.request("/api/command").body.arguments, { message: "hello world" });
+});
+
+test("long interior whitespace does not block command editing or submission", async () => {
+    const renderer = await boot();
+    await renderer.push({ type: "state", state: commandSnapshot(2, [
+        { name: "message", label: "Message", inputType: "Text" },
+    ]) });
+    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    renderer.evaluate(`(() => {
+        const control = document.querySelector('[name="message"]');
+        control.value = "\\u0085a" + " ".repeat(64000) + "b\\u0085";
+        control.dispatch("input");
+        control.dispatch("change");
+    })()`, { timeout: 1000 });
+    const expected = `a${" ".repeat(64000)}b`;
+    assert.equal(renderer.document.querySelector('[name="message"]').value, expected);
+    button(renderer.document.body, "Run command").click();
+    assert.deepEqual(renderer.request("/api/command").body.arguments, { message: expected });
 });
 
 test("submission normalizes uncommitted text and custom choices while preserving secrets", async () => {
