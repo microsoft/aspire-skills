@@ -1607,7 +1607,13 @@ async function scanImmediateAppHosts(directory) {
     }
 
     for (const entry of entries) {
-        if (entry.isFile() && /\.apphost\.csproj$/i.test(entry.name)) {
+        if (
+            entry.isFile()
+            && (
+                /\.apphost\.csproj$/i.test(entry.name)
+                || /^apphost\.(?:cs|ts|mts)$/i.test(entry.name)
+            )
+        ) {
             results.push(join(directory, entry.name));
             continue;
         }

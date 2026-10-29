@@ -4,6 +4,11 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
+### Fixed
+- Fixed AppHosts workspace fallback discovery missing mixed-case source filenames
+  such as `AppHost.cs` and `AppHost.mts` in the workspace root on case-sensitive
+  filesystems.
+
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
   reference files and SHA-512 content versions.
