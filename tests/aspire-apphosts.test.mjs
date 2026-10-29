@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -624,6 +624,25 @@ test("workspace fallback recognizes source AppHost casing at either scan depth",
                 await rm(fixtureRoot, { recursive: true, force: true });
             }
         });
+    }
+});
+
+test("workspace fallback preserves root source symlinks and ignores dangling links", {
+    skip: process.platform === "win32",
+}, async () => {
+    const fixtureRoot = await mkdtemp(join(tmpdir(), "aspire-linked-apphost-"));
+    try {
+        const root = join(fixtureRoot, ...Array(10).fill("scope"));
+        await mkdir(root, { recursive: true });
+        const target = join(fixtureRoot, "source.mts");
+        const appHostPath = join(root, "apphost.mts");
+        await writeFile(target, "");
+        await symlink(target, appHostPath);
+        await symlink(join(fixtureRoot, "missing.ts"), join(root, "apphost.ts"));
+
+        assert.deepEqual(await discoverConfiguredAppHosts(root), [appHostPath]);
+    } finally {
+        await rm(fixtureRoot, { recursive: true, force: true });
     }
 });
 
