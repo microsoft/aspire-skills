@@ -13,8 +13,8 @@ description: >-
   DO NOT USE FOR: deploy/publish/destroy (aspire-deployment), logs/traces/metrics
   (aspire-monitoring), terminal authoring/attach/tapes (aspire-terminals), or
   AppHost code and resource wiring (aspireify).
-  FOR SINGLE OPERATIONS: Load the matching editor tool first, then obey the
-  exact-target, worktree-isolation, and stop-result rules below.
+  FOR SINGLE OPERATIONS: Load the matching editor tool first; follow exact-target,
+  worktree-isolation, and stop-result rules.
 license: MIT
 metadata:
   author: Microsoft
