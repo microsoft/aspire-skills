@@ -4,9 +4,32 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
+### Changed
+- Distinguished ordinary `aspire stop`, `aspire stop --force` (which preserves
+  persistent volumes), and explicitly approved AppHost-wide `--volumes` cleanup, including
+  its ownership and compatibility limits. Stale-password recovery now prefers restoring
+  the password or a targeted reset and treats `--volumes` as a broader, approved option.
+
+### Fixed
+- Keep distinct Aspireify proposal snapshots for POSIX AppHost paths containing
+  literal backslashes instead of treating those characters as directory separators.
+
 ### Added
-- Added OpenCode V1 and V2 catalogs for all seven shipped skills, including
+- Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
   reference files and SHA-512 content versions.
+- Added the default-selected `aspire-terminals` skill for resource PTYs, persistent
+  dock sessions, terminal prompts, headless automation and integration REPLs.
+  Includes Aspire-specific VHS tape syntax/examples and stdout, `.txt` and
+  `.ascii` output contracts, capability gates, routing and lifetime evaluations.
+  Aspire CLI delivery requires refreshing its embedded skill bundle and metadata.
+
+### Fixed
+- Keep AppHosts in workspace child directories beginning with `..` visible and
+  allow their source files to open without admitting paths outside the workspace.
+
+### Removed
+- Removed embedded `.tgz` bundle generation and uploads. Releases now publish
+  reviewed source and approved changelog notes without generated archives.
 
 ## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)
 
@@ -49,10 +72,6 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   Graph diagnostics distinguish affected 13.5.0-13.5.2 dashboards from newer failures
   without recommending speculative downgrade workarounds.
 - Clarified that Docker Compose deployments run the modeled resources, not the AppHost.
-- Distinguished ordinary `aspire stop`, `aspire stop --force` (which preserves
-  persistent volumes), and explicitly approved AppHost-wide `--volumes` cleanup, including
-  its ownership and compatibility limits. Stale-password recovery now prefers restoring
-  the password or a targeted reset and treats `--volumes` as a broader, approved option.
 - Updated evaluation CI with bounded retries and result-integrity checks.
 - Set an explicit supported judge model in every skill evaluation to avoid
   falling back to an unavailable model.

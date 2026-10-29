@@ -31,6 +31,7 @@ environment:
   skills:
     - ../../aspireify
     - ../../aspire-orchestration
+    - ../../aspire-terminals
 stimuli:
   - name: aspireify-preserves-selected-version-001
     prompt: >
@@ -805,18 +806,22 @@ stimuli:
         config:
           required:
             - aspireify
-  - name: should_trigger_11
-    description: "Reason: WithTerminal is experimental AppHost authoring owned by aspireify"
-    prompt: Add an interactive WithTerminal session to my Aspire container
+  - name: terminal-specialist-handoff
+    description: "Terminal-only authoring belongs to aspire-terminals, not ordinary wiring"
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. Give read-only guidance for adding
+      WithTerminal to my existing Aspire container. Do not edit or start it.
     tags:
       priority: p1
       area: routing
     graders:
       - type: skill-invocation
-        name: invokes-aspireify-12
+        name: invokes-terminal-owner-not-wiring
         config:
-          required:
-            - aspireify
+          required: [aspire-terminals]
+          disallowed: [aspireify]
+      - type: diff-empty
   - name: should_not_trigger_01
     description: "Reason: Deployment routes to aspire-deployment"
     prompt: Deploy my Aspire app to Azure
