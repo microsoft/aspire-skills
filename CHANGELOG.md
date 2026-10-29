@@ -23,6 +23,8 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Prevented command-editing stalls in the Aspire AppHosts canvas by scanning only
   leading and trailing whitespace when normalizing values with long runs of
   interior whitespace.
+- Kept numeric command defaults visible in the Aspire AppHosts canvas instead of
+  allowing native number controls to hide values that would still be submitted.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including

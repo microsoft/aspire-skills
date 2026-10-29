@@ -9,6 +9,8 @@ npm test
 ```
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for skill formatting and agent-host checks.
+Set `CHROME_BIN` to a Chromium executable when running `npm test` to include the
+AppHosts native-browser number-input regression; without it, that check is skipped.
 Dev retains `CHANGELOG.md` and generated `opencode/` catalogs. Regenerate catalogs
 with `npm run catalog` after changing shipped skills, references, or assets,
 and commit them with the source changes. Run `npm run catalog:check` to check

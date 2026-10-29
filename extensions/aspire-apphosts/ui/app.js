@@ -2143,7 +2143,8 @@ function commandField(node, input) {
     } else {
         control = element("input", {
             ...accessibility,
-            type: kind.includes("secret") ? "password" : kind.includes("number") ? "number" : "text",
+            type: kind.includes("secret") ? "password" : "text",
+            inputmode: kind.includes("number") ? "decimal" : undefined,
             name: input.name,
             value: draft[input.name] ?? "",
             required: input.required,
