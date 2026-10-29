@@ -73,17 +73,19 @@ aspire init
 aspire agent init
 ```
 
-**Configure remote Aspire skills** for selected clients in the current project (Aspire 17.0+):
+**Configure remote `aspire-skills` content for this project** (Aspire 17.0+):
 
 ```bash
 aspire agent init --scope project
 ```
 
-Use `--scope global` for configuration shared across projects. See
+Use `--scope global` for settings shared across projects. For update options, see
 [Automatic updates and version pinning](#automatic-updates-and-version-pinning).
 
-Review the plugin source before enabling it. Existing local Aspire skill files
-may override plugin-provided skills.
+Before running setup, review the
+[`aspire-skills` repository](https://github.com/microsoft/aspire-skills).
+Existing local Aspire skill files may take precedence over skills loaded from
+the repository.
 
 In Aspire 13.6, run `aspire agent init` interactively to select the bundled
 Aspire skills and installation locations. Aspire 13.6 has no `--agents` or
