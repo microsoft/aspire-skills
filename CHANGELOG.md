@@ -9,12 +9,22 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   persistent volumes), and explicitly approved AppHost-wide `--volumes` cleanup, including
   its ownership and compatibility limits. Stale-password recovery now prefers restoring
   the password or a targeted reset and treats `--volumes` as a broader, approved option.
-- Keep distinct Aspireify proposal snapshots for POSIX AppHost paths containing
-  literal backslashes instead of treating those characters as directory separators.
-- Keep AppHosts in workspace child directories beginning with `..` visible and
-  allow their source files to open without admitting paths outside the workspace.
-
-### Fixed
+- Corrected POSIX path handling in the Aspireify canvas to keep proposal
+  snapshots separate for AppHost paths containing literal backslashes.
+- Restored AppHost visibility and source-file navigation in the Aspire AppHosts
+  canvas for workspace child directories whose names begin with `..`, preserving
+  checks that block paths outside the workspace.
+- Preserved non-ASCII check messages, paths, and error diagnostics in the
+  Aspire Doctor canvas by decoding UTF-8 characters across subprocess output
+  chunk boundaries.
+- Aligned non-secret command defaults and submissions in the Aspire AppHosts
+  canvas with Aspire Hosting's whitespace trimming. Replaced silent truncation
+  of overlength values with validation errors.
+- Prevented command-editing stalls in the Aspire AppHosts canvas by scanning only
+  leading and trailing whitespace when normalizing values with long runs of
+  interior whitespace.
+- Kept numeric command defaults visible in the Aspire AppHosts canvas instead of
+  allowing native number controls to hide values that would still be submitted.
 - Fixed AppHosts workspace fallback discovery missing mixed-case source filenames
   such as `AppHost.cs` and `AppHost.mts` in the workspace root on case-sensitive
   filesystems.

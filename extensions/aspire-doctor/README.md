@@ -50,6 +50,8 @@ qualified and name an executable rather than a `.cmd` or `.bat` wrapper.
 Bare `ASPIRE_CLI` names on `PATH` support `.exe` completion, including names
 containing periods.
 Executable lookup and diagnostics share a 60-second timeout.
+Subprocess output is decoded as UTF-8 across chunk boundaries, preserving
+non-ASCII check messages, paths, and stderr diagnostics.
 
 ## Agent actions & tools
 
