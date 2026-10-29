@@ -272,8 +272,7 @@ In that command, `-a github-copilot` selects the target agent, `-g` installs glo
 
 If your agent client supports automatic updates for remote Aspire plugins or
 skill catalogs, we recommend keeping them enabled to receive security and bug
-fixes. This recommendation also applies to content registered through Aspire
-CLI 17.0 or later.
+fixes.
 
 If your client supports pinning, you can instead pin a release tag or specific
 version. In this mode, you must monitor security notices and manually update your
