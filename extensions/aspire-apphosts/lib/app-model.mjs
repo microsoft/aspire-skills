@@ -155,7 +155,7 @@ export function isPathWithin(candidate, parent) {
     const candidatePath = normalizePathKey(resolve(candidate));
     const parentPath = normalizePathKey(resolve(parent));
     const pathRelative = relative(parentPath, candidatePath);
-    return pathRelative === "" || (!pathRelative.startsWith("..") && !isAbsolute(pathRelative));
+    return pathRelative !== ".." && !pathRelative.startsWith(`..${sep}`) && !isAbsolute(pathRelative);
 }
 
 function findJsonEnd(text, start) {

@@ -175,7 +175,7 @@ function trimTrailingSeparator(value, pathApi) {
 
 function normalizePathSeparators(value, platform) {
     if (platform !== "win32") {
-        return value.replace(/[\\/]+/g, "/");
+        return value;
     }
     const windowsPath = value.replace(/\//g, "\\");
     return windowsPath.startsWith("\\\\")
