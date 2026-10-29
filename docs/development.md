@@ -59,7 +59,10 @@ newer publication.
    It creates `release/<version>` and its PR to main, generates the release
    catalogs, and creates `bump-dev/<next-version>` and its PR to dev. The dev
    bump updates coordinated versions and adds a changelog heading without
-   changing earlier notes or regenerating catalogs. Both PRs require review.
+   changing earlier notes or regenerating catalogs. The workflow has separate
+   steps for preparing commits, pushing branches, and opening PRs; the push
+   and PR steps use the Aspire App token. Links to both PRs appear in the run
+   summary. Both PRs require review.
 2. **Prepare candidate fixes.** Run **Backport PR to branch** from main with a
    merged dev PR number and its target `release/<version>`. The copied
    Arcade-derived workflow from `microsoft/aspire` applies the PR patch using
@@ -94,6 +97,10 @@ PR-creation failure. They do not reopen closed PRs, replace maintainer edits, or
 reuse unrelated branches. Stale operations fail rather than overwrite newer
 work. Retry against current refs; investigate a conflicting operation identity
 instead of force-pushing over it.
+
+The `release-automation.mjs prepare` command only prepares local commits and
+prints a JSON plan. It does not push branches or call the GitHub PR API; those
+operations belong to the workflow.
 
 ## Automation setup
 

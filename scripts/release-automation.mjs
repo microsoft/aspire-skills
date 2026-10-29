@@ -172,7 +172,7 @@ function operationMarker(source, version, nextVersion) {
   return `Aspire-Release-Source: ${source}\nAspire-Release-Version: ${version}\nAspire-Next-Version: ${nextVersion}`;
 }
 
-export function prepareRelease(repo, source, version, nextVersion, api = githubRequest, repository = process.env.GITHUB_REPOSITORY) {
+export function prepareRelease(repo, source, version, nextVersion) {
   fullSha(source);
   parseVersion(version);
   parseVersion(nextVersion);
@@ -187,11 +187,12 @@ export function prepareRelease(repo, source, version, nextVersion, api = githubR
     throw new Error("This release version already has a published tag.");
   }
   const marker = operationMarker(source, version, nextVersion);
-  const outputs = [];
+  const branches = [];
   for (const kind of ["release", "bump-dev"]) {
     const branch = `${kind}/${kind === "release" ? version : nextVersion}`;
     const base = kind === "release" ? "main" : "dev";
     let commit = remoteHead(repo, branch);
+    const existing = commit !== null;
     if (commit) {
       repo.run(["fetch", "--no-tags", "origin", commit]);
       // The original operation commit remains in history even after maintainer edits.
@@ -210,16 +211,10 @@ export function prepareRelease(repo, source, version, nextVersion, api = githubR
         const { files } = developmentVersionFiles(repo, dev, nextVersion);
         commit = commitFiles(repo, dev, files, `Advance dev to ${nextVersion}\n\n${marker}`);
       }
-      if (remoteHead(repo, base) !== (base === "main" ? main : dev)) throw new Error(`${base} advanced during preparation; retry.`);
-      guardedPush(repo, branch, commit, null);
     }
-    outputs.push(ensurePullRequest(api, repository, {
-      branch, base, marker: `<!-- ${marker} -->`,
-      title: kind === "release" ? `Release ${version}` : `Advance dev to ${nextVersion}`,
-      body: `Source commit: ${source}\n\n${kind === "release" ? "Finalize the release notes, review the catalog snapshot, and merge after required checks pass." : "Advances coordinated versions and adds the next changelog heading. The released catalog snapshot is unchanged."}\n\nWorkflow: ${process.env.GITHUB_SERVER_URL ?? "https://github.com"}/${repository}/actions/runs/${process.env.GITHUB_RUN_ID ?? ""}`
-    }));
+    branches.push({ branch, base, commit, baseCommit: base === "main" ? main : dev, existing });
   }
-  return outputs;
+  return { marker: `<!-- ${marker} -->`, branches };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

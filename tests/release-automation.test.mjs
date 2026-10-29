@@ -107,50 +107,46 @@ test("release refresh commits exact catalogs, avoids loops, and refuses stale ti
   assert.throws(() => refreshRelease(f.repo, "release/0.0.5", result.commit), /Stale release/);
 });
 
-test("preparation creates reviewable PRs and aligned versions without changing dev catalogs; reruns preserve edits", t => {
+test("preparation returns 0.0.5 release commits without publishing; reruns preserve edits", t => {
   const f = fixture(t);
-  const github = githubFixture();
-  prepareRelease(f.repo, f.dev, "0.0.4", "0.0.5", github.api, "example/test");
-  assert.equal(github.pulls.length, 2);
-  const release = remoteHead(f.repo, "release/0.0.4");
-  const bump = remoteHead(f.repo, "bump-dev/0.0.5");
-  validateRelease(f.repo, release, f.main, "release/0.0.4");
-  assert.equal(versionSnapshot(f.repo, bump).version, "0.0.5");
+  const plan = prepareRelease(f.repo, f.dev, "0.0.5", "0.0.6");
+  assert.deepEqual(plan.branches.map(({commit, ...branch}) => branch), [
+    { branch: "release/0.0.5", base: "main", baseCommit: f.main, existing: false },
+    { branch: "bump-dev/0.0.6", base: "dev", baseCommit: f.dev, existing: false }
+  ]);
+  assert.match(plan.marker, /Aspire-Release-Version: 0\.0\.5\nAspire-Next-Version: 0\.0\.6/);
+  for (const {branch} of plan.branches) assert.equal(remoteHead(f.repo, branch), null);
+  const [{commit: release}, {commit: bump}] = plan.branches;
+  validateRelease(f.repo, release, f.main, "release/0.0.5");
+  assert.equal(versionSnapshot(f.repo, bump).version, "0.0.6");
   assert.equal(f.repo.run(["diff", "--name-only", f.dev, bump, "--", "opencode"]), "");
   assert.match(f.repo.read(bump, "package.json").toString(), /Preserve non-version metadata/);
+  for (const {branch, commit} of plan.branches) guardedPush(f.repo, branch, commit, null);
   const edited = commitFiles(f.repo, release, new Map([["maintainer.txt", Buffer.from("Keep this edit.\n")]]), "Maintainer review");
-  guardedPush(f.repo, "release/0.0.4", edited, release);
-  prepareRelease(f.repo, f.dev, "0.0.4", "0.0.5", github.api, "example/test");
-  assert.equal(github.pulls.length, 2);
-  assert.equal(remoteHead(f.repo, "release/0.0.4"), edited);
-  assert.throws(() => prepareRelease(f.repo, f.dev, "0.0.4", "0.0.6", github.api, "example/test"), /another operation/);
-  github.pulls[0].state = "closed";
-  assert.throws(() => prepareRelease(f.repo, f.dev, "0.0.4", "0.0.5", github.api, "example/test"), /already closed or merged/);
+  guardedPush(f.repo, "release/0.0.5", edited, release);
+  const retry = prepareRelease(f.repo, f.dev, "0.0.5", "0.0.6");
+  assert.deepEqual(retry.branches.map(({commit, existing}) => ({commit, existing})), [
+    { commit: edited, existing: true }, { commit: bump, existing: true }
+  ]);
+  assert.equal(remoteHead(f.repo, "release/0.0.5"), edited);
+  assert.throws(() => prepareRelease(f.repo, f.dev, "0.0.5", "0.0.7"), /another operation/);
 });
 
-test("preparation resumes after API failure without duplicate branches", t => {
+test("preparation resumes when the workflow has pushed only one branch", t => {
   const f = fixture(t);
-  const github = githubFixture();
-  let fail = true;
-  const api = (path, options) => {
-    if (fail && options?.method === "POST") {
-      fail = false;
-      throw new Error("API temporarily unavailable");
-    }
-    return github.api(path, options);
-  };
-  assert.throws(() => prepareRelease(f.repo, f.dev, "0.0.4", "0.0.5", api, "example/test"), /temporarily unavailable/);
-  const release = remoteHead(f.repo, "release/0.0.4");
-  prepareRelease(f.repo, f.dev, "0.0.4", "0.0.5", api, "example/test");
-  assert.equal(remoteHead(f.repo, "release/0.0.4"), release);
-  assert.equal(github.pulls.length, 2);
+  const plan = prepareRelease(f.repo, f.dev, "0.0.4", "0.0.5");
+  const release = plan.branches[0];
+  guardedPush(f.repo, release.branch, release.commit, null);
+  const retry = prepareRelease(f.repo, f.dev, "0.0.4", "0.0.5");
+  assert.deepEqual(retry.branches[0], { ...release, existing: true });
+  assert.equal(retry.branches[1].existing, false);
+  assert.equal(remoteHead(f.repo, retry.branches[1].branch), null);
 });
 
 test("preparation rejects invalid versions, unrelated sources, and existing tags or branches", t => {
   const f = fixture(t);
-  const github = githubFixture();
   const prepare = (source = f.dev, version = "0.0.4", next = "0.0.5") =>
-    prepareRelease(f.repo, source, version, next, github.api, "example/test");
+    prepareRelease(f.repo, source, version, next);
   assert.throws(() => prepare(f.dev, "v0.0.4"), /SemVer/);
   assert.throws(() => prepare(f.dev, "0.0.4", "0.0.4"), /newer than the release/);
   assert.throws(() => prepare(f.dev, "0.0.3"), /newer than main/);
@@ -161,14 +157,11 @@ test("preparation rejects invalid versions, unrelated sources, and existing tags
   f.repo.run(["tag", "v0.0.4", f.main]);
   f.repo.run(["push", "--quiet", "origin", "refs/tags/v0.0.4"]);
   assert.throws(() => prepare(), /published tag/);
-  assert.equal(github.pulls.length, 0);
 });
 
 test("release version alignment keeps historical notes and rejects historical edits", t => {
   const f = fixture(t);
-  const github = githubFixture();
-  prepareRelease(f.repo, f.dev, "0.0.6", "0.0.7", github.api, "example/test");
-  const release = remoteHead(f.repo, "release/0.0.6");
+  const release = prepareRelease(f.repo, f.dev, "0.0.6", "0.0.7").branches[0].commit;
   assert.equal(versionSnapshot(f.repo, release).version, "0.0.6");
   assert.match(f.repo.read(release, "CHANGELOG.md").toString(), /## \[0\.0\.6\]/);
   const bad = commitFiles(f.repo, release, new Map([["CHANGELOG.md", Buffer.from(
@@ -299,6 +292,14 @@ test("workflow wiring keeps fork validation unprivileged and bot checks on final
     assert.equal(token.with["client-id"], "${{ secrets.ASPIRE_BOT_APP_ID }}");
     assert.equal(token.with["private-key"], "${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}");
   }
+  const preparation = workflow("prepare-release").jobs.prepare.steps;
+  assert.equal(preparation.find(step => step.id === "prepare").env.GH_TOKEN, "${{ github.token }}");
+  const push = preparation.find(step => step.name === "Push release and development branches");
+  assert.equal(push.env.GH_TOKEN, "${{ steps.app-token.outputs.token }}");
+  assert.match(push.run, /push "--force-with-lease=refs\/heads\/\$branch:"/);
+  const open = preparation.find(step => step.name === "Open release and development PRs");
+  assert.equal(open.with["github-token"], "${{ steps.app-token.outputs.token }}");
+  assert.match(open.with.script, /github\.rest\.pulls\.create/);
   const backport = workflow("backport");
   assert.equal(backport.on.issue_comment, undefined);
   assert.deepEqual(backport.on.pull_request, { branches: ["main"], types: ["closed"] });
