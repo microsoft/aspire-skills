@@ -28,7 +28,7 @@ Use `blocking` when the PR…
   publishes a candidate with unselected source changes.
 - Regenerates main-to-dev catalogs against unreleased dev skills instead of
   carrying the approved release snapshot. Ordinary dev source PRs do not need
-  generated catalogs; the development HTTP catalogs are published separately.
+  generated catalogs; generated snapshots are committed for releases to main.
 - Tags the wrong final main commit or publishes without the authorization
   required by the release flow (§13).
 - Drops or shadows the project-local override deference block (`§8`).

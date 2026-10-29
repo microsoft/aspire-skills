@@ -61,7 +61,7 @@ function normalizeContents(contents) {
     ? contents : Buffer.from(contents.toString("utf8").replaceAll("\r\n", "\n"));
 }
 
-function readPublishedSkills(root, format, sourceRef) {
+function readPublishedSkills(root, format) {
   const sourceRoot = join(root, "skills");
   const sourceFiles = listFiles(sourceRoot, true);
   const names = sourceFiles.filter(path => /^[^/]+\/SKILL\.md$/.test(path))
@@ -105,7 +105,7 @@ function readPublishedSkills(root, format, sourceRef) {
           let relocated;
           if (!resolved.startsWith(`${name}/`)) {
             // OpenCode caches each skill independently; sibling directories are not guaranteed.
-            relocated = `https://github.com/microsoft/aspire-skills/blob/${sourceRef}/skills/${resolved}${suffix}`;
+            relocated = `https://github.com/microsoft/aspire-skills/blob/main/skills/${resolved}${suffix}`;
           } else if (resolved === entry) {
             relocated = `${posix.relative(posix.dirname(relativePath), entryFile)}${suffix}`;
           } else {
@@ -129,12 +129,9 @@ function contentVersion(files) {
   return `sha512-${createHash("sha512").update(JSON.stringify(manifest)).digest("hex")}`;
 }
 
-export function createCatalog(root, { format = "v2", sourceRef = "main" } = {}) {
+export function createCatalog(root, { format = "v2" } = {}) {
   if (!["v1", "v2"].includes(format)) throw new Error(`Unsupported OpenCode catalog format: ${format}`);
-  if (sourceRef !== "main" && !/^[0-9a-f]{40}$/.test(sourceRef)) {
-    throw new Error("Catalog source ref must be main or a full lowercase commit SHA.");
-  }
-  const skills = readPublishedSkills(root, format, sourceRef);
+  const skills = readPublishedSkills(root, format);
   const index = { skills: [] };
   const outputFiles = new Map();
   for (const [name, files] of skills) {

@@ -17,11 +17,11 @@ export function remoteHead(repo, branch) {
   return fullSha(sha);
 }
 
-export function commitFiles(repo, parent, files, message, { replace = [], outputOnly = false, allowEmpty = false } = {}) {
+export function commitFiles(repo, parent, files, message, { replace = [], allowEmpty = false } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "aspire-release-index-"));
   const indexFile = join(directory, "index");
   try {
-    const entries = new Map(parent && !outputOnly ? repo.files(parent) : []);
+    const entries = new Map(parent ? repo.files(parent) : []);
     for (const path of entries.keys()) {
       if (replace.some(prefix => path === prefix || path.startsWith(`${prefix}/`))) entries.delete(path);
     }
@@ -53,19 +53,6 @@ export function guardedPush(repo, branch, commit, expected) {
   if (current !== expected) throw new Error(`Stale operation: ${branch} changed; retry from its current tip.`);
   repo.run(["push", `--force-with-lease=refs/heads/${branch}:${expected ?? ""}`,
     "origin", `${fullSha(commit)}:refs/heads/${branch}`]);
-}
-
-export function publishDevelopment(repo, source) {
-  fullSha(source);
-  if (remoteHead(repo, "dev") !== source) throw new Error("Stale development catalog source; dev has advanced.");
-  const previous = remoteHead(repo, "opencode-dev");
-  if (previous) repo.run(["fetch", "--no-tags", "origin", previous]);
-  const files = expectedCatalog(repo, source, { sourceRef: source });
-  files.set("source.json", Buffer.from(`${JSON.stringify({ sourceCommit: source }, null, 2)}\n`));
-  const commit = commitFiles(repo, previous, files, `Publish development catalogs from ${source}`, { outputOnly: true });
-  if (remoteHead(repo, "dev") !== source) throw new Error("Stale development catalog source; dev has advanced.");
-  if (commit !== previous) guardedPush(repo, "opencode-dev", commit, previous);
-  return { commit, source };
 }
 
 export function refreshRelease(repo, branch, source) {
@@ -222,10 +209,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const repo = new Repository(process.cwd());
     const [command, ...args] = process.argv.slice(2);
     let result;
-    if (command === "publish-dev" && args.length === 1) result = publishDevelopment(repo, args[0]);
-    else if (command === "refresh" && args.length === 2) result = refreshRelease(repo, ...args);
+    if (command === "refresh" && args.length === 2) result = refreshRelease(repo, ...args);
     else if (command === "prepare" && args.length === 3) result = prepareRelease(repo, ...args);
-    else throw new Error("Usage: release-automation.mjs publish-dev <sha> | refresh <branch> <sha> | prepare <sha> <version> <next-version>");
+    else throw new Error("Usage: release-automation.mjs refresh <branch> <sha> | prepare <sha> <version> <next-version>");
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
     console.error(error.message);

@@ -219,11 +219,9 @@ an HTTP catalog. Add the configuration for your OpenCode version to
 See OpenCode's [skill sources documentation](https://opencode.ai/v2/docs/skills#sources)
 for configuration guidance.
 
-For merged development skills, use the HTTP catalogs under
-`https://raw.githubusercontent.com/microsoft/aspire-skills/opencode-dev/opencode/v1/`
-or `.../opencode/v2/`. For unmerged changes, use a local checkout's `skills/`
-directory. See [development testing](docs/development.md#testing-development-skills)
-for source provenance and publication details; stable catalog URLs remain unchanged.
+For development testing, use a local checkout's `skills/` directory. Catalog
+changes are prepared in release PRs and published from `main` only.
+See [development testing](docs/development.md#testing-development-skills).
 
 ### Ollama + Copilot CLI
 

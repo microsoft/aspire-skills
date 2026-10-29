@@ -9,7 +9,7 @@ import { Repository } from "../scripts/release-git.mjs";
 import { expectedCatalog, validateCatalog } from "../scripts/release-catalog.mjs";
 import { developmentVersionFiles } from "../scripts/version-development.mjs";
 import { versionSnapshot } from "../scripts/release-versions.mjs";
-import { commitFiles, ensurePullRequest, guardedPush, prepareRelease, publishDevelopment, refreshRelease, releaseFiles, remoteHead, validateRelease } from "../scripts/release-automation.mjs";
+import { commitFiles, ensurePullRequest, guardedPush, prepareRelease, refreshRelease, releaseFiles, remoteHead, validateRelease } from "../scripts/release-automation.mjs";
 import { runBackport, validateBackport } from "../scripts/backport.mjs";
 
 function fixture(t) {
@@ -77,24 +77,6 @@ function githubFixture() {
   };
   return { api, pulls, comments, sources };
 }
-
-test("development publication is output-only, SHA-pinned, idempotent, and rejects old source", t => {
-  const f = fixture(t);
-  const first = publishDevelopment(f.repo, f.dev).commit;
-  assert.equal(f.repo.run(["rev-list", "--count", first]).trim(), "1");
-  assert.ok([...f.repo.files(first).keys()].every(path => path === "source.json" || path.startsWith("opencode/")));
-  assert.equal(JSON.parse(f.repo.read(first, "source.json")).sourceCommit, f.dev);
-  assert.match(f.repo.read(first, "opencode/v2/aspire/links.md").toString(), new RegExp(`/blob/${f.dev}/`));
-  validateCatalog(f.repo, first, expectedCatalog(f.repo, f.dev, { sourceRef: f.dev }));
-  assert.equal(publishDevelopment(f.repo, f.dev).commit, first);
-  const next = commitFiles(f.repo, f.dev, new Map([["skills/aspire/new.md", Buffer.from("New instructions.\n")]]), "New dev work");
-  guardedPush(f.repo, "dev", next, f.dev);
-  assert.throws(() => publishDevelopment(f.repo, f.dev), /Stale development/);
-  const second = publishDevelopment(f.repo, next).commit;
-  assert.equal(f.repo.sha(`${second}^`), first);
-  assert.equal(remoteHead(f.repo, "opencode-dev"), second);
-  assert.throws(() => guardedPush(f.repo, "opencode-dev", first, first), /Stale operation/);
-});
 
 test("release refresh commits exact catalogs, avoids loops, and refuses stale tips", t => {
   const f = fixture(t);
@@ -187,19 +169,21 @@ test("PR deduplication refuses closed PRs and unrelated branch identities", () =
 
 test("a remote update between the last read and push is rejected by the lease", t => {
   const f = fixture(t);
-  const original = publishDevelopment(f.repo, f.dev).commit;
-  const newer = commitFiles(f.repo, original, new Map([["source.json", Buffer.from('{"newer":true}\n')]]), "Concurrent publication");
-  const attempted = commitFiles(f.repo, original, new Map([["source.json", Buffer.from('{"stale":true}\n')]]), "Stale publication");
+  const branch = "release/0.0.4";
+  const original = f.dev;
+  guardedPush(f.repo, branch, original, null);
+  const newer = commitFiles(f.repo, original, new Map([["candidate.txt", Buffer.from("Newer candidate.\n")]]), "Concurrent candidate");
+  const attempted = commitFiles(f.repo, original, new Map([["candidate.txt", Buffer.from("Stale candidate.\n")]]), "Stale candidate");
   const run = f.repo.run.bind(f.repo);
   f.repo.run = (args, options) => {
     if (args[0] === "push") {
-      run(["push", "--quiet", "origin", `${newer}:refs/heads/opencode-dev`]);
+      run(["push", "--quiet", "origin", `${newer}:refs/heads/${branch}`]);
       f.repo.run = run;
     }
     return run(args, options);
   };
-  assert.throws(() => guardedPush(f.repo, "opencode-dev", attempted, original), /git push failed/);
-  assert.equal(remoteHead(f.repo, "opencode-dev"), newer);
+  assert.throws(() => guardedPush(f.repo, branch, attempted, original), /git push failed/);
+  assert.equal(remoteHead(f.repo, branch), newer);
 });
 
 function sourcePull(github, number, source, base) {
@@ -278,7 +262,7 @@ test("backport preservation checks reject version changes and loss of dev notes"
 
 test("workflow wiring keeps fork validation unprivileged and bot checks on final candidates", () => {
   const workflow = name => parse(readFileSync(new URL(`../.github/workflows/${name}.yml`, import.meta.url), "utf8"));
-  for (const name of ["publish-dev-catalog", "prepare-release", "refresh-release-catalog", "backport"]) {
+  for (const name of ["prepare-release", "refresh-release-catalog", "backport"]) {
     const config = workflow(name);
     assert.equal(config.permissions.contents, "read");
     assert.equal(config.on.pull_request_target, undefined);
@@ -307,6 +291,5 @@ test("workflow wiring keeps fork validation unprivileged and bot checks on final
   assert.ok(backport.on.workflow_dispatch.inputs.target_branch);
   assert.ok(Object.hasOwn(workflow("test").on, "merge_group"));
   const publisher = workflow("publish").jobs.publish.steps.find(step => step.name === "Check release contents");
-  assert.match(publisher.run, /validateRelease/);
   assert.match(publisher.run, /npm run catalog:check/);
 });

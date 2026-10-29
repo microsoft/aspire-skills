@@ -121,19 +121,14 @@ test("source-only validation accepts missing or stale released snapshots without
   assert.equal(f.check("--source-only").status, 1);
 });
 
-test("both development formats pin cross-skill links while stable links remain on main", t => {
+test("both catalog formats link to the published skills on main", t => {
   const f = fixture(t);
   f.write("skills/other/SKILL.md", "---\nname: other\n---\n\n# Other\n");
   f.write("skills/aspire/links.md", "[Other](../other/SKILL.md#usage)\n");
-  const sourceRef = "a".repeat(40);
   for (const format of ["v1", "v2"]) {
-    const dev = createCatalog(f.root, { format, sourceRef });
-    assert.match(dev.files.get("aspire/links.md").toString(), new RegExp(`/blob/${sourceRef}/skills/other/SKILL.md#usage`));
-    const stable = createCatalog(f.root, { format });
-    assert.match(stable.files.get("aspire/links.md").toString(), /\/blob\/main\/skills\//);
-    assert.notEqual(dev.index.skills[0].version, stable.index.skills[0].version);
+    const catalog = createCatalog(f.root, { format });
+    assert.match(catalog.files.get("aspire/links.md").toString(), /\/blob\/main\/skills\/other\/SKILL\.md#usage/);
   }
-  assert.throws(() => createCatalog(f.root, { sourceRef: "../../dev" }), /source ref/);
 });
 
 test("catalog generation leaves literal links in code spans and fenced blocks untouched", t => {

@@ -31,28 +31,11 @@ The **Release branch check** fails any PR into main unless its head is a
 
 ## Testing development skills
 
-After a change merges into dev, **Publish development catalogs** publishes to the
-output-only `opencode-dev` branch. Configure the HTTP catalog source for your
-OpenCode version:
-
-| Format | Development catalog URL |
-|--------|-------------------------|
-| V1 | `https://raw.githubusercontent.com/microsoft/aspire-skills/opencode-dev/opencode/v1/` |
-| V2 | `https://raw.githubusercontent.com/microsoft/aspire-skills/opencode-dev/opencode/v2/` |
-
-The index is `index.json` under each URL. The branch's
-[`source.json`](https://raw.githubusercontent.com/microsoft/aspire-skills/opencode-dev/source.json)
-records the dev source commit; cross-skill links use that immutable SHA. Stable
-catalogs remain under `main/opencode/v1/` and `main/opencode/v2/`, with their
-existing URL layout and link behavior.
-
-For an unmerged change, use the local checkout's `skills/` directory as the
-agent host's local skill source. There is no per-PR HTTP preview.
-
-A failed publication is a failed Actions run, not a successful fallback to old
-output. Inspect its source SHA and error, then manually run **Publish development
-catalogs** from main to retry the current dev tip. Older runs cannot overwrite a
-newer publication.
+To test development changes, configure the agent host to use a local checkout's
+`skills/` directory. Published HTTP catalogs stay under `main/opencode/v1/` and
+`main/opencode/v2/`; they update only when a release PR merges into main.
+Generated catalog commits belong on the release branch and carry through to main,
+not on a separate development-output branch.
 
 ## Release flow
 

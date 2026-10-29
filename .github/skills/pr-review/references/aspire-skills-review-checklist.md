@@ -227,8 +227,8 @@ For a release PR, verify:
   in that order, omitting empty sections and preserving published history.
 - Committed V1 and V2 release catalogs match the final shipped source. Ordinary
   source PRs require generation-only validation, not generated commits. Dev keeps
-  the last released snapshot; development HTTP output lives on `opencode-dev`,
-  identifies its source SHA, and pins cross-skill links to that SHA.
+  the last released snapshot; generated catalog commits belong on release
+  branches destined for main.
 - Tests, catalog and version checks, and required CI agree. Distinguish local
   evidence from CI results.
 - Maintainer approval and merge authorize the publisher to tag the exact merged
