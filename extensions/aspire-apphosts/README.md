@@ -119,6 +119,8 @@ bounded request bodies.
 - Optional hidden-resource inclusion.
 - AppHost directory inputs resolve to one concrete project or source file before
   discovery, source opening, and operation locking.
+- Workspace containment accepts child directory names beginning with `..` while
+  still rejecting parent-directory traversal for source opening.
 - Older CLI compatibility retries only when the optional disabled-command flag
   is actually unsupported and marks the resulting model accordingly.
 

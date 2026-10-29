@@ -20,6 +20,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ### Changed
 - Unified canvas styling and icons with shared assets that respect host themes.
 
+### Fixed
+- Keep AppHosts in workspace child directories beginning with `..` visible and
+  allow their source files to open without admitting paths outside the workspace.
+
 ### Removed
 - Removed embedded `.tgz` bundle generation and uploads. Releases now publish
   reviewed source and approved changelog notes without generated archives.
