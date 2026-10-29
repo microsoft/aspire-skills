@@ -17,6 +17,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Removed embedded `.tgz` bundle generation and uploads. Releases now publish
   reviewed source and approved changelog notes without generated archives.
 
+### Fixed
+- Preserve non-ASCII Aspire Doctor output when UTF-8 characters span subprocess
+  chunks, including check messages, paths, and error diagnostics.
+
 ## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)
 
 ### Changed

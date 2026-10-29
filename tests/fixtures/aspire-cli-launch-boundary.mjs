@@ -30,6 +30,7 @@ async function load(url, {
     files = file(installedExecutable),
     lookup,
     closeOnSpawn = true,
+    onSpawn,
     clock,
 } = {}) {
     const entries = new Map(files.map(([path, kind]) => [path.toLowerCase(), kind]));
@@ -52,6 +53,7 @@ async function load(url, {
                 child.killed = false;
                 child.kill = () => { child.killed = true; };
                 child.unref = () => {};
+                onSpawn?.(child);
                 if (closeOnSpawn) {
                     queueMicrotask(() => {
                         child.emit("spawn");
@@ -424,6 +426,36 @@ test("Doctor's diagnostics action reports an error when PATH has no CLI", async 
     assert.ok(result.error);
     assert.equal(spawns.length, 0);
 });
+
+for (const stream of ["stdout", "stderr"]) {
+    test(`Doctor preserves UTF-8 characters split across ${stream} chunks in diagnostics HTTP results`, async () => {
+        const spawned = deferred();
+        const text = "D\u00e9j\u00e0 pr\u00eat \u65e5\u672c\u8a9e \ud83d\ude80";
+        const report = { checks: [{ name: "sdk", status: "pass", message: text }] };
+        await withDoctorCanvas({ closeOnSpawn: false, onSpawn: spawned.resolve }, async ({ url }) => {
+            const response = fetch(new URL("/api/diagnostics", url), {
+                headers: { "x-aspire-doctor-token": new URL(url).searchParams.get("token") },
+            });
+            const child = await spawned.promise;
+            const output = Buffer.from(stream === "stdout" ? JSON.stringify(report) : text, "utf8");
+            for (const byte of output) {
+                child[stream].write(Buffer.from([byte]));
+            }
+            child.stdout.end();
+            child.stderr.end();
+            child.emit("close", stream === "stdout" ? 0 : 1);
+            const result = await (await response).json();
+            if (stream === "stdout") {
+                assert.equal(result.ok, true);
+                assert.deepEqual(result.data.checks, report.checks);
+            } else {
+                assert.equal(result.ok, false);
+                assert.match(result.error, /Could not parse 'aspire doctor' output/);
+                assert.equal(result.raw, text);
+            }
+        });
+    });
+}
 
 test("Doctor reveals paths with the Explorer in the Windows directory", async () => {
     const { result, spawns } = await revealPath({ env: { SystemRoot: "D:\\Windows" }, files: file(revealed) });
