@@ -132,6 +132,6 @@ canonical assets linked by `ui/canvas-theme.css` and `ui/canvas-icons.svg`.
 ## Regression coverage
 
 Run `npm test` from the repository root. It includes the AppHosts model,
-provider, renderer, plugin-mirror and bundle-workflow suites as well as the
+provider, renderer, plugin-mirror, and shared-canvas suites as well as the
 nested Aspireify suites. Provider and renderer boundary fixtures use synthetic
 data and do not start, stop or deploy a real Aspire application.

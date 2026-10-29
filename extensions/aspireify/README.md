@@ -37,6 +37,9 @@ the immutable submitted snapshot even if a stale client attempts a later mutatio
 Before confirmation, `get_confirmation` fails without exposing an executable plan.
 Proposal and confirmation state are stored with the Copilot session so reconnecting
 or reloading the provider preserves the Step 3 decision.
+State is scoped to the canonical AppHost path. On POSIX, literal backslashes in
+file and directory names are preserved rather than treated as separators, so
+distinct AppHosts do not share proposal state.
 The confirmed surface states that implementation continues in chat; it never
 becomes a startup, editing, validation, or execution tracker.
 
@@ -67,7 +70,7 @@ AppHost editor, deployment controls, initialization flow, or validation workflow
 Aspireify uses the shared canvas theme, typography, controls, and local SVG
 sprite. Resource-kind colors and review layouts stay local; the confirmation
 boundary is unchanged. See [Shared canvas UI](../../docs/canvas-ui.md) for asset
-ownership, relative symlinks, standalone packaging, and visual review guidance.
+ownership, relative symlinks, plugin mirrors, and visual review guidance.
 
 ## Troubleshooting
 

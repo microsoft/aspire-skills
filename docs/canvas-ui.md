@@ -9,8 +9,8 @@ Edit the canonical [stylesheet](../assets/canvas/theme.css) and
 [icon sprite](../assets/canvas/icons.svg). Share them through relative symlinks,
 not copied files or synchronization scripts.
 
-Source checkouts must support symlinks. Published bundles must resolve those
-links into regular files so each extension remains self-contained.
+Source checkouts must support symlinks. The published plugin mirror preserves
+these relative links to the canonical extension sources.
 
 ## Conventions
 
