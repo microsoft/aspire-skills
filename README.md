@@ -282,46 +282,18 @@ npm run catalog:check
 The catalog check verifies that the committed V1 and V2 catalogs match the
 committed skill source, including file lists and SHA-512 content versions.
 
-```bash
-npm run bundle
-```
-
-`npm run bundle` builds both bundle artifacts:
-
-| Artifact | Contents |
-|----------|----------|
-| `aspire-skills-v<version>.tgz` | Agent skill files, canonical telemetry hooks, and `skill-manifest.json` with hook commit/SHA-512 provenance |
-| `aspire-extensions-v<version>.tgz` | GitHub Copilot app canvas extension files and `extension-manifest.json` |
-
-The skills manifest records the release commit and LF-normalized SHA-512 hash for
-each file under `hooks/scripts/`. Downstream consumers can copy the `hooks` object
-directly instead of maintaining hook provenance separately.
-
-The hooks attribute `AI_AGENT=github_copilot_app_agent` to `copilot-app` before
+The canonical telemetry hooks under `hooks/scripts/` attribute
+`AI_AGENT=github_copilot_app_agent` to `copilot-app` before
 checking `COPILOT_CLI=1` or a CLI-compatible `toolArgs` payload. Without the app
 marker, Copilot CLI, VS Code, and Claude Code attribution stays unchanged.
-
-Use `npm run bundle:skills` or `npm run bundle:extensions` to build one bundle type.
-
-Both archives declare Aspire CLI/SDK compatibility with `>=13.5.0 <13.7.0`.
-Individual features can have narrower requirements: `aspire-project-v2-migration`
-remains discoverable on 13.5 but refuses edits unless the actual AppHost targets
-13.6+ and exposes the required APIs. Bundle compatibility never authorizes an
-implicit application upgrade, downgrade, or migration. Guidance and examples
-labeled 13.5.3 remain specific to the 13.5 family.
-
-For a separately validated release target, the bundle generator accepts
-`--supports-aspire-cli` and `--supports-aspire-sdk` overrides for both archives.
-Current Aspire consumers check the skills archive's range as a whole; the manifest
-does not provide per-skill installation-time version filtering.
 
 ### Publishing releases
 
 Merging a same-repository `release/<version>` PR into `main` runs
 [the publisher](.github/workflows/publish.yml). It tags the exact merged commit,
-copies the approved changelog notes into the GitHub release, builds and attests
-both bundles, and uploads only the skills bundle. It uses `GITHUB_TOKEN`, not a
-repo bot or stored personal token. Reruns preserve the tag's commit and notes.
+copies the approved changelog notes into a source-only GitHub release, and uploads
+no generated archives. It uses `GITHUB_TOKEN`, not a repo bot or stored personal
+token. Reruns preserve the tag's commit and notes.
 Release preparation, dev bumps, catalog refreshes, and Arcade patch backports use
 the Aspire repository GitHub App to open reviewable PRs and run normal checks.
 See [the development guide](docs/development.md) for the release flow and setup.

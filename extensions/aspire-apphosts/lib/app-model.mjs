@@ -155,7 +155,7 @@ export function isPathWithin(candidate, parent) {
     const candidatePath = normalizePathKey(resolve(candidate));
     const parentPath = normalizePathKey(resolve(parent));
     const pathRelative = relative(parentPath, candidatePath);
-    return pathRelative === "" || (!pathRelative.startsWith("..") && !isAbsolute(pathRelative));
+    return pathRelative !== ".." && !pathRelative.startsWith(`..${sep}`) && !isAbsolute(pathRelative);
 }
 
 function findJsonEnd(text, start) {
@@ -330,6 +330,19 @@ function sanitizeOptions(raw) {
     }));
 }
 
+function normalizeCommandValue(inputType, value) {
+    if (typeof value !== "string" || inputType.toLowerCase().includes("secret")) {
+        return value;
+    }
+    // Match .NET String.Trim: U+0085 is whitespace, but U+FEFF is not.
+    const whitespace = /\p{White_Space}/u;
+    let start = 0;
+    let end = value.length;
+    while (start < end && whitespace.test(value[start])) start++;
+    while (end > start && whitespace.test(value[end - 1])) end--;
+    return value.slice(start, end);
+}
+
 function sanitizeArgumentInput(raw) {
     if (!isRecord(raw)) {
         return undefined;
@@ -346,9 +359,9 @@ function sanitizeArgumentInput(raw) {
         : [];
     const options = sanitizeOptions(raw.options);
     const allowCustomChoice = raw.allowCustomChoice === true;
-    const value = inputType.toLowerCase().includes("secret")
+    const value = raw.value == null || inputType.toLowerCase().includes("secret")
         ? undefined
-        : optionalText(raw.value, Number.isFinite(maxLength) && maxLength > 0 ? Math.min(maxLength, 100_000) : 100_000);
+        : normalizeCommandValue(inputType, String(raw.value));
     const safeValue = value && options.length > 0 && !allowCustomChoice
         ? options.some((option) => option.value === value) ? value : undefined
         : value;
@@ -1588,17 +1601,6 @@ async function configuredAppHostFrom(directory) {
 
 async function scanImmediateAppHosts(directory) {
     const results = [];
-    const directCandidates = [
-        join(directory, "apphost.cs"),
-        join(directory, "apphost.ts"),
-        join(directory, "apphost.mts"),
-    ];
-    for (const candidate of directCandidates) {
-        if (await pathExists(candidate)) {
-            results.push(candidate);
-        }
-    }
-
     let entries;
     try {
         entries = await readdir(directory, { withFileTypes: true });
@@ -1607,7 +1609,11 @@ async function scanImmediateAppHosts(directory) {
     }
 
     for (const entry of entries) {
-        if (entry.isFile() && /\.apphost\.csproj$/i.test(entry.name)) {
+        const sourceAppHost = /^apphost\.(?:cs|ts|mts)$/i.test(entry.name);
+        if (
+            (entry.isFile() && (/\.apphost\.csproj$/i.test(entry.name) || sourceAppHost))
+            || (entry.isSymbolicLink() && sourceAppHost && await pathExists(join(directory, entry.name)))
+        ) {
             results.push(join(directory, entry.name));
             continue;
         }
@@ -1905,8 +1911,8 @@ export function validateCommandArguments(command, values) {
         if (input.disabled) {
             continue;
         }
-        const value = values[input.name];
-        const missing = value === undefined || value === null || (typeof value === "string" && value.trim() === "");
+        const value = normalizeCommandValue(input.inputType, values[input.name]);
+        const missing = value === undefined || value === null || value === "";
         if (missing) {
             if (input.required) {
                 errors.push({ argumentName: input.name, errorMessage: `${input.label || input.name} is required.` });

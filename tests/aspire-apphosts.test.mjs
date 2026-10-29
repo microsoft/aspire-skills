@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { runInNewContext } from "node:vm";
 import {
     AppHostOperationCoordinator,
     CommandInputMetadataStore,
@@ -21,6 +22,7 @@ import {
     filterTree,
     discoverConfiguredAppHosts,
     extractJsonPayload,
+    isPathWithin,
     mapWithConcurrency,
     normalizeLsPayload,
     normalizePsPayload,
@@ -48,6 +50,16 @@ function repoPath(...segments) {
 function appsPath(...segments) {
     return join(syntheticAppsRoot, ...segments);
 }
+
+test("workspace containment distinguishes dot-prefixed children from parent traversal", () => {
+    for (const child of ["..apphost", "...", "..", "src"]) {
+        const candidate = repoPath(child, "AppHost.cs");
+        assert.equal(isPathWithin(candidate, syntheticRepoRoot), child !== "..", child);
+    }
+    assert.equal(isPathWithin(syntheticRepoRoot, syntheticRepoRoot), true);
+    assert.equal(isPathWithin(appsPath("AppHost.cs"), syntheticRepoRoot), false);
+    assert.equal(isPathWithin(`${syntheticRepoRoot}-other`, syntheticRepoRoot), false);
+});
 
 test("extractJsonPayload ignores Aspire preambles and trailing text", () => {
     const payload = extractJsonPayload("Finding AppHost...\n{\n  \"resources\": [{\"name\":\"api\"}]\n}\nDone");
@@ -491,6 +503,88 @@ test("resource command arguments use the CLI delimiter and declared input names"
     ]);
 });
 
+test("text command defaults and submissions use Hosting whitespace normalization", () => {
+    const text = "  hello world  ";
+    const customChoice = "  custom region  ";
+    const argumentInputs = sanitizeCommandArgumentInputs([
+        { name: "message", inputType: "Text", value: text },
+        {
+            name: "region", inputType: "Choice", value: customChoice,
+            allowCustomChoice: true, options: ["west"],
+        },
+    ]);
+
+    assert.equal(argumentInputs[0].value, "hello world");
+    assert.equal(argumentInputs[1].value, "custom region");
+    const validation = validateCommandArguments({ argumentInputs }, {
+        message: text,
+        region: customChoice,
+    });
+    assert.equal(validation.ok, true);
+    assert.deepEqual(buildCommandArgumentTokens(validation.values), [
+        "--", "--message=hello world", "--region=custom region",
+    ]);
+});
+
+test("long interior whitespace normalizes without blocking command defaults or validation", () => {
+    const value = `\u0085a${" ".repeat(64000)}b\u0085`;
+    const expected = value.slice(1, -1);
+    const result = runInNewContext(`(() => {
+        const argumentInputs = sanitizeCommandArgumentInputs([
+            { name: "message", inputType: "Text", value },
+        ]);
+        return { argumentInputs, validation: validateCommandArguments({ argumentInputs }, { message: value }) };
+    })()`, { sanitizeCommandArgumentInputs, validateCommandArguments, value }, { timeout: 1000 });
+    assert.equal(result.argumentInputs[0].value, expected);
+    assert.equal(result.validation.ok, true);
+    assert.equal(result.validation.values.message, expected);
+});
+
+test("overlength text command defaults are rejected rather than silently shortened", () => {
+    const value = "  hello world  ";
+    const argumentInputs = sanitizeCommandArgumentInputs([
+        { name: "message", inputType: "Text", value, maxLength: 5 },
+    ]);
+    assert.equal(argumentInputs[0].value, "hello world");
+    const validation = validateCommandArguments({ argumentInputs }, { message: argumentInputs[0].value });
+    assert.equal(validation.ok, false);
+    assert.deepEqual(validation.errors, [{
+        argumentName: "message",
+        errorMessage: "message must be 5 characters or fewer.",
+    }]);
+});
+
+test("text limits and fixed choices validate the Hosting-normalized value", () => {
+    const argumentInputs = sanitizeCommandArgumentInputs([
+        { name: "message", inputType: "Text", value: "\u0085  hello  \u0085", maxLength: 5 },
+        { name: "region", inputType: "Choice", value: "  west  ", options: ["west"] },
+        { name: "bom", inputType: "Text", value: "\uFEFFhello\uFEFF" },
+    ]);
+    assert.equal(argumentInputs[0].value, "hello");
+    assert.equal(argumentInputs[1].value, "west");
+    assert.equal(argumentInputs[2].value, "\uFEFFhello\uFEFF");
+    assert.deepEqual(validateCommandArguments({ argumentInputs }, {
+        message: "\u0085  hello  \u0085",
+        region: "  west  ",
+        bom: "\uFEFFhello\uFEFF",
+    }), {
+        ok: true,
+        values: { message: "hello", region: "west", bom: "\uFEFFhello\uFEFF" },
+        errors: [],
+    });
+});
+
+test("secret argument whitespace is preserved and is not treated as missing", () => {
+    const command = {
+        argumentInputs: [{ name: "token", inputType: "SecretText", required: true, maxLength: 2 }],
+    };
+    const validation = validateCommandArguments(command, { token: "  " });
+    assert.deepEqual(validation, { ok: true, values: { token: "  " }, errors: [] });
+    assert.deepEqual(buildCommandArgumentTokens(validation.values), ["--", "--token=  "]);
+    assert.equal(validateCommandArguments(command, { token: "" }).ok, false);
+    assert.equal(validateCommandArguments(command, { token: "   " }).ok, false);
+});
+
 test("redactText strips common token and secret forms", () => {
     const value = redactText(
         "\u001b[31mfailed\u001b[0m https://localhost/login?t=abc123 password=hunter2 API_KEY: value",
@@ -595,6 +689,52 @@ test("workspace fallback discovers file-based TypeScript AppHosts with mts exten
             new Set(await discoverConfiguredAppHosts(root)),
             new Set([directAppHost, nestedAppHost]),
         );
+    } finally {
+        await rm(fixtureRoot, { recursive: true, force: true });
+    }
+});
+
+test("workspace fallback recognizes source AppHost casing at either scan depth", async (t) => {
+    for (const fileName of ["AppHost.cs", "AppHost.ts", "AppHost.mts", "APPHOST.MTS"]) {
+        await t.test(fileName, async () => {
+            const fixtureRoot = await mkdtemp(join(tmpdir(), "aspire-cased-apphost-"));
+            try {
+                const root = join(fixtureRoot, ...Array(10).fill("scope"));
+                const nestedDirectory = join(root, "nested");
+                await mkdir(nestedDirectory, { recursive: true });
+                const directAppHost = join(root, fileName);
+                const nestedAppHost = join(nestedDirectory, fileName);
+                await writeFile(directAppHost, "");
+                await writeFile(nestedAppHost, "");
+                await writeFile(join(root, `${fileName}.bak`), "");
+                await mkdir(join(root, "unrelated"));
+                await writeFile(join(root, "unrelated", "worker.mts"), "");
+
+                assert.deepEqual(
+                    new Set(await discoverConfiguredAppHosts(root)),
+                    new Set([directAppHost, nestedAppHost]),
+                );
+            } finally {
+                await rm(fixtureRoot, { recursive: true, force: true });
+            }
+        });
+    }
+});
+
+test("workspace fallback preserves root source symlinks and ignores dangling links", {
+    skip: process.platform === "win32",
+}, async () => {
+    const fixtureRoot = await mkdtemp(join(tmpdir(), "aspire-linked-apphost-"));
+    try {
+        const root = join(fixtureRoot, ...Array(10).fill("scope"));
+        await mkdir(root, { recursive: true });
+        const target = join(fixtureRoot, "source.mts");
+        const appHostPath = join(root, "apphost.mts");
+        await writeFile(target, "");
+        await symlink(target, appHostPath);
+        await symlink(join(fixtureRoot, "missing.ts"), join(root, "apphost.ts"));
+
+        assert.deepEqual(await discoverConfiguredAppHosts(root), [appHostPath]);
     } finally {
         await rm(fixtureRoot, { recursive: true, force: true });
     }

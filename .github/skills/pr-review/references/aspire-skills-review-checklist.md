@@ -229,11 +229,12 @@ For a release PR, verify:
   source PRs require generation-only validation, not generated commits. Dev keeps
   the last released snapshot; development HTTP output lives on `opencode-dev`,
   identifies its source SHA, and pins cross-skill links to that SHA.
-- Tests, bundle builds and attestations, skills-only upload, and required checks
-  agree. Distinguish local evidence from CI results.
+- Tests, catalog and version checks, and required CI agree. Distinguish local
+  evidence from CI results.
 - Maintainer approval and merge authorize the publisher to tag the exact merged
-  main commit and publish matching changelog notes. Reruns preserve that tag and
-  those notes; no manual tag step or token-triggered follow-up job is needed.
+  main commit and create a source-only GitHub release with matching changelog
+  notes. Reruns preserve that tag and those notes; no manual tag step, generated
+  archive upload, or token-triggered follow-up job is needed.
 
 The Arcade-derived workflow opens selected dev-to-release patch backports by
 manual dispatch and automatically attempts a main-to-dev patch backport when a

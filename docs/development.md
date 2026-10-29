@@ -9,6 +9,8 @@ npm test
 ```
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for skill formatting and agent-host checks.
+Set `CHROME_BIN` to a Chromium executable when running `npm test` to include the
+AppHosts native-browser number-input regression; without it, that check is skipped.
 Ordinary contributions, including forks and release fixes, do not run catalog
 commands or commit generated files. Dev retains `CHANGELOG.md` and, after the
 first automated release, the last released `opencode/` snapshot. That snapshot
@@ -75,7 +77,7 @@ newer publication.
    workflow can also be dispatched from main with the release branch name.
 4. **Release to main.** Maintainers approve and merge the release PR after all
    required checks pass. The publisher validates and tags the exact merged
-   commit, creates the GitHub release, and uploads the skills bundle.
+   commit and creates a source-only GitHub release with no generated archives.
 5. **Review the automatic backport.** Every same-repository PR merged into main
    triggers the Arcade patch-copy flow back to dev. It opens a reviewable
    `backport/pr-<number>-to-dev` PR when patch application and preservation
@@ -126,8 +128,9 @@ does not change rulesets, approval requirements, or repository settings.
 ## Publication
 
 `.github/workflows/publish.yml` runs when a same-repository `release/*` PR
-merges into main. It uses the event's `merge_commit_sha`, builds and attests
-both bundles, and uploads only `aspire-skills-v<version>.tgz`.
+merges into main. It uses the event's `merge_commit_sha`, reruns the source,
+catalog, and version checks, then tags that commit and creates a source-only
+GitHub release from the approved changelog notes.
 
 Tag/release publication still uses `GITHUB_TOKEN`; branch and PR preparation uses
 the Aspire App. Maintainers approve and merge PRs. Tags and releases are
