@@ -2,7 +2,7 @@
   "skills": [
     {
       "name": "aspire",
-      "version": "sha512-bf8f8d5e4549e1d9493577c44995caf7c7fa5e8b8b07807c37852103015a48812a9ff9db47c02472a66113e82b1d1cf80fa5aa47d08dec2b5f4874cc84bf1e49",
+      "version": "sha512-242e4dc05e9b3e37e60e667241f3114a503c7b59e8645893f9b0742830b063fa0593c0ff1ad089238664808a9c57a54b1e5d39a2bdbe02d062be52985ed3da59",
       "files": [
         "SKILL.md",
         "references/aspire-13-3-breaking-changes.md",
@@ -46,7 +46,7 @@
     },
     {
       "name": "aspire-orchestration",
-      "version": "sha512-400fea3c05d0afd48db54c0b7aa10a93c15691b73fd4e4d43d4a1efb4252ee66b410471b8217adb23e1402d1bf96db20fd0f91277b340b1776337d4f2226d410",
+      "version": "sha512-4d79074bfe2882ca8c77d946b1c29a8b5d8a0f2259a4235e0f24079cbc52f3e127aa6c13dc8dd988fc5d07916cd493aeb0d38cabb4233c48c1a0b0d2dbba5c58",
       "files": [
         "SKILL.md",
         "references/agent-workflows.md",
@@ -78,7 +78,7 @@
     },
     {
       "name": "aspireify",
-      "version": "sha512-caa488d5558ef51b974bc4f3daefabc6c741423ed5c376d057288c361c968cd3d6e8b76dfe023055214bdb529e8cc52af27d0648e7960a28f9f3183ecc0ad6a0",
+      "version": "sha512-3e86412b2a1357aeb6ef378481ff5fc277a76a2f8fd2694c3a7cd2579b46a665d07fe67be8765a9f0c8bb62407b5f6ea5fe87c8daf40750f09780aae3d80acdc",
       "files": [
         "SKILL.md",
         "references/apphost-wiring.md",

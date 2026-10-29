@@ -88,12 +88,15 @@ matching available Aspire skill or skills. The instruction never names the expec
 owner, so the evaluation still measures owner selection and router handoff rather
 than parroting a requested skill name. Negative cases omit it.
 
-The router spec deliberately uses `gpt-5.6-sol` instead of the repository's
-usual `gpt-5-mini` executor so single-trial PR gates can enforce owner activation
+The router spec deliberately uses `gpt-5.6-sol` instead of the legacy capability
+specs' `gpt-5-mini` executor so single-trial PR gates can enforce owner activation
 without naming the owner in prompts. This increases router-suite cost, but avoids
 weakening policy checks to accommodate small-model routing variance.
 The terminal suite uses the same executor for exact experimental APIs and real
 activation: initial `gpt-5-mini` trials invented dock APIs or skipped invocation.
+The orchestration and Aspireify suites also use `gpt-5.6-sol`: their Actions
+executor rejected `gpt-5-mini` as unavailable before any trials could execute.
+This changes their model baseline and cost, not their grading thresholds.
 Actual-edit prompts expose the changed code in the reply as well as the captured
 diff, because the prompt judge's timeline may truncate tool output. The independent
 program grader still checks the actual workspace; prose cannot substitute for edits.
