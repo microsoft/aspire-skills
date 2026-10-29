@@ -4,6 +4,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
+### Fixed
+- Keep distinct Aspireify proposal snapshots for POSIX AppHost paths containing
+  literal backslashes instead of treating those characters as directory separators.
+
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
   reference files and SHA-512 content versions.
