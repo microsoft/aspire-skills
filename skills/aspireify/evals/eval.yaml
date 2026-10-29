@@ -15,12 +15,12 @@ defaults:
   # whole eval (evalHadExecutionErrors) even when the aggregate score passes.
   timeout: 600s
   executor: copilot-sdk
-  model: gpt-5-mini
+  model: gpt-5.6-sol
   judge_model: gpt-5.6-sol
 scoring:
   # CI-gate tolerance: a stimulus passes when the weighted majority of its graders
   # pass, rather than demanding every grader pass on every trial. This absorbs (a)
-  # gpt-5-mini nondeterminism and (b) `output-contains` graders that look for code
+  # run-to-run variation and (b) `output-contains` graders that look for code
   # tokens the agent writes into edited files instead of its chat message. Genuine
   # regressions still drop the aggregate below the bar.
   threshold: 0.7
