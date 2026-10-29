@@ -1932,6 +1932,19 @@ async function runAppHostOperation(appHostId, operation, step) {
     }
 }
 
+function normalizeCommandValue(inputType, value) {
+    if (typeof value !== "string" || inputType.toLowerCase().includes("secret")) {
+        return value;
+    }
+    // Match .NET String.Trim: U+0085 is whitespace, but U+FEFF is not.
+    const whitespace = /\p{White_Space}/u;
+    let start = 0;
+    let end = value.length;
+    while (start < end && whitespace.test(value[start])) start++;
+    while (end > start && whitespace.test(value[end - 1])) end--;
+    return value.slice(start, end);
+}
+
 function commandDraft(node) {
     let draft = commandDrafts.get(node.id);
     if (!draft) {
@@ -2007,9 +2020,15 @@ function prepareCommandDraft(node, inputs) {
 }
 
 function commandDependencySignature(node, inputs, values) {
-    const dependencies = [...new Set([...(node.command.argumentInputs ?? []), ...inputs]
+    const allInputs = [...(node.command.argumentInputs ?? []), ...inputs];
+    const dependencies = [...new Set(allInputs
         .flatMap((input) => input.dynamicLoading?.dependsOnInputs ?? []))].sort();
-    return JSON.stringify(dependencies.map((name) => [name, values[name] == null ? null : String(values[name])]));
+    const normalizedValues = new Map(allInputs.map((input) =>
+        [input.name, normalizeCommandValue(input.inputType, values[input.name])]));
+    return JSON.stringify(dependencies.map((name) => {
+        const value = normalizedValues.get(name);
+        return [name, value == null || value === "" ? null : String(value)];
+    }));
 }
 
 function focusCommandPanel(nodeId) {
@@ -2124,15 +2143,21 @@ function commandField(node, input) {
     } else {
         control = element("input", {
             ...accessibility,
-            type: kind.includes("secret") ? "password" : kind.includes("number") ? "number" : "text",
+            type: kind.includes("secret") ? "password" : "text",
+            inputmode: kind.includes("number") ? "decimal" : undefined,
             name: input.name,
             value: draft[input.name] ?? "",
             required: input.required,
             disabled: input.disabled,
             placeholder: input.placeholder ?? "",
-            ...(input.maxLength ? { maxLength: input.maxLength } : {}),
             autocomplete: kind.includes("secret") ? "off" : "on",
-            on: { input: (event) => updateCommandDraft(node, input, event.target.value) },
+            on: {
+                input: (event) => updateCommandDraft(node, input, event.target.value),
+                change: (event) => {
+                    event.target.value = normalizeCommandValue(input.inputType, event.target.value);
+                    updateCommandDraft(node, input, event.target.value);
+                },
+            },
         });
     }
     const label = element("span", { text: `${input.label}${input.required ? " *" : ""}` });
@@ -2150,7 +2175,8 @@ function commandField(node, input) {
 }
 
 function updateCommandDraft(node, input, value) {
-    const changed = commandDraft(node)[input.name] !== value;
+    const changed = (normalizeCommandValue(input.inputType, commandDraft(node)[input.name]) ?? "")
+        !== (normalizeCommandValue(input.inputType, value) ?? "");
     commandDraft(node)[input.name] = value;
     const remainingErrors = (commandValidationErrors.get(node.id) ?? [])
         .filter((error) => error.argumentName !== input.name);
@@ -2300,6 +2326,9 @@ function renderCommandPanel(node) {
         },
     }, [
         element("p", { class: "inline-panel-title", text: node.label }),
+        ...(inputs.some((input) => !input.disabled && !input.inputType.toLowerCase().includes("secret"))
+            ? [element("small", { text: "Non-secret values are trimmed to match Aspire before execution." })]
+            : []),
         ...inputs.filter((input) => !input.disabled).map((input) => commandField(node, input)),
         element("div", { class: "panel-actions" }, [
             element("button", {
@@ -2333,6 +2362,18 @@ async function submitResourceCommand(node, form) {
     if (commandRunning || dynamicLoadingIds.has(node.id) || dynamicLoadFailedIds.has(node.id)) {
         return;
     }
+    const inputs = commandInputList(node);
+    const draft = commandDraft(node);
+    for (const input of inputs.filter((input) => !input.disabled)) {
+        const value = normalizeCommandValue(input.inputType, draft[input.name]);
+        if (value !== draft[input.name]) {
+            draft[input.name] = value;
+            const control = form.querySelector(`[name="${CSS.escape(input.name)}"]`);
+            if (control) {
+                control.value = value;
+            }
+        }
+    }
     commandRunning = true;
     updateBusy();
     try {
@@ -2343,8 +2384,8 @@ async function submitResourceCommand(node, form) {
                 resourceName: node.resourceName,
                 commandName: node.commandName,
                 arguments: Object.fromEntries(
-                    Object.entries(commandDraft(node))
-                        .filter(([name]) => commandInputList(node)
+                    Object.entries(draft)
+                        .filter(([name]) => inputs
                             .some((input) => !input.disabled && input.name === name)),
                 ),
             },

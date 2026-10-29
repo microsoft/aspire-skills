@@ -330,6 +330,19 @@ function sanitizeOptions(raw) {
     }));
 }
 
+function normalizeCommandValue(inputType, value) {
+    if (typeof value !== "string" || inputType.toLowerCase().includes("secret")) {
+        return value;
+    }
+    // Match .NET String.Trim: U+0085 is whitespace, but U+FEFF is not.
+    const whitespace = /\p{White_Space}/u;
+    let start = 0;
+    let end = value.length;
+    while (start < end && whitespace.test(value[start])) start++;
+    while (end > start && whitespace.test(value[end - 1])) end--;
+    return value.slice(start, end);
+}
+
 function sanitizeArgumentInput(raw) {
     if (!isRecord(raw)) {
         return undefined;
@@ -346,9 +359,9 @@ function sanitizeArgumentInput(raw) {
         : [];
     const options = sanitizeOptions(raw.options);
     const allowCustomChoice = raw.allowCustomChoice === true;
-    const value = inputType.toLowerCase().includes("secret")
+    const value = raw.value == null || inputType.toLowerCase().includes("secret")
         ? undefined
-        : optionalText(raw.value, Number.isFinite(maxLength) && maxLength > 0 ? Math.min(maxLength, 100_000) : 100_000);
+        : normalizeCommandValue(inputType, String(raw.value));
     const safeValue = value && options.length > 0 && !allowCustomChoice
         ? options.some((option) => option.value === value) ? value : undefined
         : value;
@@ -1905,8 +1918,8 @@ export function validateCommandArguments(command, values) {
         if (input.disabled) {
             continue;
         }
-        const value = values[input.name];
-        const missing = value === undefined || value === null || (typeof value === "string" && value.trim() === "");
+        const value = normalizeCommandValue(input.inputType, values[input.name]);
+        const missing = value === undefined || value === null || value === "";
         if (missing) {
             if (input.required) {
                 errors.push({ argumentName: input.name, errorMessage: `${input.label || input.name} is required.` });
