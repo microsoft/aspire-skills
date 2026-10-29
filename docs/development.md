@@ -71,13 +71,46 @@ prerequisite for Aspire-owned scripts and retirement of the old bundle machinery
 Configure `ASPIRE_BOT_APP_ID` and `ASPIRE_BOT_PRIVATE_KEY` as repository secrets.
 Source research uses a read-only GitHub CLI proxy. Optional maintenance is
 disabled in `.github/workflows/aw.json`. Regenerate the compiled workflow with
-gh-aw v0.89.17 after editing its source or configuration.
-Workflow-owned post-steps run dependency restore and all targeted telemetry tests
-on the runner, outside the agent sandbox. Required PowerShell coverage is included.
-Restore must succeed before tests begin. Any failed agent or verification step
-replaces proposals and no-ops with an incomplete outcome before output processing;
-the agent cannot override a failing check. Dry-run previews use a read-only Aspire
-checkout, without persisting Git credentials or enabling publication.
+gh-aw v0.89.17 on Linux or WSL after editing its source or configuration.
+
+The workflow separates input resolution, agent editing, verification, and
+publication:
+
+- A trusted job snapshots the source PR's commit, Git diff, and file inventory,
+  and pins Aspire's base commit. Manual runs can select unmerged PRs; neither
+  their descriptions nor their contents become workflow instructions.
+- A fresh verification job reads the existing publisher's compiled file policy,
+  checks the bundle's actual changes, and freezes one candidate commit. The
+  agent's checkout, Git configuration, and proposed commit history are not reused.
+- A digest-pinned .NET SDK container restores only trusted base source. A second,
+  unprivileged container runs all required telemetry tests, including PowerShell,
+  against the proposed code with networking disabled. Both containers receive only
+  disposable source and cache directories, not runner credentials, home, Actions
+  control files, publication artifacts, or a Docker socket. There is no fallback
+  to running candidate code on the host or restoring it online.
+- Only the trusted supervisor can produce the successful verification receipt.
+  Publication requires verifier success, clean threat detection, matching artifact
+  hashes, the same source commit, and the tested candidate tree and base. Source
+  or target changes detected before publication require a new run. The native
+  publisher's later fetches cannot silently move its signed replay onto a newer
+  base. Before promoting any artifacts, the publication job independently checks
+  the bundle's actual file changes against the same compiled policy; a clean
+  companion patch cannot hide an out-of-scope bundle change.
+- The publisher can create one draft PR in `microsoft/aspire` on `main`, restricted
+  to telemetry paths and the protected-file policy. Its App token covers only
+  Aspire; source research, input resolution, and verification use read-only
+  tokens. Diagnostic issue reporting is disabled in both live and dry-run modes;
+  failures remain in Actions logs and artifacts. The pinned compiler still grants
+  source-repository contents and PR write permissions to native publishing and
+  conclusion jobs; built-in permission overrides are additive, not restrictive.
+  Those jobs never execute candidate build or test code, and conclusion receives
+  no publishing App token.
+
+The receipt establishes which tree ran the required checks, not that the
+agent's conclusions or proposed telemetry changes are safe. Human review and
+downstream branch protection remain necessary. Draft status does not prevent
+other workflows from executing; downstream CI must not expose privileged
+credentials to proposed code.
 
 ### Manual runs
 
@@ -91,6 +124,34 @@ and checks; inspect the Actions summary and artifacts for dry-run previews.
 Merge-triggered runs publish normally.
 
 Source reads use the PR's merge commit when merged, or its head commit when
-unmerged, independently of the workflow branch's SHA.
+unmerged, independently of the workflow branch's SHA. Evidence is derived from
+those Git objects, not a later mutable PR-files response.
 Aspire-side prerequisite checks still apply; dry runs do not bypass ownership
 or bundle-retirement gates. Failed checks remain visible as failed runs.
+
+### Verifier changes
+
+The isolation supervisor and publication checks are in
+`scripts/telemetry-workflow.mjs`. They use the pinned gh-aw runtime's path policy,
+not a second allowlist. Keep its SDK image digest pinned when updating the
+toolchain; the image must include PowerShell and be able to bootstrap the SDK
+required by Aspire's pinned `global.json`. Preserve the same container paths
+between trusted restore and offline tests so restored assets remain usable.
+Populate sandbox source from a private clone of the trusted verifier checkout,
+without copying credentials or sharing Git metadata; do not fetch the base twice.
+Never mount runner state or re-enable candidate network access to fix a test.
+
+Run `node --test tests/update-aspire-workflow.test.mjs` for behavioral coverage
+of snapshot consistency, rejected proposals, file modes, isolated execution
+arguments, artifact tampering, run binding, base drift, and compiled gates.
+
+The Linux **Tests** job also runs
+`node --test tests/telemetry-publication/*.test.mjs` with `GH_AW_ACTIONS_DIR`
+pointing to the same pinned gh-aw setup runtime used by the workflow. These
+regressions execute the compiled pre-publication script and native signed-PR
+handler against local Git fixtures. Workflow, CODEOWNERS, unrelated source, and
+project-file edits must be rejected both alone and mixed with valid telemetry,
+before any API mutation or Git push. A misleading telemetry-only companion patch
+must not bypass that boundary. The valid-telemetry control reaches the signed
+commit API and Git-push fallback, with both intercepted; no test writes to GitHub.
+Update the CI runtime pin alongside any workflow runtime upgrade.

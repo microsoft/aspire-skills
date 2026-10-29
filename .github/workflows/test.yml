@@ -34,3 +34,13 @@ jobs:
 
       - name: Test
         run: npm test
+
+      - name: Setup pinned telemetry publisher runtime
+        if: runner.os == 'Linux'
+        uses: github/gh-aw-actions/setup@f3b81cdb3070066a47faa9bdf440f4f1dc78b1f0
+
+      - name: Test telemetry publication boundary
+        if: runner.os == 'Linux'
+        env:
+          GH_AW_ACTIONS_DIR: ${{ runner.temp }}/gh-aw/actions
+        run: node --test tests/telemetry-publication/*.test.mjs

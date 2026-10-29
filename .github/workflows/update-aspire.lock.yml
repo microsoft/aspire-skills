@@ -1,5 +1,5 @@
-# gh-aw-metadata: {"schema_version":"v4","frontmatter_hash":"7e2587c5722404e6e2a52a9f5172867473f6338cf4b4c49df364e5f911976f71","body_hash":"b5cda554def2fcdd2825cf26268f71772bd3ea0c98199eb89b5524a44a68a10c","compiler_version":"v0.89.17","strict":true,"agent_id":"copilot","engine_versions":{"copilot":"1.0.85"}}
-# gh-aw-manifest: {"version":1,"secrets":["ASPIRE_BOT_APP_ID","ASPIRE_BOT_PRIVATE_KEY","GH_AW_CI_TRIGGER_TOKEN","GH_AW_DEFAULT_OTLP_ENDPOINT","GH_AW_DEFAULT_OTLP_HEADERS","GH_AW_GITHUB_MCP_SERVER_TOKEN","GH_AW_GITHUB_TOKEN","GITHUB_TOKEN"],"actions":[{"repo":"actions/checkout","sha":"3d3c42e5aac5ba805825da76410c181273ba90b1","version":"v7.0.1"},{"repo":"actions/checkout","sha":"de0fac2e4500dabe0009e67214ff5f5447ce83dd","version":"v6.0.2"},{"repo":"actions/create-github-app-token","sha":"bcd2ba49218906704ab6c1aa796996da409d3eb1","version":"v3.2.0"},{"repo":"actions/download-artifact","sha":"3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c","version":"v8.0.1"},{"repo":"actions/github-script","sha":"3a2844b7e9c422d3c10d287c895573f7108da1b3","version":"v9.0.0"},{"repo":"actions/setup-dotnet","sha":"a98b56852c35b8e3190ac28c8c2271da59106c68","version":"v6.0.0"},{"repo":"actions/setup-node","sha":"820762786026740c76f36085b0efc47a31fe5020","version":"v7.0.0"},{"repo":"actions/upload-artifact","sha":"043fb46d1a93c77aae656e7c1c64a875d1fc6a0a","version":"v7.0.1"},{"repo":"github/gh-aw-actions/setup","sha":"f3b81cdb3070066a47faa9bdf440f4f1dc78b1f0","version":"v0.89.17"}],"containers":[{"image":"ghcr.io/github/gh-aw-firewall/agent:0.28.20","digest":"sha256:1bacef0f405d77999d01d8c00cb731222531b3f43ef9dc8312c513d6d9038bb1","pinned_image":"ghcr.io/github/gh-aw-firewall/agent:0.28.20@sha256:1bacef0f405d77999d01d8c00cb731222531b3f43ef9dc8312c513d6d9038bb1"},{"image":"ghcr.io/github/gh-aw-firewall/api-proxy:0.28.20","digest":"sha256:30ab6d3261dd95364281fa0b52ab78450e1c01aa074eccc3a8d4f04b12a6560b","pinned_image":"ghcr.io/github/gh-aw-firewall/api-proxy:0.28.20@sha256:30ab6d3261dd95364281fa0b52ab78450e1c01aa074eccc3a8d4f04b12a6560b"},{"image":"ghcr.io/github/gh-aw-firewall/cli-proxy:0.28.20","digest":"sha256:1f2d7e0791d0e522152f7479ed700476720effe3b7498b837259112049595d64","pinned_image":"ghcr.io/github/gh-aw-firewall/cli-proxy:0.28.20@sha256:1f2d7e0791d0e522152f7479ed700476720effe3b7498b837259112049595d64"},{"image":"ghcr.io/github/gh-aw-firewall/squid:0.28.20","digest":"sha256:cba5f56857e4869c4a00c1cce29c3056516cf1a746e18ce380753ecfbe40f112","pinned_image":"ghcr.io/github/gh-aw-firewall/squid:0.28.20@sha256:cba5f56857e4869c4a00c1cce29c3056516cf1a746e18ce380753ecfbe40f112"},{"image":"ghcr.io/github/gh-aw-mcpg:v0.4.25","digest":"sha256:9be0a86220e807a0ecc89e53d7453468f7a53fbc6b3d1efd2299025ffe01d086","pinned_image":"ghcr.io/github/gh-aw-mcpg:v0.4.25@sha256:9be0a86220e807a0ecc89e53d7453468f7a53fbc6b3d1efd2299025ffe01d086"},{"image":"ghcr.io/github/gh-aw-node","digest":"sha256:0daa8971fa4732b647150cb6524a6b0804b68d5d24f6f58b5dd1af23bd63fb23","pinned_image":"ghcr.io/github/gh-aw-node@sha256:0daa8971fa4732b647150cb6524a6b0804b68d5d24f6f58b5dd1af23bd63fb23"},{"image":"ghcr.io/github/github-mcp-server:v1.12.1","digest":"sha256:0ba840c46a237879c8300e7fddb0b6347f20e029ccb9cbe2ce4a943daa1ff560","pinned_image":"ghcr.io/github/github-mcp-server:v1.12.1@sha256:0ba840c46a237879c8300e7fddb0b6347f20e029ccb9cbe2ce4a943daa1ff560"}],"has_pull_request":true,"mcp_servers":[{"name":"safeoutputs","tools":["create_pull_request","missing_data","missing_tool","noop"]}]}
+# gh-aw-metadata: {"schema_version":"v4","frontmatter_hash":"2b1cb9b8beb337ddfa3659b9b32e425047c2f3114af3659546c09a4a033d80c8","body_hash":"60a3ab6715e2c11d229a139f91412b5487581efc8645187af05fdb9176d06335","compiler_version":"v0.89.17","strict":true,"agent_id":"copilot","engine_versions":{"copilot":"1.0.85"}}
+# gh-aw-manifest: {"version":1,"secrets":["ASPIRE_BOT_APP_ID","ASPIRE_BOT_PRIVATE_KEY","GH_AW_CI_TRIGGER_TOKEN","GH_AW_DEFAULT_OTLP_ENDPOINT","GH_AW_DEFAULT_OTLP_HEADERS","GH_AW_GITHUB_MCP_SERVER_TOKEN","GH_AW_GITHUB_TOKEN","GITHUB_TOKEN"],"actions":[{"repo":"actions/checkout","sha":"3d3c42e5aac5ba805825da76410c181273ba90b1","version":"v7.0.1"},{"repo":"actions/create-github-app-token","sha":"bcd2ba49218906704ab6c1aa796996da409d3eb1","version":"v3.2.0"},{"repo":"actions/download-artifact","sha":"3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c","version":"v8.0.1"},{"repo":"actions/github-script","sha":"3a2844b7e9c422d3c10d287c895573f7108da1b3","version":"v9.0.0"},{"repo":"actions/setup-node","sha":"820762786026740c76f36085b0efc47a31fe5020","version":"v7.0.0"},{"repo":"actions/upload-artifact","sha":"043fb46d1a93c77aae656e7c1c64a875d1fc6a0a","version":"v7.0.1"},{"repo":"github/gh-aw-actions/setup","sha":"f3b81cdb3070066a47faa9bdf440f4f1dc78b1f0","version":"f3b81cdb3070066a47faa9bdf440f4f1dc78b1f0"}],"containers":[{"image":"ghcr.io/github/gh-aw-firewall/agent:0.28.20","digest":"sha256:1bacef0f405d77999d01d8c00cb731222531b3f43ef9dc8312c513d6d9038bb1","pinned_image":"ghcr.io/github/gh-aw-firewall/agent:0.28.20@sha256:1bacef0f405d77999d01d8c00cb731222531b3f43ef9dc8312c513d6d9038bb1"},{"image":"ghcr.io/github/gh-aw-firewall/api-proxy:0.28.20","digest":"sha256:30ab6d3261dd95364281fa0b52ab78450e1c01aa074eccc3a8d4f04b12a6560b","pinned_image":"ghcr.io/github/gh-aw-firewall/api-proxy:0.28.20@sha256:30ab6d3261dd95364281fa0b52ab78450e1c01aa074eccc3a8d4f04b12a6560b"},{"image":"ghcr.io/github/gh-aw-firewall/cli-proxy:0.28.20","digest":"sha256:1f2d7e0791d0e522152f7479ed700476720effe3b7498b837259112049595d64","pinned_image":"ghcr.io/github/gh-aw-firewall/cli-proxy:0.28.20@sha256:1f2d7e0791d0e522152f7479ed700476720effe3b7498b837259112049595d64"},{"image":"ghcr.io/github/gh-aw-firewall/squid:0.28.20","digest":"sha256:cba5f56857e4869c4a00c1cce29c3056516cf1a746e18ce380753ecfbe40f112","pinned_image":"ghcr.io/github/gh-aw-firewall/squid:0.28.20@sha256:cba5f56857e4869c4a00c1cce29c3056516cf1a746e18ce380753ecfbe40f112"},{"image":"ghcr.io/github/gh-aw-mcpg:v0.4.25","digest":"sha256:9be0a86220e807a0ecc89e53d7453468f7a53fbc6b3d1efd2299025ffe01d086","pinned_image":"ghcr.io/github/gh-aw-mcpg:v0.4.25@sha256:9be0a86220e807a0ecc89e53d7453468f7a53fbc6b3d1efd2299025ffe01d086"},{"image":"ghcr.io/github/gh-aw-node","digest":"sha256:0daa8971fa4732b647150cb6524a6b0804b68d5d24f6f58b5dd1af23bd63fb23","pinned_image":"ghcr.io/github/gh-aw-node@sha256:0daa8971fa4732b647150cb6524a6b0804b68d5d24f6f58b5dd1af23bd63fb23"},{"image":"ghcr.io/github/github-mcp-server:v1.12.1","digest":"sha256:0ba840c46a237879c8300e7fddb0b6347f20e029ccb9cbe2ce4a943daa1ff560","pinned_image":"ghcr.io/github/github-mcp-server:v1.12.1@sha256:0ba840c46a237879c8300e7fddb0b6347f20e029ccb9cbe2ce4a943daa1ff560"}],"has_pull_request":true,"mcp_servers":[{"name":"safeoutputs","tools":["create_pull_request","missing_data","missing_tool","noop"]}]}
 # This file was automatically generated by gh-aw (v0.89.17). DO NOT EDIT. To debug this workflow, load the skill at https://github.com/github/gh-aw/blob/main/debug.md
 #
 #    ___                   _   _
@@ -26,10 +26,6 @@
 # Keep Aspire telemetry aligned with skills, extensions, and canonical MCP tools.
 # Update managed telemetry, compatibility hooks, regression tests, and docs.
 #
-# Frontmatter env variables:
-#   - DRY_RUN: (main workflow)
-#   - SOURCE_PR_NUMBER: (main workflow)
-#
 # Secrets used:
 #   - ASPIRE_BOT_APP_ID
 #   - ASPIRE_BOT_PRIVATE_KEY
@@ -42,14 +38,13 @@
 #
 # Custom actions used:
 #   - actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-#   - actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 #   - actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
 #   - actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
 #   - actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
 #   - actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0 (source v9)
-#   - actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
 #   - actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
 #   - actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+#   - github/gh-aw-actions/setup@f3b81cdb3070066a47faa9bdf440f4f1dc78b1f0 # f3b81cdb3070066a47faa9bdf440f4f1dc78b1f0
 #   - github/gh-aw-actions/setup@f3b81cdb3070066a47faa9bdf440f4f1dc78b1f0 # v0.89.17
 #
 # Container images used:
@@ -97,8 +92,6 @@ concurrency:
 run-name: "Update Aspire telemetry"
 
 env:
-  DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
-  SOURCE_PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
   OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.GH_AW_DEFAULT_OTLP_ENDPOINT || vars.GH_AW_DEFAULT_OTLP_ENDPOINT }}
   OTEL_SERVICE_NAME: gh-aw.update-aspire
   OTEL_RESOURCE_ATTRIBUTES: 'gh-aw.workflow.name=Update%20Aspire%20telemetry,gh-aw.repository=${{ github.repository }},gh-aw.run.id=${{ github.run_id }},github.run_id=${{ github.run_id }},gh-aw.engine.id=copilot'
@@ -118,7 +111,6 @@ jobs:
     permissions:
       actions: read
       contents: read
-      issues: write
     env:
       GH_AW_MAX_DAILY_AI_CREDITS: ${{ vars.GH_AW_DEFAULT_MAX_DAILY_AI_CREDITS || '5000' }}
       GH_AW_RUNTIME_FEATURES: ${{ vars.GH_AW_RUNTIME_FEATURES }}
@@ -264,7 +256,7 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           GH_AW_COMPILED_VERSION: "v0.89.17"
-          GH_AW_BLOCKED_VERSION_REPORT_AS_ISSUE: ${{ github.event_name != 'workflow_dispatch' || !inputs.dry_run }}
+          GH_AW_BLOCKED_VERSION_REPORT_AS_ISSUE: "false"
           GH_AW_WORKFLOW_NAME: "Update Aspire telemetry"
         with:
           script: |
@@ -415,7 +407,9 @@ jobs:
           retention-days: 1
 
   agent:
-    needs: activation
+    needs:
+      - activation
+      - resolve-source
     if: needs.activation.outputs.daily_ai_credits_exceeded != 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -514,7 +508,7 @@ jobs:
         with:
           persist-credentials: false
           repository: microsoft/aspire
-          ref: main
+          ref: ${{ needs.resolve-source.outputs.aspire-base }}
           token: ${{ steps.checkout-app-token-0.outputs.token }}
           fetch-depth: 0
       - name: Build checkout manifest for safe-outputs handlers
@@ -616,10 +610,6 @@ jobs:
       - name: Require Aspire-owned telemetry
         run: "$ErrorActionPreference = \"Stop\"\nforeach ($script in @(\"track-telemetry.sh\", \"track-telemetry.ps1\")) {\n  if (!(Test-Path \"src/Aspire.Cli/Agents/Hooks/$script\" -PathType Leaf)) {\n    throw \"Land microsoft/aspire#20947: Aspire must own both telemetry hook scripts.\"\n  }\n}\nif ((Test-Path \"src/Aspire.Cli/Agents/AspireSkills/Embedded\") -or\n    (Test-Path \".github/workflows/update-aspire-skills-bundle.yml\")) {\n  throw \"Land microsoft/aspire#20947: retire the embedded skills bundle and standalone updater first.\"\n}\n"
         shell: pwsh
-      - name: Setup Aspire's .NET SDK
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          global-json-file: global.json
       - id: github-read-token
         name: Generate read-only GitHub token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
@@ -631,12 +621,11 @@ jobs:
           permission-pull-requests: read
           private-key: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
           repositories: aspire-skills,aspire
-      - id: source-pr
-        name: Resolve source PR
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      - name: Download immutable source evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          github-token: ${{ steps.github-read-token.outputs.token }}
-          script: "const value = process.env.SOURCE_PR_NUMBER;\nconst number = Number(value);\nif (!Number.isSafeInteger(number) || number <= 0 || String(number) !== value) {\n  throw new Error(\"pr_number must be a positive integer.\");\n}\nconst repository = { owner: \"microsoft\", repo: \"aspire-skills\" };\nconst { data: pr } = await github.rest.pulls.get({ ...repository, pull_number: number });\nif (pr.base.ref !== \"main\" || pr.base.repo.full_name !== \"microsoft/aspire-skills\") {\n  throw new Error(\"The source PR must target microsoft/aspire-skills main.\");\n}\nconst manual = context.eventName === \"workflow_dispatch\";\nif (!manual && !pr.merged) {\n  throw new Error(\"Automatic telemetry review requires a merged PR.\");\n}\nconst commit = pr.merged ? pr.merge_commit_sha : pr.head.sha;\nif (typeof commit !== \"string\" || commit.length !== 40 || !/^[0-9a-f]+$/.test(commit)) {\n  throw new Error(\"The source PR did not resolve to a commit SHA.\");\n}\nif (!manual && commit !== context.payload.pull_request.merge_commit_sha) {\n  throw new Error(\"The source PR no longer matches the triggering merge commit.\");\n}\nconst files = await github.paginate(github.rest.pulls.listFiles, {\n  ...repository, pull_number: number, per_page: 100\n});\nif (files.length !== pr.changed_files) {\n  throw new Error(\"The source PR changed-file list is incomplete.\");\n}\nconst fs = require(\"node:fs\");\nfs.mkdirSync(\"/tmp/gh-aw/agent\", { recursive: true });\nfs.writeFileSync(\"/tmp/gh-aw/agent/source-pr-files.json\", JSON.stringify(files));\nfs.writeFileSync(\"/tmp/gh-aw/agent/source-pr.json\", JSON.stringify({\n  number,\n  title: pr.title,\n  body: pr.body,\n  commit,\n  url: pr.html_url,\n  merged: pr.merged,\n  dryRun: manual && process.env.DRY_RUN === \"true\",\n  changed_files: files.map(({ filename, status, additions, deletions }) => ({\n    filename, status, additions, deletions\n  }))\n}));"
+          name: telemetry-source
+          path: /tmp/gh-aw/agent
 
       - name: Download container images
         run: bash "${RUNNER_TEMP}/gh-aw/actions/download_docker_images.sh" ghcr.io/github/gh-aw-firewall/agent:0.28.20@sha256:1bacef0f405d77999d01d8c00cb731222531b3f43ef9dc8312c513d6d9038bb1 ghcr.io/github/gh-aw-firewall/api-proxy:0.28.20@sha256:30ab6d3261dd95364281fa0b52ab78450e1c01aa074eccc3a8d4f04b12a6560b ghcr.io/github/gh-aw-firewall/cli-proxy:0.28.20@sha256:1f2d7e0791d0e522152f7479ed700476720effe3b7498b837259112049595d64 ghcr.io/github/gh-aw-firewall/squid:0.28.20@sha256:cba5f56857e4869c4a00c1cce29c3056516cf1a746e18ce380753ecfbe40f112 ghcr.io/github/gh-aw-mcpg:v0.4.25@sha256:9be0a86220e807a0ecc89e53d7453468f7a53fbc6b3d1efd2299025ffe01d086 ghcr.io/github/gh-aw-node@sha256:0daa8971fa4732b647150cb6524a6b0804b68d5d24f6f58b5dd1af23bd63fb23 ghcr.io/github/github-mcp-server:v1.12.1@sha256:0ba840c46a237879c8300e7fddb0b6347f20e029ccb9cbe2ce4a943daa1ff560
@@ -650,7 +639,7 @@ jobs:
         env:
           GH_AW_FILE_ROOT: "${{ runner.temp }}/gh-aw"
           GH_AW_FILE_CONFIG: "{\"files\":[{\"path\":\"safeoutputs/config.json\",\"content_env\":\"GH_AW_SAFE_OUTPUTS_CONFIG\"}]}"
-          GH_AW_SAFE_OUTPUTS_CONFIG: "{\"create_pull_request\":{\"allowed_base_branches\":[\"main\"],\"allowed_branches\":[\"update-aspire-telemetry-*\"],\"allowed_files\":[\"src/Aspire.Cli/Agents/Hooks/*.cs\",\"src/Aspire.Cli/Agents/Hooks/track-telemetry.sh\",\"src/Aspire.Cli/Agents/Hooks/track-telemetry.ps1\",\"src/Aspire.Cli/Agents/Hooks/README.md\",\"src/Aspire.Cli/Commands/AgentTelemetryCommand.cs\",\"tests/Aspire.Cli.Tests/Agents/AgentTelemetry*.cs\",\"tests/Aspire.Cli.Tests/Agents/TelemetryHook*.cs\",\"tests/Aspire.Cli.Tests/Commands/AgentTelemetryCommandTests.cs\",\"docs/specs/aspire-product-telemetry.md\"],\"base_branch\":\"main\",\"draft\":true,\"fallback_as_issue\":false,\"if_no_changes\":\"error\",\"labels\":[\"area-cli\",\"area-engineering-systems\"],\"max\":1,\"max_patch_files\":100,\"max_patch_size\":4096,\"patch_format\":\"bundle\",\"preserve_branch_name\":true,\"protect_top_level_dot_folders\":true,\"protected_files\":[\"package.json\",\"bun.lockb\",\"bunfig.toml\",\"deno.json\",\"deno.jsonc\",\"deno.lock\",\"global.json\",\"NuGet.Config\",\"Directory.Packages.props\",\"mix.exs\",\"mix.lock\",\"go.mod\",\"go.sum\",\"stack.yaml\",\"stack.yaml.lock\",\"pom.xml\",\"build.gradle\",\"build.gradle.kts\",\"settings.gradle\",\"settings.gradle.kts\",\"gradle.properties\",\"package-lock.json\",\"yarn.lock\",\"pnpm-lock.yaml\",\"npm-shrinkwrap.json\",\"requirements.txt\",\"Pipfile\",\"Pipfile.lock\",\"pyproject.toml\",\"setup.py\",\"setup.cfg\",\"Gemfile\",\"Gemfile.lock\",\"uv.lock\",\"CODEOWNERS\",\"DESIGN.md\",\"README.md\",\"CONTRIBUTING.md\",\"SECURITY.md\",\"CODE_OF_CONDUCT.md\",\"AGENTS.md\"],\"protected_files_policy\":\"blocked\",\"target-repo\":\"microsoft/aspire\",\"title_prefix\":\"[telemetry] \"},\"create_report_incomplete_issue\":{\"create-issue\":\"${{ github.event_name != 'workflow_dispatch' || !inputs.dry_run }}\",\"max\":1,\"title-prefix\":\"[incomplete]\"},\"missing_data\":{},\"missing_tool\":{},\"noop\":{\"max\":1,\"report-as-issue\":\"false\"},\"report_incomplete\":{\"max\":1}}"
+          GH_AW_SAFE_OUTPUTS_CONFIG: "{\"create_pull_request\":{\"allowed_base_branches\":[\"main\"],\"allowed_branches\":[\"update-aspire-telemetry-*\"],\"allowed_files\":[\"src/Aspire.Cli/Agents/Hooks/*.cs\",\"src/Aspire.Cli/Agents/Hooks/track-telemetry.sh\",\"src/Aspire.Cli/Agents/Hooks/track-telemetry.ps1\",\"src/Aspire.Cli/Agents/Hooks/README.md\",\"src/Aspire.Cli/Commands/AgentTelemetryCommand.cs\",\"tests/Aspire.Cli.Tests/Agents/AgentTelemetry*.cs\",\"tests/Aspire.Cli.Tests/Agents/TelemetryHook*.cs\",\"tests/Aspire.Cli.Tests/Commands/AgentTelemetryCommandTests.cs\",\"docs/specs/aspire-product-telemetry.md\"],\"base_branch\":\"main\",\"draft\":true,\"fallback_as_issue\":false,\"github-token\":\"${{ steps.create-pull-request-app-token.outputs.token }}\",\"if_no_changes\":\"error\",\"labels\":[\"area-cli\",\"area-engineering-systems\"],\"max\":1,\"max_patch_files\":100,\"max_patch_size\":4096,\"patch_format\":\"bundle\",\"preserve_branch_name\":true,\"protect_top_level_dot_folders\":true,\"protected_files\":[\"package.json\",\"bun.lockb\",\"bunfig.toml\",\"deno.json\",\"deno.jsonc\",\"deno.lock\",\"global.json\",\"NuGet.Config\",\"Directory.Packages.props\",\"mix.exs\",\"mix.lock\",\"go.mod\",\"go.sum\",\"stack.yaml\",\"stack.yaml.lock\",\"pom.xml\",\"build.gradle\",\"build.gradle.kts\",\"settings.gradle\",\"settings.gradle.kts\",\"gradle.properties\",\"package-lock.json\",\"yarn.lock\",\"pnpm-lock.yaml\",\"npm-shrinkwrap.json\",\"requirements.txt\",\"Pipfile\",\"Pipfile.lock\",\"pyproject.toml\",\"setup.py\",\"setup.cfg\",\"Gemfile\",\"Gemfile.lock\",\"uv.lock\",\"CODEOWNERS\",\"DESIGN.md\",\"README.md\",\"CONTRIBUTING.md\",\"SECURITY.md\",\"CODE_OF_CONDUCT.md\",\"AGENTS.md\"],\"protected_files_policy\":\"blocked\",\"target-repo\":\"microsoft/aspire\",\"title_prefix\":\"[telemetry] \"},\"missing_data\":{},\"missing_tool\":{},\"noop\":{\"max\":1,\"report-as-issue\":\"false\"},\"report_incomplete\":{\"max\":1}}"
         with:
           script: |
             const path = require('path');
@@ -1210,13 +1199,6 @@ jobs:
           if [ ! -f /tmp/gh-aw/agent_output.json ]; then
             echo '{"items":[]}' > /tmp/gh-aw/agent_output.json
           fi
-      - id: telemetry-verification
-        if: success()
-        name: Verify Aspire telemetry
-        run: "set -euo pipefail\ngit --no-pager log -1 --format='Verifying Aspire commit %H'\nexport XDG_RUNTIME_DIR=\"$RUNNER_TEMP/aspire-telemetry-runtime\"\ninstall -d -m 700 \"$XDG_RUNTIME_DIR\"\npwsh -NoLogo -NoProfile -NonInteractive -Command '$ErrorActionPreference = \"Stop\"; Write-Output $PSVersionTable.PSVersion'\n./restore.sh\ndotnet test --project tests/Aspire.Cli.Tests/Aspire.Cli.Tests.csproj --no-launch-profile -- \\\n  --filter-class '*.AgentTelemetryCatalogTests' \\\n  --filter-class '*.AgentTelemetryHookTests' \\\n  --filter-class '*.AgentTelemetryCommandTests' \\\n  --filter-class '*.TelemetryHookConfiguratorTests' \\\n  --filter-class '*.TelemetryHookInstallerTests' \\\n  --filter-class '*.TelemetryHookScriptTests' \\\n  --filter-not-trait quarantined=true \\\n  --filter-not-trait outerloop=true\n"
-        shell: bash
-        timeout-minutes: 20
-
       # Small dedicated copy of the agent output so safe-output processing
       # survives a failed or timed-out upload of the larger agent artifact
       - name: Upload agent output fallback artifact
@@ -1271,7 +1253,9 @@ jobs:
       - activation
       - agent
       - detection
+      - resolve-source
       - safe_outputs
+      - verify-telemetry
     if: >
       always() && (needs.agent.result != 'skipped' || needs.activation.outputs.lockdown_check_failed == 'true' ||
       needs.activation.outputs.oauth_token_check_failed == 'true' || needs.activation.outputs.stale_lock_file_failed == 'true' ||
@@ -1280,7 +1264,7 @@ jobs:
     runs-on: ubuntu-slim
     permissions:
       contents: write
-      issues: write
+      issues: read
       pull-requests: write
     concurrency:
       group: "gh-aw-conclusion-update-aspire-${{ github.run_id }}"
@@ -1308,20 +1292,6 @@ jobs:
           GH_AW_INFO_VERSION: "1.0.85"
           GH_AW_INFO_AWF_VERSION: "v0.28.20"
           GH_AW_INFO_ENGINE_ID: "copilot"
-      - name: Generate GitHub App token
-        id: safe-outputs-app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
-          private-key: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
-          owner: microsoft
-          repositories: |-
-            aspire-skills
-            aspire
-          github-api-url: ${{ github.api_url }}
-          permission-contents: write
-          permission-issues: write
-          permission-pull-requests: write
       - name: Download agent output artifact
         id: download-agent-output
         continue-on-error: true
@@ -1399,7 +1369,7 @@ jobs:
           GH_AW_AMBIENT_CONTEXT: ${{ needs.agent.outputs.ambient_context }}
           GH_AW_WORKFLOW_ID: "update-aspire"
         with:
-          github-token: ${{ steps.safe-outputs-app-token.outputs.token }}
+          github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
             const path = require('path');
             const actionsDir = path.join(process.env.RUNNER_TEMP, 'gh-aw', 'actions');
@@ -1407,36 +1377,17 @@ jobs:
             setupGlobals(core, github, context, exec, io, getOctokit);
             const { main } = require(path.join(actionsDir, 'handle_noop_message.cjs'));
             await main();
-      - name: Log detection run
-        id: detection_runs
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          GH_AW_AGENT_OUTPUT: ${{ steps.setup-agent-output-env.outputs.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Update Aspire telemetry"
-          GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/.github/workflows/update-aspire.md"
-          GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          GH_AW_DETECTION_CONCLUSION: ${{ needs.detection.outputs.detection_conclusion }}
-          GH_AW_DETECTION_REASON: ${{ needs.detection.outputs.detection_reason }}
-        with:
-          github-token: ${{ steps.safe-outputs-app-token.outputs.token }}
-          script: |
-            const path = require('path');
-            const actionsDir = path.join(process.env.RUNNER_TEMP, 'gh-aw', 'actions');
-            const { setupGlobals } = require(path.join(actionsDir, 'setup_globals.cjs'));
-            setupGlobals(core, github, context, exec, io, getOctokit);
-            const { main } = require(path.join(actionsDir, 'handle_detection_runs.cjs'));
-            await main();
       - name: Record missing tool
         id: missing_tool
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           GH_AW_AGENT_OUTPUT: ${{ steps.setup-agent-output-env.outputs.GH_AW_AGENT_OUTPUT }}
-          GH_AW_MISSING_TOOL_CREATE_ISSUE: ${{ github.event_name != 'workflow_dispatch' || !inputs.dry_run }}
+          GH_AW_MISSING_TOOL_CREATE_ISSUE: "false"
           GH_AW_MISSING_TOOL_TITLE_PREFIX: "[missing tool]"
           GH_AW_WORKFLOW_NAME: "Update Aspire telemetry"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/.github/workflows/update-aspire.md"
         with:
-          github-token: ${{ steps.safe-outputs-app-token.outputs.token }}
+          github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
             const path = require('path');
             const actionsDir = path.join(process.env.RUNNER_TEMP, 'gh-aw', 'actions');
@@ -1450,12 +1401,12 @@ jobs:
         env:
           GH_AW_AGENT_OUTPUT: ${{ steps.setup-agent-output-env.outputs.GH_AW_AGENT_OUTPUT }}
           GH_AW_REPORT_INCOMPLETE_MAX: "1"
-          GH_AW_REPORT_INCOMPLETE_CREATE_ISSUE: ${{ github.event_name != 'workflow_dispatch' || !inputs.dry_run }}
+          GH_AW_REPORT_INCOMPLETE_CREATE_ISSUE: "false"
           GH_AW_REPORT_INCOMPLETE_TITLE_PREFIX: "[incomplete]"
           GH_AW_WORKFLOW_NAME: "Update Aspire telemetry"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/.github/workflows/update-aspire.md"
         with:
-          github-token: ${{ steps.safe-outputs-app-token.outputs.token }}
+          github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
             const path = require('path');
             const actionsDir = path.join(process.env.RUNNER_TEMP, 'gh-aw', 'actions');
@@ -1494,8 +1445,6 @@ jobs:
           GH_AW_ENGINE_API_HOSTS: "api.enterprise.githubcopilot.com,api.githubcopilot.com,api.business.githubcopilot.com,api.individual.githubcopilot.com"
           GH_AW_CODE_PUSH_FAILURE_ERRORS: ${{ needs.safe_outputs.outputs.code_push_failure_errors }}
           GH_AW_CODE_PUSH_FAILURE_COUNT: ${{ needs.safe_outputs.outputs.code_push_failure_count }}
-          GH_AW_SAFE_OUTPUTS_APP_TOKEN_MINTING_FAILED: ${{ needs.safe_outputs.outputs.app_token_minting_failed }}
-          GH_AW_CONCLUSION_APP_TOKEN_MINTING_FAILED: ${{ steps.safe-outputs-app-token.outcome == 'failure' }}
           GH_AW_LOCKDOWN_CHECK_FAILED: ${{ needs.activation.outputs.lockdown_check_failed }}
           GH_AW_OAUTH_TOKEN_CHECK_FAILED: ${{ needs.activation.outputs.oauth_token_check_failed }}
           GH_AW_STALE_LOCK_FILE_FAILED: ${{ needs.activation.outputs.stale_lock_file_failed }}
@@ -1505,12 +1454,12 @@ jobs:
           GH_AW_DAILY_AI_CREDITS_TOTAL: ${{ needs.activation.outputs.daily_ai_credits_total }}
           GH_AW_DAILY_AI_CREDITS_THRESHOLD: ${{ needs.activation.outputs.daily_ai_credits_threshold }}
           GH_AW_GROUP_REPORTS: "false"
-          GH_AW_FAILURE_REPORT_AS_ISSUE: ${{ github.event_name != 'workflow_dispatch' || !inputs.dry_run }}
+          GH_AW_FAILURE_REPORT_AS_ISSUE: "false"
           GH_AW_MISSING_TOOL_REPORT_AS_FAILURE: "true"
           GH_AW_MISSING_DATA_REPORT_AS_FAILURE: "true"
           GH_AW_TIMEOUT_MINUTES: "60"
         with:
-          github-token: ${{ steps.safe-outputs-app-token.outputs.token }}
+          github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
             const path = require('path');
             const actionsDir = path.join(process.env.RUNNER_TEMP, 'gh-aw', 'actions');
@@ -1625,7 +1574,7 @@ jobs:
           WORKFLOW_NAME: "Update Aspire telemetry"
           WORKFLOW_DESCRIPTION: "Keep Aspire telemetry aligned with skills, extensions, and canonical MCP tools.\nUpdate managed telemetry, compatibility hooks, regression tests, and docs."
           HAS_PATCH: ${{ needs.agent.outputs.has_patch }}
-          GH_AW_DETECTION_CONTINUE_ON_ERROR: "true"
+          GH_AW_DETECTION_CONTINUE_ON_ERROR: "false"
           GH_AW_DETECTION_SKIP_PROMPT_SUMMARY: "true"
         with:
           script: |
@@ -1654,7 +1603,6 @@ jobs:
           GH_AW_COMPILED_VERSION: v0.89.17
       - name: Install threat-detect binary
         if: always() && steps.detection_guard.outputs.run_detection == 'true'
-        continue-on-error: true
         run: |
           bash "${RUNNER_TEMP}/gh-aw/actions/install_threat_detect_binary.sh" v0.5.1
       - name: Execute threat detection with AWF
@@ -1694,7 +1642,7 @@ jobs:
           WORKFLOW_NAME: "Update Aspire telemetry"
           WORKFLOW_DESCRIPTION: "Keep Aspire telemetry aligned with skills, extensions, and canonical MCP tools.\nUpdate managed telemetry, compatibility hooks, regression tests, and docs."
           HAS_PATCH: ${{ needs.agent.outputs.has_patch }}
-          GH_AW_DETECTION_CONTINUE_ON_ERROR: "true"
+          GH_AW_DETECTION_CONTINUE_ON_ERROR: "false"
         run: |
           mkdir -p "/tmp/gh-aw/threat-detection"
           evidence_tmp="/tmp/gh-aw/threat-detection/execution.json.tmp"
@@ -1795,11 +1743,10 @@ jobs:
       - name: Conclude threat detection
         id: detection_conclusion
         if: always()
-        continue-on-error: true
         env:
           RUN_DETECTION: ${{ steps.detection_guard.outputs.run_detection }}
           DETECTION_AGENTIC_EXECUTION_OUTCOME: ${{ steps.detection_agentic_execution.outcome }}
-          GH_AW_DETECTION_CONTINUE_ON_ERROR: "true"
+          GH_AW_DETECTION_CONTINUE_ON_ERROR: "false"
         run: |
           bash "${RUNNER_TEMP}/gh-aw/actions/conclude_threat_detection.sh" /tmp/gh-aw/threat-detection/detection_result.json
 
@@ -1847,16 +1794,58 @@ jobs:
             const { main } = require(path.join(actionsDir, 'check_membership.cjs'));
             await main();
 
+  resolve-source:
+    needs: activation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      aspire-base: ${{ steps.source.outputs.aspire-base }}
+      source: ${{ steps.source.outputs.source }}
+    steps:
+      - name: Configure GH_HOST for enterprise compatibility
+        id: ghes-host-config
+        shell: bash
+        run: | # zizmor: ignore[github-env] - GITHUB_SERVER_URL is set by GitHub Actions, not user input.
+          # Derive GH_HOST from GITHUB_SERVER_URL so the gh CLI targets the correct
+          # GitHub instance (GHES/GHEC). On github.com this is a harmless no-op.
+          GH_HOST="${GITHUB_SERVER_URL#https://}"
+          GH_HOST="${GH_HOST#http://}"
+          echo "GH_HOST=${GH_HOST}" >> "$GITHUB_ENV"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.workflow_sha }}
+      - name: Snapshot source PR and Aspire base
+        id: source
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { resolveSource } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/telemetry-workflow.mjs`);
+            const source = await resolveSource({ github, context, directory: process.env.GITHUB_WORKSPACE });
+            core.setOutput("source", JSON.stringify(source));
+            core.setOutput("aspire-base", source.aspireBase);
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          if-no-files-found: error
+          name: telemetry-source
+          path: ${{ runner.temp }}/telemetry-source/
+
   safe_outputs:
     needs:
       - activation
       - agent
       - detection
-    if: (!cancelled()) && needs.agent.result != 'skipped' && needs.detection.result == 'success'
+      - resolve-source
+      - verify-telemetry
+    if: >
+      ((!cancelled()) && needs.agent.result != 'skipped' && needs.detection.result == 'success') &&
+      (needs.verify-telemetry.result == 'success')
     runs-on: ubuntu-slim
     permissions:
       contents: write
-      issues: write
+      issues: read
       pull-requests: write
     timeout-minutes: 45
     env:
@@ -1876,7 +1865,6 @@ jobs:
       GH_AW_WORKFLOW_NAME: "Update Aspire telemetry"
       GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/.github/workflows/update-aspire.md"
     outputs:
-      app_token_minting_failed: ${{ steps.safe-outputs-app-token.outcome == 'failure' }}
       code_push_failure_count: ${{ steps.process_safe_outputs.outputs.code_push_failure_count }}
       code_push_failure_errors: ${{ steps.process_safe_outputs.outputs.code_push_failure_errors }}
       create_discussion_error_count: ${{ steps.process_safe_outputs.outputs.create_discussion_error_count }}
@@ -1932,20 +1920,6 @@ jobs:
         with:
           name: agent
           path: /tmp/gh-aw/
-      - name: Generate GitHub App token
-        id: safe-outputs-app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
-          private-key: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
-          owner: microsoft
-          repositories: |-
-            aspire-skills
-            aspire
-          github-api-url: ${{ github.api_url }}
-          permission-contents: write
-          permission-issues: write
-          permission-pull-requests: write
       - name: Generate GitHub App token for checkout (0)
         if: (!cancelled()) && needs.agent.result != 'skipped' && contains(needs.agent.outputs.output_types, 'create_pull_request')
         id: checkout-app-token-0
@@ -1971,7 +1945,7 @@ jobs:
         with:
           persist-credentials: true
           repository: microsoft/aspire
-          ref: main
+          ref: ${{ needs.resolve-source.outputs.aspire-base }}
           token: ${{ steps.checkout-app-token-0.outputs.token }}
           fetch-depth: 0
       - name: Configure Git credentials
@@ -1979,7 +1953,7 @@ jobs:
         env:
           GITHUB_REPOSITORY: microsoft/aspire
           GITHUB_SERVER_URL: ${{ github.server_url }}
-          GIT_TOKEN: ${{ steps.safe-outputs-app-token.outputs.token }}
+          GIT_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
         run: bash "${RUNNER_TEMP}/gh-aw/actions/configure_git_credentials.sh"
       - name: Configure GH_HOST for enterprise compatibility
         id: ghes-host-config
@@ -1990,32 +1964,43 @@ jobs:
           GH_HOST="${GITHUB_SERVER_URL#https://}"
           GH_HOST="${GH_HOST#http://}"
           echo "GH_HOST=${GH_HOST}" >> "$GITHUB_ENV"
-      - name: Reject unverified telemetry proposals
-        id: telemetry-verification-gate
-        if: "!cancelled() && needs.agent.result != 'success'"
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      - name: Checkout trusted publication validator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require("node:fs");
-            const reason = "Required telemetry verification or an earlier agent step failed.";
-            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-            fs.writeFileSync("/tmp/gh-aw/agent_output.json", JSON.stringify({
-              items: [{
-                type: "report_incomplete",
-                reason,
-                details: `No proposal or no-op is accepted. Inspect the agent job's restore and test logs: ${runUrl}`
-              }],
-              errors: []
-            }));
-            core.warning(reason);
-      - name: Checkout Aspire for staged preview
-        if: env.GH_AW_SAFE_OUTPUTS_STAGED == 'true' && needs.agent.result == 'success'
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
+          path: _telemetry-tools
           persist-credentials: false
-          ref: main
-          repository: microsoft/aspire
+          ref: ${{ github.workflow_sha }}
+      - name: Install trusted publication validator dependency
+        run: npm ci --ignore-scripts --no-audit --no-fund --prefix _telemetry-tools
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: telemetry-verified-proposal
+          path: ${{ runner.temp }}/telemetry-verified/
+      - name: Require exact verified proposal
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          TELEMETRY_RECEIPT: ${{ needs.verify-telemetry.outputs.receipt }}
+          TELEMETRY_SOURCE: ${{ needs.resolve-source.outputs.source }}
+        with:
+          script: |
+            const { promoteVerifiedProposal } = await import(`${process.env.GITHUB_WORKSPACE}/_telemetry-tools/scripts/telemetry-workflow.mjs`);
+            await promoteVerifiedProposal({
+              github,
+              directory: process.env.GITHUB_WORKSPACE,
+              source: JSON.parse(process.env.TELEMETRY_SOURCE),
+              receipt: JSON.parse(process.env.TELEMETRY_RECEIPT)
+            });
+      - name: Generate GitHub App token (create-pull-request)
+        id: create-pull-request-app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
+          private-key: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
+          owner: microsoft
+          repositories: aspire
+          github-api-url: ${{ github.api_url }}
+          permission-contents: write
+          permission-pull-requests: write
       - name: Process Safe Outputs
         id: process_safe_outputs
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -2025,12 +2010,11 @@ jobs:
           GH_AW_ALLOWED_DOMAINS: "*.githubusercontent.com,*.vsblob.vsassets.io,api.nuget.org,api.snapcraft.io,archive.ubuntu.com,azure.archive.ubuntu.com,azuresearch-usnc.nuget.org,azuresearch-ussc.nuget.org,builds.dotnet.microsoft.com,ci.dot.net,codeload.github.com,crl.geotrust.com,crl.globalsign.com,crl.identrust.com,crl.sectigo.com,crl.thawte.com,crl.usertrust.com,crl.verisign.com,crl3.digicert.com,crl4.digicert.com,crls.ssl.com,dc.services.visualstudio.com,dist.nuget.org,dnceng.pkgs.visualstudio.com,docs.github.com,dot.net,dotnet.microsoft.com,dotnetcli.blob.core.windows.net,github-cloud.githubusercontent.com,github-cloud.s3.amazonaws.com,github.blog,github.com,github.githubassets.com,json-schema.org,json.schemastore.org,keyserver.ubuntu.com,lfs.github.com,nuget.org,nuget.pkg.github.com,nugetregistryv2prod.blob.core.windows.net,objects.githubusercontent.com,ocsp.digicert.com,ocsp.geotrust.com,ocsp.globalsign.com,ocsp.identrust.com,ocsp.sectigo.com,ocsp.ssl.com,ocsp.thawte.com,ocsp.usertrust.com,ocsp.verisign.com,oneocsp.microsoft.com,packagecloud.io,packages.cloud.google.com,packages.microsoft.com,patch-diff.githubusercontent.com,patchdiff.githubusercontent.com,pkgs.dev.azure.com,ppa.launchpad.net,raw.githubusercontent.com,s.symcb.com,s.symcd.com,security.ubuntu.com,ts-crl.ws.symantec.com,ts-ocsp.ws.symantec.com,www.googleapis.com,www.microsoft.com"
           GITHUB_SERVER_URL: ${{ github.server_url }}
           GITHUB_API_URL: ${{ github.api_url }}
-          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"create_pull_request\":{\"allowed_base_branches\":[\"main\"],\"allowed_branches\":[\"update-aspire-telemetry-*\"],\"allowed_files\":[\"src/Aspire.Cli/Agents/Hooks/*.cs\",\"src/Aspire.Cli/Agents/Hooks/track-telemetry.sh\",\"src/Aspire.Cli/Agents/Hooks/track-telemetry.ps1\",\"src/Aspire.Cli/Agents/Hooks/README.md\",\"src/Aspire.Cli/Commands/AgentTelemetryCommand.cs\",\"tests/Aspire.Cli.Tests/Agents/AgentTelemetry*.cs\",\"tests/Aspire.Cli.Tests/Agents/TelemetryHook*.cs\",\"tests/Aspire.Cli.Tests/Commands/AgentTelemetryCommandTests.cs\",\"docs/specs/aspire-product-telemetry.md\"],\"base_branch\":\"main\",\"draft\":true,\"fallback_as_issue\":false,\"if_no_changes\":\"error\",\"labels\":[\"area-cli\",\"area-engineering-systems\"],\"max\":1,\"max_patch_files\":100,\"max_patch_size\":4096,\"patch_format\":\"bundle\",\"preserve_branch_name\":true,\"protect_top_level_dot_folders\":true,\"protected_files\":[\"package.json\",\"bun.lockb\",\"bunfig.toml\",\"deno.json\",\"deno.jsonc\",\"deno.lock\",\"global.json\",\"NuGet.Config\",\"Directory.Packages.props\",\"mix.exs\",\"mix.lock\",\"go.mod\",\"go.sum\",\"stack.yaml\",\"stack.yaml.lock\",\"pom.xml\",\"build.gradle\",\"build.gradle.kts\",\"settings.gradle\",\"settings.gradle.kts\",\"gradle.properties\",\"package-lock.json\",\"yarn.lock\",\"pnpm-lock.yaml\",\"npm-shrinkwrap.json\",\"requirements.txt\",\"Pipfile\",\"Pipfile.lock\",\"pyproject.toml\",\"setup.py\",\"setup.cfg\",\"Gemfile\",\"Gemfile.lock\",\"uv.lock\",\"CODEOWNERS\",\"DESIGN.md\",\"README.md\",\"CONTRIBUTING.md\",\"SECURITY.md\",\"CODE_OF_CONDUCT.md\",\"AGENTS.md\"],\"protected_files_policy\":\"blocked\",\"target-repo\":\"microsoft/aspire\",\"title_prefix\":\"[telemetry] \"},\"create_report_incomplete_issue\":{\"create-issue\":\"${{ github.event_name != 'workflow_dispatch' || !inputs.dry_run }}\",\"max\":1,\"title-prefix\":\"[incomplete]\"},\"missing_data\":{},\"missing_tool\":{},\"noop\":{\"max\":1,\"report-as-issue\":\"false\"},\"report_incomplete\":{\"max\":1}}"
+          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"create_pull_request\":{\"allowed_base_branches\":[\"main\"],\"allowed_branches\":[\"update-aspire-telemetry-*\"],\"allowed_files\":[\"src/Aspire.Cli/Agents/Hooks/*.cs\",\"src/Aspire.Cli/Agents/Hooks/track-telemetry.sh\",\"src/Aspire.Cli/Agents/Hooks/track-telemetry.ps1\",\"src/Aspire.Cli/Agents/Hooks/README.md\",\"src/Aspire.Cli/Commands/AgentTelemetryCommand.cs\",\"tests/Aspire.Cli.Tests/Agents/AgentTelemetry*.cs\",\"tests/Aspire.Cli.Tests/Agents/TelemetryHook*.cs\",\"tests/Aspire.Cli.Tests/Commands/AgentTelemetryCommandTests.cs\",\"docs/specs/aspire-product-telemetry.md\"],\"base_branch\":\"main\",\"draft\":true,\"fallback_as_issue\":false,\"github-token\":\"${{ steps.create-pull-request-app-token.outputs.token }}\",\"if_no_changes\":\"error\",\"labels\":[\"area-cli\",\"area-engineering-systems\"],\"max\":1,\"max_patch_files\":100,\"max_patch_size\":4096,\"patch_format\":\"bundle\",\"preserve_branch_name\":true,\"protect_top_level_dot_folders\":true,\"protected_files\":[\"package.json\",\"bun.lockb\",\"bunfig.toml\",\"deno.json\",\"deno.jsonc\",\"deno.lock\",\"global.json\",\"NuGet.Config\",\"Directory.Packages.props\",\"mix.exs\",\"mix.lock\",\"go.mod\",\"go.sum\",\"stack.yaml\",\"stack.yaml.lock\",\"pom.xml\",\"build.gradle\",\"build.gradle.kts\",\"settings.gradle\",\"settings.gradle.kts\",\"gradle.properties\",\"package-lock.json\",\"yarn.lock\",\"pnpm-lock.yaml\",\"npm-shrinkwrap.json\",\"requirements.txt\",\"Pipfile\",\"Pipfile.lock\",\"pyproject.toml\",\"setup.py\",\"setup.cfg\",\"Gemfile\",\"Gemfile.lock\",\"uv.lock\",\"CODEOWNERS\",\"DESIGN.md\",\"README.md\",\"CONTRIBUTING.md\",\"SECURITY.md\",\"CODE_OF_CONDUCT.md\",\"AGENTS.md\"],\"protected_files_policy\":\"blocked\",\"target-repo\":\"microsoft/aspire\",\"title_prefix\":\"[telemetry] \"},\"missing_data\":{},\"missing_tool\":{},\"noop\":{\"max\":1,\"report-as-issue\":\"false\"},\"report_incomplete\":{\"max\":1}}"
           GH_AW_SAFE_OUTPUTS_STAGED: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
           GH_AW_CI_TRIGGER_TOKEN: ${{ secrets.GH_AW_CI_TRIGGER_TOKEN }}
-          GITHUB_TOKEN: ${{ steps.safe-outputs-app-token.outputs.token }}
         with:
-          github-token: ${{ steps.safe-outputs-app-token.outputs.token }}
+          github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
             const path = require('path');
             const actionsDir = path.join(process.env.RUNNER_TEMP, 'gh-aw', 'actions');
@@ -2048,3 +2032,66 @@ jobs:
             /tmp/gh-aw/temporary-id-map.json
             /tmp/gh-aw/safe-output-errors.json
           if-no-files-found: ignore
+
+  verify-telemetry:
+    needs:
+      - agent
+      - resolve-source
+    if: ${{ !cancelled() && needs.agent.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 40
+    outputs:
+      receipt: ${{ steps.verify.outputs.receipt }}
+    steps:
+      - name: Configure GH_HOST for enterprise compatibility
+        id: ghes-host-config
+        shell: bash
+        run: | # zizmor: ignore[github-env] - GITHUB_SERVER_URL is set by GitHub Actions, not user input.
+          # Derive GH_HOST from GITHUB_SERVER_URL so the gh CLI targets the correct
+          # GitHub instance (GHES/GHEC). On github.com this is a harmless no-op.
+          GH_HOST="${GITHUB_SERVER_URL#https://}"
+          GH_HOST="${GH_HOST#http://}"
+          echo "GH_HOST=${GH_HOST}" >> "$GITHUB_ENV"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.workflow_sha }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          path: _aspire
+          persist-credentials: false
+          ref: ${{ needs.resolve-source.outputs.aspire-base }}
+          repository: microsoft/aspire
+      - uses: github/gh-aw-actions/setup@f3b81cdb3070066a47faa9bdf440f4f1dc78b1f0 # f3b81cdb3070066a47faa9bdf440f4f1dc78b1f0
+        with:
+          destination: ${{ runner.temp }}/gh-aw/actions
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: agent
+          path: /tmp/gh-aw/
+      - name: Verify frozen proposal in offline isolation
+        id: verify
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          TELEMETRY_SOURCE: ${{ needs.resolve-source.outputs.source }}
+        with:
+          script: |
+            const { verifyTelemetry } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/telemetry-workflow.mjs`);
+            const receipt = await verifyTelemetry({
+              directory: process.env.GITHUB_WORKSPACE,
+              source: JSON.parse(process.env.TELEMETRY_SOURCE)
+            });
+            core.setOutput("receipt", JSON.stringify(receipt));
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          if-no-files-found: error
+          name: telemetry-verified-proposal
+          path: ${{ runner.temp }}/telemetry-verified/
+      - name: Remove verifier container
+        if: always()
+        run: |
+          node scripts/telemetry-workflow.mjs cleanup
