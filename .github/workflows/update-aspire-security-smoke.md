@@ -38,6 +38,8 @@ permissions:
 engine:
   id: copilot
   model: gpt-6.1-sol
+  env:
+    COPILOT_PROVIDER_WIRE_API: responses
 max-turns: 50
 timeout-minutes: 60
 checkout:

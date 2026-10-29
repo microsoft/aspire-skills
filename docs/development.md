@@ -70,6 +70,8 @@ Configure `ASPIRE_BOT_APP_ID` and `ASPIRE_BOT_PRIVATE_KEY` as repository secrets
 Source research uses a read-only GitHub CLI proxy. Optional maintenance is
 disabled in `.github/workflows/aw.json`. Regenerate the compiled workflow with
 gh-aw v0.89.17 on Linux or WSL after editing its source or configuration.
+The Copilot engine uses `COPILOT_PROVIDER_WIRE_API=responses` to preserve custom-tool
+schemas across the inference proxy.
 
 The workflow separates input resolution, agent editing, verification, and
 publication:

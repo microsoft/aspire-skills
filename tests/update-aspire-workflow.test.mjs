@@ -360,6 +360,17 @@ test("Linux CI exercises publication against the same pinned runtime as the work
   assert.equal(regression.env.GH_AW_ACTIONS_DIR, "${{ runner.temp }}/gh-aw/actions");
 });
 
+test("Copilot author and reviewer use the Responses wire protocol", () => {
+  assert.equal(authored.engine.id, "copilot");
+  assert.equal(authored.engine.env.COPILOT_PROVIDER_WIRE_API, "responses");
+  for (const [job, step] of [["agent", "agentic_execution"], ["detection", "detection_agentic_execution"]]) {
+    assert.equal(
+      compiled.jobs[job].steps.find(item => item.id === step).env.COPILOT_PROVIDER_WIRE_API,
+      "responses"
+    );
+  }
+});
+
 test("dry-runs have no diagnostic-issue mutation paths and publishing App is target-only", () => {
   const outputs = authored["safe-outputs"];
   assert.equal(outputs["report-failure-as-issue"], false);
