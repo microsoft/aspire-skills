@@ -74,7 +74,7 @@ aspire init
 aspire agent init
 ```
 
-**Register the plugin or catalog** for selected clients in the current project (Aspire 17.0+):
+**Configure remote Aspire skills** for selected clients in the current project (Aspire 17.0+):
 
 ```bash
 aspire agent init --scope project
@@ -85,6 +85,10 @@ Use `--scope global` for configuration shared across projects. See
 
 Review the plugin source before enabling it. Existing local Aspire skill files
 may override plugin-provided skills.
+
+In Aspire 13.6, run `aspire agent init` interactively to select the bundled
+Aspire skills and installation locations. Aspire 13.6 has no `--agents` or
+`--scope` flags and does not register remote plugins or skill catalogs.
 
 **Configure the Aspire MCP server** only when you want it (Aspire 13.6+):
 
