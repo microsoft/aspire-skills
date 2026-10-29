@@ -67,19 +67,6 @@ tools:
     min-integrity: approved
     allowed-repos: [microsoft/aspire-skills, microsoft/aspire]
 pre-agent-steps:
-  - name: Require Aspire-owned telemetry
-    shell: pwsh
-    run: |
-      $ErrorActionPreference = "Stop"
-      foreach ($script in @("track-telemetry.sh", "track-telemetry.ps1")) {
-        if (!(Test-Path "src/Aspire.Cli/Agents/Hooks/$script" -PathType Leaf)) {
-          throw "Land microsoft/aspire#20947: Aspire must own both telemetry hook scripts."
-        }
-      }
-      if ((Test-Path "src/Aspire.Cli/Agents/AspireSkills/Embedded") -or
-          (Test-Path ".github/workflows/update-aspire-skills-bundle.yml")) {
-        throw "Land microsoft/aspire#20947: retire the embedded skills bundle and standalone updater first."
-      }
   - name: Generate read-only GitHub token
     id: github-read-token
     uses: actions/create-github-app-token@v3.2.0

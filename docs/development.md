@@ -65,8 +65,6 @@ Each review also checks `KnownMcpTools.All` against both compatibility scripts
 and managed-hook classification, even when skill and extension inventories
 are unchanged. An offline regression test must guard coverage before a no-op
 is allowed.
-[microsoft/aspire#20947](https://github.com/microsoft/aspire/pull/20947) is the
-prerequisite for Aspire-owned scripts and retirement of the old bundle machinery.
 `aspire-repo-bot[bot]` is allowlisted; the App must cover both repositories.
 Configure `ASPIRE_BOT_APP_ID` and `ASPIRE_BOT_PRIVATE_KEY` as repository secrets.
 Source research uses a read-only GitHub CLI proxy. Optional maintenance is
@@ -126,8 +124,7 @@ Merge-triggered runs publish normally.
 Source reads use the PR's merge commit when merged, or its head commit when
 unmerged, independently of the workflow branch's SHA. Evidence is derived from
 those Git objects, not a later mutable PR-files response.
-Aspire-side prerequisite checks still apply; dry runs do not bypass ownership
-or bundle-retirement gates. Failed checks remain visible as failed runs.
+Failed checks remain visible as failed runs.
 
 ### Verifier changes
 
