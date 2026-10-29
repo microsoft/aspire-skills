@@ -17,6 +17,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   `.ascii` output contracts, capability gates, routing and lifetime evaluations.
   Aspire CLI delivery requires refreshing its embedded skill bundle and metadata.
 
+### Fixed
+- Keep AppHosts in workspace child directories beginning with `..` visible and
+  allow their source files to open without admitting paths outside the workspace.
+
 ### Removed
 - Removed embedded `.tgz` bundle generation and uploads. Releases now publish
   reviewed source and approved changelog notes without generated archives.
