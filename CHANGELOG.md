@@ -13,6 +13,7 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   literal backslashes instead of treating those characters as directory separators.
 - Keep AppHosts in workspace child directories beginning with `..` visible and
   allow their source files to open without admitting paths outside the workspace.
+- Unified canvas styling and icons with shared assets that respect host themes.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
@@ -22,9 +23,6 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   Includes Aspire-specific VHS tape syntax/examples and stdout, `.txt` and
   `.ascii` output contracts, capability gates, routing and lifetime evaluations.
   Aspire CLI delivery requires refreshing its embedded skill bundle and metadata.
-
-### Changed
-- Unified canvas styling and icons with shared assets that respect host themes.
 
 ### Removed
 - Removed embedded `.tgz` bundle generation and uploads. Releases now publish
