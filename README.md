@@ -39,15 +39,16 @@ Choose the path that matches your agent host.
 ### Aspire CLI
 
 Aspire's first-party agent setup configures detected agent environments to load
-Aspire skills and extensions through plugins or skill catalogs. Aspire MCP server
-configuration is separate and opt-in.
+content from the [aspire-skills repository](https://github.com/microsoft/aspire-skills).
+Aspire MCP server configuration is separate and opt-in.
 
 `aspire new` and `aspire init` offer agent setup without MCP configuration.
-Starting in Aspire 13.6, this setup preselects recommended repository-local skills,
-including `aspireify`. In Aspire 17.0 and later, you can choose the agent clients,
-installation scope, and skills or CLI tools to configure. Aspire guidance is
-registered through native agent clients; the CLI no longer bundles or copies
-Aspire skill files.
+In Aspire 13.6, this setup preselects recommended repository-local skills,
+including `aspireify`.
+
+In Aspire 17.0 and later, choose which agent clients, skills, and CLI tools to
+configure at project or global scope. The CLI registers remote Aspire skills
+with the selected clients instead of bundling or copying Aspire skill files.
 
 Standalone `aspire agent init` also offers MCP configuration, which is off by
 default. Non-interactive runs configure MCP only when you pass `--mcp`.
