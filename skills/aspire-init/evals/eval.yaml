@@ -13,12 +13,12 @@ defaults:
   # whole eval (evalHadExecutionErrors) even when the aggregate score passes.
   timeout: 600s
   executor: copilot-sdk
-  model: gpt-5-mini
+  model: gpt-5.6-sol
   judge_model: gpt-5.6-sol
 scoring:
   # Score each stimulus by the weighted share of graders that pass, then gate on
   # the aggregate (>= threshold) instead of demanding every grader pass on every
-  # trial. This absorbs gpt-5-mini nondeterminism and graders that look for code
+  # trial. This absorbs executor nondeterminism and graders that look for code
   # tokens the agent writes into edited files rather than its chat message;
   # genuine regressions still drag the aggregate below the bar.
   threshold: 0.7
@@ -525,3 +525,49 @@ stimuli:
         config:
           disallowed:
             - aspire-init
+  - name: init-pnpm-partial-recovery-001
+    prompt: >
+      Use the aspire-init skill before answering. My TypeScript initialization failed;
+      the supplied files are what it left behind. There is no root aspire.config.json.
+      How should I recover without changing the application's build policy?
+      Keep this read-only: inspect files, but do not edit or run init, install, restore,
+      or start commands. Explain any approval needed before making changes.
+    tags:
+      priority: p1
+      area:
+        - pnpm-recovery
+        - typescript
+    environment:
+      files:
+        - src: ../../../evals/ts-apphost-pnpm-policy/package.json
+          dest: pnpm-repro/package.json
+        - src: ../../../evals/ts-apphost-pnpm-policy/pnpm-workspace.yaml
+          dest: pnpm-repro/pnpm-workspace.yaml
+        - src: ../../../evals/ts-apphost-pnpm-policy/aspire-apphost/apphost.mts
+          dest: pnpm-repro/aspire-apphost/apphost.mts
+        - src: ../../../evals/ts-apphost-pnpm-policy/aspire-apphost/package.json
+          dest: pnpm-repro/aspire-apphost/package.json
+        - src: ../../../evals/ts-apphost-pnpm-policy/init-output.txt
+          dest: pnpm-repro/init-output.txt
+    rubric:
+      - The assistant identifies partial initialization caused by pnpm blocking esbuild, even though root aspire.config.json is missing. It preserves generated artifacts rather than rerunning init, deleting files, or fabricating metadata.
+      - The assistant requests approval for an esbuild-only exception in the standalone nested AppHost's pnpm-workspace.yaml, containing only that package. It preserves the root esbuild denial and does not approve unrelated builds or change package managers.
+      - The assistant recommends installing from the AppHost directory with an explicit workspaceDir pointing there, without using --ignore-workspace for this recovery.
+      - The assistant distinguishes dependency repair from the remaining CLI resolver bug and hands off the unwired AppHost to aspireify, confirming skill installation without adding MCP or discarding explicit skill/location selections.
+    graders:
+      - type: skill-invocation
+        name: invokes-init-for-pnpm-recovery
+        config:
+          required:
+            - aspire-init
+      - type: prompt
+        name: recovers-partial-init-with-scoped-approval
+        config:
+          prompt: >
+            Evaluate the assistant's response against the rubric. It must preserve the
+            partial AppHost despite missing root config, request approval for only the
+            nested esbuild build, retain root policy, explain a workspaceDir-scoped
+            install rather than --ignore-workspace, and preserve the Aspireify handoff
+            without claiming that the CLI resolver itself is fixed.
+      - type: diff-empty
+        name: keeps-pnpm-init-guidance-read-only

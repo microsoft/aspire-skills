@@ -93,6 +93,8 @@ without naming the owner in prompts. This increases router-suite cost, but avoid
 weakening policy checks to accommodate small-model routing variance.
 The terminal suite uses the same executor for exact experimental APIs and real
 activation: initial `gpt-5-mini` trials invented dock APIs or skipped invocation.
+The init and Aspireify suites also use `gpt-5.6-sol` because `gpt-5-mini` is
+unavailable to their eval runtime.
 Actual-edit prompts expose the changed code in the reply as well as the captured
 diff, because the prompt judge's timeline may truncate tool output. The independent
 program grader still checks the actual workspace; prose cannot substitute for edits.

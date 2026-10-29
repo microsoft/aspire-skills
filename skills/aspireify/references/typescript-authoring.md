@@ -250,10 +250,11 @@ requires it. These commands diagnose dependencies and toolchains; they do not re
 `apphost.mts` is the default entry point. When the AppHost configuration selects a
 different file, use that configured entry point instead.
 
-`--ignore-workspace` applies only to the generated brownfield pnpm AppHost package. It
-prevents pnpm from requiring an edit to the user's workspace configuration. Use
-`pnpm install --ignore-workspace` only in that scenario; do not generalize it to
-arbitrary application dependency installs.
+Affected Aspire CLIs invoke `pnpm install --ignore-workspace` to keep generated
+brownfield AppHosts out of the parent workspace. This also ignores an AppHost-local
+`pnpm-workspace.yaml`, including its build approvals. It is not a recovery command
+for blocked build scripts; use [pnpm build-policy recovery](#pnpm-build-policy-recovery)
+instead. Do not generalize the resolver's flag to application dependency installs.
 
 Yarn Classic is unsupported for TypeScript AppHosts. If `packageManager` is `yarn@1...`
 or the first lines of `yarn.lock` identify lockfile v1, stop and tell the user to upgrade
@@ -280,6 +281,58 @@ await builder.addViteApp('web', '../web')
 await builder.addViteApp('web', '../web')
     .publishAsPackageScript({ scriptName: 'start' });
 ```
+
+### pnpm build-policy recovery
+
+Use this procedure for a generated, standalone nested TypeScript AppHost when
+pnpm reports `ERR_PNPM_IGNORED_BUILDS` for `esbuild`. This failure reproduces on
+Aspire CLI 13.6.4 with pnpm 11.25.0 and 12.14.0. It can interrupt `aspire init`
+after scaffolding, before root configuration or agent setup is complete. Do not
+rerun init or delete the generated files.
+
+1. Inspect the selected pnpm version, AppHost package, and workspace policies.
+   Keep the root `pnpm-workspace.yaml`, package-manager metadata, dependencies,
+   lockfile, and AppHost source unchanged. If this AppHost already owns a workspace,
+   preserve its members and approvals; do not replace it with a single-package recipe.
+2. Ask for approval to run `esbuild`'s build script in the generated AppHost only.
+   If approved and no local workspace exists, create
+   `aspire-apphost/pnpm-workspace.yaml`:
+
+   ```yaml
+   packages:
+     - "."
+   allowBuilds:
+     esbuild: true
+   ```
+
+   pnpm 11+ uses `allowBuilds`; pnpm 10.26+ also supports it. For older pnpm
+   versions that use `onlyBuiltDependencies`, retain `packages: ["."]` and
+   allow only `esbuild` there. Do not relax the root policy, approve unrelated
+   scripts, or use `dangerouslyAllowAllBuilds`.
+3. From the generated AppHost directory, honor that local policy explicitly:
+
+   ```powershell
+   pnpm --config.workspaceDir="$PWD" install --frozen-lockfile
+   pnpm exec tsc --noEmit -p tsconfig.apphost.json
+   pnpm exec tsx --eval 'console.log("tsx transform succeeded")'
+   ```
+
+   Use `--frozen-lockfile` when the generated lockfile exists; omit it only if
+   initialization did not produce one. Substitute the absolute AppHost directory
+   for `$PWD` in shells that do not expand it to a path. Confirm installation
+   succeeds, `esbuild`'s required postinstall completes, and the toolchain works.
+   Do not substitute `--ignore-workspace`, which discards the approval being tested.
+4. Report the scope of recovery accurately. This repairs installed dependencies;
+   it does **not** fix the CLI resolver. An affected `aspire restore` or
+   `aspire start` may still invoke `--ignore-workspace` and repeat the ignored-build
+   error. Inspect output as well as the exit code: `aspire restore` can report
+   success despite this dependency error. Stop and report that remaining failure,
+   rather than looping, disabling build-policy checks, or claiming init completed.
+
+Related upstream bug: [microsoft/aspire#18012](https://github.com/microsoft/aspire/issues/18012).
+The CLI fix is tracked in
+[microsoft/aspire#19919](https://github.com/microsoft/aspire/pull/19919);
+do not assume it is included in an installed release.
 
 ## Docker Compose Hooks
 

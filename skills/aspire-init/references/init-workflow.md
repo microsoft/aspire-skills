@@ -134,6 +134,27 @@ The same precedence applies to a legacy `.agents/skills/aspire-init/SKILL.md` fr
 | `aspire start` after wiring fails immediately | Wiring incomplete or wrong AppHost path | Re-invoke `aspireify`; confirm `aspire.config.json` `appHost.path` is correct |
 | Existing TypeScript AppHost uses `apphost.ts` | Legacy entry point and package graph | Hand off to `aspire-orchestration`, which owns approval and `aspire update --migrate --yes --non-interactive`; return to aspireify only for later source authoring |
 
+### Partial TypeScript init with pnpm
+
+`ERR_PNPM_IGNORED_BUILDS` can leave a generated `aspire-apphost/apphost.mts`,
+`package.json`, lockfile, and modules even when init exits nonzero. Root
+`aspire.config.json` may not have been written yet; its absence does **not** make
+the directory safe to initialize again. Inspect the generated AppHost and any
+available configuration. Preserve those files and `apphost.run.json`; do not
+delete them, fabricate missing metadata, or rerun init.
+
+Check the selected pnpm version and applicable build approvals. For a generated
+nested AppHost, follow the shared
+[pnpm build-policy recovery](../../aspireify/references/typescript-authoring.md#pnpm-build-policy-recovery).
+Ask before approving `esbuild` in that isolated package; leave the root workspace
+policy unchanged. This repairs dependencies, not the CLI's install behavior.
+If a later Aspire command repeats the error, report the remaining failure rather
+than treating its exit code as proof of recovery.
+
+After dependency repair, confirm the `aspireify` skill is installed using step 4
+above and hand off the still-unwired AppHost. Keep any selected skill locations
+and explicit skill list, and do not enable MCP as part of this recovery.
+
 ## Don't Do This
 
 - **Don't run `aspire init` if any AppHost signal already exists** — it duplicates the

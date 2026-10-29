@@ -144,6 +144,7 @@ copy and warn.
 |---------|-------|--------|
 | `aspire init` reports AppHost already exists | Repo already has an AppHost | Stop. Route to `aspireify` (re-wire) or `aspire-orchestration` (lifecycle) |
 | `aspire init` fails in non-interactive mode without `--language` | Multiple language paths available | Re-run with `--language csharp` or `--language typescript` |
+| TypeScript init fails with `ERR_PNPM_IGNORED_BUILDS` after creating an AppHost | Partial initialization; pnpm blocked a dependency build script | Preserve the generated files, even if root config is missing. Follow [pnpm recovery](references/init-workflow.md#partial-typescript-init-with-pnpm); do not rerun init |
 | `aspire new` rejects `--output` path | Path exists and is non-empty | Use a different `--output` or empty the directory |
 | `aspire` command not found | CLI not installed | `dotnet tool install -g Aspire.Cli` (.NET 10) or `curl -sSL https://aspire.dev/install.sh \| bash` |
 | `aspire doctor` reports missing .NET 10 | SDK missing | Install .NET 10 SDK before retrying |

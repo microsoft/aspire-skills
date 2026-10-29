@@ -9,6 +9,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   literal backslashes instead of treating those characters as directory separators.
 
 ### Added
+- Documented scoped pnpm build-policy recovery after partial TypeScript AppHost
+  initialization, preserving root approvals and generated files. Added regression
+  coverage for missing root config and CLI success output that still reports
+  ignored dependency builds.
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
   reference files and SHA-512 content versions.
 - Added the default-selected `aspire-terminals` skill for resource PTYs, persistent

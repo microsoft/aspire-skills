@@ -173,8 +173,12 @@ a recognized marker, Aspire defaults to npm. Report the selected manager and mar
 Use the selected manager only to repair dependencies or diagnose the toolchain. The resolver
 commands are `npm install`, `bun install`, and `yarn install`; a generated brownfield pnpm
 AppHost uses `pnpm install --ignore-workspace`, while other pnpm dependency installs use
-`pnpm install`. Yarn Classic (`yarn@1...` or a v1 lockfile) is unsupported: stop and ask the
-user to upgrade to Yarn 4+ or explicitly migrate to npm, pnpm, or Bun.
+`pnpm install`. **Do not use `--ignore-workspace` to repair blocked build scripts:**
+it ignores local approvals too. For `ERR_PNPM_IGNORED_BUILDS`, follow
+[pnpm build-policy recovery](references/typescript-authoring.md#pnpm-build-policy-recovery)
+without weakening the root policy or assuming a successful CLI exit cleared the error.
+Yarn Classic (`yarn@1...` or a v1 lockfile) is unsupported: stop and ask the user to
+upgrade to Yarn 4+ or explicitly migrate to npm, pnpm, or Bun.
 
 Do not change `packageManager` or create, replace, or regenerate a lockfile merely to
 influence detection or switch managers. Preserve existing files until the user explicitly

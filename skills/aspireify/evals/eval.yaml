@@ -15,12 +15,12 @@ defaults:
   # whole eval (evalHadExecutionErrors) even when the aggregate score passes.
   timeout: 600s
   executor: copilot-sdk
-  model: gpt-5-mini
+  model: gpt-5.6-sol
   judge_model: gpt-5.6-sol
 scoring:
   # CI-gate tolerance: a stimulus passes when the weighted majority of its graders
   # pass, rather than demanding every grader pass on every trial. This absorbs (a)
-  # gpt-5-mini nondeterminism and (b) `output-contains` graders that look for code
+  # executor nondeterminism and (b) `output-contains` graders that look for code
   # tokens the agent writes into edited files instead of its chat message. Genuine
   # regressions still drop the aggregate below the bar.
   threshold: 0.7
@@ -1025,3 +1025,51 @@ stimuli:
         config:
           required:
             - aspireify
+  - name: aspireify-pnpm-policy-recovery-001
+    prompt: >
+      Use the aspireify skill before answering. I approved esbuild in this generated
+      nested AppHost's local pnpm-workspace.yaml, but Aspire restore still reports an
+      ignored-build error followed by success and exit code 0. Is dependency recovery
+      complete? Which install command actually honors my local approval while leaving
+      the root workspace policy unchanged? Keep this read-only: inspect the supplied
+      files, but do not edit or execute install, restore, init, or start commands.
+    tags:
+      priority: p1
+      area:
+        - pnpm-recovery
+        - typescript
+    environment:
+      files:
+        - src: ../../../evals/ts-apphost-pnpm-policy/package.json
+          dest: pnpm-repro/package.json
+        - src: ../../../evals/ts-apphost-pnpm-policy/pnpm-workspace.yaml
+          dest: pnpm-repro/pnpm-workspace.yaml
+        - src: ../../../evals/ts-apphost-pnpm-policy/aspire-apphost/apphost.mts
+          dest: pnpm-repro/aspire-apphost/apphost.mts
+        - src: ../../../evals/ts-apphost-pnpm-policy/aspire-apphost/package.json
+          dest: pnpm-repro/aspire-apphost/package.json
+        - src: ../../../evals/ts-apphost-pnpm-policy/aspire-apphost/pnpm-workspace.yaml
+          dest: pnpm-repro/aspire-apphost/pnpm-workspace.yaml
+        - src: ../../../evals/ts-apphost-pnpm-policy/restore-output.txt
+          dest: pnpm-repro/restore-output.txt
+    rubric:
+      - The assistant rejects exit code 0 and the success message as sufficient evidence because ERR_PNPM_IGNORED_BUILDS is still present.
+      - The assistant explains that the affected CLI resolver uses --ignore-workspace, which ignores even the existing AppHost-local approval.
+      - The assistant recommends a pnpm install from the nested AppHost directory with explicit workspaceDir pointing there, preserves both workspace policies and existing package-manager metadata, and does not recommend --ignore-workspace as the repair.
+      - The assistant verifies dependency repair with install output and a toolchain check, distinguishes it from fixing the CLI, and reports recurring CLI failures instead of rerunning init, disabling checks, changing managers, or claiming the upstream fix is already released.
+    graders:
+      - type: skill-invocation
+        name: invokes-aspireify-for-pnpm-recovery
+        config:
+          required:
+            - aspireify
+      - type: prompt
+        name: honors-local-policy-without-false-success
+        config:
+          prompt: >
+            Evaluate the assistant's response against the rubric. It must not treat
+            the successful exit as proof of recovery, must explain why the CLI ignores
+            local approvals, and must recommend an explicit workspaceDir-scoped install
+            plus verification without weakening either policy or claiming to fix the CLI.
+      - type: diff-empty
+        name: keeps-pnpm-policy-guidance-read-only
