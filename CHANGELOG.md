@@ -13,13 +13,13 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   `.ascii` output contracts, capability gates, routing and lifetime evaluations.
   Aspire CLI delivery requires refreshing its embedded skill bundle and metadata.
 
+### Changed
+- Preserve non-ASCII Aspire Doctor output when UTF-8 characters span subprocess
+  chunks, including check messages, paths, and error diagnostics.
+
 ### Removed
 - Removed embedded `.tgz` bundle generation and uploads. Releases now publish
   reviewed source and approved changelog notes without generated archives.
-
-### Fixed
-- Preserve non-ASCII Aspire Doctor output when UTF-8 characters span subprocess
-  chunks, including check messages, paths, and error diagnostics.
 
 ## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)
 
