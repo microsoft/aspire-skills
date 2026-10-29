@@ -46,9 +46,11 @@ Aspire MCP server configuration is separate and opt-in.
 In Aspire 13.6, this setup preselects recommended repository-local skills,
 including `aspireify`.
 
-In Aspire 17.0 and later, choose which agent clients, skills, and CLI tools to
-configure at project or global scope. The CLI registers remote Aspire skills
-with the selected clients instead of bundling or copying Aspire skill files.
+In Aspire 17.0 and later, agent setup lets you choose which agent clients,
+skills, and CLI tools to configure. You can choose project-specific settings or
+global settings shared across projects. The CLI configures the selected agent
+clients to fetch and load content directly from the `aspire-skills` repository
+instead of copying bundled skill files.
 
 Standalone `aspire agent init` also offers MCP configuration, which is off by
 default. Non-interactive runs configure MCP only when you pass `--mcp`.
