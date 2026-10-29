@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -689,6 +689,52 @@ test("workspace fallback discovers file-based TypeScript AppHosts with mts exten
             new Set(await discoverConfiguredAppHosts(root)),
             new Set([directAppHost, nestedAppHost]),
         );
+    } finally {
+        await rm(fixtureRoot, { recursive: true, force: true });
+    }
+});
+
+test("workspace fallback recognizes source AppHost casing at either scan depth", async (t) => {
+    for (const fileName of ["AppHost.cs", "AppHost.ts", "AppHost.mts", "APPHOST.MTS"]) {
+        await t.test(fileName, async () => {
+            const fixtureRoot = await mkdtemp(join(tmpdir(), "aspire-cased-apphost-"));
+            try {
+                const root = join(fixtureRoot, ...Array(10).fill("scope"));
+                const nestedDirectory = join(root, "nested");
+                await mkdir(nestedDirectory, { recursive: true });
+                const directAppHost = join(root, fileName);
+                const nestedAppHost = join(nestedDirectory, fileName);
+                await writeFile(directAppHost, "");
+                await writeFile(nestedAppHost, "");
+                await writeFile(join(root, `${fileName}.bak`), "");
+                await mkdir(join(root, "unrelated"));
+                await writeFile(join(root, "unrelated", "worker.mts"), "");
+
+                assert.deepEqual(
+                    new Set(await discoverConfiguredAppHosts(root)),
+                    new Set([directAppHost, nestedAppHost]),
+                );
+            } finally {
+                await rm(fixtureRoot, { recursive: true, force: true });
+            }
+        });
+    }
+});
+
+test("workspace fallback preserves root source symlinks and ignores dangling links", {
+    skip: process.platform === "win32",
+}, async () => {
+    const fixtureRoot = await mkdtemp(join(tmpdir(), "aspire-linked-apphost-"));
+    try {
+        const root = join(fixtureRoot, ...Array(10).fill("scope"));
+        await mkdir(root, { recursive: true });
+        const target = join(fixtureRoot, "source.mts");
+        const appHostPath = join(root, "apphost.mts");
+        await writeFile(target, "");
+        await symlink(target, appHostPath);
+        await symlink(join(fixtureRoot, "missing.ts"), join(root, "apphost.ts"));
+
+        assert.deepEqual(await discoverConfiguredAppHosts(root), [appHostPath]);
     } finally {
         await rm(fixtureRoot, { recursive: true, force: true });
     }

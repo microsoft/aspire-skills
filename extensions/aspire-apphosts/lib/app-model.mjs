@@ -1601,17 +1601,6 @@ async function configuredAppHostFrom(directory) {
 
 async function scanImmediateAppHosts(directory) {
     const results = [];
-    const directCandidates = [
-        join(directory, "apphost.cs"),
-        join(directory, "apphost.ts"),
-        join(directory, "apphost.mts"),
-    ];
-    for (const candidate of directCandidates) {
-        if (await pathExists(candidate)) {
-            results.push(candidate);
-        }
-    }
-
     let entries;
     try {
         entries = await readdir(directory, { withFileTypes: true });
@@ -1620,7 +1609,11 @@ async function scanImmediateAppHosts(directory) {
     }
 
     for (const entry of entries) {
-        if (entry.isFile() && /\.apphost\.csproj$/i.test(entry.name)) {
+        const sourceAppHost = /^apphost\.(?:cs|ts|mts)$/i.test(entry.name);
+        if (
+            (entry.isFile() && (/\.apphost\.csproj$/i.test(entry.name) || sourceAppHost))
+            || (entry.isSymbolicLink() && sourceAppHost && await pathExists(join(directory, entry.name)))
+        ) {
             results.push(join(directory, entry.name));
             continue;
         }
