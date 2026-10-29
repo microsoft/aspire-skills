@@ -219,6 +219,10 @@ an HTTP catalog. Add the configuration for your OpenCode version to
 See OpenCode's [skill sources documentation](https://opencode.ai/v2/docs/skills#sources)
 for configuration guidance.
 
+For development testing, use a local checkout's `skills/` directory. Catalog
+changes are prepared in release PRs and published from `main` only.
+See [development testing](docs/development.md#testing-development-skills).
+
 ### Ollama + Copilot CLI
 
 **Launch Copilot with Ollama:**
@@ -288,7 +292,9 @@ Merging a same-repository `release/<version>` PR into `main` runs
 copies the approved changelog notes into a source-only GitHub release, and uploads
 no generated archives. It uses `GITHUB_TOKEN`, not a repo bot or stored personal
 token. Reruns preserve the tag's commit and notes.
-See [the development guide](docs/development.md) for the release flow.
+Release preparation, dev bumps, catalog refreshes, and Arcade patch backports use
+the Aspire repository GitHub App to open reviewable PRs and run normal checks.
+See [the development guide](docs/development.md) for the release flow and setup.
 
 ## Contributing
 
