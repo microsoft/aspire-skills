@@ -9,12 +9,20 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   persistent volumes), and explicitly approved AppHost-wide `--volumes` cleanup, including
   its ownership and compatibility limits. Stale-password recovery now prefers restoring
   the password or a targeted reset and treats `--volumes` as a broader, approved option.
-- Keep distinct Aspireify proposal snapshots for POSIX AppHost paths containing
-  literal backslashes instead of treating those characters as directory separators.
-- Keep AppHosts in workspace child directories beginning with `..` visible and
-  allow their source files to open without admitting paths outside the workspace.
-- Preserve non-ASCII Aspire Doctor output when UTF-8 characters span subprocess
-  chunks, including check messages, paths, and error diagnostics.
+- Corrected POSIX path handling in the Aspireify canvas to keep proposal
+  snapshots separate for AppHost paths containing literal backslashes.
+- Restored AppHost visibility and source-file navigation in the Aspire AppHosts
+  canvas for workspace child directories whose names begin with `..`, preserving
+  checks that block paths outside the workspace.
+- Preserved non-ASCII check messages, paths, and error diagnostics in the
+  Aspire Doctor canvas by decoding UTF-8 characters across subprocess output
+  chunk boundaries.
+- Aligned non-secret command defaults and submissions in the Aspire AppHosts
+  canvas with Aspire Hosting's whitespace trimming. Replaced silent truncation
+  of overlength values with validation errors.
+- Prevented command-editing stalls in the Aspire AppHosts canvas by scanning only
+  leading and trailing whitespace when normalizing values with long runs of
+  interior whitespace.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
@@ -28,12 +36,6 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ### Removed
 - Removed embedded `.tgz` bundle generation and uploads. Releases now publish
   reviewed source and approved changelog notes without generated archives.
-
-### Fixed
-- Match Aspire Hosting's whitespace normalization for AppHosts command defaults
-  and submissions without silently shortening overlength values.
-- Avoid stalls when editing command values containing long interior whitespace
-  by scanning only their ends during normalization.
 
 ## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)
 
