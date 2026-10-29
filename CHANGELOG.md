@@ -13,6 +13,8 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   literal backslashes instead of treating those characters as directory separators.
 - Keep AppHosts in workspace child directories beginning with `..` visible and
   allow their source files to open without admitting paths outside the workspace.
+- Preserve non-ASCII Aspire Doctor output when UTF-8 characters span subprocess
+  chunks, including check messages, paths, and error diagnostics.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
