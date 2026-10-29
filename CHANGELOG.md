@@ -25,9 +25,8 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   interior whitespace.
 - Kept numeric command defaults visible in the Aspire AppHosts canvas instead of
   allowing native number controls to hide values that would still be submitted.
-- Fixed AppHosts workspace fallback discovery missing mixed-case source filenames
-  such as `AppHost.cs` and `AppHost.mts` in the workspace root on case-sensitive
-  filesystems.
+- Fixed the Aspire AppHosts canvas missing mixed-case AppHost files in the
+  workspace root when `aspire ls` is unavailable.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
