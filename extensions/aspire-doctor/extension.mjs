@@ -260,11 +260,13 @@ async function runDoctor() {
                 return;
             }
 
+            child.stdout?.setEncoding("utf8");
+            child.stderr?.setEncoding("utf8");
             child.stdout?.on("data", (chunk) => {
-                stdout += chunk.toString();
+                stdout += chunk;
             });
             child.stderr?.on("data", (chunk) => {
-                stderr += chunk.toString();
+                stderr += chunk;
             });
             child.on("error", (err) => {
                 finish({

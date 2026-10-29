@@ -15,6 +15,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   allow their source files to open without admitting paths outside the workspace.
 - Unified canvas styling and icons with shared assets that respect host themes.
 
+- Preserve non-ASCII Aspire Doctor output when UTF-8 characters span subprocess
+  chunks, including check messages, paths, and error diagnostics.
+
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
   reference files and SHA-512 content versions.
