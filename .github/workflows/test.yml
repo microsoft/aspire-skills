@@ -32,6 +32,35 @@ jobs:
       - name: Install test dependencies
         run: npm ci --ignore-scripts
 
+      - name: Setup pinned workflow compiler
+        if: runner.os == 'Linux'
+        uses: github/gh-aw-actions/setup-cli@866158eb5c6cbfd3c614104e3d3d6634e246d220
+        with:
+          version: v0.91.8
+
+      - name: Compile agentic workflows
+        if: runner.os == 'Linux'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh aw compile --purge --validate
+          --action-mode action --action-tag 866158eb5c6cbfd3c614104e3d3d6634e246d220
+          --no-check-update --schedule-seed microsoft/aspire-skills
+
+      - name: Reject generated workflow drift
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          changes=$(git status --porcelain --untracked-files=all -- \
+            '.github/aw/actions-lock.json' \
+            '.github/workflows/*.lock.yml' \
+            '.github/workflows/agentics-maintenance*.yml')
+          if [[ -n "$changes" ]]; then
+            echo "Generated agentic workflow files are not up to date:"
+            printf '%s\n' "$changes"
+            exit 1
+          fi
+
       - name: Test
         run: npm test
 
@@ -44,3 +73,14 @@ jobs:
         env:
           GH_AW_ACTIONS_DIR: ${{ runner.temp }}/gh-aw/actions
         run: node --test tests/telemetry-publication/*.test.mjs
+
+      - name: Exercise telemetry container isolation
+        id: telemetry-isolation
+        if: runner.os == 'Linux'
+        run: node tests/telemetry-publication/isolation-canary.mjs
+
+      - name: Reject interpreted container commands
+        if: runner.os == 'Linux'
+        env:
+          FORGED_CONTAINER_OUTPUT: ${{ steps.telemetry-isolation.outputs.forged }}
+        run: test -z "$FORGED_CONTAINER_OUTPUT"

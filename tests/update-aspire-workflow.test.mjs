@@ -11,7 +11,8 @@ import { test } from "node:test";
 import { parse } from "yaml";
 import {
   applyFrozenProposal, cloneTrustedBase, dockerArguments, freezeBundle, pinPublicationBase, publicationPolicy,
-  prepareVerifiedReview, resolveSource, validateOutcome, validateReceipt, validateReviewReceipt, verifierImage
+  prepareVerifiedReview, resolveSource, validateOutcome, validatePublication, validateReceipt,
+  validateReviewReceipt, verifierImage
 } from "../scripts/telemetry-workflow.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -95,7 +96,9 @@ function withRun(t, directory) {
 function receipt(f, type = "create_pull_request") {
   const item = type === "noop"
     ? { type, message: "Baseline covers the selected source." }
-    : { type, branch: f.source.branch, title: "Telemetry", body: "Changes." };
+    : type === "report_incomplete"
+      ? { type, reason: "A required update could not be prepared." }
+      : { type, branch: f.source.branch, title: "Telemetry", body: "Changes." };
   writeFileSync(join(f.output, "agent_output.json"), JSON.stringify({ items: [item], errors: [] }));
   return {
     source: f.source, type, tree: git(f.repo, "rev-parse", "HEAD^{tree}"),
@@ -145,9 +148,7 @@ test("source evidence comes from immutable commits even when a manual PR advance
   assert.equal(source.base, f.base);
   const evidence = join(f.directory, "telemetry-source");
   const metadata = JSON.parse(readFileSync(join(evidence, "source-pr.json")));
-  assert.equal(metadata.dryRun, true);
-  assert.equal(Object.hasOwn(metadata, "title"), false);
-  assert.equal(Object.hasOwn(metadata, "body"), false);
+  assert.deepEqual(metadata, { ...source, dryRun: true });
   assert.equal(metadataReads, 1);
   const diff = readFileSync(join(evidence, "source-pr.diff"), "utf8");
   assert.match(diff, /\+selected/);
@@ -221,8 +222,8 @@ test("source resolution rejects malformed inputs and mismatched automatic trigge
   }), /must target/);
 });
 
-test("contradictory outcomes and forged destinations cannot reach publication", t => {
-  const { source } = fixture(t);
+test("contradictory outcomes and forged destinations cannot reach publication", () => {
+  const source = { branch: "update-aspire-telemetry-pr-123" };
   const good = { type: "create_pull_request", branch: source.branch, title: "Telemetry", body: "Evidence." };
   for (const item of [
     { ...good, branch: "update-aspire-telemetry-pr-999" },
@@ -366,11 +367,11 @@ test("native review replaces raw transports with the frozen proposal and records
   assert.equal(readFileSync(join(directory, "aw-prompts", "prompt.txt"), "utf8"), "Original prompt context.");
 });
 
-test("native review binding rejects missing, stale, mismatched, skipped, and non-successful review", t => {
-  const f = proposal(fixture(t));
-  withRun(t, f.directory);
-  freeze(f);
-  const verified = receipt(f);
+test("native review binding rejects missing, stale, mismatched, skipped, and non-successful review", () => {
+  const verified = {
+    source: { commit: "1".repeat(40) }, tree: "2".repeat(40), type: "create_pull_request",
+    run: "123456", attempt: "2", files: { "agent_output.json": "3".repeat(64) }
+  };
   const detection = { result: "success", success: "true", conclusion: "success" };
   validateReviewReceipt(verified, structuredClone(verified), detection);
   for (const reviewed of [
@@ -398,6 +399,103 @@ test("native publisher fetches cannot silently rebase a verified proposal", t =>
   git(publisher, "fetch", "origin", "main");
   assert.equal(git(publisher, "rev-parse", "origin/main"), f.base);
   assert.equal(git(publisher, "rev-parse", "origin/publication-main"), advanced);
+});
+
+test("publication audit requires the actual draft PR to contain the verified tree on its pinned parent", async t => {
+  const f = proposal(fixture(t));
+  withRun(t, f.directory);
+  freeze(f);
+  const verified = receipt(f);
+  const goodPr = {
+    number: 42, html_url: "https://github.com/microsoft/aspire/pull/42", state: "open", draft: true, merged: false,
+    base: { ref: "main", repo: { full_name: "microsoft/aspire" } },
+    head: { ref: f.source.branch, sha: f.head, repo: { full_name: "microsoft/aspire" } }
+  };
+  const goodCommit = { sha: f.head, tree: { sha: verified.tree }, parents: [{ sha: f.source.aspireBase }] };
+  let pr = goodPr;
+  let commit = goodCommit;
+  const reads = [];
+  const github = { rest: {
+    pulls: { get: async parameters => {
+      assert.deepEqual(parameters, { owner: "microsoft", repo: "aspire", pull_number: 42 });
+      reads.push("PR");
+      return { data: pr };
+    } },
+    git: { getCommit: async parameters => {
+      assert.deepEqual(parameters, { owner: "microsoft", repo: "aspire", commit_sha: f.head });
+      reads.push("commit");
+      return { data: commit };
+    } }
+  } };
+  const audit = values => validatePublication({
+    github, source: f.source, receipt: verified, publisherResult: "success",
+    staged: false, number: "42", url: goodPr.html_url, ...values
+  });
+  assert.equal(await audit(), "published");
+  assert.deepEqual(reads, ["PR", "commit"]);
+  for (const [name, change] of [
+    ["wrong PR number", () => pr.number = 43],
+    ["wrong actual URL", () => pr.html_url += "?unexpected"],
+    ["closed PR", () => pr.state = "closed"],
+    ["non-draft PR", () => pr.draft = false],
+    ["merged PR", () => pr.merged = true],
+    ["wrong base repository", () => pr.base.repo.full_name = "example/other"],
+    ["wrong base branch", () => pr.base.ref = "release/99"],
+    ["fork head", () => pr.head.repo.full_name = "example/fork"],
+    ["wrong head branch", () => pr.head.ref += "-other"],
+    ["wrong commit", () => commit.sha = "a".repeat(40)],
+    ["untested tree", () => commit.tree.sha = "a".repeat(40)],
+    ["different parent", () => commit.parents[0].sha = "a".repeat(40)],
+    ["merge commit", () => commit.parents.push({ sha: "a".repeat(40) })]
+  ]) {
+    await t.test(name, async () => {
+      pr = structuredClone(goodPr);
+      commit = structuredClone(goodCommit);
+      change();
+      await assert.rejects(audit(), /actual PR does not match|published commit does not match/);
+    });
+  }
+  pr = goodPr;
+  commit = goodCommit;
+  for (const values of [
+    { number: "", url: "" }, { number: "" }, { url: "" }, { number: "042" }, { number: "42\n" },
+    { number: "42", url: "https://github.com/example/other/pull/42" },
+    { number: "42", url: `${goodPr.html_url}/` }
+  ]) {
+    reads.length = 0;
+    await assert.rejects(audit(values), /canonical Aspire PR number and URL/);
+    assert.deepEqual(reads, []);
+  }
+  for (const publisherResult of ["failure", "cancelled", "skipped", ""]) {
+    await assert.rejects(audit({ publisherResult }), /publisher did not complete successfully/);
+  }
+});
+
+test("publication audit distinguishes staged previews, verified no-ops, incomplete work, and missing publication", async t => {
+  const f = fixture(t);
+  withRun(t, f.directory);
+  const github = { get rest() { throw new Error("This outcome must not call the GitHub API."); } };
+  const audit = (verified, values = {}) => validatePublication({
+    github, source: f.source, receipt: verified, publisherResult: "success",
+    staged: false, ...values
+  });
+  let verified = receipt(f, "noop");
+  assert.equal(await audit(verified), "noop");
+  assert.equal(await audit(verified, { staged: true }), "staged");
+  for (const values of [
+    { number: "42" }, { url: "https://github.com/microsoft/aspire/pull/42" },
+    { staged: true, number: "42", url: "https://github.com/microsoft/aspire/pull/42" }
+  ]) {
+    await assert.rejects(audit(verified, values), /unexpectedly published a PR/);
+  }
+  verified = receipt(f, "report_incomplete");
+  await assert.rejects(audit(verified), /maintenance is incomplete/);
+  await assert.rejects(audit(verified, { staged: true }), /maintenance is incomplete/);
+  const candidate = proposal(f);
+  freeze(candidate);
+  verified = receipt(candidate);
+  assert.equal(await audit(verified, { staged: true }), "staged");
+  await assert.rejects(audit(verified), /did not return a canonical Aspire PR/);
 });
 
 test("compiled workflow enforces verifier success, strict detection, and bounded credentials", async () => {
@@ -433,7 +531,7 @@ test("compiled workflow enforces verifier success, strict detection, and bounded
     assert.ok(step);
     assert.equal(step.env.GH_AW_DETECTION_CONTINUE_ON_ERROR, "false");
   }
-  for (const name of ["resolve-source", "verify-telemetry"]) {
+  for (const name of ["resolve-source", "verify-telemetry", "validate-publication"]) {
     assert.ok(Object.values(compiled.jobs[name].permissions).every(value => ["none", "read"].includes(value)));
   }
   const maximum = { contents: "write", issues: "read", "pull-requests": "write" };
@@ -455,6 +553,27 @@ test("compiled workflow enforces verifier success, strict detection, and bounded
   assert.equal(policy.fallback_as_issue, false);
   assert.deepEqual(policy.allowed_base_branches, ["main"]);
   assert.ok(policy.allowed_files.every(path => !/AspireSkills|\.csproj$|\.tgz$/.test(path)));
+});
+
+test("compiled publication audit uses trusted code and read-only destination credentials after native publishing", () => {
+  const audit = compiled.jobs["validate-publication"];
+  for (const dependency of ["resolve-source", "verify-telemetry", "safe_outputs"]) {
+    assert.ok(audit.needs.includes(dependency));
+  }
+  assert.match(audit.if, /!cancelled\(\).*needs\.verify-telemetry\.result == 'success'/);
+  assert.ok(compiled.jobs.conclusion.needs.includes("validate-publication"));
+  const checkout = audit.steps.find(step => step.uses?.startsWith("actions/checkout@"));
+  assert.equal(checkout.with.ref, "${{ github.workflow_sha }}");
+  assert.equal(checkout.with["persist-credentials"], false);
+  const token = audit.steps.find(step => step.id === "publication-read-token");
+  assert.equal(token.with.repositories, "aspire");
+  assert.equal(token.with["permission-contents"], "read");
+  assert.equal(token.with["permission-pull-requests"], "read");
+  const validation = audit.steps.find(step => step.with?.script?.includes("validatePublication("));
+  assert.equal(validation.env.TELEMETRY_PUBLISHER_RESULT, "${{ needs.safe_outputs.result }}");
+  assert.equal(validation.env.TELEMETRY_PR_NUMBER, "${{ needs.safe_outputs.outputs.created_pr_number }}");
+  assert.equal(validation.env.TELEMETRY_PR_URL, "${{ needs.safe_outputs.outputs.created_pr_url }}");
+  assert.equal(validation.env.TELEMETRY_STAGED, authored["safe-outputs"].staged);
 });
 
 test("publisher prepares the pinned target repository before validating frozen Git transports", () => {
@@ -482,6 +601,22 @@ test("Linux CI exercises publication against the same pinned runtime as the work
   assert.ok(regression);
   assert.equal(regression.if, "runner.os == 'Linux'");
   assert.equal(regression.env.GH_AW_ACTIONS_DIR, "${{ runner.temp }}/gh-aw/actions");
+  const compiler = ci.jobs.test.steps.find(step => step.uses?.startsWith("github/gh-aw-actions/setup-cli@"));
+  assert.equal(compiler.uses, runtime(compiled.jobs.safe_outputs.steps).uses.replace("/setup@", "/setup-cli@"));
+  assert.equal(compiler.with.version, "v0.91.8");
+  assert.equal(compiler.if, "runner.os == 'Linux'");
+  const compilation = ci.jobs.test.steps.find(step => step.name === "Compile agentic workflows");
+  assert.match(compilation.run, /--purge --validate/);
+  assert.doesNotMatch(compilation.run, /--force-refresh-action-pins/);
+  assert.match(compilation.run, /--action-tag 866158eb5c6cbfd3c614104e3d3d6634e246d220/);
+  assert.equal(compilation.if, "runner.os == 'Linux'");
+  const canary = ci.jobs.test.steps.find(step => step.run === "node tests/telemetry-publication/isolation-canary.mjs");
+  assert.ok(canary);
+  assert.equal(canary.if, "runner.os == 'Linux'");
+  assert.equal(canary["continue-on-error"], undefined);
+  const commandCheck = ci.jobs.test.steps.find(step => step.name === "Reject interpreted container commands");
+  assert.equal(commandCheck.env.FORGED_CONTAINER_OUTPUT, `\${{ steps.${canary.id}.outputs.forged }}`);
+  assert.equal(commandCheck.run, 'test -z "$FORGED_CONTAINER_OUTPUT"');
 });
 
 test("Copilot protocol selection uses the fixed, pinned runtime and firewall", () => {

@@ -13,8 +13,9 @@ Dev retains `CHANGELOG.md` and generated `opencode/` catalogs. Regenerate catalo
 with `npm run catalog` after changing shipped skills, references, or assets,
 and commit them with the source changes. Run `npm run catalog:check` to check
 the committed tree. CI rejects missing, extra, or stale V1 and V2 catalog files.
-Feature PRs update the current version's changelog notes and preserve earlier
-entries and the coordinated version.
+Only consumer-facing changes belong in the current version's changelog notes.
+Keep internal repository automation, CI, and test-only changes in development
+documentation. Preserve earlier entries and the coordinated version.
 
 The **OpenCode catalog check** runs on every PR, including stacked PRs, on
 main/dev/release pushes, and on merge-queue candidates.
@@ -74,8 +75,15 @@ Regenerate the compiled workflow with
 gh-aw v0.91.8 on Linux or WSL after editing its source or configuration:
 
 ```shell
-gh aw compile update-aspire --validate --action-mode action --action-tag 866158eb5c6cbfd3c614104e3d3d6634e246d220
+gh aw compile --purge --validate \
+  --action-mode action --action-tag 866158eb5c6cbfd3c614104e3d3d6634e246d220 \
+  --no-check-update --schedule-seed microsoft/aspire-skills
 ```
+
+Linux CI runs this command with the same pinned compiler and rejects modified,
+deleted, or unexpected generated workflows and action pins.
+Use `--force-refresh-action-pins` only when intentionally updating locked
+action references.
 
 The sandbox pins AWF v0.28.49 for Copilot custom-tool handling and
 [model-supported endpoint discovery and recovery](https://github.com/github/gh-aw-firewall/pull/9559).
@@ -92,8 +100,9 @@ publication:
   and pins Aspire's base commit. Manual runs can select unmerged PRs; neither
   their descriptions nor their contents become workflow instructions.
 - A fresh verification job reads the existing publisher's compiled file policy,
-  checks the bundle's actual changes, and freezes one candidate commit. The
-  agent's checkout, Git configuration, and proposed commit history are not reused.
+  checks the proposed Git `.bundle` transport's actual changes, and freezes one
+  candidate commit. The agent's checkout, Git configuration, and proposed commit
+  history are not reused.
 - A digest-pinned .NET SDK container restores only trusted base source. A second,
   unprivileged container runs all required telemetry tests, including PowerShell,
   against the proposed code with networking disabled. Both containers receive only
@@ -125,6 +134,12 @@ publication:
   conclusion jobs; built-in permission overrides are additive, not restrictive.
   Those jobs never execute candidate build or test code, and conclusion receives
   no publishing App token.
+- A read-only audit checks the native publisher's returned PR number and URL
+  against the actual open draft in Aspire. The head repository and branch, base
+  branch, commit tree, and single parent must match the verified proposal.
+  Missing publication results, contradictory staged/no-op outputs, and incomplete
+  work fail the run. This audit detects a bad outcome after publication; it
+  cannot undo a write or prevent downstream CI from starting.
 
 The receipt establishes which tree ran the required checks, not that the
 agent's conclusions or proposed telemetry changes are safe. Human review and
@@ -162,7 +177,8 @@ Never mount runner state or re-enable candidate network access to fix a test.
 
 Run `node --test tests/update-aspire-workflow.test.mjs` for behavioral coverage
 of snapshot consistency, rejected proposals, file modes, isolated execution
-arguments, artifact tampering, run binding, base drift, and compiled gates.
+arguments, artifact tampering, run binding, base drift, actual publication
+outcomes, and compiled gates.
 
 The Linux **Tests** job also runs
 `node --test tests/telemetry-publication/*.test.mjs` with `GH_AW_ACTIONS_DIR`
@@ -171,6 +187,18 @@ regressions execute the compiled pre-publication script and native signed-PR
 handler against local Git fixtures. Workflow, CODEOWNERS, unrelated source, and
 project-file edits must be rejected both alone and mixed with valid telemetry,
 before any API mutation or Git push. A misleading telemetry-only companion patch
-must not bypass that boundary. The valid-telemetry control reaches the signed
-commit API and Git-push fallback, with both intercepted; no test writes to GitHub.
-Update the CI runtime pin alongside any workflow runtime upgrade.
+must not bypass that boundary. A successful mocked native publisher exercises
+signed commit creation, draft-PR creation, native result outputs, and the compiled
+read-only audit; no test writes to GitHub. Additional cases cover staged
+publication without mutations, late source/base changes, compiled admission
+denials, generated-file drift, and hostile output on success and failure.
+
+Linux CI also runs `node tests/telemetry-publication/isolation-canary.mjs`
+against the pinned SDK image using the production Docker invocation and output
+wrapper. This required check exercises cleared credentials, inaccessible host and
+Actions-file canaries, no Docker socket, nonroot execution, dropped capabilities,
+no-new-privileges, read-only root, loopback-only networking, and executable private
+temporary files. Its command-like stdout must not become Actions commands.
+The next step rejects any forged step output from that stdout.
+Docker must already be running; the check fails rather than silently skipping.
+Update the CI compiler and runtime pins alongside any workflow runtime upgrade.

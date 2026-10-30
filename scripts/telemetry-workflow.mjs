@@ -93,8 +93,7 @@ export async function resolveSource({ github, context, directory }) {
   const output = join(process.env.RUNNER_TEMP, "telemetry-source");
   mkdirSync(output, { recursive: true });
   writeFileSync(join(output, "source-pr.json"), JSON.stringify({
-    ...source, changed_files: files,
-    dryRun: manual && [true, "true"].includes(context.payload.inputs?.dry_run)
+    ...source, dryRun: manual && [true, "true"].includes(context.payload.inputs?.dry_run)
   }));
   writeFileSync(join(output, "source-pr-files.json"), JSON.stringify(files));
   writeFileSync(join(output, "source-pr.diff"), git(directory, [
@@ -178,7 +177,7 @@ export function inspectProposal({ directory, base, head, policy, checkFiles }) {
 
 export function freezeBundle({ directory, bundle, source, outputDirectory, policy, checkFiles }) {
   sha(source.aspireBase);
-  digest(bundle);
+  if (!lstatSync(bundle).isFile()) throw new Error("Proposal bundle must be a regular file.");
   git(directory, ["bundle", "verify", bundle]);
   const heads = git(directory, ["bundle", "list-heads", bundle]).trim().split("\n").map(line => line.split(" "));
   if (!heads.length || heads.some(([oid, ref]) =>
@@ -273,7 +272,7 @@ export function cleanupContainer() {
   }
 }
 
-function runContainer(options) {
+export function runContainer(options) {
   const stop = randomUUID();
   process.stdout.write(`::stop-commands::${stop}\n`);
   try {
@@ -383,7 +382,7 @@ export function validateReviewReceipt(receipt, reviewedReceipt, detection) {
 
 export function pinPublicationBase(directory, base) {
   // The pinned gh-aw handler refetches main before signed replay against origin/main.
-  // https://github.com/github/gh-aw/blob/v0.89.17/actions/setup/js/create_pull_request.cjs#L1779-L1784
+  // https://github.com/github/gh-aw-actions/blob/866158eb5c6cbfd3c614104e3d3d6634e246d220/setup/js/create_pull_request.cjs#L1792-L1806
   git(directory, ["update-ref", "refs/remotes/origin/main", sha(base)]);
   git(directory, ["config", "--replace-all", "remote.origin.fetch",
     "+refs/heads/main:refs/remotes/origin/publication-main"]);
@@ -421,6 +420,35 @@ export async function promoteVerifiedProposal({ github, directory, source, recei
   const artifactDirectory = "/tmp/gh-aw";
   for (const name of Object.keys(receipt.files)) copyFileSync(join(verified, name), join(artifactDirectory, name));
   writeFileSync(join(artifactDirectory, "safeoutputs.jsonl"), `${JSON.stringify(item)}\n`);
+}
+
+export async function validatePublication({ github, source, receipt, publisherResult, staged, number = "", url = "" }) {
+  const verified = join(process.env.RUNNER_TEMP, "telemetry-verified");
+  const item = validateReceipt(receipt, source, verified);
+  if (publisherResult !== "success") throw new Error("The native publisher did not complete successfully.");
+  if (item.type === "report_incomplete") throw new Error(`Telemetry maintenance is incomplete: ${item.reason}`);
+  if (staged || item.type === "noop") {
+    if (number !== "" || url !== "") throw new Error("A staged or no-op outcome unexpectedly published a PR.");
+    return staged ? "staged" : "noop";
+  }
+  const parsed = Number(number);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0 || String(parsed) !== number ||
+      url !== `https://github.com/microsoft/aspire/pull/${parsed}`) {
+    throw new Error("The native publisher did not return a canonical Aspire PR number and URL.");
+  }
+  const { data: pr } = await github.rest.pulls.get({ ...targetRepository, pull_number: parsed });
+  if (pr.number !== parsed || pr.html_url !== url || pr.state !== "open" || pr.draft !== true || pr.merged !== false ||
+      pr.base?.repo?.full_name !== "microsoft/aspire" || pr.base.ref !== "main" ||
+      pr.head?.repo?.full_name !== "microsoft/aspire" || pr.head.ref !== source.branch) {
+    throw new Error("The actual PR does not match the expected draft, repository, and branches.");
+  }
+  const head = sha(pr.head.sha);
+  const { data: commit } = await github.rest.git.getCommit({ ...targetRepository, commit_sha: head });
+  if (commit.sha !== head || commit.tree?.sha !== receipt.tree ||
+      commit.parents?.length !== 1 || commit.parents[0].sha !== source.aspireBase) {
+    throw new Error("The published commit does not match the verified tree and base.");
+  }
+  return "published";
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

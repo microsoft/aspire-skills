@@ -58,7 +58,7 @@ function environment(t, values) {
   }
 }
 
-async function fixture(t, { outside, telemetry = true, cleanPatch = false } = {}) {
+async function fixture(t, { outside, telemetry = true, cleanPatch = false, complete = false, staged = false } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "telemetry-publication-"));
   const previousDirectory = process.cwd();
   t.after(() => {
@@ -128,7 +128,7 @@ async function fixture(t, { outside, telemetry = true, cleanPatch = false } = {}
     RUNNER_TEMP: directory, GITHUB_WORKSPACE: publisher, GITHUB_RUN_ID: receipt.run,
     GITHUB_RUN_ATTEMPT: receipt.attempt, GITHUB_REPOSITORY: "microsoft/aspire-skills",
     GITHUB_SERVER_URL: "https://github.com", GITHUB_TOKEN: "fixture-token",
-    GH_AW_WORKFLOW_ID: "update-aspire", GH_AW_SAFE_OUTPUTS_STAGED: "false",
+    GH_AW_WORKFLOW_ID: "update-aspire", GH_AW_SAFE_OUTPUTS_STAGED: String(staged),
     TELEMETRY_SOURCE: JSON.stringify(source), TELEMETRY_RECEIPT: JSON.stringify(receipt),
     TELEMETRY_DETECTION_RESULT: "success", TELEMETRY_DETECTION_SUCCESS: "true",
     TELEMETRY_DETECTION_CONCLUSION: "success",
@@ -145,6 +145,12 @@ async function fixture(t, { outside, telemetry = true, cleanPatch = false } = {}
   const writes = [];
   const gitPushes = [];
   const logs = [];
+  const outputs = {};
+  const sourcePr = { merged: false, head: { sha: source.commit }, base: {
+    ref: "main", repo: { full_name: "microsoft/aspire-skills" }
+  } };
+  const targetBase = { object: { sha: base } };
+  let publishedPr;
   const recordWrite = (operation, parameters) => {
     assert.equal(`${parameters.owner}/${parameters.repo}`, "microsoft/aspire");
     writes.push({ operation, parameters });
@@ -158,28 +164,51 @@ async function fixture(t, { outside, telemetry = true, cleanPatch = false } = {}
     rest: {
       pulls: {
         get: async parameters => {
-          assert.equal(`${parameters.owner}/${parameters.repo}`, "microsoft/aspire-skills");
-          return { data: { merged: false, head: { sha: source.commit }, base: {
-            ref: "main", repo: { full_name: "microsoft/aspire-skills" }
-          } } };
+          if (parameters.repo === "aspire-skills") return { data: sourcePr };
+          assert.equal(`${parameters.owner}/${parameters.repo}`, "microsoft/aspire");
+          assert.equal(parameters.pull_number, publishedPr.number);
+          return { data: publishedPr };
         },
         list: async () => ({ data: [] }),
-        create: async parameters => intercept("pulls.create", parameters)
+        create: async parameters => {
+          if (!complete) return intercept("pulls.create", parameters);
+          recordWrite("pulls.create", parameters);
+          publishedPr = {
+            number: 42, html_url: "https://github.com/microsoft/aspire/pull/42",
+            id: 42, node_id: "PR_fixture", state: "open", merged: false, draft: parameters.draft,
+            base: { ref: parameters.base, repo: { full_name: "microsoft/aspire" } },
+            head: { ref: parameters.head, sha: head, repo: { full_name: "microsoft/aspire" } }
+          };
+          return { data: publishedPr };
+        }
       },
       repos: { get: async () => ({ data: { default_branch: "main", full_name: "microsoft/aspire" } }) },
       git: {
-        getRef: async () => ({ data: { object: { sha: base } } }),
+        getRef: async () => ({ data: targetBase }),
+        getCommit: async parameters => {
+          assert.deepEqual(parameters, { owner: "microsoft", repo: "aspire", commit_sha: head });
+          return { data: { sha: head, tree: { sha: receipt.tree }, parents: [{ sha: base }] } };
+        },
         createRef: async parameters => {
           recordWrite("git.createRef", parameters);
           return { data: { ref: parameters.ref, object: { sha: parameters.sha } } };
         },
         updateRef: async parameters => intercept("git.updateRef", parameters)
       },
-      issues: { create: async parameters => intercept("issues.create", parameters) }
+      issues: {
+        create: async parameters => intercept("issues.create", parameters),
+        addLabels: async parameters => {
+          assert.ok(complete);
+          recordWrite("issues.addLabels", parameters);
+          return { data: parameters.labels.map(name => ({ name })) };
+        }
+      }
     },
     graphql: async (_query, { input }) => {
       const [owner, repo] = input.branch.repositoryNameWithOwner.split("/");
-      return intercept("createCommitOnBranch", { owner, repo, input });
+      if (!complete) return intercept("createCommitOnBranch", { owner, repo, input });
+      recordWrite("createCommitOnBranch", { owner, repo, input });
+      return { createCommitOnBranch: { commit: { oid: head } } };
     }
   };
   const execute = async (command, args = [], options = {}) => {
@@ -208,6 +237,11 @@ async function fixture(t, { outside, telemetry = true, cleanPatch = false } = {}
   const core = Object.fromEntries(["debug", "error", "info", "warning", "notice"].map(name => [
     name, message => logs.push(String(message))
   ]));
+  core.setOutput = (name, value) => outputs[name] = value;
+  core.summary = {
+    addRaw(content) { logs.push(content); return this; },
+    async write() { return this; }
+  };
   const context = {
     repo: { owner: "microsoft", repo: "aspire-skills" }, payload: {}, workflow: "Telemetry regression",
     eventName: "workflow_dispatch", runId: Number(receipt.run)
@@ -223,9 +257,34 @@ async function fixture(t, { outside, telemetry = true, cleanPatch = false } = {}
     const handler = await main(await publicationPolicy(root));
     const result = await handler(JSON.parse(readFileSync("/tmp/gh-aw/safeoutputs.jsonl", "utf8")), {});
     if (!result.success) throw new Error(`${result.error}\n${logs.join("\n")}`);
+    const { emitSafeOutputActionOutputs } = require(join(runtime, "safe_outputs_action_outputs.cjs"));
+    emitSafeOutputActionOutputs({ results: [{ success: true, type: "create_pull_request", result }] });
     return result;
   };
-  return { publish, writes, gitPushes, remote, remoteRefs, verified, prefix, source, receipt, reviewedReceipt };
+  const audit = async (values = {}) => {
+    const step = compiled.jobs["validate-publication"].steps.find(step =>
+      step.with?.script?.includes("validatePublication("));
+    const run = new AsyncFunction("github", "core", step.with.script);
+    const auditEnvironment = {
+      TELEMETRY_PUBLISHER_RESULT: "success", TELEMETRY_STAGED: String(staged),
+      TELEMETRY_PR_NUMBER: outputs.created_pr_number ?? "", TELEMETRY_PR_URL: outputs.created_pr_url ?? "",
+      GITHUB_WORKSPACE: root, ...values
+    };
+    const previous = Object.fromEntries(Object.keys(auditEnvironment).map(name => [name, process.env[name]]));
+    Object.assign(process.env, auditEnvironment);
+    try {
+      await run(github, core);
+    } finally {
+      for (const [name, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
+  };
+  return {
+    publish, audit, outputs, writes, gitPushes, remote, remoteRefs, verified, prefix, source,
+    sourcePr, targetBase, head, agent, receipt, reviewedReceipt
+  };
 }
 
 for (const outside of [
@@ -262,7 +321,7 @@ test("publication rejects a mixed bundle even when its companion patch hides the
   assert.equal(git(f.remote, "show-ref"), f.remoteRefs);
 });
 
-for (const mismatch of ["missing", "tree", "source", "attempt", "files"]) {
+for (const mismatch of ["missing", "tree"]) {
   test(`publication rejects ${mismatch} native review evidence before any remote write`, async t => {
     const f = await fixture(t);
     if (mismatch === "missing") {
@@ -270,9 +329,6 @@ for (const mismatch of ["missing", "tree", "source", "attempt", "files"]) {
     } else {
       const reviewed = structuredClone(f.receipt);
       if (mismatch === "tree") reviewed.tree = "a".repeat(40);
-      if (mismatch === "source") reviewed.source.commit = "a".repeat(40);
-      if (mismatch === "attempt") reviewed.attempt = "0";
-      if (mismatch === "files") reviewed.files = {};
       writeFileSync(f.reviewedReceipt, JSON.stringify(reviewed));
     }
     await assert.rejects(f.publish(), mismatch === "missing" ? /ENOENT/ : /Threat review does not match/);
@@ -313,3 +369,58 @@ test("valid telemetry reaches the real signed publisher with all remote writes i
   assert.deepEqual(input.fileChanges.deletions, []);
   assert.equal(git(f.remote, "show-ref"), f.remoteRefs);
 });
+
+test("native signed publication creates a real-shaped draft result that passes the compiled read-only audit", async t => {
+  const f = await fixture(t, { complete: true });
+  const result = await f.publish();
+  assert.equal(result.number, 42);
+  assert.deepEqual(f.outputs, {
+    created_pr_number: "42", created_pr_url: "https://github.com/microsoft/aspire/pull/42"
+  });
+  const request = f.writes.find(write => write.operation === "pulls.create").parameters;
+  assert.equal(request.head, f.source.branch);
+  assert.equal(request.base, "main");
+  assert.equal(request.draft, true);
+  assert.ok(f.writes.some(write => write.operation === "createCommitOnBranch"));
+  const writes = structuredClone(f.writes);
+  await f.audit();
+  assert.deepEqual(f.writes, writes);
+  for (const values of [
+    { TELEMETRY_PR_NUMBER: "" }, { TELEMETRY_PR_URL: "" },
+    { TELEMETRY_PR_URL: "https://github.com/example/other/pull/42" },
+    { TELEMETRY_PR_NUMBER: "43" }
+  ]) {
+    await assert.rejects(f.audit(values), /canonical Aspire PR number and URL/);
+  }
+  assert.deepEqual(f.gitPushes, []);
+  assert.equal(git(f.remote, "show-ref"), f.remoteRefs);
+});
+
+test("native staged publication previews the same verified proposal without any remote mutation", async t => {
+  const f = await fixture(t, { staged: true });
+  const result = await f.publish();
+  assert.equal(result.staged, true);
+  assert.deepEqual(f.outputs, {});
+  await f.audit();
+  assert.deepEqual(f.writes, []);
+  assert.deepEqual(f.gitPushes, []);
+  assert.equal(git(f.remote, "show-ref"), f.remoteRefs);
+});
+
+for (const changed of ["source PR", "Aspire main"]) {
+  test(`final promotion rejects a late ${changed} change after review with zero remote mutations`, async t => {
+    const f = await fixture(t);
+    if (changed === "source PR") {
+      f.sourcePr.head.sha = f.head;
+    } else {
+      git(f.remote, "fetch", "--quiet", f.agent, `${f.head}:refs/heads/main`);
+      f.targetBase.object.sha = f.head;
+    }
+    const before = git(f.remote, "show-ref");
+    await assert.rejects(f.publish(), changed === "source PR" ? /Source PR advanced/ : /Aspire main advanced/);
+    assert.deepEqual(f.writes, []);
+    assert.deepEqual(f.gitPushes, []);
+    assert.equal(git(f.remote, "show-ref"), before);
+    assert.equal(existsSync(join("/tmp/gh-aw", `${f.prefix}.bundle`)), false);
+  });
+}

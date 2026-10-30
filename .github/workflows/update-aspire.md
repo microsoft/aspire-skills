@@ -172,8 +172,57 @@ jobs:
     if: needs.verify-telemetry.result == 'success'
     permissions:
       issues: read
+  validate-publication:
+    needs: [agent, resolve-source, verify-telemetry, safe_outputs]
+    if: ${{ !cancelled() && needs.verify-telemetry.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: telemetry-verified-proposal
+          path: ${{ runner.temp }}/telemetry-verified/
+      - name: Generate read-only publication audit token
+        id: publication-read-token
+        if: needs.safe_outputs.outputs.created_pr_number != '' || needs.safe_outputs.outputs.created_pr_url != ''
+        uses: actions/create-github-app-token@v3.2.0
+        with:
+          client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
+          private-key: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
+          owner: microsoft
+          repositories: aspire
+          permission-contents: read
+          permission-pull-requests: read
+      - name: Validate actual publication outcome
+        uses: actions/github-script@v9.0.0
+        env:
+          TELEMETRY_SOURCE: ${{ needs.resolve-source.outputs.source }}
+          TELEMETRY_RECEIPT: ${{ needs.verify-telemetry.outputs.receipt }}
+          TELEMETRY_PUBLISHER_RESULT: ${{ needs.safe_outputs.result }}
+          TELEMETRY_STAGED: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+          TELEMETRY_PR_NUMBER: ${{ needs.safe_outputs.outputs.created_pr_number }}
+          TELEMETRY_PR_URL: ${{ needs.safe_outputs.outputs.created_pr_url }}
+        with:
+          github-token: ${{ steps.publication-read-token.outputs.token || github.token }}
+          script: |
+            const { validatePublication } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/telemetry-workflow.mjs`);
+            const outcome = await validatePublication({
+              github,
+              source: JSON.parse(process.env.TELEMETRY_SOURCE),
+              receipt: JSON.parse(process.env.TELEMETRY_RECEIPT),
+              publisherResult: process.env.TELEMETRY_PUBLISHER_RESULT,
+              staged: process.env.TELEMETRY_STAGED === "true",
+              number: process.env.TELEMETRY_PR_NUMBER,
+              url: process.env.TELEMETRY_PR_URL
+            });
+            core.info(`Confirmed telemetry outcome: ${outcome}`);
   conclusion:
-    needs: [verify-telemetry]
+    needs: [verify-telemetry, validate-publication]
     permissions:
       issues: read
 safe-outputs:
@@ -359,7 +408,7 @@ use `report_incomplete` with the concrete blocker rather than exhausting the cap
 
 Read `/tmp/gh-aw/agent/source-pr.json` first. It contains the validated PR
 `number`, source `commit`, canonical PR `url`, `merged` status,
-`dryRun` mode, and `changed_files` summary. Do not re-fetch prepared metadata.
+and `dryRun` mode. Do not re-fetch prepared metadata.
 A merged PR uses its merge commit; an unmerged PR selected manually uses its
 head commit. Use that commit for source research and proposal provenance, not
 the manual dispatch's workflow SHA.

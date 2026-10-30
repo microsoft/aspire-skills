@@ -2,7 +2,7 @@
 name: Aspire telemetry security smoke (PR 111)
 description: |
   Exercise the hardened telemetry workflow against pinned, unmerged PR 111.
-  Create one real draft PR only after isolated verification and native review.
+  Stage the proposal only after security regressions, isolation, and native review.
 on:
   bots: ["aspire-repo-bot[bot]"]
   push:
@@ -115,13 +115,13 @@ jobs:
               context: {
                 ...context,
                 eventName: "workflow_dispatch",
-                payload: { inputs: { pr_number: "111", dry_run: false } }
+                payload: { inputs: { pr_number: "111", dry_run: true } }
               },
               directory: process.env.GITHUB_WORKSPACE
             });
-            if (source.merged || source.commit !== "8f09d3d298009d415555afa154de891b719e907f" ||
+            if (source.merged || source.commit !== "53dac813359bccf1ae47e45f1c43922b6ba8aa44" ||
                 source.base !== "02d82d2de9ba787eeba1e2577be8377308b1b889") {
-              throw new Error("PR 111 changed from the selected unmerged snapshot; do not mix revisions.");
+              throw new Error("PR 111 changed from the approved snapshot; do not mix revisions.");
             }
             core.setOutput("source", JSON.stringify(source));
             core.setOutput("aspire-base", source.aspireBase);
@@ -130,8 +130,58 @@ jobs:
           name: telemetry-source
           path: ${{ runner.temp }}/telemetry-source/
           if-no-files-found: error
+  workflow-security:
+    needs: [activation]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "22"
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: github/gh-aw-actions/setup-cli@866158eb5c6cbfd3c614104e3d3d6634e246d220
+        with:
+          version: v0.91.8
+      - name: Compile agentic workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh aw compile --purge --validate
+          --action-mode action --action-tag 866158eb5c6cbfd3c614104e3d3d6634e246d220
+          --no-check-update --schedule-seed microsoft/aspire-skills
+      - name: Reject generated workflow drift
+        shell: bash
+        run: |
+          changes=$(git status --porcelain --untracked-files=all -- \
+            '.github/aw/actions-lock.json' \
+            '.github/workflows/*.lock.yml' \
+            '.github/workflows/agentics-maintenance*.yml')
+          if [[ -n "$changes" ]]; then
+            echo "Generated agentic workflow files are not up to date:"
+            printf '%s\n' "$changes"
+            exit 1
+          fi
+      - uses: github/gh-aw-actions/setup@866158eb5c6cbfd3c614104e3d3d6634e246d220
+        with:
+          destination: ${{ runner.temp }}/gh-aw/actions
+      - name: Run security regressions
+        env:
+          GH_AW_ACTIONS_DIR: ${{ runner.temp }}/gh-aw/actions
+        run: node --test tests/update-aspire-workflow.test.mjs tests/telemetry-publication/*.test.mjs
+      - name: Exercise telemetry container isolation
+        id: telemetry-isolation
+        run: node tests/telemetry-publication/isolation-canary.mjs
+      - name: Reject interpreted container commands
+        env:
+          FORGED_CONTAINER_OUTPUT: ${{ steps.telemetry-isolation.outputs.forged }}
+        run: test -z "$FORGED_CONTAINER_OUTPUT"
   agent:
-    needs: [resolve-source]
+    needs: [resolve-source, workflow-security]
   detection:
     needs: [resolve-source, verify-telemetry]
     if: needs.verify-telemetry.result == 'success'
@@ -190,13 +240,62 @@ jobs:
     if: needs.verify-telemetry.result == 'success'
     permissions:
       issues: read
+  validate-publication:
+    needs: [agent, resolve-source, verify-telemetry, safe_outputs]
+    if: ${{ !cancelled() && needs.verify-telemetry.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: telemetry-verified-proposal
+          path: ${{ runner.temp }}/telemetry-verified/
+      - name: Generate read-only publication audit token
+        id: publication-read-token
+        if: needs.safe_outputs.outputs.created_pr_number != '' || needs.safe_outputs.outputs.created_pr_url != ''
+        uses: actions/create-github-app-token@v3.2.0
+        with:
+          client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
+          private-key: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
+          owner: microsoft
+          repositories: aspire
+          permission-contents: read
+          permission-pull-requests: read
+      - name: Validate actual publication outcome
+        uses: actions/github-script@v9.0.0
+        env:
+          TELEMETRY_SOURCE: ${{ needs.resolve-source.outputs.source }}
+          TELEMETRY_RECEIPT: ${{ needs.verify-telemetry.outputs.receipt }}
+          TELEMETRY_PUBLISHER_RESULT: ${{ needs.safe_outputs.result }}
+          TELEMETRY_STAGED: "true"
+          TELEMETRY_PR_NUMBER: ${{ needs.safe_outputs.outputs.created_pr_number }}
+          TELEMETRY_PR_URL: ${{ needs.safe_outputs.outputs.created_pr_url }}
+        with:
+          github-token: ${{ steps.publication-read-token.outputs.token || github.token }}
+          script: |
+            const { validatePublication } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/telemetry-workflow.mjs`);
+            const outcome = await validatePublication({
+              github,
+              source: JSON.parse(process.env.TELEMETRY_SOURCE),
+              receipt: JSON.parse(process.env.TELEMETRY_RECEIPT),
+              publisherResult: process.env.TELEMETRY_PUBLISHER_RESULT,
+              staged: process.env.TELEMETRY_STAGED === "true",
+              number: process.env.TELEMETRY_PR_NUMBER,
+              url: process.env.TELEMETRY_PR_URL
+            });
+            core.info(`Confirmed telemetry outcome: ${outcome}`);
   conclusion:
-    needs: [verify-telemetry]
+    needs: [verify-telemetry, validate-publication]
     permissions:
       issues: read
 safe-outputs:
   needs: [resolve-source, verify-telemetry]
-  staged: false
+  staged: true
   report-failure-as-issue: false
   report-failed-jobs: false
   threat-detection:
@@ -358,7 +457,7 @@ create a draft PR with the actual telemetry changes.
 ## Context
 
 - **Source repository**: `microsoft/aspire-skills`
-- **PR Number**: `111`
+- **PR Number**: `${{ github.event.pull_request.number || github.event.inputs.pr_number }}`
 
 > [!NOTE]
 > The agent runs with `microsoft/aspire` as the current workspace. Use the
@@ -373,21 +472,11 @@ invocation 35. Do not repeat searches once there is enough evidence for the
 smallest necessary update. If a required update cannot be finished safely,
 use `report_incomplete` with the concrete blocker rather than exhausting the cap.
 
-## Previous smoke verification feedback
-
-The previous proposal failed offline compilation with `CS9007` in
-`AgentTelemetryHookTests.cs`: a new nested-JSON payload used an interpolated
-raw string with too few `$` delimiters for its closing braces.
-Use `JsonSerializer.Serialize` for nested-JSON test payloads or correct the
-raw-string delimiters. Preserve the test coverage and assertions; do not
-change the verifier or suppress the compiler error. Reassess the current
-pinned source and base rather than copying the earlier proposal.
-
 ## Step 1: Read Pinned Source Evidence
 
 Read `/tmp/gh-aw/agent/source-pr.json` first. It contains the validated PR
 `number`, source `commit`, canonical PR `url`, `merged` status,
-`dryRun` mode, and `changed_files` summary. Do not re-fetch prepared metadata.
+and `dryRun` mode. Do not re-fetch prepared metadata.
 A merged PR uses its merge commit; an unmerged PR selected manually uses its
 head commit. Use that commit for source research and proposal provenance, not
 the manual dispatch's workflow SHA.
