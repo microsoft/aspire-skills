@@ -53,6 +53,25 @@ export function assignResourceNames(services) {
     });
 }
 
+// Discovered services that no proposal resource or removed generated resource maps.
+// The skill supplied no treatment for them, so they are reported as not assessed.
+export function unproposedServices({ services, resources, removedGeneratedResources }) {
+    const mappedIds = new Set(
+        [...(resources ?? []), ...(removedGeneratedResources ?? [])]
+            .map((resource) => resource.serviceId)
+            .filter(Boolean),
+    );
+    return (services ?? [])
+        .filter((service) => !mappedIds.has(service.id))
+        .map((service) => ({
+            id: service.id,
+            name: service.name,
+            type: service.type,
+            path: service.path,
+            treatment: "not-assessed",
+        }));
+}
+
 export function presentationMode(proposal) {
     const count = Array.isArray(proposal?.resources)
         ? proposal.resources.filter((resource) => resource.include !== false).length

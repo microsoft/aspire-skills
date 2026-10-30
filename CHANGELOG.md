@@ -30,6 +30,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   OS file manager and could hand the editor a path outside the repository.
 - Corrected POSIX path handling in the Aspireify canvas to keep proposal
   snapshots separate for AppHost paths containing literal backslashes.
+- Kept discovered services without a proposal mapping visible in the Aspireify
+  canvas as **Not assessed** in a "Not in the proposed graph" section, and
+  preserved them as `notProposed` in the confirmation and chat handoff.
 - Restored AppHost visibility and source-file navigation in the Aspire AppHosts
   canvas for workspace child directories whose names begin with `..`, preserving
   checks that block paths outside the workspace.

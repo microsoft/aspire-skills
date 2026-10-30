@@ -19,6 +19,7 @@ import {
     presentationMode,
     resourceNameFrom,
     stableProposalHash,
+    unproposedServices,
 } from "./proposal-model.mjs";
 import {
     appHostIdentity,
@@ -876,6 +877,14 @@ function mappedServices(snapshot) {
     return snapshot.services.filter((service) => serviceIds.has(service.id));
 }
 
+function notProposedServices(snapshot) {
+    return unproposedServices({
+        services: snapshot.services,
+        resources: snapshot.proposal.resources,
+        removedGeneratedResources: snapshot.removedGeneratedResources,
+    });
+}
+
 function projectService(service) {
     return {
         id: service.id,
@@ -953,6 +962,7 @@ function confirmationResult(snapshot, confirmed = snapshot.confirmed) {
         apphostStyle: snapshot.apphostStyle,
         included: includedMappedServices(snapshot).map(projectService),
         excluded: excludedMappedServices(snapshot).map(projectService),
+        notProposed: notProposedServices(snapshot),
         serviceDefaults: [...serviceDefaults],
         proposal: confirmedProposal(snapshot.proposal),
     };
@@ -975,6 +985,7 @@ function snapshotForClient(snapshot) {
         proposalLoaded: snapshot.proposalLoaded,
         apphostStyle: snapshot.apphostStyle,
         services: snapshot.services.map(projectService),
+        notProposed: snapshot.confirmation?.notProposed ?? notProposedServices(snapshot),
         proposal: proposalForClient(snapshot.proposal),
         proposalEdited: snapshot.proposalEdited,
         proposalStale: snapshot.proposalStale,
@@ -1207,6 +1218,11 @@ function confirmationMessage(snapshot) {
             .map((service) => ({ name: service.name, resourceName: service.resourceName })),
         excluded: confirmation.excluded
             .map((service) => service.name),
+        notProposed: (confirmation.notProposed ?? []).map(({ name, path, treatment }) => ({
+            name,
+            path,
+            treatment,
+        })),
         proposal: confirmation.proposal,
     };
     return [
@@ -2791,7 +2807,7 @@ const aspireifyCanvas = createCanvas({
         {
             name: "get_confirmation",
             description:
-                "Read the user's confirmed choices before editing the AppHost. Returns final service selections and the edited proposal graph.",
+                "Read the user's confirmed choices before editing the AppHost. Returns final service selections, discovered services left unmapped as notProposed (not assessed), and the edited proposal graph.",
             inputSchema: {
                 type: "object",
                 additionalProperties: false,
