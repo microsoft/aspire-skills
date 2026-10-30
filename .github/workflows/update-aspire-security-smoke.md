@@ -38,8 +38,6 @@ permissions:
 engine:
   id: copilot
   model: gpt-6.1-sol
-  env:
-    COPILOT_PROVIDER_WIRE_API: responses
 max-turns: 50
 timeout-minutes: 60
 checkout:
@@ -59,6 +57,14 @@ network:
     - github
     - dotnet
     - dnceng.pkgs.visualstudio.com
+sandbox:
+  agent:
+    version: v0.28.27
+    images:
+      agent: ghcr.io/github/gh-aw-firewall/agent:0.28.27@sha256:8d14865f96d57d9b4f22b30b3e148d2d926384f0aa543a139f15593e450f0e90
+      apiProxy: ghcr.io/github/gh-aw-firewall/api-proxy:0.28.27@sha256:b767b95ad787fae126e0224e547e31daa22950aaa4f03c34e1224f3ce80f314e
+      cliProxy: ghcr.io/github/gh-aw-firewall/cli-proxy:0.28.27@sha256:7536c8d5b9b4f77d48f3617df6b3d303d363945c7490bd0e708ddb420986448d
+      squid: ghcr.io/github/gh-aw-firewall/squid:0.28.27@sha256:c89d35cbc15c1c8614cc01da321a26a0685a71b51858965ce6fdd78252df64a9
 tools:
   edit:
   bash: ["*"]
@@ -149,7 +155,7 @@ jobs:
           path: _aspire
           fetch-depth: 0
           persist-credentials: false
-      - uses: github/gh-aw-actions/setup@f3b81cdb3070066a47faa9bdf440f4f1dc78b1f0
+      - uses: github/gh-aw-actions/setup@2fbab69bfca02bebd76cd0fc43f2d12acfed994f
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
       - run: npm ci --ignore-scripts --no-audit --no-fund

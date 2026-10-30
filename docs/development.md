@@ -59,8 +59,7 @@ or manually for a selected PR, following Aspire's documentation-workflow
 pattern. It assesses skill and extension behavior and opens draft PRs in
 `microsoft/aspire` only when telemetry or its regression coverage needs updates.
 It reads source directly; it does not publish, acquire, or refresh embedded
-bundles. Bundle support is retired separately in
-[#74](https://github.com/microsoft/aspire-skills/pull/74), which lands first.
+bundles.
 Each review also checks `KnownMcpTools.All` against both compatibility scripts
 and managed-hook classification, even when skill and extension inventories
 are unchanged. An offline regression test must guard coverage before a no-op
@@ -69,9 +68,17 @@ is allowed.
 Configure `ASPIRE_BOT_APP_ID` and `ASPIRE_BOT_PRIVATE_KEY` as repository secrets.
 Source research uses a read-only GitHub CLI proxy. Optional maintenance is
 disabled in `.github/workflows/aw.json`. Regenerate the compiled workflow with
-gh-aw v0.89.17 on Linux or WSL after editing its source or configuration.
-The Copilot engine uses `COPILOT_PROVIDER_WIRE_API=responses` to preserve custom-tool
-schemas across the inference proxy.
+gh-aw v0.89.22 on Linux or WSL after editing its source or configuration:
+
+```shell
+gh aw compile update-aspire --validate --action-mode action --action-tag 2fbab69bfca02bebd76cd0fc43f2d12acfed994f
+```
+
+The sandbox pins AWF v0.28.27 for the
+[Copilot custom-tool translation fix](https://github.com/github/gh-aw-firewall/pull/9075).
+The compiler includes the
+[reviewer image-propagation fix](https://github.com/github/gh-aw/pull/63014),
+so the digest-pinned sandbox images apply to both AI jobs.
 
 The workflow separates input resolution, agent editing, verification, and
 publication:
