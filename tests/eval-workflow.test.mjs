@@ -145,7 +145,8 @@ test("PR evaluations exclude forks and Dependabot without privileged PR triggers
   assert.match(workflow, /^  pull_request:/m);
   assert.match(workflow, /^    if: >-\r?\n      github\.event\.pull_request\.head\.repo\.full_name == github\.event\.pull_request\.base\.repo\.full_name &&\r?\n      github\.event\.pull_request\.user\.login != 'dependabot\[bot\]' &&\r?\n      github\.actor != 'dependabot\[bot\]'/m);
   assert.doesNotMatch(workflow, /^\s*(pull_request_target|workflow_run):/m);
-  assert.match(workflow, /gh pr diff/);
+  assert.match(workflow, /gh api --paginate \\\r?\n\s+"repos\/\$\{\{ github\.repository \}\}\/pulls\/\$\{\{ github\.event\.pull_request\.number \}\}\/files\?per_page=100"/);
+  assert.doesNotMatch(workflow, /gh pr diff/);
 });
 
 test("scheduled and manual triggers remain unchanged", () => {
@@ -305,6 +306,36 @@ test("routing helper changes de-duplicate an explicitly changed router spec", t 
 
 test("an ordinary skill-only change selects only that skill", t => {
   assert.equal(runChangedSpecSelection(t, ["skills/aspire-init/SKILL.md"], ["aspire-init"]),
+    "run_full=false\nhas_specs=true\nmatched=aspire-init\nexpected_runs=aspire-init\n");
+});
+
+test("a PR whose diff exceeds GitHub's 20,000-line limit still selects its changed specs", t => {
+  const root = mkdtempSync(join(tmpdir(), "aspire-ci-large-selection-"));
+  t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 3 }));
+  mkdirSync(join(root, "skills", "aspire-init", "evals"), { recursive: true });
+  writeFileSync(join(root, "skills", "aspire-init", "evals", "eval.yaml"), "");
+  const output = join(root, "outputs");
+  const script = getStepRun(readWorkflow("skill-eval.yml"), "Determine changed skill eval specs")
+    .replaceAll("${{ github.event.pull_request.number }}", "111")
+    .replaceAll("${{ github.repository }}", "microsoft/aspire-skills");
+  // Mirrors the real CLI for release PR #111: the diff endpoint rejects the
+  // oversized diff, while the paginated PR files endpoint still lists paths.
+  const gh = `gh() {
+  if [ "$1 $2" = "pr diff" ]; then
+    echo "could not find pull request diff: HTTP 406: Sorry, the diff exceeded the maximum number of lines (20000)" >&2
+    return 1
+  fi
+  case " $* " in
+    *" --paginate "*"repos/microsoft/aspire-skills/pulls/111/files"*)
+      printf '%s\\n' 'README.md' 'skills/aspire-init/SKILL.md'; return 0 ;;
+  esac
+  echo "unexpected gh invocation: $*" >&2
+  return 2
+}`;
+  const result = runBash(`${gh}\n${script}`, root, { GITHUB_OUTPUT: output.replaceAll("\\", "/") });
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(readFileSync(output, "utf8").replaceAll("\r\n", "\n"),
     "run_full=false\nhas_specs=true\nmatched=aspire-init\nexpected_runs=aspire-init\n");
 });
 
