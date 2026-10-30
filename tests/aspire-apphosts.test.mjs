@@ -276,6 +276,12 @@ test("pending health checks keep a running resource in a warning state", () => {
                 state: "NotStarted",
                 healthReports: { ready: {} },
             },
+            {
+                name: "worker",
+                resourceType: "Project",
+                state: "Exited",
+                healthReports: { live: { status: "Healthy" }, ready: { status: null } },
+            },
         ],
     });
     const nodes = buildResourceTree(projected.resources, "host");
@@ -302,12 +308,14 @@ test("pending health checks keep a running resource in a warning state", () => {
         healthChecks(byName.get("tool")).map(({ statusLabel, icon, tone }) => ({ statusLabel, icon, tone })),
         [{ statusLabel: "Not checked", icon: "record", tone: "inactive" }],
     );
+    assert.equal(byName.get("worker").healthLabel, "Not checked");
+    assert.equal(byName.get("worker").healthTone, "inactive");
     assert.deepEqual(projected.summary, {
-        total: 3,
+        total: 4,
         healthy: 0,
         warning: 1,
         error: 1,
-        inactive: 1,
+        inactive: 2,
     });
 });
 

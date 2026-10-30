@@ -770,7 +770,7 @@ function resourceHealthSummary(resource) {
                     ? "Last known unhealthy"
                     : degraded
                         ? "Last known degraded"
-                        : healthy === 0 && pending
+                        : pending
                             ? "Not checked"
                             : "Last known healthy",
                 tone: unhealthy ? "error" : degraded ? "warning" : "inactive",
