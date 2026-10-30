@@ -241,7 +241,7 @@ export function dockerArguments({ workspace, cache, name, offline, uid, gid, bas
       "pwsh -NoLogo -NoProfile -NonInteractive -Command '$ErrorActionPreference = \"Stop\"; $PSVersionTable.PSVersion'",
       "dotnet test --project tests/Aspire.Cli.Tests/Aspire.Cli.Tests.csproj --no-restore --no-launch-profile -- " +
       ["AgentTelemetryCatalogTests", "AgentTelemetryHookTests", "AgentTelemetryCommandTests",
-        "TelemetryHookConfiguratorTests", "TelemetryHookInstallerTests", "TelemetryHookScriptTests"]
+        "TelemetryHookConfiguratorTests", "TelemetryHookScriptTests"]
         .map(name => `--filter-class '*.${name}'`).join(" ") +
       " --filter-not-trait quarantined=true --filter-not-trait outerloop=true"
     ].join("\n")

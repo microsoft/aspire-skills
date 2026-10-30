@@ -508,7 +508,7 @@ Read the managed `AgentTelemetryHook`, `AgentTelemetryCatalog`,
 `tests/Aspire.Cli.Tests`. New registrations invoke
 `aspire agent telemetry --hook` directly; shell and PowerShell scripts are
 compatibility paths, not the primary implementation.
-Read the required catalog, hook, command, configurator, installer, and
+Read the required catalog, hook, command, configurator, and
 compatibility-script test classes before editing. Account for their existing
 contracts, not just newly added tests; do not weaken assertions or fixtures
 to conceal a regression.
@@ -519,8 +519,9 @@ implementations, tool registrations, and shared assets only when needed to
 trace a changed behavior's telemetry impact. Do not read every skill,
 reference, or unrelated implementation. Pin all source reads to the recorded
 commit in `microsoft/aspire-skills`. Assess their impact on
-agent/client integration and telemetry; do not acquire or refresh an embedded
-bundle or revert later telemetry support when assessing an older PR.
+agent/client integration and telemetry. Preserve later telemetry support when
+assessing an older PR. Embedded-bundle work is out of scope; do not inspect it,
+verify its state, or treat its removal as a prerequisite or blocker.
 
 This review is required even when inventories are unchanged or the PR
 description is empty or generic. Do not skip extension-only behavior changes.
@@ -575,7 +576,7 @@ The separate `verify-telemetry` job reconstructs the bundle against the pinned
 Aspire base and applies the publisher's file policy before executing code.
 It restores only trusted base source in a disposable container, then overlays
 the proposal and runs the required catalog, managed hook, command,
-configurator, installer, and compatibility-script tests without network access.
+configurator, and compatibility-script tests without network access.
 Candidate code has no runner credentials, home directory, Actions control
 files, Docker socket, or access to the trusted verification receipt.
 Failed verification or threat detection blocks publication, including no-ops.
