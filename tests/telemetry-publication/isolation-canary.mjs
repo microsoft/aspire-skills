@@ -41,6 +41,7 @@ chmod +x /tmp/executable-canary
 /tmp/executable-canary
 printf '::error::telemetry-isolation-hostile-canary\\n::set-output name=forged::yes\\n'
 printf 'isolation checked\\n' > /cache/canary-passed
+printf 'Test run summary: Passed!\\n  total: 1\\n  failed: 0\\n  succeeded: 1\\n  skipped: 0\\n  duration: 1ms\\n'
 `, { mode: 0o755 });
 const values = {
   ...files, GITHUB_TOKEN: "dummy-host-token", GH_TOKEN: "dummy-host-token",

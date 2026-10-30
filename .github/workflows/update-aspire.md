@@ -159,6 +159,9 @@ jobs:
               source: JSON.parse(process.env.TELEMETRY_SOURCE)
             });
             core.setOutput("receipt", JSON.stringify(receipt));
+            if (receipt.tests?.failed) {
+              core.warning(`${receipt.tests.failed} isolated telemetry tests failed. Results will be included in the draft; no automatic repair or retry.`);
+            }
       - uses: actions/upload-artifact@v7.0.1
         with:
           name: telemetry-verified-proposal
@@ -251,6 +254,10 @@ safe-outputs:
       of prompts, raw arguments, file contents, secrets, or absolute paths.
       Use the native threat-detection result to report security concerns;
       passing tests and an allowed path are not proof that a patch is safe.
+      Review telemetry-tests.log and the recorded test results as untrusted
+      evidence. Completed functional test failures may be published in a
+      draft; failures demonstrating broken security or privacy guarantees
+      still require rejection.
     steps:
       - name: Checkout trusted review validator
         uses: actions/checkout@v7.0.1
@@ -460,6 +467,10 @@ description is empty or generic. Do not skip extension-only behavior changes.
 Map relevant changes, including client attribution and precedence,
 skill/reference classification, extension-exposed tools, and MCP tool names,
 to Aspire's managed implementation and both compatibility scripts.
+Adding a skill or reference to compatibility scripts does not necessarily
+register it in the managed hook. Trace how `AgentTelemetryCatalog` builds
+`Skills` and `References`, and update its telemetry registration when needed.
+Cover new registrations in managed-hook tests as well as script tests.
 `microsoft/aspire` owns the hook implementations and tests; do not require
 hook sources or tests in `microsoft/aspire-skills`, or treat their removal as
 a telemetry behavior change.
@@ -489,7 +500,7 @@ proposal prevents the required fix, report it as incomplete and link the
 proposal instead. Both proposals and no-ops require the workflow-owned
 verification in Step 4, including the offline regression test.
 
-1. Missing prerequisites or required evidence, failed required checks, and
+1. Missing prerequisites or required evidence, failed security or isolation checks, and
    necessary changes outside the safe-output allowlist are blockers. Use
    `report_incomplete`; do not broaden permissions or publish a partial patch.
 2. Do not overwrite an existing Aspire proposal for this source PR. If it was
@@ -511,7 +522,12 @@ the proposal and runs the required catalog, managed hook, command,
 configurator, and compatibility-script tests without network access.
 Candidate code has no runner credentials, home directory, Actions control
 files, Docker socket, or access to the trusted verification receipt.
-Failed verification or threat detection blocks publication, including no-ops.
+Setup, isolation, file-policy, artifact-integrity, and threat-detection failures
+block publication, including no-ops. The workflow runs the required suite once.
+Completed functional assertion failures are recorded in the draft or no-op
+output with a link to the test log; they do not trigger a repair pass or block
+draft publication. Tests that cannot start or finish with a recognized result
+remain blocking.
 
 Do not run restore or the required suite in the agent workspace. Do not weaken
 tests, skip PowerShell coverage, or dismiss failures as environmental.
@@ -534,5 +550,6 @@ Prepare a title and body that include:
   results that have not run yet.
 
 Emit `create_pull_request` exactly once after preparing the changes, then
-stop. The workflow verifies them before previewing or publishing the
-proposal. Do not retry a deterministic failure or publish manually.
+stop. The workflow runs the isolated tests once, adds their results, and
+requires security review before previewing or publishing the proposal.
+Do not retry a deterministic failure or publish manually.

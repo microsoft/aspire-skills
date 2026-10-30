@@ -86,6 +86,8 @@ test("the compiled native permission check denies insufficient roles and lookup 
   const runtime = process.env.GH_AW_ACTIONS_DIR;
   assert.ok(runtime, "GH_AW_ACTIONS_DIR must point to the workflow's pinned runtime.");
   const step = compiled.jobs.pre_activation.steps.find(step => step.id === "check_membership");
+  assert.equal(step.env.GH_AW_REQUIRED_ROLES, "admin,maintainer,write");
+  assert.equal(step.env.GH_AW_ALLOWED_BOTS, "aspire-repo-bot[bot]");
   const run = new AsyncFunction("require", "github", "core", "context", "exec", "io", "getOctokit", step.with.script);
   const path = directory(t, "telemetry-authorization-");
   mkdirSync(join(path, "gh-aw"), { recursive: true });
@@ -101,7 +103,9 @@ test("the compiled native permission check denies insufficient roles and lookup 
     }
   });
   for (const [name, permission, status, allowed] of [
-    ["read", "read", undefined, false], ["write", "write", undefined, true],
+    ["none", "none", undefined, false], ["read", "read", undefined, false],
+    ["triage", "triage", undefined, false], ["write", "write", undefined, true],
+    ["maintain", "maintain", undefined, true], ["admin", "admin", undefined, true],
     ["API failure", undefined, 500, false]
   ]) {
     await t.test(name, async () => {
@@ -124,14 +128,20 @@ test("the compiled native permission check denies insufficient roles and lookup 
 
 test("hostile container output remains inside random command-suppression markers on success and failure", async t => {
   const tokens = new Set();
-  for (const status of [0, 7]) {
-    await t.test(`container exit ${status}`, t => {
+  for (const [offline, status] of [[true, 0], [true, 2], [true, 7], [false, 2]]) {
+    await t.test(`${offline ? "tests" : "restore"} exit ${status}`, t => {
       const path = directory(t, "telemetry-stdout-");
       const log = join(path, "docker.log");
       write(path, "docker", [
         "#!/bin/bash", 'printf "%s\\n" "$*" >> "$FAKE_DOCKER_LOG"',
         'if [[ "$1" == "rm" ]]; then exit 0; fi',
         'printf "::error::hostile-canary\\n::set-output name=forged::yes\\n::predictable-resume::\\n"',
+        'printf "::warning::hostile-stderr-canary\\n" >&2',
+        'if [[ "$FAKE_DOCKER_STATUS" == 0 ]]; then',
+        '  printf "Test run summary: Passed!\\n  total: 1\\n  failed: 0\\n  succeeded: 1\\n  skipped: 0\\n  duration: 1ms\\n"',
+        'else',
+        '  printf "Test run summary: Failed!\\n  total: 1\\n  failed: 1\\n  succeeded: 0\\n  skipped: 0\\n  duration: 1ms\\n"',
+        'fi',
         'exit "$FAKE_DOCKER_STATUS"', ""
       ].join("\n"), { mode: 0o755 });
       const module = pathToFileURL(join(root, "scripts", "telemetry-workflow.mjs")).href;
@@ -139,7 +149,7 @@ test("hostile container output remains inside random command-suppression markers
         import { runContainer } from ${JSON.stringify(module)};
         runContainer({
           workspace: "/private/source", cache: "/private/cache", name: "aspire-telemetry-123456-1",
-          uid: 1001, gid: 1001, offline: true, base: "${"a".repeat(40)}"
+          uid: 1001, gid: 1001, offline: ${offline}, base: "${"a".repeat(40)}"
         });
       `], {
         encoding: "utf8",
@@ -149,7 +159,7 @@ test("hostile container output remains inside random command-suppression markers
         }
       });
       if (result.error) throw result.error;
-      assert.equal(result.status, status === 0 ? 0 : 1, result.stderr);
+      assert.equal(result.status, offline && [0, 2].includes(status) ? 0 : 1, result.stderr);
       const stop = /^::stop-commands::([^:\r\n]+)$/m.exec(result.stdout);
       assert.ok(stop, result.stdout);
       assert.ok(!tokens.has(stop[1]), "Container commands must use a fresh suppression token.");
@@ -157,8 +167,14 @@ test("hostile container output remains inside random command-suppression markers
       const hostile = result.stdout.indexOf("::error::hostile-canary");
       const resume = result.stdout.indexOf(`::${stop[1]}::`);
       assert.ok(hostile > stop.index && resume > hostile, result.stdout);
+      if (offline) {
+        const stderr = result.stdout.indexOf("::warning::hostile-stderr-canary");
+        assert.ok(stderr > stop.index && resume > stderr, result.stdout);
+      }
       assert.ok(result.stdout.includes("::set-output name=forged::yes"));
-      assert.match(readFileSync(log, "utf8"), /rm --force aspire-telemetry-123456-1/);
+      const calls = readFileSync(log, "utf8");
+      assert.match(calls, /rm --force aspire-telemetry-123456-1/);
+      assert.equal(calls.split("\n").filter(line => line.startsWith("run ")).length, 1);
     });
   }
 });

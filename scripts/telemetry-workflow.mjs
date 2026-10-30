@@ -7,7 +7,7 @@ import {
 import { createRequire } from "node:module";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isDeepStrictEqual } from "node:util";
+import { isDeepStrictEqual, stripVTControlCharacters } from "node:util";
 
 const sourceRepository = { owner: "microsoft", repo: "aspire-skills" };
 const targetRepository = { owner: "microsoft", repo: "aspire" };
@@ -272,13 +272,49 @@ export function cleanupContainer() {
   }
 }
 
+export function testResultSummary(tests) {
+  if (!tests || !["total", "failed", "passed", "skipped"].every(name =>
+    Number.isSafeInteger(tests[name]) && tests[name] >= 0) ||
+      tests.total !== tests.failed + tests.passed + tests.skipped || tests.failed + tests.passed === 0) {
+    throw new Error("Isolated tests require complete, nonempty result counts.");
+  }
+  return `**Isolated telemetry tests: ${tests.failed ? "FAILED" : "PASSED"}**\n\n` +
+    `${tests.passed} passed, ${tests.failed} failed, ${tests.skipped} skipped (${tests.total} total).`;
+}
+
+export function parseTestResults(exitCode, output) {
+  const summaries = [...stripVTControlCharacters(output).matchAll(
+    /^Test run summary: (Passed!|Failed!)\r?\n[ \t]+total: (\d+)\r?\n[ \t]+failed: (\d+)\r?\n[ \t]+succeeded: (\d+)\r?\n[ \t]+skipped: (\d+)\r?\n[ \t]+duration: [^\r\n]+/gm
+  )];
+  if (![0, 2].includes(exitCode) || summaries.length !== 1) {
+    throw new Error(`Isolated tests did not complete with a recognized result (exit ${exitCode}).`);
+  }
+  const [, verdict, total, failed, passed, skipped] = summaries[0];
+  const tests = { total: Number(total), failed: Number(failed), passed: Number(passed), skipped: Number(skipped) };
+  testResultSummary(tests);
+  if ((tests.failed > 0) !== (exitCode === 2) || verdict !== (tests.failed ? "Failed!" : "Passed!")) {
+    throw new Error("Isolated test counts, verdict, and exit code disagree.");
+  }
+  return tests;
+}
+
 export function runContainer(options) {
   const stop = randomUUID();
   process.stdout.write(`::stop-commands::${stop}\n`);
   try {
-    const result = spawnSync("docker", dockerArguments(options), { stdio: "inherit", timeout: 25 * 60 * 1000 });
+    const result = spawnSync("docker", dockerArguments(options), {
+      stdio: options.offline ? ["ignore", "pipe", "pipe"] : "inherit",
+      encoding: "utf8", maxBuffer: 16 * 1024 * 1024, timeout: 25 * 60 * 1000
+    });
+    const log = (result.stdout ?? "") + (result.stderr ?? "");
+    if (options.offline) {
+      process.stdout.write(log);
+    }
     if (result.error) throw result.error;
-    if (result.status !== 0) throw new Error(`Isolated ${options.offline ? "tests" : "restore"} failed (${result.status}).`);
+    if (options.offline) {
+      return { tests: parseTestResults(result.status, result.stdout), log };
+    }
+    if (result.status !== 0) throw new Error(`Isolated restore failed (${result.status}).`);
   } finally {
     process.stdout.write(`::${stop}::\n`);
     cleanupContainer();
@@ -296,6 +332,7 @@ export async function verifyTelemetry({ directory, source }) {
   const { resolveTransportPaths } = require(join(actions, "resolve_transport_paths.cjs"));
   const item = validateOutcome(JSON.parse(readFileSync(join(artifactDirectory, "agent_output.json"), "utf8")), source);
   let proposal;
+  let tests;
   if (item.type === "create_pull_request") {
     const transport = resolveTransportPaths(item, "microsoft/aspire");
     if (!transport.bundlePath) throw new Error("A proposal must include a Git bundle; patch fallback is disabled.");
@@ -317,15 +354,23 @@ export async function verifyTelemetry({ directory, source }) {
     };
     runContainer({ ...options, offline: false });
     if (proposal) applyFrozenProposal(workspace, join(outputDirectory, proposal.patch), proposal.tree);
-    runContainer({ ...options, offline: true });
+    const result = runContainer({ ...options, offline: true });
+    tests = result.tests;
+    writeFileSync(join(outputDirectory, "telemetry-tests.log"), result.log);
   }
   const tree = proposal?.tree ?? sha(git(repo, ["rev-parse", `${sha(source.aspireBase)}^{tree}`]).trim());
+  if (tests) {
+    const field = proposal ? "body" : "message";
+    const runUrl = `https://github.com/microsoft/aspire-skills/actions/runs/${process.env.GITHUB_RUN_ID}/attempts/${process.env.GITHUB_RUN_ATTEMPT}`;
+    item[field] = `${testResultSummary(tests)}\n\n` +
+      `[Full test output](${runUrl}) (verify-telemetry job). One test run; no automatic repair or retry.\n\n${item[field]}`;
+  }
   if (proposal) {
-    item.body += `\n\n### Workflow verification\nSource: ${source.url}\nSource commit: \`${source.commit}\`\nAspire base: \`${source.aspireBase}\`\nVerified tree: \`${tree}\`\n`;
+    item.body += `\n\n### Workflow provenance\nSource: ${source.url}\nSource commit: \`${source.commit}\`\nAspire base: \`${source.aspireBase}\`\nTested tree: \`${tree}\`\n`;
   }
   writeFileSync(join(outputDirectory, "agent_output.json"), JSON.stringify({ items: [item], errors: [] }));
   return {
-    source, tree, type: item.type,
+    source, tree, type: item.type, ...(tests ? { tests } : {}),
     run: process.env.GITHUB_RUN_ID, attempt: process.env.GITHUB_RUN_ATTEMPT,
     files: Object.fromEntries(readdirSync(outputDirectory).map(name => [name, digest(join(outputDirectory, name))]))
   };
@@ -341,6 +386,7 @@ export function validateReceipt(receipt, source, directory) {
   const expected = receipt.type === "create_pull_request"
     ? ["agent_output.json", `${prefix}.bundle`, `${prefix}.patch`]
     : ["agent_output.json"];
+  if (receipt.type !== "report_incomplete") expected.push("telemetry-tests.log");
   if (names.toSorted().join("\0") !== expected.toSorted().join("\0")) {
     throw new Error("Verification receipt has an unexpected artifact set.");
   }
@@ -349,6 +395,12 @@ export function validateReceipt(receipt, source, directory) {
   }
   const item = validateOutcome(JSON.parse(readFileSync(join(directory, "agent_output.json"), "utf8")), source);
   if (item.type !== receipt.type) throw new Error("Verified outcome changed.");
+  if (item.type !== "report_incomplete") {
+    const field = item.type === "create_pull_request" ? "body" : "message";
+    if (!item[field].startsWith(`${testResultSummary(receipt.tests)}\n\n`)) {
+      throw new Error("Verified outcome does not report the recorded test results.");
+    }
+  }
   sha(receipt.tree);
   return item;
 }
@@ -357,7 +409,7 @@ export function prepareVerifiedReview({ source, receipt, directory }) {
   const verified = join(process.env.RUNNER_TEMP, "telemetry-verified");
   validateReceipt(receipt, source, verified);
   for (const name of readdirSync(directory)) {
-    if (name === "agent_output.json" || /^aw-.+\.(patch|bundle)$/.test(name)) {
+    if (["agent_output.json", "telemetry-tests.log"].includes(name) || /^aw-.+\.(patch|bundle)$/.test(name)) {
       rmSync(join(directory, name));
     }
   }
@@ -432,6 +484,9 @@ export async function validatePublication({ github, source, receipt, publisherRe
       pr.base?.repo?.full_name !== "microsoft/aspire" || pr.base.ref !== "main" ||
       pr.head?.repo?.full_name !== "microsoft/aspire" || pr.head.ref !== source.branch) {
     throw new Error("The actual PR does not match the expected draft, repository, and branches.");
+  }
+  if (!pr.body?.includes(`${testResultSummary(receipt.tests)}\n\n`)) {
+    throw new Error("The actual PR does not report the recorded test results.");
   }
   const head = sha(pr.head.sha);
   const { data: commit } = await github.rest.git.getCommit({ ...targetRepository, commit_sha: head });

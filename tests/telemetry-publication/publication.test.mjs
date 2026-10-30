@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import {
   existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync
 } from "node:fs";
@@ -39,10 +39,10 @@ function git(directory, ...args) {
   }).trim();
 }
 
-function write(directory, filename, content) {
+function write(directory, filename, content, options) {
   const path = join(directory, filename);
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, content);
+  writeFileSync(path, content, options);
 }
 
 function commit(directory) {
@@ -101,11 +101,52 @@ function proposalFixture(t, { outside, telemetry = true } = {}) {
   return { directory, agent, verified, base, source, prefix, bundle, verify };
 }
 
-async function fixture(t, { staged = false } = {}) {
-  const { directory, agent, verified, base, source, prefix, verify } = proposalFixture(t);
-  const proposal = await verify();
-  const head = git(agent, "rev-parse", source.branch);
+async function fixture(t, { staged = false, failed = false } = {}) {
+  const { directory, agent, verified, base, source, prefix, bundle } = proposalFixture(t);
   const publisher = join(directory, "publisher");
+  const shims = join(directory, "shims");
+  const containerCalls = join(directory, "docker.log");
+  const total = 189;
+  const failures = failed ? 12 : 0;
+  write(directory, "shims/docker", `#!/bin/bash
+set -euo pipefail
+printf '%s\\n' "$1" >> "$FAKE_DOCKER_LOG"
+if [[ "$1" != run || " $* " != *" --network=none "* ]]; then exit 0; fi
+printf 'Test run summary: ${failed ? "Failed!" : "Passed!"}\\n  total: ${total}\\n  failed: ${failures}\\n  succeeded: ${total - failures}\\n  skipped: 0\\n  duration: 1ms\\n'
+exit ${failed ? 2 : 0}
+`, { mode: 0o755 });
+  write(directory, ".github/workflows/update-aspire.lock.yml",
+    readFileSync(join(root, ".github", "workflows", "update-aspire.lock.yml")));
+  mkdirSync(join(directory, "gh-aw"));
+  symlinkSync(runtime, join(directory, "gh-aw", "actions"), "dir");
+  symlinkSync(agent, join(directory, "_aspire"), "dir");
+  environment(t, {
+    RUNNER_TEMP: directory, GITHUB_WORKSPACE: publisher, GITHUB_RUN_ID: "123456",
+    GITHUB_RUN_ATTEMPT: "1", GITHUB_REPOSITORY: "microsoft/aspire-skills",
+    GITHUB_SERVER_URL: "https://github.com", GITHUB_TOKEN: "fixture-token",
+    GH_AW_WORKFLOW_ID: "update-aspire", GH_AW_SAFE_OUTPUTS_STAGED: String(staged),
+    TELEMETRY_SOURCE: JSON.stringify(source),
+    TELEMETRY_DETECTION_RESULT: "success", TELEMETRY_DETECTION_SUCCESS: "true",
+    TELEMETRY_DETECTION_CONCLUSION: "success",
+    PATH: `${shims}:${process.env.PATH}`, FAKE_DOCKER_LOG: containerCalls,
+    GH_AW_PROMPTS_DIR: process.env.GH_AW_PROMPTS_DIR || join(dirname(runtime), "prompts")
+  });
+  mkdirSync("/tmp/gh-aw", { recursive: true });
+  const inputNames = ["agent_output.json", `${prefix}.bundle`, `${prefix}.patch`];
+  for (const name of inputNames) assert.equal(existsSync(join("/tmp/gh-aw", name)), false);
+  t.after(() => {
+    for (const name of inputNames) rmSync(join("/tmp/gh-aw", name), { force: true });
+  });
+  write("/tmp/gh-aw", "agent_output.json", JSON.stringify({ items: [{
+    type: "create_pull_request", branch: source.branch, title: "Telemetry fixture", body: "Regression proposal."
+  }], errors: [] }));
+  write("/tmp/gh-aw", `${prefix}.bundle`, readFileSync(bundle));
+  write("/tmp/gh-aw", `${prefix}.patch`, git(agent, "diff", "--binary", base, source.branch));
+  git(agent, "switch", "--quiet", "main");
+  const receipt = await verifyTelemetry({ directory, source });
+  for (const name of inputNames) rmSync(join("/tmp/gh-aw", name));
+  environment(t, { TELEMETRY_RECEIPT: JSON.stringify(receipt) });
+  const head = git(agent, "rev-parse", source.branch);
   const remote = join(directory, "remote.git");
   git(directory, "clone", "--quiet", "--bare", "--single-branch", "--branch", "main", agent, remote);
   mkdirSync(publisher);
@@ -122,31 +163,10 @@ async function fixture(t, { staged = false } = {}) {
   git(publisher, "config", `url.${remote}.insteadOf`, target);
   git(publisher, "config", "user.name", "Fixture");
   git(publisher, "config", "user.email", "fixture@example.invalid");
-  const item = { type: "create_pull_request", branch: source.branch, title: "Telemetry fixture", body: "Regression proposal." };
-  writeFileSync(join(verified, "agent_output.json"), JSON.stringify({ items: [item], errors: [] }));
-  const receipt = {
-    source, type: item.type, tree: proposal.tree, run: "123456", attempt: "1",
-    files: Object.fromEntries(readdirSync(verified).map(name => [
-      name, createHash("sha256").update(readFileSync(join(verified, name))).digest("hex")
-    ]))
-  };
   const reviewedReceipt = join(directory, "telemetry-reviewed", "receipt.json");
   write(directory, "telemetry-reviewed/receipt.json", JSON.stringify(receipt));
-  mkdirSync(join(directory, "gh-aw"));
-  symlinkSync(runtime, join(directory, "gh-aw", "actions"), "dir");
   write(publisher, "_telemetry-tools/scripts/telemetry-workflow.mjs",
     readFileSync(join(root, "scripts", "telemetry-workflow.mjs")));
-  environment(t, {
-    RUNNER_TEMP: directory, GITHUB_WORKSPACE: publisher, GITHUB_RUN_ID: receipt.run,
-    GITHUB_RUN_ATTEMPT: receipt.attempt, GITHUB_REPOSITORY: "microsoft/aspire-skills",
-    GITHUB_SERVER_URL: "https://github.com", GITHUB_TOKEN: "fixture-token",
-    GH_AW_WORKFLOW_ID: "update-aspire", GH_AW_SAFE_OUTPUTS_STAGED: String(staged),
-    TELEMETRY_SOURCE: JSON.stringify(source), TELEMETRY_RECEIPT: JSON.stringify(receipt),
-    TELEMETRY_DETECTION_RESULT: "success", TELEMETRY_DETECTION_SUCCESS: "true",
-    TELEMETRY_DETECTION_CONCLUSION: "success",
-    GH_AW_PROMPTS_DIR: process.env.GH_AW_PROMPTS_DIR || join(dirname(runtime), "prompts")
-  });
-  mkdirSync("/tmp/gh-aw", { recursive: true });
   const promotedFiles = [...Object.keys(receipt.files), "safeoutputs.jsonl"];
   for (const name of promotedFiles) {
     assert.equal(existsSync(join("/tmp/gh-aw", name)), false, `Refusing to overwrite an existing publication artifact: ${name}`);
@@ -186,6 +206,7 @@ async function fixture(t, { staged = false } = {}) {
           publishedPr = {
             number: 42, html_url: "https://github.com/microsoft/aspire/pull/42",
             id: 42, node_id: "PR_fixture", state: "open", merged: false, draft: parameters.draft,
+            body: parameters.body,
             base: { ref: parameters.base, repo: { full_name: "microsoft/aspire" } },
             head: { ref: parameters.head, sha: head, repo: { full_name: "microsoft/aspire" } }
           };
@@ -289,7 +310,7 @@ async function fixture(t, { staged = false } = {}) {
   };
   return {
     publish, audit, outputs, writes, gitPushes, remote, remoteRefs, verified, prefix, source,
-    sourcePr, head, agent, publisher, prepareCheckout, receipt, reviewedReceipt
+    sourcePr, head, agent, publisher, prepareCheckout, receipt, reviewedReceipt, containerCalls
   };
 }
 
@@ -401,6 +422,21 @@ test("native staged publication previews the same verified proposal without any 
   assert.deepEqual(f.writes, []);
   assert.deepEqual(f.gitPushes, []);
   assert.equal(git(f.remote, "show-ref"), f.remoteRefs);
+});
+
+test("completed functional failures remain visible on the native draft without changing its tested tree", async t => {
+  const f = await fixture(t, { failed: true });
+  await f.publish();
+  const request = f.writes.find(write => write.operation === "pulls.create").parameters;
+  assert.equal(request.draft, true);
+  assert.ok(request.body.includes(
+    "**Isolated telemetry tests: FAILED**\n\n177 passed, 12 failed, 0 skipped (189 total).\n\n"
+  ));
+  assert.ok(request.body.indexOf("**Isolated telemetry tests: FAILED**") < request.body.indexOf("Regression proposal."));
+  await f.audit();
+  assert.equal(f.writes.filter(write => write.operation === "pulls.create").length, 1);
+  assert.deepEqual(readFileSync(f.containerCalls, "utf8").trim().split("\n"), ["pull", "run", "rm", "run", "rm"]);
+  assert.deepEqual(f.gitPushes, []);
 });
 
 test("final promotion rejects a late source PR change after review with zero remote mutations", async t => {

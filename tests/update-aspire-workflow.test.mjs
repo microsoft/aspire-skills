@@ -11,7 +11,7 @@ import { test } from "node:test";
 import { parse } from "yaml";
 import {
   applyFrozenProposal, cloneTrustedBase, dockerArguments, freezeBundle, pinPublicationBase, publicationPolicy,
-  prepareVerifiedReview, resolveSource, validateOutcome, validatePublication, validateReceipt,
+  parseTestResults, prepareVerifiedReview, resolveSource, testResultSummary, validateOutcome, validatePublication, validateReceipt,
   validateReviewReceipt
 } from "../scripts/telemetry-workflow.mjs";
 
@@ -111,11 +111,15 @@ function artifactFixture(t) {
 }
 
 function receipt(f, type = "create_pull_request") {
+  for (const name of readdirSync(f.output)) rmSync(join(f.output, name));
+  const tests = type === "report_incomplete" ? undefined : { total: 1, passed: 1, failed: 0, skipped: 0 };
+  const summary = tests ? `${testResultSummary(tests)}\n\n` : "";
   const item = type === "noop"
-    ? { type, message: "Baseline covers the selected source." }
+    ? { type, message: `${summary}Baseline covers the selected source.` }
     : type === "report_incomplete"
       ? { type, reason: "A required update could not be prepared." }
-      : { type, branch: f.source.branch, title: "Telemetry", body: "Changes." };
+      : { type, branch: f.source.branch, title: "Telemetry", body: `${summary}Changes.` };
+  if (tests) writeFileSync(join(f.output, "telemetry-tests.log"), "Isolated fixture test output.");
   if (type === "create_pull_request") {
     const prefix = `aw-microsoft-aspire-${f.source.branch}`;
     writeFileSync(join(f.output, `${prefix}.bundle`), "verified bundle");
@@ -123,7 +127,7 @@ function receipt(f, type = "create_pull_request") {
   }
   writeFileSync(join(f.output, "agent_output.json"), JSON.stringify({ items: [item], errors: [] }));
   return {
-    source: f.source, type, tree: "2".repeat(40),
+    source: f.source, type, tree: "2".repeat(40), ...(tests ? { tests } : {}),
     run: "123456", attempt: "2",
     files: Object.fromEntries(readdirSync(f.output).map(name => [
       name, createHash("sha256").update(readFileSync(join(f.output, name))).digest("hex")
@@ -341,6 +345,36 @@ test("verification restores trusted code separately from offline candidate tests
   assert.doesNotMatch(restore.at(-1), /dotnet test|git (?:fetch|clone|init)/);
 });
 
+test("completed assertion failures produce an explicit result instead of an execution failure", () => {
+  const output = [
+    "failed Aspire.Cli.Tests.Agents.AgentTelemetryHookTests.AllowlistsMatchCanonicalPowerShellHook",
+    "Test run summary: Failed!",
+    "  total: 189",
+    "  failed: 12",
+    "  succeeded: 177",
+    "  skipped: 0",
+    "  duration: 58s 025ms"
+  ].join("\n");
+  const tests = parseTestResults(2, output);
+  assert.deepEqual(tests, { total: 189, failed: 12, passed: 177, skipped: 0 });
+  assert.equal(testResultSummary(tests),
+    "**Isolated telemetry tests: FAILED**\n\n177 passed, 12 failed, 0 skipped (189 total).");
+  const passed = output.replace("Failed!", "Passed!").replace("failed: 12", "failed: 0")
+    .replace("succeeded: 177", "succeeded: 189");
+  assert.deepEqual(parseTestResults(0, passed), { total: 189, failed: 0, passed: 189, skipped: 0 });
+  for (const [status, log] of [
+    [2, "Build failed."], [0, ""], [7, output], [124, output], [null, output],
+    [0, output], [2, passed], [2, output + "\n" + output],
+    [2, output.replace("total: 189", "total: 190")],
+    [2, output.replace("  total:", "  error: 1\n  total:")],
+    [2, output.replace("  duration: 58s 025ms", "")],
+    [0, passed.replace("total: 189", "total: 0").replace("succeeded: 189", "succeeded: 0")],
+    [0, passed.replace("succeeded: 189", "succeeded: 0").replace("skipped: 0", "skipped: 189")]
+  ]) {
+    assert.throws(() => parseTestResults(status, log), /Isolated test/);
+  }
+});
+
 test("publication rejects altered artifacts, different source snapshots, and stale run attempts", t => {
   const f = artifactFixture(t);
   withRun(t, f.directory);
@@ -349,6 +383,14 @@ test("publication rejects altered artifacts, different source snapshots, and sta
   assert.throws(() => validateReceipt({ ...verified, attempt: "1" }, f.source, f.output), /run, and attempt/);
   assert.throws(() => validateReceipt(verified, { ...f.source, commit: "a".repeat(40) }, f.output), /source, run/);
   assert.throws(() => validateReceipt({ ...verified, files: { "../receipt.json": "forged" } }, f.source, f.output), /artifact set/);
+  assert.throws(() => validateReceipt({
+    ...verified, tests: { total: 1, failed: 1, passed: 0, skipped: 0 }
+  }, f.source, f.output), /does not report the recorded test results/);
+  const log = join(f.output, "telemetry-tests.log");
+  const original = readFileSync(log);
+  writeFileSync(log, "Test results changed after review.");
+  assert.throws(() => validateReceipt(verified, f.source, f.output), /artifact changed: telemetry-tests.log/);
+  writeFileSync(log, original);
   writeFileSync(join(f.output, Object.keys(verified.files).find(name => name.endsWith(".bundle"))), "changed after tests");
   assert.throws(() => validateReceipt(verified, f.source, f.output), /artifact changed/);
 });
@@ -359,7 +401,7 @@ test("native review replaces raw transports with the frozen proposal and records
   const verified = receipt(f);
   const directory = join(f.directory, "review-inputs");
   mkdirSync(directory);
-  for (const name of ["agent_output.json", "aw-unverified.patch", "aw-unverified.bundle"]) {
+  for (const name of ["agent_output.json", "telemetry-tests.log", "aw-unverified.patch", "aw-unverified.bundle"]) {
     writeFileSync(join(directory, name), "unverified");
   }
   write(directory, "aw-prompts/prompt.txt", "Original prompt context.");
@@ -413,6 +455,7 @@ test("publication audit requires the actual draft PR to contain the verified tre
   const verified = receipt(f);
   const goodPr = {
     number: 42, html_url: "https://github.com/microsoft/aspire/pull/42", state: "open", draft: true, merged: false,
+    body: `${testResultSummary(verified.tests)}\n\nChanges.`,
     base: { ref: "main", repo: { full_name: "microsoft/aspire" } },
     head: { ref: f.source.branch, sha: f.head, repo: { full_name: "microsoft/aspire" } }
   };
@@ -461,6 +504,9 @@ test("publication audit requires the actual draft PR to contain the verified tre
   }
   pr = goodPr;
   commit = goodCommit;
+  await assert.rejects(audit({
+    github: { rest: { pulls: { get: async () => ({ data: { ...goodPr, body: "Results removed." } }) } } }
+  }), /actual PR does not report the recorded test results/);
   for (const values of [
     { number: "", url: "" }, { number: "" }, { url: "" }, { number: "042" }, { number: "42\n" },
     { number: "42", url: "https://github.com/example/other/pull/42" },

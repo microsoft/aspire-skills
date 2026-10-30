@@ -57,3 +57,6 @@ another workflow. Reruns must preserve the tag's commit and approved notes.
 The [update-aspire workflow](../.github/workflows/update-aspire.md) keeps Aspire CLI
 telemetry for aspire-skills usage up to date, including which skills and extension
 tools agents invoke.
+It creates draft proposals with one isolated telemetry test run. Functional test
+failures are reported in the draft; setup, isolation, and security failures block
+publication.
