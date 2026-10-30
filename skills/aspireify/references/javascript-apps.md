@@ -83,30 +83,46 @@ Tell the user: *"This is a yarn workspace monorepo — I'll skip `.withYarn()` o
 
 ### package.json
 
-If one exists at the root, augment it (do not overwrite). Add/merge these scripts that delegate to the Aspire CLI:
+`aspire init` and `aspire restore` create or merge the AppHost `package.json`. Verify
+the result instead of hand-writing different scripts.
+
+If one exists at the root, the CLI augments it without overwriting anything:
+
+- It keeps every existing script.
+- It adds the AppHost scripts under the `aspire:` prefix.
+- It adds a plain alias such as `build` only when that name is unused; the alias runs the
+  `aspire:` script with the repo's package manager.
+- It does not add `"type": "module"`. `apphost.mts` is ESM by its extension, and switching
+  an existing package to ESM changes how every `.js` file in it loads.
 
 ```json
 {
-  "type": "module",
   "scripts": {
-    "dev": "aspire run",
-    "build": "tsc",
-    "watch": "tsc --watch"
+    "aspire:lint": "eslint apphost.mts",
+    "aspire:start": "aspire run",
+    "aspire:build": "tsc -p tsconfig.apphost.json",
+    "aspire:dev": "tsc --watch -p tsconfig.apphost.json"
   }
 }
 ```
 
-If no root `package.json` exists, create a minimal one matching the canonical Aspire template:
+If no root `package.json` exists, the CLI creates one matching the canonical Aspire template:
 
 ```json
 {
   "name": "<repo-name>",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "aspire run",
-    "build": "tsc",
-    "watch": "tsc --watch"
+    "aspire:lint": "eslint apphost.mts",
+    "aspire:start": "aspire run",
+    "aspire:build": "tsc -p tsconfig.apphost.json",
+    "aspire:dev": "tsc --watch -p tsconfig.apphost.json",
+    "lint": "eslint apphost.mts",
+    "dev": "eslint apphost.mts && aspire run",
+    "build": "eslint apphost.mts && tsc -p tsconfig.apphost.json",
+    "watch": "tsc --watch -p tsconfig.apphost.json"
   },
   "engines": {
     "node": "^20.19.0 || ^22.13.0 || >=24"
@@ -114,7 +130,7 @@ If no root `package.json` exists, create a minimal one matching the canonical As
 }
 ```
 
-**Important**: Scripts should point to `aspire run`/`aspire start` — the Aspire CLI handles TypeScript compilation internally. Do not use `npx tsc && node apphost.js` patterns.
+**Important**: Run the AppHost with `aspire run`/`aspire start` — the Aspire CLI handles TypeScript compilation internally. Do not use `npx tsc && node apphost.js` patterns. Any script that type-checks the AppHost must pass `-p tsconfig.apphost.json`; bare `tsc` compiles the application's root `tsconfig.json` instead of the AppHost.
 
 Never overwrite existing `scripts`, `dependencies`, or `devDependencies` — merge only. Do not manually add Aspire SDK packages — `aspire restore` handles those.
 

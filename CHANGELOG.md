@@ -80,6 +80,11 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Fixed Aspireify ServiceDefaults guidance to install `Aspire.ProjectTemplates` before
   `dotnet new aspire-servicedefaults` when the template is missing, as it is after a
   TypeScript `aspire init`.
+- Aligned Aspireify's TypeScript AppHost `package.json` guidance with the scripts that
+  `aspire init` generates. The `aspire:*` scripts compile with `tsc -p tsconfig.apphost.json`,
+  and existing packages keep their scripts and module type. Previously it told agents to
+  add bare `tsc` build scripts (which compile the app's root `tsconfig.json`) and
+  `"type": "module"` to existing packages.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
