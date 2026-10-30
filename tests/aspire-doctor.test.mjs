@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { readFile } from "node:fs/promises";
 import { dirname, join, parse } from "node:path";
@@ -262,4 +263,20 @@ test("workspace-relative paths keep dot-prefixed children inside the workspace",
   assert.equal(workspaceRelativePath(workspace, join(dirname(workspace), "other", "file.json")), null);
   assert.equal(workspaceRelativePath(workspace, join(workspace, "..", "app-sibling", "x.json")), null);
   assert.equal(workspaceRelativePath(undefined, join(workspace, "src", "Program.cs")), null);
+});
+
+test("open-path editor handoff uses the repository root, not session storage", { timeout: 60_000 }, () => {
+  const fixture = join(repoRoot, "tests", "fixtures", "aspire-doctor-provider-boundary.mjs");
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  const result = spawnSync(process.execPath, ["--experimental-vm-modules", "--test", "--test-reporter=tap", fixture], {
+    env,
+    encoding: "utf8",
+    timeout: 50_000,
+    windowsHide: true,
+    maxBuffer: 1024 * 1024
+  });
+  assert.equal(result.error, undefined, result.error?.message);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stdout, /# fail 0/);
 });

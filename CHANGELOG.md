@@ -25,6 +25,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Fixed Aspire Doctor treating workspace files under child directories whose names
   begin with `..` (for example `..config`) as outside the workspace, which revealed
   them in the OS file manager instead of opening them in the editor canvas.
+- Fixed Aspire Doctor resolving and containing editor paths against session-state
+  storage instead of the session's working directory, which sent repository files to the
+  OS file manager and could hand the editor a path outside the repository.
 - Corrected POSIX path handling in the Aspireify canvas to keep proposal
   snapshots separate for AppHost paths containing literal backslashes.
 - Restored AppHost visibility and source-file navigation in the Aspire AppHosts
