@@ -11,7 +11,7 @@
     },
     {
       "name": "aspire-deployment",
-      "version": "sha512-54a4d4f086323f163f4721d02d1dac0b180ba0043019831b16ccce9cb6f44dd962b28a622d235428b04544a4ef0719af21803dd11a0dc8c8c0e98cc65b5b126e",
+      "version": "sha512-c59c608020325ff7d2526b210736e915c9cd83ea4d30a8ddeb41691877440dec36842450c8c5e0427f1feb2ef0244bd2c2eb0d45bb3086444bce54643287584e",
       "files": [
         "SKILL.md",
         "references/aws.md",
