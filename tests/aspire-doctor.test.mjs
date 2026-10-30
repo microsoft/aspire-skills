@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, parse } from "node:path";
 import { PassThrough } from "node:stream";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -15,7 +15,8 @@ import {
   requestErrorStatus,
   runLatestDiagnostics,
   selectDiagnosticsResult,
-  windowsExplorerInvocation
+  windowsExplorerInvocation,
+  workspaceRelativePath
 } from "../extensions/aspire-doctor/provider-helpers.mjs";
 import {
   normalizeDoctorData,
@@ -248,3 +249,17 @@ function deferred() {
   });
   return { promise, resolve };
 }
+
+test("workspace-relative paths keep dot-prefixed children inside the workspace", () => {
+  const workspace = join(parse(repoRoot).root, "workspace", "app");
+
+  assert.equal(workspaceRelativePath(workspace, join(workspace, "..config", "settings.json")), "..config/settings.json");
+  assert.equal(workspaceRelativePath(workspace, join(workspace, "..env")), "..env");
+  assert.equal(workspaceRelativePath(workspace, join(workspace, "src", "Program.cs")), "src/Program.cs");
+
+  assert.equal(workspaceRelativePath(workspace, workspace), null);
+  assert.equal(workspaceRelativePath(workspace, dirname(workspace)), null);
+  assert.equal(workspaceRelativePath(workspace, join(dirname(workspace), "other", "file.json")), null);
+  assert.equal(workspaceRelativePath(workspace, join(workspace, "..", "app-sibling", "x.json")), null);
+  assert.equal(workspaceRelativePath(undefined, join(workspace, "src", "Program.cs")), null);
+});

@@ -7,7 +7,7 @@ import { spawn } from "node:child_process";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { basename, dirname, extname, isAbsolute, normalize, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, normalize, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { joinSession, createCanvas, CanvasError } from "@github/copilot-sdk/extension";
 import {
@@ -20,6 +20,7 @@ import {
     selectDiagnosticsResult,
     windowsExplorerExecutable,
     windowsExplorerInvocation,
+    workspaceRelativePath,
 } from "./provider-helpers.mjs";
 import { normalizeDoctorData } from "./ui/model.mjs";
 
@@ -419,17 +420,7 @@ function resolveUserPath(value) {
 }
 
 function getRepoRelativePath(absolutePath) {
-    const workspacePath = sessionRef?.workspacePath;
-    if (!workspacePath) {
-        return null;
-    }
-
-    const relativePath = relative(workspacePath, absolutePath);
-    if (!relativePath || relativePath.startsWith("..") || isAbsolute(relativePath)) {
-        return null;
-    }
-
-    return relativePath.split(sep).join("/");
+    return workspaceRelativePath(sessionRef?.workspacePath, absolutePath);
 }
 
 function shouldOpenInEditor(absolutePath, stats) {
