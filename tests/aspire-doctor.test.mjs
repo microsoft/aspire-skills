@@ -191,10 +191,11 @@ test("loopback startup removes temporary error listeners", async () => {
 });
 
 test("renderer exposes responsive and accessible review controls", async () => {
-  const [html, app, styles] = await Promise.all([
+  const [html, app, styles, sharedStyles] = await Promise.all([
     readFile(join(extensionRoot, "ui", "index.html"), "utf8"),
     readFile(join(extensionRoot, "ui", "app.js"), "utf8"),
-    readFile(join(extensionRoot, "ui", "styles.css"), "utf8")
+    readFile(join(extensionRoot, "ui", "styles.css"), "utf8"),
+    readFile(join(extensionRoot, "ui", "canvas-theme.css"), "utf8")
   ]);
 
   assert.match(html, /<h1[^>]+id="page-title"/);
@@ -202,7 +203,7 @@ test("renderer exposes responsive and accessible review controls", async () => {
   assert.match(html, /id="error"[^>]+role="alert"/);
   assert.match(html, /id="toggle-passed"/);
   assert.match(html, /id="toggle-details"/);
-  assert.match(html, /class="brand-mark"/);
+  assert.match(html, /class="brand-mark canvas-brand"/);
   assert.match(html, /class="btn btn-outline btn-sm" id="rerun"/);
   assert.match(app, /devtools: "Developer tools"/);
   assert.match(app, /latestVersionChannel: "Latest channel"/);
@@ -213,16 +214,16 @@ test("renderer exposes responsive and accessible review controls", async () => {
   assert.match(app, /class: "diag-sec-count"/);
   assert.match(app, /class: "diag-metadata-heading"/);
   assert.match(app, /class: "tag install-meta"/);
-  assert.match(styles, /--brand: var\(--fgColor-done/);
-  assert.match(styles, /--ok: var\(--fgColor-success/);
-  assert.match(styles, /--warn: var\(--fgColor-attention/);
-  assert.match(styles, /--req: var\(--fgColor-danger/);
+  assert.match(sharedStyles, /--brand: var\(--true-color-purple/);
+  assert.match(sharedStyles, /--ok: var\(--healthy\)/);
+  assert.match(sharedStyles, /--warn: var\(--warning\)/);
+  assert.match(sharedStyles, /--req: var\(--failure\)/);
   assert.match(styles, /\.pill[\s\S]+background: var\(--surface-raised\)/);
   assert.match(styles, /\.pill\[data-zero="true"\][\s\S]+background: var\(--surface-inset\)/);
   assert.match(styles, /\.diag-ico\.warn[\s\S]+var\(--warn\) 13%/);
   assert.match(styles, /\.diag-detail[\s\S]+border-top: 1px solid var\(--border-soft\)/);
   assert.match(styles, /\.diag-fix[\s\S]+border-bottom: 1px solid var\(--border-soft\)/);
-  assert.match(styles, /--card: color-mix/);
+  assert.match(sharedStyles, /--card: var\(--card-surface\)/);
   assert.match(styles, /color-mix\(in srgb, var\(--pill-tone\), var\(--fg\) 25%\)/);
   assert.match(styles, /color-mix\(in srgb, var\(--status-tone\), var\(--fg\) 25%\)/);
   assert.match(styles, /\.diag-sec-count[\s\S]+border-radius: 999px/);
