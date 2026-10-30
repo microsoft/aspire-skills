@@ -2,11 +2,12 @@ import { createHash, randomUUID } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   copyFileSync, lstatSync, mkdirSync, mkdtempSync, readFileSync,
-  readdirSync, writeFileSync
+  readdirSync, rmSync, writeFileSync
 } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 
 const sourceRepository = { owner: "microsoft", repo: "aspire-skills" };
 const targetRepository = { owner: "microsoft", repo: "aspire" };
@@ -92,7 +93,7 @@ export async function resolveSource({ github, context, directory }) {
   const output = join(process.env.RUNNER_TEMP, "telemetry-source");
   mkdirSync(output, { recursive: true });
   writeFileSync(join(output, "source-pr.json"), JSON.stringify({
-    ...source, title: pr.title, body: pr.body, changed_files: files,
+    ...source, changed_files: files,
     dryRun: manual && [true, "true"].includes(context.payload.inputs?.dry_run)
   }));
   writeFileSync(join(output, "source-pr-files.json"), JSON.stringify(files));
@@ -256,7 +257,7 @@ export function dockerArguments({ workspace, cache, name, offline, uid, gid, bas
     "run", "--rm", "--pull=never", "--platform=linux/amd64", "--name", name,
     `--network=${offline ? "none" : "bridge"}`, `--user=${uid}:${gid}`,
     "--cap-drop=ALL", "--security-opt=no-new-privileges=true", "--read-only", "--pids-limit=1024",
-    "--ulimit=core=0", "--tmpfs=/tmp:rw,nosuid,nodev",
+    "--ulimit=core=0", "--tmpfs=/tmp:rw,nosuid,nodev,exec",
     "--mount", `type=bind,src=${workspace},dst=/src`,
     "--mount", `type=bind,src=${cache},dst=/cache`,
     "--workdir=/src", "--entrypoint=/usr/bin/env", verifierImage,
@@ -353,6 +354,33 @@ export function validateReceipt(receipt, source, directory) {
   return item;
 }
 
+export function prepareVerifiedReview({ source, receipt, directory }) {
+  const verified = join(process.env.RUNNER_TEMP, "telemetry-verified");
+  validateReceipt(receipt, source, verified);
+  for (const name of readdirSync(directory)) {
+    if (name === "agent_output.json" || /^aw-.+\.(patch|bundle)$/.test(name)) {
+      rmSync(join(directory, name));
+    }
+  }
+  for (const name of Object.keys(receipt.files)) {
+    copyFileSync(join(verified, name), join(directory, name));
+  }
+  const record = JSON.stringify(receipt);
+  writeFileSync(join(directory, "verification-receipt.json"), record);
+  const reviewed = join(process.env.RUNNER_TEMP, "telemetry-reviewed");
+  mkdirSync(reviewed);
+  writeFileSync(join(reviewed, "receipt.json"), record);
+}
+
+export function validateReviewReceipt(receipt, reviewedReceipt, detection) {
+  if (!isDeepStrictEqual(receipt, reviewedReceipt)) {
+    throw new Error("Threat review does not match the verified source, artifacts, and run.");
+  }
+  if (detection?.result !== "success" || detection.success !== "true" || detection.conclusion !== "success") {
+    throw new Error("Publication requires a successful native threat review of the frozen proposal.");
+  }
+}
+
 export function pinPublicationBase(directory, base) {
   // The pinned gh-aw handler refetches main before signed replay against origin/main.
   // https://github.com/github/gh-aw/blob/v0.89.17/actions/setup/js/create_pull_request.cjs#L1779-L1784
@@ -361,9 +389,10 @@ export function pinPublicationBase(directory, base) {
     "+refs/heads/main:refs/remotes/origin/publication-main"]);
 }
 
-export async function promoteVerifiedProposal({ github, directory, source, receipt }) {
+export async function promoteVerifiedProposal({ github, directory, source, receipt, reviewedReceipt, detection }) {
   const verified = join(process.env.RUNNER_TEMP, "telemetry-verified");
   const item = validateReceipt(receipt, source, verified);
+  validateReviewReceipt(receipt, reviewedReceipt, detection);
   const { data: pr } = await github.rest.pulls.get({ ...sourceRepository, pull_number: source.number });
   if (pr.base.ref !== "main" || pr.base.repo.full_name !== "microsoft/aspire-skills" ||
       (pr.merged ? pr.merge_commit_sha : pr.head.sha) !== source.commit) {

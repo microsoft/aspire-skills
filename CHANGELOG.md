@@ -7,9 +7,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ### Added
 - Added isolated, offline verification and exact-artifact publication gates for
   Aspire telemetry proposals, with immutable source evidence, fail-closed threat
-  detection, and destination-scoped publishing credentials. Publication regressions
-  reject out-of-scope and mixed Git bundles before writes, including bundles with
-  misleading telemetry-only companion patches.
+  review bound to the frozen proposal, and destination-scoped publishing
+  credentials. Publication regressions reject out-of-scope and mixed Git bundles
+  before writes, including bundles with misleading telemetry-only companion patches.
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
   reference files and SHA-512 content versions.
 - Added the default-selected `aspire-terminals` skill for resource PTYs, persistent

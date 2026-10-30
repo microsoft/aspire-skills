@@ -11,7 +11,7 @@ import { test } from "node:test";
 import { parse } from "yaml";
 import {
   applyFrozenProposal, cloneTrustedBase, dockerArguments, freezeBundle, pinPublicationBase, publicationPolicy,
-  resolveSource, validateOutcome, validateReceipt, verifierImage
+  prepareVerifiedReview, resolveSource, validateOutcome, validateReceipt, validateReviewReceipt, verifierImage
 } from "../scripts/telemetry-workflow.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -51,7 +51,7 @@ function fixture(t) {
   write(repo, allowedPath, "baseline\n");
   write(repo, "restore.sh", "#!/bin/sh\nexit 0\n");
   const base = commit(repo);
-  const output = join(directory, "verified");
+  const output = join(directory, "telemetry-verified");
   mkdirSync(output);
   const source = {
     number: 123, commit: base, base, aspireBase: base, merged: false,
@@ -134,19 +134,65 @@ test("source evidence comes from immutable commits even when a manual PR advance
     title: "Selected PR", body: "Untrusted evidence", merged: false,
     head: { sha: head }, base: { ref: "main", sha: f.base, repo: { full_name: "microsoft/aspire-skills" } }
   };
-  const github = { rest: { pulls: { get: async () => ({ data: pr }) } } };
+  let metadataReads = 0;
+  const github = { rest: { pulls: { get: async () => {
+    metadataReads++;
+    return { data: pr };
+  } } } };
   const context = { eventName: "workflow_dispatch", payload: { inputs: { pr_number: "123", dry_run: "true" } } };
   const source = await resolveSource({ github, context, directory: f.repo });
   assert.equal(source.commit, head);
   assert.equal(source.base, f.base);
   const evidence = join(f.directory, "telemetry-source");
-  assert.equal(JSON.parse(readFileSync(join(evidence, "source-pr.json"))).dryRun, true);
+  const metadata = JSON.parse(readFileSync(join(evidence, "source-pr.json")));
+  assert.equal(metadata.dryRun, true);
+  assert.equal(Object.hasOwn(metadata, "title"), false);
+  assert.equal(Object.hasOwn(metadata, "body"), false);
+  assert.equal(metadataReads, 1);
   const diff = readFileSync(join(evidence, "source-pr.diff"), "utf8");
   assert.match(diff, /\+selected/);
   assert.doesNotMatch(diff, /later revision/);
   assert.deepEqual(JSON.parse(readFileSync(join(evidence, "source-pr-files.json"))), [
     { filename: "extensions/example/extension.mjs", additions: 1, deletions: 0 }
   ]);
+});
+
+test("a force-push after the PR metadata snapshot cannot change the pinned inventory or diff", async t => {
+  const f = fixture(t);
+  withRun(t, f.directory);
+  git(f.repo, "remote", "add", "origin", f.repo);
+  git(f.repo, "config", `url.${f.repo.replaceAll("\\", "/")}.insteadOf`, "https://github.com/microsoft/aspire.git");
+  write(f.repo, "extensions/selected/extension.mjs", "selected revision\n");
+  const selected = commit(f.repo);
+  let replacement;
+  const github = { rest: { pulls: {
+    get: async () => {
+      const pr = {
+        merged: false, head: { sha: selected },
+        base: { ref: "main", sha: f.base, repo: { full_name: "microsoft/aspire-skills" } }
+      };
+      git(f.repo, "switch", "--quiet", "--detach", f.base);
+      write(f.repo, "extensions/replacement/extension.mjs", "force-pushed revision\n");
+      replacement = commit(f.repo);
+      git(f.repo, "update-ref", "refs/heads/main", replacement, selected);
+      return { data: pr };
+    },
+    listFiles: async () => { throw new Error("Mutable PR-files endpoints must not be used."); }
+  } } };
+  const source = await resolveSource({
+    github, context: { eventName: "workflow_dispatch", payload: { inputs: { pr_number: "123" } } },
+    directory: f.repo
+  });
+  assert.equal(git(f.repo, "rev-parse", "main"), replacement);
+  assert.equal(git(f.repo, "merge-base", selected, replacement), f.base);
+  assert.equal(source.commit, selected);
+  const evidence = join(f.directory, "telemetry-source");
+  assert.deepEqual(JSON.parse(readFileSync(join(evidence, "source-pr-files.json"))), [
+    { filename: "extensions/selected/extension.mjs", additions: 1, deletions: 0 }
+  ]);
+  const diff = readFileSync(join(evidence, "source-pr.diff"), "utf8");
+  assert.match(diff, /\+selected revision/);
+  assert.doesNotMatch(diff, /replacement|force-pushed revision/);
 });
 
 test("source resolution rejects malformed inputs and mismatched automatic triggers", async t => {
@@ -270,6 +316,7 @@ test("candidate Docker invocation has no network, credentials, host home, socket
   assert.ok(args.includes("--cap-drop=ALL"));
   assert.ok(args.includes("--security-opt=no-new-privileges=true"));
   assert.ok(args.includes("--user=1001:1001"));
+  assert.ok(args.includes("--tmpfs=/tmp:rw,nosuid,nodev,exec"));
   assert.ok(args.includes(verifierImage));
   assert.deepEqual(args.filter((_, index) => args[index - 1] === "--mount"), [
     "type=bind,src=/private/source,dst=/src", "type=bind,src=/private/cache,dst=/cache"
@@ -297,6 +344,50 @@ test("publication rejects altered artifacts, different source snapshots, and sta
   assert.throws(() => validateReceipt(verified, f.source, f.output), /artifact changed/);
 });
 
+test("native review replaces raw transports with the frozen proposal and records its exact receipt", t => {
+  const f = proposal(fixture(t));
+  withRun(t, f.directory);
+  freeze(f);
+  const verified = receipt(f);
+  const directory = join(f.directory, "review-inputs");
+  mkdirSync(directory);
+  for (const name of ["agent_output.json", "aw-unverified.patch", "aw-unverified.bundle"]) {
+    writeFileSync(join(directory, name), "unverified");
+  }
+  write(directory, "aw-prompts/prompt.txt", "Original prompt context.");
+  prepareVerifiedReview({ source: f.source, receipt: verified, directory });
+  assert.equal(existsSync(join(directory, "aw-unverified.patch")), false);
+  assert.equal(existsSync(join(directory, "aw-unverified.bundle")), false);
+  for (const name of Object.keys(verified.files)) {
+    assert.deepEqual(readFileSync(join(directory, name)), readFileSync(join(f.output, name)));
+  }
+  assert.deepEqual(JSON.parse(readFileSync(join(directory, "verification-receipt.json"))), verified);
+  assert.deepEqual(JSON.parse(readFileSync(join(f.directory, "telemetry-reviewed", "receipt.json"))), verified);
+  assert.equal(readFileSync(join(directory, "aw-prompts", "prompt.txt"), "utf8"), "Original prompt context.");
+});
+
+test("native review binding rejects missing, stale, mismatched, skipped, and non-successful review", t => {
+  const f = proposal(fixture(t));
+  withRun(t, f.directory);
+  freeze(f);
+  const verified = receipt(f);
+  const detection = { result: "success", success: "true", conclusion: "success" };
+  validateReviewReceipt(verified, structuredClone(verified), detection);
+  for (const reviewed of [
+    undefined, {}, { ...verified, attempt: "1" }, { ...verified, run: "another" },
+    { ...verified, tree: "a".repeat(40) }, { ...verified, files: {} },
+    { ...verified, source: { ...verified.source, commit: "a".repeat(40) } }
+  ]) {
+    assert.throws(() => validateReviewReceipt(verified, reviewed, detection), /Threat review does not match/);
+  }
+  for (const result of [
+    undefined, {}, { ...detection, result: "failure" }, { ...detection, success: "false" },
+    { ...detection, conclusion: "skipped" }, { ...detection, conclusion: "warning" }
+  ]) {
+    assert.throws(() => validateReviewReceipt(verified, verified, result), /successful native threat review/);
+  }
+});
+
 test("native publisher fetches cannot silently rebase a verified proposal", t => {
   const f = fixture(t);
   const publisher = join(f.directory, "publisher");
@@ -316,7 +407,25 @@ test("compiled workflow enforces verifier success, strict detection, and bounded
   assert.match(compiled.jobs.safe_outputs.if, /needs\.detection\.result == 'success'/);
   assert.match(compiled.jobs.safe_outputs.if, /needs\.verify-telemetry\.result == 'success'/);
   const detection = authored["safe-outputs"]["threat-detection"];
-  assert.deepEqual(detection, { "continue-on-error": false, "report-as-issue": false });
+  assert.equal(detection["continue-on-error"], false);
+  assert.equal(detection["report-as-issue"], false);
+  assert.match(detection.prompt, /sensitive privileges/);
+  assert.match(detection.prompt, /low-cardinality/);
+  assert.ok(compiled.jobs.detection.needs.includes("verify-telemetry"));
+  assert.ok(compiled.jobs.detection.needs.includes("resolve-source"));
+  assert.match(compiled.jobs.detection.if, /needs\.verify-telemetry\.result == 'success'/);
+  const reviewSteps = compiled.jobs.detection.steps;
+  const stage = reviewSteps.findIndex(step => step.with?.script?.includes("prepareVerifiedReview("));
+  const record = reviewSteps.findIndex(step => step.with?.name === "telemetry-reviewed-proposal");
+  const execution = reviewSteps.findIndex(step => step.id === "detection_agentic_execution");
+  assert.ok(stage > reviewSteps.findIndex(step => step.name === "Prepare threat detection files"));
+  assert.ok(record > stage && record < execution);
+  assert.ok(record < reviewSteps.findIndex(step => step.name === "Setup threat detection"));
+  assert.equal(reviewSteps[execution].env.CUSTOM_PROMPT, detection.prompt);
+  const publication = compiled.jobs.safe_outputs.steps.find(step =>
+    step.with?.script?.includes("await promoteVerifiedProposal("));
+  assert.equal(publication.env.TELEMETRY_DETECTION_SUCCESS, "${{ needs.detection.outputs.detection_success }}");
+  assert.equal(publication.env.TELEMETRY_DETECTION_CONCLUSION, "${{ needs.detection.outputs.detection_conclusion }}");
   for (const step of [
     compiled.jobs.detection.steps.find(step => step.id === "detection_agentic_execution"),
     compiled.jobs.detection.steps.find(step => step.env?.DETECTION_AGENTIC_EXECUTION_OUTCOME)
@@ -386,7 +495,13 @@ test("dry-runs have no diagnostic-issue mutation paths and publishing App is tar
   assert.deepEqual(outputs["create-pull-request"]["github-app"].repositories, ["aspire"]);
   assert.ok(!compiled.jobs.conclusion.steps.some(step => step.uses?.startsWith("actions/create-github-app-token@")));
   const research = authored["pre-agent-steps"].find(step => step.id === "github-read-token");
-  for (const permission of ["contents", "issues", "pull-requests"]) {
+  for (const permission of ["contents", "pull-requests"]) {
     assert.equal(research.with[`permission-${permission}`], "read");
   }
+  assert.equal(research.with["permission-issues"], undefined);
+  assert.equal(authored.permissions.issues, undefined);
+  assert.equal(compiled.jobs.agent.permissions.issues, undefined);
+  assert.deepEqual(authored.tools.github.toolsets, ["repos", "pull_requests"]);
+  assert.match(markdown, /Do not retrieve source PR comments, reviews, descriptions, linked pages/);
+  assert.match(markdown, /Do not read every skill/);
 });

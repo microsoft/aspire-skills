@@ -66,8 +66,11 @@ are unchanged. An offline regression test must guard coverage before a no-op
 is allowed.
 `aspire-repo-bot[bot]` is allowlisted; the App must cover both repositories.
 Configure `ASPIRE_BOT_APP_ID` and `ASPIRE_BOT_PRIVATE_KEY` as repository secrets.
-Source research uses a read-only GitHub CLI proxy. Optional maintenance is
-disabled in `.github/workflows/aw.json`. Regenerate the compiled workflow with
+Source research uses a read-only GitHub CLI proxy without the issues toolset.
+Snapshots omit PR titles and descriptions; research instructions exclude
+comments and linked pages and limit source reads to relevant pinned files.
+Optional maintenance is disabled in `.github/workflows/aw.json`.
+Regenerate the compiled workflow with
 gh-aw v0.91.8 on Linux or WSL after editing its source or configuration:
 
 ```shell
@@ -97,9 +100,15 @@ publication:
   disposable source and cache directories, not runner credentials, home, Actions
   control files, publication artifacts, or a Docker socket. There is no fallback
   to running candidate code on the host or restoring it online.
+  The container's private `/tmp` permits execution so Bash tests can invoke
+  their recording stubs; it never maps the runner's temporary directory.
 - Only the trusted supervisor can produce the successful verification receipt.
-  Publication requires verifier success, clean threat detection, matching artifact
-  hashes, the same source commit, and the tested candidate tree and base. Source
+  Native threat detection waits for that receipt and reviews the exact frozen
+  output, patch, and bundle, replacing the original transports. An immutable
+  review-input receipt is uploaded before the reviewer starts.
+  Publication requires verifier success, a successful native review, matching
+  verification and review receipts, matching artifact hashes, the same source
+  commit, and the tested candidate tree and base. Source
   or target changes detected before publication require a new run. The native
   publisher's later fetches cannot silently move its signed replay onto a newer
   base. Before promoting any artifacts, the publication job independently checks

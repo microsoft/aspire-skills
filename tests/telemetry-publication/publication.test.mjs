@@ -103,6 +103,8 @@ async function fixture(t, { outside, telemetry = true, cleanPatch = false } = {}
       name, createHash("sha256").update(readFileSync(join(verified, name))).digest("hex")
     ]))
   };
+  const reviewedReceipt = join(directory, "telemetry-reviewed", "receipt.json");
+  write(directory, "telemetry-reviewed/receipt.json", JSON.stringify(receipt));
   mkdirSync(join(directory, "gh-aw"));
   symlinkSync(runtime, join(directory, "gh-aw", "actions"), "dir");
   symlinkSync(root, join(publisher, "_telemetry-tools"), "dir");
@@ -112,6 +114,8 @@ async function fixture(t, { outside, telemetry = true, cleanPatch = false } = {}
     GITHUB_SERVER_URL: "https://github.com", GITHUB_TOKEN: "fixture-token",
     GH_AW_WORKFLOW_ID: "update-aspire", GH_AW_SAFE_OUTPUTS_STAGED: "false",
     TELEMETRY_SOURCE: JSON.stringify(source), TELEMETRY_RECEIPT: JSON.stringify(receipt),
+    TELEMETRY_DETECTION_RESULT: "success", TELEMETRY_DETECTION_SUCCESS: "true",
+    TELEMETRY_DETECTION_CONCLUSION: "success",
     GH_AW_PROMPTS_DIR: process.env.GH_AW_PROMPTS_DIR || join(dirname(runtime), "prompts")
   });
   mkdirSync("/tmp/gh-aw", { recursive: true });
@@ -205,7 +209,7 @@ async function fixture(t, { outside, telemetry = true, cleanPatch = false } = {}
     if (!result.success) throw new Error(`${result.error}\n${logs.join("\n")}`);
     return result;
   };
-  return { publish, writes, gitPushes, remote, remoteRefs, verified, prefix, source };
+  return { publish, writes, gitPushes, remote, remoteRefs, verified, prefix, source, receipt, reviewedReceipt };
 }
 
 for (const outside of [
@@ -241,6 +245,42 @@ test("publication rejects a mixed bundle even when its companion patch hides the
   assert.deepEqual(f.gitPushes, []);
   assert.equal(git(f.remote, "show-ref"), f.remoteRefs);
 });
+
+for (const mismatch of ["missing", "tree", "source", "attempt", "files"]) {
+  test(`publication rejects ${mismatch} native review evidence before any remote write`, async t => {
+    const f = await fixture(t);
+    if (mismatch === "missing") {
+      rmSync(f.reviewedReceipt);
+    } else {
+      const reviewed = structuredClone(f.receipt);
+      if (mismatch === "tree") reviewed.tree = "a".repeat(40);
+      if (mismatch === "source") reviewed.source.commit = "a".repeat(40);
+      if (mismatch === "attempt") reviewed.attempt = "0";
+      if (mismatch === "files") reviewed.files = {};
+      writeFileSync(f.reviewedReceipt, JSON.stringify(reviewed));
+    }
+    await assert.rejects(f.publish(), mismatch === "missing" ? /ENOENT/ : /Threat review does not match/);
+    assert.deepEqual(f.writes, []);
+    assert.deepEqual(f.gitPushes, []);
+    assert.equal(git(f.remote, "show-ref"), f.remoteRefs);
+  });
+}
+
+for (const [name, values] of [
+  ["failed", { TELEMETRY_DETECTION_RESULT: "failure" }],
+  ["unconfirmed", { TELEMETRY_DETECTION_SUCCESS: "" }],
+  ["skipped", { TELEMETRY_DETECTION_CONCLUSION: "skipped" }],
+  ["warning", { TELEMETRY_DETECTION_CONCLUSION: "warning" }]
+]) {
+  test(`publication rejects ${name} native detection before any remote write`, async t => {
+    const f = await fixture(t);
+    environment(t, values);
+    await assert.rejects(f.publish(), /successful native threat review/);
+    assert.deepEqual(f.writes, []);
+    assert.deepEqual(f.gitPushes, []);
+    assert.equal(git(f.remote, "show-ref"), f.remoteRefs);
+  });
+}
 
 test("valid telemetry reaches the real signed publisher with all remote writes intercepted", async t => {
   const f = await fixture(t);
