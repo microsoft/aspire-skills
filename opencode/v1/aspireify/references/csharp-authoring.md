@@ -89,7 +89,7 @@ the path overload of `AddProject`.
 | `AddProject<T>(name)` / `AddProject(name, path)` | Add a .NET project |
 | `AddContainer(name, image)` | Add a container |
 | `AddDockerfile(name, contextPath)` | Build from a Dockerfile |
-| `AddNodeApp(name, scriptPath)` | Plain Node service |
+| `AddNodeApp(name, appDirectory, scriptPath)` | Plain Node service |
 | `AddNextJsApp(name, projectPath)` | Next.js with auto standalone publish |
 | `AddViteApp(name, projectPath)` | Vite app — pair with `PublishAsStaticWebsite` |
 | `AddPostgres` / `AddRedis` / `AddMongoDB` / `AddRabbitMQ` / `AddSqlServer` / `AddMySql` / `AddKafka` | Datastores & messaging |

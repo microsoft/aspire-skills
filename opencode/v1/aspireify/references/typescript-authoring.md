@@ -201,7 +201,7 @@ await builder.addProject('api', '../Api/Api.csproj')
 |--------|---------|
 | `addNextJsApp(name, projectPath)` | Next.js (auto standalone publish; set `output: 'standalone'` in `next.config.js`) |
 | `addViteApp(name, projectPath)` | Vite (dev server) |
-| `addNodeApp(name, scriptPath)` | Plain Node service |
+| `addNodeApp(name, appDirectory, scriptPath)` | Plain Node service |
 
 Package managers: **Bun, Yarn, pnpm** are first-class alongside npm.
 

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 const read = path => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");
@@ -51,4 +51,19 @@ test("Aspireify TypeScript examples call exported APIs with their generated sign
   // withLifetime takes the generated ContainerLifetime string enum, whose members are PascalCase.
   assert.doesNotMatch(code, /\.withLifetime\(\s*['"]/);
   assert.match(code, /\.withLifetime\(ContainerLifetime\.Persistent\)/);
+});
+
+test("Aspire skills document addNodeApp with its app directory and script path", () => {
+  // AddNodeApp(name, appDirectory, scriptPath) / addNodeApp(name, appDirectory, scriptPath) has no
+  // two-argument overload, so signature rows and examples that omit appDirectory don't compile.
+  const root = new URL("../../skills/", import.meta.url);
+  const files = readdirSync(root, { recursive: true }).filter(file => file.endsWith(".md"));
+  const calls = files.flatMap(file =>
+    [...readFileSync(new URL(file, root), "utf8").matchAll(/\b[Aa]ddNodeApp\(([^()]+)\)/g)]
+      .map(m => ({ file, args: m[1] })))
+    .filter(({ args }) => args.trim() !== "...");
+  assert.ok(calls.length > 0, "Missing addNodeApp examples");
+  for (const { file, args } of calls) {
+    assert.equal(args.split(",").length, 3, `${file}: addNodeApp needs name, appDirectory and scriptPath: ${args}`);
+  }
 });
