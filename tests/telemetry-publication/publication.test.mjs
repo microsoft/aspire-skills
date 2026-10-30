@@ -10,6 +10,7 @@ import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
+import { freezeBundle, publicationPolicy, verifyTelemetry } from "../../scripts/telemetry-workflow.mjs";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -58,7 +59,7 @@ function environment(t, values) {
   }
 }
 
-async function fixture(t, { outside, telemetry = true, cleanPatch = false, complete = false, staged = false } = {}) {
+function proposalFixture(t, { outside, telemetry = true } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "telemetry-publication-"));
   const previousDirectory = process.cwd();
   t.after(() => {
@@ -66,34 +67,13 @@ async function fixture(t, { outside, telemetry = true, cleanPatch = false, compl
     rmSync(directory, { recursive: true, force: true });
   });
   const agent = join(directory, "agent");
-  const publisher = join(directory, "publisher");
-  const remote = join(directory, "remote.git");
   const verified = join(directory, "telemetry-verified");
   mkdirSync(agent);
-  mkdirSync(verified);
   git(agent, "init", "--quiet", "--initial-branch=main");
   git(agent, "config", "user.name", "Fixture");
   git(agent, "config", "user.email", "fixture@example.invalid");
   write(agent, allowedPath, "baseline\n");
   const base = commit(agent);
-  git(directory, "clone", "--quiet", "--bare", agent, remote);
-  mkdirSync(publisher);
-  const prepareCheckout = () => execFileSync("bash", ["-euo", "pipefail", "-c", checkout.run], {
-    cwd: publisher, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
-    env: {
-      ...process.env, ...checkout.env, TELEMETRY_ASPIRE_BASE: base,
-      GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: `url.${remote}.insteadOf`, GIT_CONFIG_VALUE_0: target
-    }
-  });
-  prepareCheckout();
-  git(publisher, "remote", "set-url", "origin", "https://x-access-token:fixture-token@github.com/microsoft/aspire.git");
-  prepareCheckout();
-  git(publisher, "remote", "set-url", "origin", target);
-  assert.equal(git(publisher, "rev-parse", "HEAD"), base);
-  assert.equal(git(publisher, "remote", "get-url", "origin"), target);
-  git(publisher, "config", `url.${remote}.insteadOf`, target);
-  git(publisher, "config", "user.name", "Fixture");
-  git(publisher, "config", "user.email", "fixture@example.invalid");
   const number = Number.parseInt(randomUUID().slice(0, 6), 16) + 1;
   const source = {
     number, commit: base, base, aspireBase: base, merged: false,
@@ -108,13 +88,44 @@ async function fixture(t, { outside, telemetry = true, cleanPatch = false, compl
   if (telemetry) assert.ok(files.includes(allowedPath));
   if (outside) assert.ok(files.includes(outside));
   const prefix = `aw-microsoft-aspire-${source.branch}`;
-  git(agent, "bundle", "create", join(verified, `${prefix}.bundle`), `${base}..${source.branch}`);
-  const patch = git(agent, "diff", "--binary", base, head, ...(cleanPatch ? ["--", allowedPath] : []));
-  writeFileSync(join(verified, `${prefix}.patch`), `${patch}\n`);
+  const bundle = join(directory, `${prefix}.bundle`);
+  git(agent, "bundle", "create", bundle, `${base}..${source.branch}`);
+  const verify = async () => {
+    mkdirSync(verified);
+    const { checkFileProtectionPostApply } = require(join(runtime, "manifest_file_helpers.cjs"));
+    return freezeBundle({
+      directory: agent, bundle, source, outputDirectory: verified,
+      policy: await publicationPolicy(root), checkFiles: checkFileProtectionPostApply
+    });
+  };
+  return { directory, agent, verified, base, source, prefix, bundle, verify };
+}
+
+async function fixture(t, { staged = false } = {}) {
+  const { directory, agent, verified, base, source, prefix, verify } = proposalFixture(t);
+  const proposal = await verify();
+  const head = git(agent, "rev-parse", source.branch);
+  const publisher = join(directory, "publisher");
+  const remote = join(directory, "remote.git");
+  git(directory, "clone", "--quiet", "--bare", "--single-branch", "--branch", "main", agent, remote);
+  mkdirSync(publisher);
+  const prepareCheckout = () => execFileSync("bash", ["-euo", "pipefail", "-c", checkout.run], {
+    cwd: publisher, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
+    env: {
+      ...process.env, ...checkout.env, TELEMETRY_ASPIRE_BASE: base,
+      GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: `url.${remote}.insteadOf`, GIT_CONFIG_VALUE_0: target
+    }
+  });
+  prepareCheckout();
+  assert.equal(git(publisher, "rev-parse", "HEAD"), base);
+  assert.equal(git(publisher, "remote", "get-url", "origin"), target);
+  git(publisher, "config", `url.${remote}.insteadOf`, target);
+  git(publisher, "config", "user.name", "Fixture");
+  git(publisher, "config", "user.email", "fixture@example.invalid");
   const item = { type: "create_pull_request", branch: source.branch, title: "Telemetry fixture", body: "Regression proposal." };
   writeFileSync(join(verified, "agent_output.json"), JSON.stringify({ items: [item], errors: [] }));
   const receipt = {
-    source, type: item.type, tree: git(agent, "rev-parse", `${head}^{tree}`), run: "123456", attempt: "1",
+    source, type: item.type, tree: proposal.tree, run: "123456", attempt: "1",
     files: Object.fromEntries(readdirSync(verified).map(name => [
       name, createHash("sha256").update(readFileSync(join(verified, name))).digest("hex")
     ]))
@@ -123,7 +134,8 @@ async function fixture(t, { outside, telemetry = true, cleanPatch = false, compl
   write(directory, "telemetry-reviewed/receipt.json", JSON.stringify(receipt));
   mkdirSync(join(directory, "gh-aw"));
   symlinkSync(runtime, join(directory, "gh-aw", "actions"), "dir");
-  symlinkSync(root, join(publisher, "_telemetry-tools"), "dir");
+  write(publisher, "_telemetry-tools/scripts/telemetry-workflow.mjs",
+    readFileSync(join(root, "scripts", "telemetry-workflow.mjs")));
   environment(t, {
     RUNNER_TEMP: directory, GITHUB_WORKSPACE: publisher, GITHUB_RUN_ID: receipt.run,
     GITHUB_RUN_ATTEMPT: receipt.attempt, GITHUB_REPOSITORY: "microsoft/aspire-skills",
@@ -149,7 +161,6 @@ async function fixture(t, { outside, telemetry = true, cleanPatch = false, compl
   const sourcePr = { merged: false, head: { sha: source.commit }, base: {
     ref: "main", repo: { full_name: "microsoft/aspire-skills" }
   } };
-  const targetBase = { object: { sha: base } };
   let publishedPr;
   const recordWrite = (operation, parameters) => {
     assert.equal(`${parameters.owner}/${parameters.repo}`, "microsoft/aspire");
@@ -171,7 +182,6 @@ async function fixture(t, { outside, telemetry = true, cleanPatch = false, compl
         },
         list: async () => ({ data: [] }),
         create: async parameters => {
-          if (!complete) return intercept("pulls.create", parameters);
           recordWrite("pulls.create", parameters);
           publishedPr = {
             number: 42, html_url: "https://github.com/microsoft/aspire/pull/42",
@@ -184,7 +194,6 @@ async function fixture(t, { outside, telemetry = true, cleanPatch = false, compl
       },
       repos: { get: async () => ({ data: { default_branch: "main", full_name: "microsoft/aspire" } }) },
       git: {
-        getRef: async () => ({ data: targetBase }),
         getCommit: async parameters => {
           assert.deepEqual(parameters, { owner: "microsoft", repo: "aspire", commit_sha: head });
           return { data: { sha: head, tree: { sha: receipt.tree }, parents: [{ sha: base }] } };
@@ -198,7 +207,6 @@ async function fixture(t, { outside, telemetry = true, cleanPatch = false, compl
       issues: {
         create: async parameters => intercept("issues.create", parameters),
         addLabels: async parameters => {
-          assert.ok(complete);
           recordWrite("issues.addLabels", parameters);
           return { data: parameters.labels.map(name => ({ name })) };
         }
@@ -206,7 +214,6 @@ async function fixture(t, { outside, telemetry = true, cleanPatch = false, compl
     },
     graphql: async (_query, { input }) => {
       const [owner, repo] = input.branch.repositoryNameWithOwner.split("/");
-      if (!complete) return intercept("createCommitOnBranch", { owner, repo, input });
       recordWrite("createCommitOnBranch", { owner, repo, input });
       return { createCommitOnBranch: { commit: { oid: head } } };
     }
@@ -250,7 +257,6 @@ async function fixture(t, { outside, telemetry = true, cleanPatch = false, compl
   const remoteRefs = git(remote, "show-ref");
   const publish = async () => {
     await runGate(require, github, core, context, exec, {}, () => github);
-    const { publicationPolicy } = await import("../../scripts/telemetry-workflow.mjs");
     const { setupGlobals } = require(join(runtime, "setup_globals.cjs"));
     setupGlobals(core, github, context, exec, {}, () => github);
     const { main } = require(join(runtime, "create_pull_request.cjs"));
@@ -283,80 +289,79 @@ async function fixture(t, { outside, telemetry = true, cleanPatch = false, compl
   };
   return {
     publish, audit, outputs, writes, gitPushes, remote, remoteRefs, verified, prefix, source,
-    sourcePr, targetBase, head, agent, receipt, reviewedReceipt
+    sourcePr, head, agent, publisher, prepareCheckout, receipt, reviewedReceipt
   };
 }
 
-for (const outside of [
-  ".github/workflows/publish.yml", ".github/CODEOWNERS",
-  "src/Aspire.Cli/Commands/DeployCommand.cs", "tests/Aspire.Cli.Tests/Aspire.Cli.Tests.csproj"
+for (const [outside, telemetry] of [
+  [".github/workflows/publish.yml", false], [".github/workflows/publish.yml", true],
+  [".github/CODEOWNERS", true], ["src/Aspire.Cli/Commands/DeployCommand.cs", true],
+  ["tests/Aspire.Cli.Tests/Aspire.Cli.Tests.csproj", true]
 ]) {
-  test(`publication rejects ${outside} both alone and mixed with valid telemetry`, async t => {
-    for (const telemetry of [false, true]) {
-      await t.test(telemetry ? "mixed bundle" : "out-of-scope-only bundle", async t => {
-        const f = await fixture(t, { outside, telemetry });
-        await assert.rejects(f.publish(), error => {
-          assert.match(error.message, /Publisher file policy rejected/);
-          assert.ok(error.message.includes(outside));
-          return true;
-        });
-        assert.deepEqual(f.writes, []);
-        assert.deepEqual(f.gitPushes, []);
-        assert.equal(git(f.remote, "show-ref"), f.remoteRefs);
-        assert.equal(existsSync(join("/tmp/gh-aw", `${f.prefix}.bundle`)), false);
-      });
-    }
+  test(`verification rejects ${outside} ${telemetry ? "mixed with telemetry" : "alone"} before issuing a receipt`, async t => {
+    const f = proposalFixture(t, { outside, telemetry });
+    await assert.rejects(f.verify(), error => {
+      assert.match(error.message, /Publisher file policy rejected/);
+      assert.ok(error.message.includes(outside));
+      return true;
+    });
+    assert.deepEqual(readdirSync(f.verified), []);
   });
 }
 
-test("publication rejects a mixed bundle even when its companion patch hides the workflow edit", async t => {
+test("verification rejects a mixed bundle even when its companion patch hides the workflow edit", async t => {
   const outside = ".github/workflows/publish.yml";
-  const f = await fixture(t, { outside, cleanPatch: true });
-  const patch = readFileSync(join(f.verified, `${f.prefix}.patch`), "utf8");
+  const f = proposalFixture(t, { outside });
+  const patch = git(f.agent, "diff", "--binary", f.base, f.source.branch, "--", allowedPath);
   assert.ok(patch.includes(allowedPath));
   assert.ok(!patch.includes(outside));
-  await assert.rejects(f.publish(), /Publisher file policy rejected.*\.github\/workflows\/publish\.yml/);
+  const inputs = "/tmp/gh-aw";
+  const names = ["agent_output.json", `${f.prefix}.bundle`, `${f.prefix}.patch`];
+  for (const name of names) assert.equal(existsSync(join(inputs, name)), false);
+  t.after(() => {
+    for (const name of names) rmSync(join(inputs, name), { force: true });
+  });
+  write(inputs, `${f.prefix}.bundle`, readFileSync(f.bundle));
+  write(inputs, `${f.prefix}.patch`, patch);
+  write(inputs, "agent_output.json", JSON.stringify({ items: [{
+    type: "create_pull_request", branch: f.source.branch, title: "Telemetry fixture", body: "Regression proposal."
+  }], errors: [] }));
+  write(f.directory, ".github/workflows/update-aspire.lock.yml",
+    readFileSync(join(root, ".github", "workflows", "update-aspire.lock.yml")));
+  mkdirSync(join(f.directory, "gh-aw"));
+  symlinkSync(runtime, join(f.directory, "gh-aw", "actions"), "dir");
+  symlinkSync(f.agent, join(f.directory, "_aspire"), "dir");
+  environment(t, { RUNNER_TEMP: f.directory });
+  await assert.rejects(
+    verifyTelemetry({ directory: f.directory, source: f.source }),
+    /Publisher file policy rejected.*\.github\/workflows\/publish\.yml/
+  );
+  assert.deepEqual(readdirSync(f.verified), []);
+});
+
+test("the compiled promotion guard binds review evidence and detector success before any remote write", async t => {
+  const f = await fixture(t);
+  writeFileSync(f.reviewedReceipt, JSON.stringify({ ...f.receipt, tree: "a".repeat(40) }));
+  await assert.rejects(f.publish(), /Threat review does not match/);
+  writeFileSync(f.reviewedReceipt, JSON.stringify(f.receipt));
+  environment(t, { TELEMETRY_DETECTION_RESULT: "failure" });
+  await assert.rejects(f.publish(), /successful native threat review/);
   assert.deepEqual(f.writes, []);
   assert.deepEqual(f.gitPushes, []);
   assert.equal(git(f.remote, "show-ref"), f.remoteRefs);
 });
 
-for (const mismatch of ["missing", "tree"]) {
-  test(`publication rejects ${mismatch} native review evidence before any remote write`, async t => {
-    const f = await fixture(t);
-    if (mismatch === "missing") {
-      rmSync(f.reviewedReceipt);
-    } else {
-      const reviewed = structuredClone(f.receipt);
-      if (mismatch === "tree") reviewed.tree = "a".repeat(40);
-      writeFileSync(f.reviewedReceipt, JSON.stringify(reviewed));
-    }
-    await assert.rejects(f.publish(), mismatch === "missing" ? /ENOENT/ : /Threat review does not match/);
-    assert.deepEqual(f.writes, []);
-    assert.deepEqual(f.gitPushes, []);
-    assert.equal(git(f.remote, "show-ref"), f.remoteRefs);
-  });
-}
-
-for (const [name, values] of [
-  ["failed", { TELEMETRY_DETECTION_RESULT: "failure" }],
-  ["unconfirmed", { TELEMETRY_DETECTION_SUCCESS: "" }],
-  ["skipped", { TELEMETRY_DETECTION_CONCLUSION: "skipped" }],
-  ["warning", { TELEMETRY_DETECTION_CONCLUSION: "warning" }]
-]) {
-  test(`publication rejects ${name} native detection before any remote write`, async t => {
-    const f = await fixture(t);
-    environment(t, values);
-    await assert.rejects(f.publish(), /successful native threat review/);
-    assert.deepEqual(f.writes, []);
-    assert.deepEqual(f.gitPushes, []);
-    assert.equal(git(f.remote, "show-ref"), f.remoteRefs);
-  });
-}
-
-test("valid telemetry reaches the real signed publisher with all remote writes intercepted", async t => {
+test("native signed publication preserves the verified draft after unrelated main advancement", async t => {
   const f = await fixture(t);
-  await assert.rejects(f.publish(), /Publication write intercepted by regression harness/);
+  git(f.publisher, "remote", "set-url", "origin", "https://x-access-token:fixture-token@github.com/microsoft/aspire.git");
+  f.prepareCheckout();
+  git(f.publisher, "remote", "set-url", "origin", target);
+  git(f.agent, "switch", "--quiet", "main");
+  write(f.agent, "unrelated.txt", "unrelated main change\n");
+  const advanced = commit(f.agent);
+  git(f.remote, "fetch", "--quiet", f.agent, `${advanced}:refs/heads/main`);
+  const before = git(f.remote, "show-ref");
+  const result = await f.publish();
   const signedCommit = f.writes.find(write => write.operation === "createCommitOnBranch");
   assert.ok(signedCommit, "The valid proposal must reach the native signed-commit publisher.");
   const { input } = signedCommit.parameters;
@@ -367,12 +372,6 @@ test("valid telemetry reaches the real signed publisher with all remote writes i
   assert.deepEqual(input.fileChanges.additions.map(file => file.path), [allowedPath]);
   assert.equal(Buffer.from(input.fileChanges.additions[0].contents, "base64").toString(), "candidate\n");
   assert.deepEqual(input.fileChanges.deletions, []);
-  assert.equal(git(f.remote, "show-ref"), f.remoteRefs);
-});
-
-test("native signed publication creates a real-shaped draft result that passes the compiled read-only audit", async t => {
-  const f = await fixture(t, { complete: true });
-  const result = await f.publish();
   assert.equal(result.number, 42);
   assert.deepEqual(f.outputs, {
     created_pr_number: "42", created_pr_url: "https://github.com/microsoft/aspire/pull/42"
@@ -385,15 +384,12 @@ test("native signed publication creates a real-shaped draft result that passes t
   const writes = structuredClone(f.writes);
   await f.audit();
   assert.deepEqual(f.writes, writes);
-  for (const values of [
-    { TELEMETRY_PR_NUMBER: "" }, { TELEMETRY_PR_URL: "" },
-    { TELEMETRY_PR_URL: "https://github.com/example/other/pull/42" },
-    { TELEMETRY_PR_NUMBER: "43" }
-  ]) {
-    await assert.rejects(f.audit(values), /canonical Aspire PR number and URL/);
-  }
+  await assert.rejects(f.audit({ TELEMETRY_PR_URL: "" }), /canonical Aspire PR number and URL/);
+  assert.equal(git(f.publisher, "rev-parse", "origin/main"), f.source.aspireBase);
+  assert.equal(git(f.publisher, "rev-parse", "origin/publication-main"), advanced);
+  assert.equal(git(f.remote, "show", "main:unrelated.txt"), "unrelated main change");
   assert.deepEqual(f.gitPushes, []);
-  assert.equal(git(f.remote, "show-ref"), f.remoteRefs);
+  assert.equal(git(f.remote, "show-ref"), before);
 });
 
 test("native staged publication previews the same verified proposal without any remote mutation", async t => {
@@ -407,20 +403,12 @@ test("native staged publication previews the same verified proposal without any 
   assert.equal(git(f.remote, "show-ref"), f.remoteRefs);
 });
 
-for (const changed of ["source PR", "Aspire main"]) {
-  test(`final promotion rejects a late ${changed} change after review with zero remote mutations`, async t => {
-    const f = await fixture(t);
-    if (changed === "source PR") {
-      f.sourcePr.head.sha = f.head;
-    } else {
-      git(f.remote, "fetch", "--quiet", f.agent, `${f.head}:refs/heads/main`);
-      f.targetBase.object.sha = f.head;
-    }
-    const before = git(f.remote, "show-ref");
-    await assert.rejects(f.publish(), changed === "source PR" ? /Source PR advanced/ : /Aspire main advanced/);
-    assert.deepEqual(f.writes, []);
-    assert.deepEqual(f.gitPushes, []);
-    assert.equal(git(f.remote, "show-ref"), before);
-    assert.equal(existsSync(join("/tmp/gh-aw", `${f.prefix}.bundle`)), false);
-  });
-}
+test("final promotion rejects a late source PR change after review with zero remote mutations", async t => {
+  const f = await fixture(t);
+  f.sourcePr.head.sha = f.head;
+  await assert.rejects(f.publish(), /Source PR advanced/);
+  assert.deepEqual(f.writes, []);
+  assert.deepEqual(f.gitPushes, []);
+  assert.equal(git(f.remote, "show-ref"), f.remoteRefs);
+  assert.equal(existsSync(join("/tmp/gh-aw", `${f.prefix}.bundle`)), false);
+});

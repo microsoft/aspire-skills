@@ -382,8 +382,6 @@ safe-outputs:
         ref: ${{ github.workflow_sha }}
         path: _telemetry-tools
         persist-credentials: false
-    - name: Install trusted publication validator dependency
-      run: npm ci --ignore-scripts --no-audit --no-fund --prefix _telemetry-tools
     - uses: actions/download-artifact@v8.0.1
       with:
         name: telemetry-verified-proposal

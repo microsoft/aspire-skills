@@ -398,8 +398,6 @@ export async function promoteVerifiedProposal({ github, directory, source, recei
     throw new Error("Source PR advanced after the immutable snapshot; run verification again.");
   }
   if (item.type === "create_pull_request") {
-    const { data: base } = await github.rest.git.getRef({ ...targetRepository, ref: "heads/main" });
-    if (base.object.sha !== source.aspireBase) throw new Error("Aspire main advanced; run verification again.");
     const prefix = `aw-microsoft-aspire-${source.branch}`;
     const bundle = join(verified, `${prefix}.bundle`);
     git(directory, ["fetch", "--no-tags", bundle, `refs/heads/${source.branch}:refs/telemetry/verified`]);
@@ -408,13 +406,6 @@ export async function promoteVerifiedProposal({ github, directory, source, recei
         git(directory, ["rev-list", "--count", `${source.aspireBase}..refs/telemetry/verified`]).trim() !== "1") {
       throw new Error("Published bundle must contain exactly the tested tree on the verified base.");
     }
-    const actions = join(process.env.RUNNER_TEMP, "gh-aw", "actions");
-    const { checkFileProtectionPostApply } = require(join(actions, "manifest_file_helpers.cjs"));
-    inspectProposal({
-      directory, base: source.aspireBase,
-      head: sha(git(directory, ["rev-parse", "refs/telemetry/verified"]).trim()),
-      policy: await publicationPolicy(), checkFiles: checkFileProtectionPostApply
-    });
     pinPublicationBase(directory, source.aspireBase);
   }
   const artifactDirectory = "/tmp/gh-aw";
