@@ -164,7 +164,7 @@ builder.AddViteApp("frontend", "../frontend")
 | `AddNetworkSecurityPerimeter("nsp").WithAccessRule(...)` + `resource.WithNetworkSecurityPerimeter(nsp)` | NSP for Storage / Key Vault / Cosmos / SQL |
 | `AddAzureKubernetesEnvironment("aks").WithSystemNodePool(sku, minCount, maxCount)` | AKS hosting |
 | `AddPromptAgent(...)` | Azure AI Foundry Prompt Agent (replaces non-functional `AddAndPublishPromptAgent`) |
-| `resource.WithPrivateEndpoint()` | Now supported on ACR, Azure OpenAI, AI Foundry |
+| `var subnet = builder.AddAzureVirtualNetwork("vnet").AddSubnet("pe", "10.0.1.0/24");` + `subnet.AddPrivateEndpoint(acr)` | Private endpoint from a subnet to a supported target such as ACR, Azure OpenAI, or AI Foundry (`Aspire.Hosting.Azure.Network`) |
 
 ## Lifecycle Hooks
 
