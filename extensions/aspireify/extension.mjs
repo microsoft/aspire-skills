@@ -9,6 +9,7 @@ import { basename, dirname, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CanvasError, createCanvas, joinSession } from "@github/copilot-sdk/extension";
 import {
+    assignResourceNames,
     classifyServiceKind,
     exactType,
     freezeSnapshot,
@@ -2314,7 +2315,11 @@ const aspireifyCanvas = createCanvas({
                         "This scan result is stale. Re-run the latest scan request before loading discovery.",
                     );
                 }
-                const incomingServices = context.input.services.map(normalizeService);
+                const resourceNames = assignResourceNames(context.input.services);
+                const incomingServices = context.input.services.map((service, index) => ({
+                    ...normalizeService(service, index),
+                    resourceName: resourceNames[index],
+                }));
                 const serviceIds = new Set();
                 for (const service of incomingServices) {
                     if (!service.id) {

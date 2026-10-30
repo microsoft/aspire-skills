@@ -12,7 +12,7 @@ export function exactType(value, fallback = "") {
     return String(value ?? "").trim() || fallback;
 }
 
-export function resourceNameFrom(value, index) {
+function derivedResourceName(value) {
     const normalized = String(value ?? "")
         .trim()
         .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
@@ -20,10 +20,37 @@ export function resourceNameFrom(value, index) {
         .replace(/^-+|-+$/g, "")
         .toLowerCase();
     if (!normalized) {
-        return `service-${index + 1}`;
+        return "";
     }
     const prefixed = /^[a-z]/.test(normalized) ? normalized : `service-${normalized}`;
     return prefixed.slice(0, 64).replace(/-+$/g, "");
+}
+
+export function resourceNameFrom(value, index) {
+    return derivedResourceName(value) || `service-${index + 1}`;
+}
+
+// Fallback names for services without ASCII letters or digits must not collide with
+// names derived from, or supplied for, any other service in the same discovery.
+export function assignResourceNames(services) {
+    const names = services.map((service) =>
+        service?.resourceName == null
+            ? derivedResourceName(service?.name)
+            : String(service.resourceName).trim(),
+    );
+    const taken = new Set(names.filter(Boolean).map((name) => name.toLowerCase()));
+    return names.map((name, index) => {
+        if (name || services[index]?.resourceName != null) {
+            return name;
+        }
+        let candidate = index + 1;
+        while (taken.has(`service-${candidate}`)) {
+            candidate += 1;
+        }
+        const fallback = `service-${candidate}`;
+        taken.add(fallback);
+        return fallback;
+    });
 }
 
 export function presentationMode(proposal) {

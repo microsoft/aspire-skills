@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resourceNameFrom } from "../../extensions/aspireify/proposal-model.mjs";
+import { assignResourceNames, resourceNameFrom } from "../../extensions/aspireify/proposal-model.mjs";
 
 const VALID_RESOURCE_NAME = /^[a-z](?:[a-z0-9]|-(?!-))*(?<!-)$/;
 
@@ -20,4 +20,31 @@ test("ASCII service names keep their existing default resource names", () => {
     assert.equal(resourceNameFrom("Café", 3), "caf");
     assert.equal(resourceNameFrom(`a${"-b".repeat(40)}`, 4).length <= 64, true);
     assert.match(resourceNameFrom(`a${"-b".repeat(40)}`, 4), VALID_RESOURCE_NAME);
+});
+
+test("fallback resource names skip names derived or supplied for other services", () => {
+    const names = assignResourceNames([
+        { name: "Service 2" },
+        { name: "注文サービス" },
+        { name: "在庫サービス" },
+        { name: "Billing", resourceName: "service-3" },
+        { name: "🚀" },
+    ]);
+
+    assert.deepEqual(names, ["service-2", "service-4", "service-5", "service-3", "service-6"]);
+    assert.equal(new Set(names).size, names.length);
+    for (const name of names) {
+        assert.match(name, VALID_RESOURCE_NAME);
+    }
+});
+
+test("resource name allocation keeps supplied and ASCII-derived names unchanged", () => {
+    assert.deepEqual(
+        assignResourceNames([
+            { name: "OrderApi" },
+            { name: "Contoso.Web", resourceName: " web " },
+            { name: "注文サービス" },
+        ]),
+        ["order-api", "web", "service-3"],
+    );
 });
