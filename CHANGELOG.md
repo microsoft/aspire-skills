@@ -13,6 +13,11 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Gave discovered services whose names contain no ASCII letters or digits distinct
   default resource names in the Aspireify canvas. Previously they all defaulted to
   `service`, so their names collided and proposal retries were rejected.
+- Kept running AppHost resources in a warning state while their health checks are
+  still pending, instead of reporting them as errors before the first check returns.
+- Stopped Aspire AppHosts error redaction from mangling URLs and words that only
+  contain a private root name, such as `https://aspire.dev/data/connect` or
+  `.../aspire/app-host/overview`; whole POSIX paths under those roots are still withheld.
 - Stopped the Aspireify canvas from classifying Node.js, TypeScript, Python, and
   container services as .NET when their type label also mentions gRPC or a worker
   service. These services no longer default to .NET Service Defaults, and they keep

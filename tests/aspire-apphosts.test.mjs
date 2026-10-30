@@ -252,6 +252,73 @@ test("resource status prefers lifecycle and current health checks over stale agg
     });
 });
 
+test("pending health checks keep a running resource in a warning state", () => {
+    const projected = projectDescribePayload({
+        resources: [
+            {
+                name: "api",
+                resourceType: "Project",
+                state: "Running",
+                // Aspire reports aggregate Unhealthy until the first registered check returns.
+                healthStatus: "Unhealthy",
+                healthReports: { ready: { status: null } },
+            },
+            {
+                name: "web",
+                resourceType: "Project",
+                state: "Running",
+                healthStatus: "Unhealthy",
+                healthReports: { live: { status: "Unhealthy" }, ready: { status: null } },
+            },
+            {
+                name: "tool",
+                resourceType: "Executable",
+                state: "NotStarted",
+                healthReports: { ready: {} },
+            },
+            {
+                name: "worker",
+                resourceType: "Project",
+                state: "Exited",
+                healthReports: { live: { status: "Healthy" }, ready: { status: null } },
+            },
+        ],
+    });
+    const nodes = buildResourceTree(projected.resources, "host");
+    const byName = new Map(nodes.map((node) => [node.label, node]));
+    const healthChecks = (node) => node.children
+        .find((child) => child.kind === "health-group").children;
+
+    assert.deepEqual(projected.resources.find((resource) => resource.name === "api").healthReports,
+        [{ name: "ready", status: "Pending" }]);
+    assert.equal(byName.get("api").tone, "warning");
+    assert.equal(byName.get("api").icon, "warning");
+    assert.equal(byName.get("api").healthLabel, "0/1 healthy");
+    assert.equal(byName.get("api").healthTone, "warning");
+    assert.deepEqual(
+        healthChecks(byName.get("api")).map(({ statusLabel, icon, tone }) => ({ statusLabel, icon, tone })),
+        [{ statusLabel: "Pending", icon: "loading", tone: "warning" }],
+    );
+    assert.equal(byName.get("web").tone, "error");
+    assert.equal(byName.get("web").healthTone, "error");
+    assert.equal(byName.get("tool").tone, "inactive");
+    assert.equal(byName.get("tool").healthLabel, "Not checked");
+    assert.equal(byName.get("tool").healthTone, "inactive");
+    assert.deepEqual(
+        healthChecks(byName.get("tool")).map(({ statusLabel, icon, tone }) => ({ statusLabel, icon, tone })),
+        [{ statusLabel: "Not checked", icon: "record", tone: "inactive" }],
+    );
+    assert.equal(byName.get("worker").healthLabel, "Not checked");
+    assert.equal(byName.get("worker").healthTone, "inactive");
+    assert.deepEqual(projected.summary, {
+        total: 4,
+        healthy: 0,
+        warning: 1,
+        error: 1,
+        inactive: 2,
+    });
+});
+
 test("resource graph layers dependencies before dependents and preserves relationship semantics", () => {
     const resources = projectDescribePayload({
         resources: [
@@ -620,6 +687,25 @@ test("redactAbsolutePaths handles delimited Windows and POSIX paths without swal
         redactAbsolutePaths("open /Users/jane doe/secrets.txt failed"),
         "open [path withheld] failed",
     );
+});
+
+test("redactAbsolutePaths keeps URLs and words that merely contain private root names", () => {
+    for (const text of [
+        "See https://learn.microsoft.com/dotnet/aspire/app-host/overview for details",
+        "Dashboard: http://localhost:5000/application/status",
+        "Read https://aspire.dev/data/connect first",
+        "Saved notes to ./homework/todo.txt",
+        "Run /homework/script.sh",
+        "Open https://app/foo now",
+        "Proxy http://data/foo?x=1",
+        "See https://home/foo and https://Users/bar",
+    ]) {
+        assert.equal(redactAbsolutePaths(text), text);
+    }
+    assert.equal(redactAbsolutePaths("open file:///home/jane/App.AppHost.csproj"), "open file://[path withheld]");
+    assert.equal(redactAbsolutePaths("--project=/home/jane/App.csproj failed"), "--project=[path withheld] failed");
+    assert.equal(redactAbsolutePaths("cwd (/tmp) missing"), "cwd ([path withheld]) missing");
+    assert.equal(redactAbsolutePaths("at C:/Users/jane/App.csproj"), "at C:[path withheld]");
 });
 
 test("redactKnownPaths consumes private path suffixes", () => {
