@@ -49,6 +49,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Corrected Aspireify's TypeScript Foundry example to use the exported
   `addFoundry(...).addDeployment(...)` APIs instead of nonexistent
   `addAzureFoundry(...).addModel(...)`.
+- Fixed service-defaults detection to match template-generated `<App>.ServiceDefaults`
+  projects (`IsAspireSharedProject` and `*.ServiceDefaults.csproj` references) instead
+  of a nonexistent `Aspire.ServiceDefaults` package that matched nothing.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including

@@ -2,7 +2,7 @@
   "skills": [
     {
       "name": "aspire",
-      "version": "sha512-510be11eaaba835b4e0f680fc53090dba5f14375eb1a2663e972d1fe656b6298f4beb692c5170a7dd3d357dae07d4e59801b79e2ef848b6141a37578bbb031ba",
+      "version": "sha512-e35f2ab430414370d4d31ceff5e8a6a412d7cb47344294f4328830b8f7f3c62adbef5fe454be12ceb645962f7c662a21f5664ed29ef8a78f35682284c38e19bf",
       "files": [
         "aspire.md",
         "references/aspire-13-3-breaking-changes.md",
@@ -46,7 +46,7 @@
     },
     {
       "name": "aspire-orchestration",
-      "version": "sha512-b78f8c5b97f554b279b1bac5f4a3b08889d3b713e5053513f6a7a3c23a97b9c09159c861c1d91e1130f19de856c35f42036bb626fe3d0130375fb5defe35d786",
+      "version": "sha512-154dc17a5202579b05c94e66e7f41363f7c58191614abb45b0254d09a584bcb9308d1149878882f2466871575c13b6b67f7982fe33024ddc50eb45874e8fb80d",
       "files": [
         "aspire-orchestration.md",
         "references/agent-workflows.md",
