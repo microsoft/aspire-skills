@@ -26,8 +26,11 @@ jobs:
       contents: read
       copilot-requests: write
     # Keep fork code out of the job that can make organization-billed model requests.
+    # Allow maintainer pushes on Dependabot PRs, but not Dependabot-triggered events.
     # Do not replace pull_request with pull_request_target to bypass this.
-    if: github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name &&
+      github.actor != 'dependabot[bot]'
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

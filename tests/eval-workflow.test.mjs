@@ -141,11 +141,11 @@ for (const name of workflows) {
   });
 }
 
-test("PR evaluations allow same-repository Dependabot PRs but exclude forks without privileged triggers", () => {
+test("PR evaluations allow Dependabot authors but exclude forks and Dependabot actors without privileged triggers", () => {
   const workflow = readWorkflow("skill-eval.yml");
   assert.match(workflow, /^  pull_request:/m);
   assert.equal(parse(workflow).jobs.eval.if,
-    "github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name");
+    "github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name && github.actor != 'dependabot[bot]'");
   assert.doesNotMatch(workflow, /^\s*(pull_request_target|workflow_run):/m);
   assert.match(workflow, /gh pr diff/);
 });
