@@ -591,9 +591,10 @@ export function redactAbsolutePaths(value) {
         .replace(/(["'`])\/(?:Users|home|tmp|var|private|opt|usr|mnt|Volumes|workspaces|srv|data|app)\/[^"'`\r\n]+\1/g, "$1[path withheld]$1")
         .replace(
             // Only whole root segments at a path start: URL paths such as
-            // https://host/app-host and words such as /homework are not local paths.
+            // https://host/app-host, URL hosts such as https://app/, and words such as
+            // /homework are not local paths.
             new RegExp(
-                `(?<![A-Za-z0-9._~%+-])\\/(?:Users|home|tmp|var|private|opt|usr|mnt|Volumes|workspaces|srv|data|app)`
+                `(?<![A-Za-z0-9._~%+-])(?<!:\\/)\\/(?:Users|home|tmp|var|private|opt|usr|mnt|Volumes|workspaces|srv|data|app)`
                 + `(?![A-Za-z0-9._-])${PATH_TAIL_PATTERN}`,
                 "g",
             ),

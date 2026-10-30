@@ -629,6 +629,9 @@ test("redactAbsolutePaths keeps URLs and words that merely contain private root 
         "Read https://aspire.dev/data/connect first",
         "Saved notes to ./homework/todo.txt",
         "Run /homework/script.sh",
+        "Open https://app/foo now",
+        "Proxy http://data/foo?x=1",
+        "See https://home/foo and https://Users/bar",
     ]) {
         assert.equal(redactAbsolutePaths(text), text);
     }
