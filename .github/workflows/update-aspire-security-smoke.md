@@ -119,7 +119,7 @@ jobs:
               },
               directory: process.env.GITHUB_WORKSPACE
             });
-            if (source.merged || source.commit !== "53dac813359bccf1ae47e45f1c43922b6ba8aa44" ||
+            if (source.merged || source.commit !== "a5dd6c82e3bba6930eb759442f0a9cb9a0ec7d1d" ||
                 source.base !== "02d82d2de9ba787eeba1e2577be8377308b1b889") {
               throw new Error("PR 111 changed from the approved snapshot; do not mix revisions.");
             }
