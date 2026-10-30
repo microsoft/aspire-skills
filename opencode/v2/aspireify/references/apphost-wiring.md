@@ -349,8 +349,10 @@ This prevents data loss when restarting the AppHost — the container stays runn
 **TypeScript equivalent:**
 
 ```typescript
+import { ContainerLifetime } from './.aspire/modules/aspire.mjs';
+
 const db = await builder.addPostgres("pg")
-    .withLifetime("persistent");
+    .withLifetime(ContainerLifetime.Persistent);
 ```
 
 Recommend persistent lifetime for databases and caches during local development.

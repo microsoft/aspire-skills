@@ -175,7 +175,7 @@ Endpoints expose `url`, `host`, and `port` properties usable inside expressions:
 const api = await builder.addProject('api', '../Api/Api.csproj');
 const httpEndpoint = api.getEndpoint('http');
 
-await builder.addNodeApp('worker', 'worker.js')
+await builder.addNodeApp('worker', './worker', 'worker.js')
     .withEnvironment('API_BASE', httpEndpoint.url)
     .withEnvironment('API_HOST', httpEndpoint.host)
     .withEnvironment('API_PORT', httpEndpoint.port);
@@ -183,13 +183,16 @@ await builder.addNodeApp('worker', 'worker.js')
 
 ## Endpoint Update Behavior
 
-`withEndpoint('name', cb)` updates an existing endpoint rather than throwing.
-Use the `excludeReferenceEndpoint` flag to keep admin endpoints out of
-`withReference()`:
+`withEndpointCallback('name', cb)` updates an existing endpoint rather than
+throwing (and creates it unless `{ createIfNotExists: false }` is passed).
+`withEndpoint(...)` only takes an options object. Set the
+`excludeReferenceEndpoint` flag to keep admin endpoints out of `withReference()`:
 
 ```ts
 await builder.addProject('api', '../Api/Api.csproj')
-    .withEndpoint('admin', e => { e.excludeReferenceEndpoint = true; });
+    .withEndpointCallback('admin', async e => {
+        await e.excludeReferenceEndpoint.set(true);
+    });
 ```
 
 ## JavaScript / TypeScript Frontends
@@ -294,14 +297,15 @@ await builder.addContainer('netshoot', 'nicolaka/netshoot')
 
 ```ts
 // Diagnostic ASPIREDOCKERFILEBUILDER001 — experimental warning
-await builder.addDockerfileBuilder('myimage')
-    .withDockerfileBuilder(b => b
-        .from('node:20-alpine')
-        .workdir('/app')
-        .copy('package*.json', './')
-        .run('npm ci')
-        .copy('.', '.')
-        .cmd(['node', 'server.js']));
+await builder.addDockerfileBuilder('myimage', '.', async context => {
+    const dockerfile = await context.builder();
+    const stage = await dockerfile.from('node:20-alpine');
+    await stage.workDir('/app');
+    await stage.copy('package*.json', './');
+    await stage.run('npm ci');
+    await stage.copy('.', '.');
+    await stage.cmd(['node', 'server.js']);
+});
 ```
 
 ## YARP Routing
@@ -323,11 +327,15 @@ await builder.addProject('api', '../Api/Api.csproj')
     .withComputeEnvironment(aca);
 ```
 
-ACA custom domain configuration is exposed in TS:
+ACA custom domain configuration is exposed in TS on the generated container app.
+`withComputeEnvironment` only accepts the environment:
 
 ```ts
-await api.withComputeEnvironment(aca, e => {
-    e.customDomains = [{ name: 'api.example.com', certificate: cert }];
+const customDomain = await builder.addParameter('customDomain');
+const certificateName = await builder.addParameter('certificateName');
+
+await api.publishAsAzureContainerApp(async (infrastructure, app) => {
+    await app.configureCustomDomain(customDomain, certificateName);
 });
 ```
 
