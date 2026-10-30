@@ -61,6 +61,7 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Replaced the nonexistent `resource.WithPrivateEndpoint()` in Aspireify's C#
   authoring reference with Aspire's subnet-based `subnet.AddPrivateEndpoint(target)` API,
   including the `Aspire.Hosting.Azure.Network` package reference and `ASPIREAZURE003` opt-in.
+  Aspireify's authoring rules now route private endpoint requests to that API instead of raw Bicep.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including

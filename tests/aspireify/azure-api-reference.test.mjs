@@ -29,3 +29,20 @@ test("C# authoring documents private endpoints with the subnet-owned Aspire API"
   assert.match(optIn[1], /AddAzureVirtualNetwork\([^)]*\)\.AddSubnet\([^)]*\)/);
   assert.match(optIn[1], /\bsubnet\.AddPrivateEndpoint\(\w+\)/);
 });
+
+test("Aspireify routes Azure private endpoint requests to the subnet-owned Aspire API", () => {
+  const skill = read("skills/aspireify/SKILL.md");
+  const rules = /^## Current Authoring Rules\n([\s\S]*?)(?=^## )/m.exec(skill)?.[1];
+  assert.ok(rules, "Missing Current Authoring Rules section");
+
+  // Without a rule here, agents never open the Azure-Specific reference and fall back to raw Bicep
+  // or hand-built ConfigureInfrastructure networking (aspireify-private-endpoint-001).
+  const row = rules.split("\n").find(line => /private endpoint/i.test(line));
+  assert.ok(row, "Missing private endpoint authoring rule");
+  assert.match(row, /AddAzureVirtualNetwork\([^)]*\)\.AddSubnet\([^)]*\)/);
+  assert.match(row, /\bsubnet\.AddPrivateEndpoint\(\w+\)/);
+  assert.match(row, /Aspire\.Hosting\.Azure\.Network/);
+  assert.match(row, /ASPIREAZURE003/);
+  assert.match(row, /references\/csharp-authoring\.md#azure-specific/);
+  assert.match(row, /Bicep/);
+});
