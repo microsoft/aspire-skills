@@ -18,6 +18,10 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Enable Git symlinks on Windows
+        if: runner.os == 'Windows'
+        run: git config --global core.symlinks true
+
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
@@ -33,4 +37,6 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Test
+        env:
+          CHROME_BIN: ${{ runner.os == 'Linux' && '/usr/bin/google-chrome' || '' }}
         run: npm test

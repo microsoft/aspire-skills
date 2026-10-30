@@ -224,16 +224,8 @@ noninteractive path before calling prompt APIs.
 
 ## Experimental Terminals
 
-`WithTerminal()` exposes an interactive dashboard/CLI terminal. Suppress
-`ASPIRETERMINAL001`, keep `Columns` and `Rows` positive, and do not generate the removed
-`TerminalOptions.Shell` property:
-
-```csharp
-#pragma warning disable ASPIRETERMINAL001
-builder.AddContainer("repl", "my-repl")
-    .WithTerminal(options =>
-    {
-        options.Columns = 120;
-        options.Rows = 30;
-    });
-```
+Invoke [`aspire-terminals`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-terminals/SKILL.md)
+for resource `WithTerminal`, auxiliary `TerminalService` dock/dialog/headless
+sessions, terminal prompts, REPLs and automation. It owns the capability checks,
+narrowly paired `ASPIRETERMINAL001` suppression and process lifetimes.
+Nonterminal Interaction Service prompts remain in this skill.

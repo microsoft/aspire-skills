@@ -223,6 +223,8 @@ aspire otel logs --dashboard-url https://my-dashboard.example.com --api-key "$DA
   telemetry without pausing live streams.
 - Console-log pages support text search.
 - `WithTerminal()` resources use the experimental interactive terminal view.
+  Route terminal authoring/input, dock/dialog sessions and tapes to `aspire-terminals`;
+  console logs and telemetry diagnostics remain in monitoring.
 - The dashboard AI Assistant was removed. Configure agents with `aspire agent init`.
 - The VS Code Aspire extension no longer auto-opens the dashboard; use its in-editor view
   or opt in through `dashboardBrowser` / `launch.json`.

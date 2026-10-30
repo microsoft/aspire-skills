@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { test } from "node:test";
 import vm from "node:vm";
+import { execFile } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
+import { sanitizeCommandArgumentInputs, validateCommandArguments } from "../extensions/aspire-apphosts/lib/app-model.mjs";
 
 const rendererSource = await readFile(new URL("../extensions/aspire-apphosts/ui/app.js", import.meta.url), "utf8");
 const markup = await readFile(new URL("../extensions/aspire-apphosts/ui/index.html", import.meta.url), "utf8");
 const styles = await readFile(new URL("../extensions/aspire-apphosts/ui/styles.css", import.meta.url), "utf8");
+const sharedStyles = await readFile(new URL("../extensions/aspire-apphosts/ui/canvas-theme.css", import.meta.url), "utf8");
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 // A bounded DOM/event adapter for executing the shipped renderer without a browser dependency.
@@ -277,7 +284,7 @@ function createRenderer({ transitions = false } = {}) {
     return {
         context, document, copied, requests, timers, frames, queuedTransitions,
         streamEvent: (name) => streams[0].handlers.get(name)(),
-        evaluate: (source) => vm.runInContext(source, context),
+        evaluate: (source, options) => vm.runInContext(source, context, options),
         state: () => vm.runInContext("modelState", context),
         request: (path) => {
             const request = requests.find((request) => request.path === path && request.resolve && !request.done);
@@ -512,6 +519,46 @@ test("dependency edits immediately invalidate a pending load before the next deb
     assert.equal(button(renderer.document.body, "Run command").disabled, false);
 });
 
+test("committing normalized dependency text preserves pending and loaded metadata", async () => {
+    const renderer = await boot();
+    await openCommand(renderer);
+    enterField(renderer, "environment", "  production  ");
+    await renderer.advance(250);
+    const load = renderer.request("/api/command-inputs");
+    enterField(renderer, "environment", "  production  ", "change");
+    await renderer.respond(load, { ok: true, inputs: inputs() });
+    assert.equal(renderer.document.querySelector('[name="environment"]').value, "production");
+    assert.equal(button(renderer.document.body, "Run command").disabled, false);
+
+    enterField(renderer, "environment", "  production  ");
+    assert.equal(button(renderer.document.body, "Run command").disabled, false);
+    enterField(renderer, "environment", "  production  ", "change");
+    await renderer.advance(250);
+    assert.equal(renderer.requests.filter((request) => request.path === "/api/command-inputs").length, 2);
+    button(renderer.document.body, "Run command").click();
+    assert.deepEqual(renderer.request("/api/command").body.arguments, { environment: "production", target: "east" });
+});
+
+test("whitespace edits to secret dependencies still invalidate metadata", async () => {
+    const renderer = await boot();
+    const fields = inputs();
+    fields[0] = { ...fields[0], inputType: "SecretText" };
+    await renderer.push({ type: "state", state: commandSnapshot(2, fields) });
+    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
+    button(renderer.document.body, "Continue").click();
+    enterField(renderer, "environment", "  token  ");
+    await renderer.advance(250);
+    await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
+    enterField(renderer, "environment", "token");
+    assert.equal(button(renderer.document.body, "Loading inputs...").disabled, true);
+    await renderer.advance(250);
+    const load = renderer.request("/api/command-inputs");
+    assert.equal(load.body.arguments.environment, "token");
+    await renderer.respond(load, { ok: true, inputs: fields });
+    assert.equal(button(renderer.document.body, "Run command").disabled, false);
+});
+
 test("secret-gated forms load effective non-secret defaults before Continue", async () => {
     const renderer = await boot();
     const fields = [...inputs(), { name: "token", label: "Token", inputType: "SecretText", value: "never-use-default" }];
@@ -527,6 +574,149 @@ test("secret-gated forms load effective non-secret defaults before Continue", as
     assert.equal(button(renderer.document.body, "Run command").disabled, false);
     button(renderer.document.body, "Run command").click();
     assert.deepEqual(renderer.request("/api/command").body.arguments, load.body.arguments);
+});
+
+test("text defaults match Hosting in command forms without shortening overlength values", async () => {
+    const renderer = await boot();
+    const fields = sanitizeCommandArgumentInputs([
+        { name: "message", inputType: "Text", value: "  hello world  ", maxLength: 5 },
+    ]);
+    await renderer.push({ type: "state", state: commandSnapshot(2, fields) });
+    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    assert.equal(renderer.document.querySelector('[name="message"]').value, "hello world");
+    assert.equal(renderer.document.querySelector('[name="message"]').getAttribute("maxLength"), null);
+    button(renderer.document.body, "Run command").click();
+    assert.deepEqual(renderer.request("/api/command").body.arguments, { message: "hello world" });
+});
+
+test("number defaults remain visible and submit without browser-only normalization", async () => {
+    const renderer = await boot();
+    const value = "\uFEFF12\uFEFF";
+    await renderer.push({ type: "state", state: commandSnapshot(2, [
+        { name: "count", label: "Count", inputType: "Number", value },
+    ]) });
+    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    const control = renderer.document.querySelector('[name="count"]');
+    assert.equal(control.type, "text");
+    assert.equal(control.getAttribute("inputmode"), "decimal");
+    assert.equal(control.value, value);
+    button(renderer.document.body, "Run command").click();
+    assert.deepEqual(renderer.request("/api/command").body.arguments, { count: value });
+    const result = validateCommandArguments({ argumentInputs: [
+        { name: "count", label: "Count", inputType: "Number" },
+    ] }, renderer.request("/api/command").body.arguments);
+    assert.deepEqual(result.errors, []);
+    assert.deepEqual(result.values, { count: 12 });
+});
+
+test("native browser displays exactly the number value submitted by an untouched form", {
+    skip: !process.env.CHROME_BIN && "Set CHROME_BIN to a Chromium executable for native-browser regressions.",
+}, async (t) => {
+    const directory = await mkdtemp(join(tmpdir(), "apphosts-number-browser-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const setup = `
+        window.commandRequests = [];
+        window.fetch = (path, options) => {
+            if (path === "/api/command") commandRequests.push(JSON.parse(options.body));
+            return new Promise(() => {});
+        };
+        window.EventSource = class { addEventListener() {} };
+    `;
+    const regression = `
+        try {
+            for (const [index, value] of ["\\uFEFF12\\uFEFF", "12", "1.5", "-2", "1e2", "", "invalid"].entries()) {
+                commandRunning = false;
+                const node = {
+                    id: "number-" + index, label: "Number regression",
+                    appHostId: "host", resourceName: "api", commandName: "inspect",
+                    command: { argumentInputs: [{ name: "count", label: "Count", inputType: "Number", value }] },
+                };
+                const panel = renderCommandPanel(node);
+                document.body.append(panel);
+                const control = panel.querySelector('[name="count"]');
+                if (control.value !== value) {
+                    throw new Error("Visible default differs: " + JSON.stringify({ value, visible: control.value }));
+                }
+                panel.querySelector('button[type="submit"]').click();
+                if (commandRequests.at(-1)?.arguments.count !== control.value) {
+                    throw new Error("Submitted value differs from visible default");
+                }
+                panel.remove();
+            }
+            document.body.dataset.numberRegression = "passed";
+        } catch (error) {
+            document.body.dataset.numberRegression = error.message;
+        }
+    `;
+    const script = (source) => `<script>${source.replaceAll("</script", "<\\/script")}</script>`;
+    const html = markup.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+        .replace(/<link\b[^>]*>/gi, "")
+        .replace("</body>", `${script(setup)}${script(rendererSource)}${script(regression)}</body>`);
+    const file = join(directory, "number.html");
+    await writeFile(file, html);
+    const { stdout } = await promisify(execFile)(process.env.CHROME_BIN, [
+        "--headless", "--disable-gpu",
+        ...(process.getuid?.() === 0 ? ["--no-sandbox"] : []),
+        `--user-data-dir=${join(directory, "profile")}`,
+        "--dump-dom", pathToFileURL(file).href,
+    ], { timeout: 30_000, maxBuffer: 2_000_000 });
+    assert.equal(stdout.match(/data-number-regression="([^"]*)"/)?.[1], "passed",
+        "Native-browser number regression failed.");
+});
+
+test("committing a text edit normalizes it without trimming spaces while typing", async () => {
+    const renderer = await boot();
+    await renderer.push({ type: "state", state: commandSnapshot(2, [
+        { name: "message", label: "Message", inputType: "Text" },
+    ]) });
+    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    enterField(renderer, "message", "  hello ");
+    assert.equal(renderer.document.querySelector('[name="message"]').value, "  hello ");
+    enterField(renderer, "message", "\u0085  hello world  \u0085", "change");
+    assert.equal(renderer.document.querySelector('[name="message"]').value, "hello world");
+    button(renderer.document.body, "Run command").click();
+    assert.deepEqual(renderer.request("/api/command").body.arguments, { message: "hello world" });
+});
+
+test("long interior whitespace does not block command editing or submission", async () => {
+    const renderer = await boot();
+    await renderer.push({ type: "state", state: commandSnapshot(2, [
+        { name: "message", label: "Message", inputType: "Text" },
+    ]) });
+    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    renderer.evaluate(`(() => {
+        const control = document.querySelector('[name="message"]');
+        control.value = "\\u0085a" + " ".repeat(64000) + "b\\u0085";
+        control.dispatch("input");
+        control.dispatch("change");
+    })()`, { timeout: 1000 });
+    const expected = `a${" ".repeat(64000)}b`;
+    assert.equal(renderer.document.querySelector('[name="message"]').value, expected);
+    button(renderer.document.body, "Run command").click();
+    assert.deepEqual(renderer.request("/api/command").body.arguments, { message: expected });
+});
+
+test("submission normalizes uncommitted text and custom choices while preserving secrets", async () => {
+    const renderer = await boot();
+    await renderer.push({ type: "state", state: commandSnapshot(2, [
+        { name: "message", label: "Message", inputType: "Text" },
+        { name: "region", label: "Region", inputType: "Choice", allowCustomChoice: true, options: [{ value: "west", label: "West" }] },
+        { name: "token", label: "Token", inputType: "SecretText" },
+    ]) });
+    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    button(renderer.document.body, "Continue").click();
+    enterField(renderer, "message", "\u0085  edited message  \u0085");
+    enterField(renderer, "region", "  \uFEFFcustom region\uFEFF  ");
+    enterField(renderer, "token", "  test-token  ");
+    renderer.document.querySelector(".command-form").dispatch("submit");
+    assert.equal(renderer.document.querySelector('[name="message"]').value, "edited message");
+    assert.equal(renderer.document.querySelector('[name="region"]').value, "\uFEFFcustom region\uFEFF");
+    assert.equal(renderer.document.querySelector('[name="token"]').value, "  test-token  ");
+    assert.deepEqual(renderer.request("/api/command").body.arguments, {
+        message: "edited message",
+        region: "\uFEFFcustom region\uFEFF",
+        token: "  test-token  ",
+    });
 });
 
 test("live base schema changes reload an open form and supersede pending old-schema inputs", async () => {
@@ -960,9 +1150,9 @@ test("pipeline focus returns to a live control after the board rerenders, and ol
 });
 
 test("responsive and theme selectors preserve host priority, the official mark, and long parent identity", async () => {
-    assert.match(styles, /@media \(prefers-color-scheme: dark\)[\s\S]*?:root:not\(\[data-color-mode\]\):not\(:has\(body\[data-color-mode\]\)\)/);
-    assert.match(styles, /--surface: var\(--background-color-default, #151b23\)/);
-    assert.match(styles, /--text: var\(--text-color-default, #f0f6fc\)/);
+    assert.match(sharedStyles, /:root:not\(\[data-color-mode\]\):has\(body\[data-color-mode="light"\]\)/);
+    assert.match(sharedStyles, /--surface: var\(--background-color-default, light-dark\(#ffffff, #0d1117\)\)/);
+    assert.match(sharedStyles, /--text: var\(--text-color-default, light-dark\(#1f2328, #f0f6fc\)\)/);
     assert.match(styles, /\.resource-parent\s*\{[^}]*min-width: 0;[^}]*overflow-wrap: anywhere;/);
     assert.match(styles, /\.apphost-heading\s*\{[^}]*max-width: 100%;/);
     assert.match(styles, /\.apphost-heading h2\s*\{[^}]*overflow-wrap: anywhere;[^}]*white-space: normal;/);
@@ -970,8 +1160,12 @@ test("responsive and theme selectors preserve host priority, the official mark, 
     assert.match(styles, /\.host-more-actions\s*\{\s*display: none;/);
     assert.match(styles, /@media \(max-width: 520px\)[\s\S]*?\.host-more-actions\s*\{\s*display: inline-flex;/);
     assert.match(styles, /@media \(max-width: 520px\)[\s\S]*?\.title-row\s*\{[^}]*grid-template-columns: 40px minmax\(0, 1fr\) auto;/);
-    assert.match(markup, /class="brand-mark"[\s\S]*?width="22"\s+height="22"/);
+    assert.match(markup, /class="brand-mark canvas-brand"[\s\S]*?width="22"\s+height="22"/);
     const renderer = await boot();
+    const icon = renderer.context.svgIcon("warning");
+    assert.equal(icon.getAttribute("aria-hidden"), "true");
+    assert.equal(icon.getAttribute("focusable"), "false");
+    assert.equal(icon.children[0].getAttribute("href"), "/canvas-icons.svg#warning");
     const longParent = "LongParent".repeat(80);
     const card = renderer.context.renderResourceCard({
         resource: { id: "child", label: "Child", children: [] }, parentLabel: longParent, dashboardAvailable: false,

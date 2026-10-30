@@ -17,6 +17,12 @@ It helps agents recognize Aspire workspaces, use the Aspire CLI correctly, route
 | `aspire-orchestration` | Starts, stops, waits for, and manages Aspire resources |
 | `aspire-deployment` | Publishes, deploys, and tears down Aspire apps |
 | `aspire-monitoring` | Routes logs, traces, dashboard, telemetry, and diagnostics work |
+| `aspire-terminals` | Authors resource/dock/dialog/headless terminals, reuses REPLs, and automates terminal input and VHS-subset tapes |
+
+`aspire-terminals` covers Aspire 13.5 resource terminals and capability-gated
+13.6 terminal services, prompts, REPLs and tape playback. Its
+[tape reference](skills/aspire-terminals/references/tapes.md) documents Aspire's
+supported VHS syntax and plain-text output formats, not all upstream VHS features.
 
 ### Extensions
 
@@ -62,6 +68,13 @@ aspire agent init --mcp
 ```
 
 In Aspire 13.5, run `aspire agent init` interactively and select the MCP server option; 13.5 has no `--mcp` flag.
+
+The generated skills bundle selects `aspire-terminals` by default alongside
+`aspire`, `aspireify` and `aspire-deployment`. Shipping this in Aspire also requires
+refreshing the CLI's embedded `aspire-skills` archive and metadata in
+`microsoft/aspire`, and aligning `AspireSkillsInstaller` with the published bundle
+version. Repository changes alone do not update an installed CLI's embedded skills;
+verify `aspire agent init` selection with the refreshed CLI before release.
 
 ### GitHub Copilot app
 
@@ -173,6 +186,39 @@ apm install microsoft/aspire-skills
 opencode
 ```
 
+#### Skill catalogs
+
+As an alternative to APM, configure OpenCode to load the skills directly from
+an HTTP catalog. Add the configuration for your OpenCode version to
+`opencode.json` or `opencode.jsonc`, preserving any existing settings.
+
+**OpenCode V2:**
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": [
+    "https://raw.githubusercontent.com/microsoft/aspire-skills/main/opencode/v2/"
+  ]
+}
+```
+
+**OpenCode V1:**
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": {
+    "urls": [
+      "https://raw.githubusercontent.com/microsoft/aspire-skills/main/opencode/v1/"
+    ]
+  }
+}
+```
+
+See OpenCode's [skill sources documentation](https://opencode.ai/v2/docs/skills#sources)
+for configuration guidance.
+
 ### Ollama + Copilot CLI
 
 **Launch Copilot with Ollama:**
@@ -209,6 +255,7 @@ In that command, `-a github-copilot` selects the target agent, `-g` installs glo
 | Path | Purpose |
 |------|---------|
 | `skills/` | Source skill files, references, and evals |
+| `opencode/` | Generated OpenCode V1 and V2 skill catalogs |
 | `docs/` | Documentation |
 | `extensions/` | Source GitHub Copilot app canvas extensions |
 | `hooks/scripts/` | Canonical Aspire CLI agent telemetry hooks |
@@ -218,46 +265,29 @@ In that command, `-a github-copilot` selects the target agent, `-g` installs glo
 
 ## Development
 
+Regenerate the OpenCode catalogs after changing shipped skills, references, or
+assets, and commit the output with the source changes:
+
 ```bash
-npm run bundle
+npm run catalog
+npm run catalog:check
 ```
 
-`npm run bundle` builds both bundle artifacts:
+The catalog check verifies that the committed V1 and V2 catalogs match the
+committed skill source, including file lists and SHA-512 content versions.
 
-| Artifact | Contents |
-|----------|----------|
-| `aspire-skills-v<version>.tgz` | Agent skill files, canonical telemetry hooks, and `skill-manifest.json` with hook commit/SHA-512 provenance |
-| `aspire-extensions-v<version>.tgz` | GitHub Copilot app canvas extension files and `extension-manifest.json` |
-
-The skills manifest records the release commit and LF-normalized SHA-512 hash for
-each file under `hooks/scripts/`. Downstream consumers can copy the `hooks` object
-directly instead of maintaining hook provenance separately.
-
-The hooks attribute `AI_AGENT=github_copilot_app_agent` to `copilot-app` before
+The canonical telemetry hooks under `hooks/scripts/` attribute
+`AI_AGENT=github_copilot_app_agent` to `copilot-app` before
 checking `COPILOT_CLI=1` or a CLI-compatible `toolArgs` payload. Without the app
 marker, Copilot CLI, VS Code, and Claude Code attribution stays unchanged.
-
-Use `npm run bundle:skills` or `npm run bundle:extensions` to build one bundle type.
-
-Both archives declare Aspire CLI/SDK compatibility with `>=13.5.0 <13.7.0`.
-Individual features can have narrower requirements: `aspire-project-v2-migration`
-remains discoverable on 13.5 but refuses edits unless the actual AppHost targets
-13.6+ and exposes the required APIs. Bundle compatibility never authorizes an
-implicit application upgrade, downgrade, or migration. Guidance and examples
-labeled 13.5.3 remain specific to the 13.5 family.
-
-For a separately validated release target, the bundle generator accepts
-`--supports-aspire-cli` and `--supports-aspire-sdk` overrides for both archives.
-Current Aspire consumers check the skills archive's range as a whole; the manifest
-does not provide per-skill installation-time version filtering.
 
 ### Publishing releases
 
 Merging a same-repository `release/<version>` PR into `main` runs
 [the publisher](.github/workflows/publish.yml). It tags the exact merged commit,
-copies the approved changelog notes into the GitHub release, builds and attests
-both bundles, and uploads only the skills bundle. It uses `GITHUB_TOKEN`, not a
-repo bot or stored personal token. Reruns preserve the tag's commit and notes.
+copies the approved changelog notes into a source-only GitHub release, and uploads
+no generated archives. It uses `GITHUB_TOKEN`, not a repo bot or stored personal
+token. Reruns preserve the tag's commit and notes.
 See [the development guide](docs/development.md) for the release flow.
 
 ## Contributing

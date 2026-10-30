@@ -14,8 +14,9 @@ The canvas only:
    HTTP exposure, path, inclusion, resource name, and Service Defaults fields;
 3. receives resources and connections through `set_proposal`, using the current
    `proposalGeneration` and the skill's existing resource and edge fields;
-4. explicitly maps source services to proposed Aspire resources without showing
-   discovered services that the skill did not include in the proposal;
+4. explicitly maps source services to proposed Aspire resources and lists any
+   discovered service without a proposal mapping as **Not assessed** in a compact
+   "Not in the proposed graph" section, without adding it to the graph;
 5. uses a compact mapping-first review for one or two resources and a role-grouped
    overview with one focused inspector for larger plans;
 6. lets the user add or remove plan resources, add their initial connections
@@ -29,14 +30,18 @@ The canvas only:
    violated naming rule, and prevents invalid edits from being saved;
 9. keeps unresolved implementation tradeoffs in chat rather than inventing new
    canvas data; and
-10. returns the confirmed service choices, exact structured plan, generation,
-    and stable proposal hash through `get_confirmation`.
+10. returns the confirmed service choices, not-assessed discovered services
+    (`notProposed`), exact structured plan, generation, and stable proposal hash
+    through `get_confirmation`.
 
 After confirmation, the canvas becomes read-only and `get_confirmation` returns
 the immutable submitted snapshot even if a stale client attempts a later mutation.
 Before confirmation, `get_confirmation` fails without exposing an executable plan.
 Proposal and confirmation state are stored with the Copilot session so reconnecting
 or reloading the provider preserves the Step 3 decision.
+State is scoped to the canonical AppHost path. On POSIX, literal backslashes in
+file and directory names are preserved rather than treated as separators, so
+distinct AppHosts do not share proposal state.
 The confirmed surface states that implementation continues in chat; it never
 becomes a startup, editing, validation, or execution tracker.
 
@@ -61,6 +66,13 @@ as explicit user requests.
 
 It intentionally has no repository detector, scanner, proposal generator,
 AppHost editor, deployment controls, initialization flow, or validation workflow.
+
+## Shared canvas UI
+
+Aspireify uses the shared canvas theme, typography, controls, and local SVG
+sprite. Resource-kind colors and review layouts stay local; the confirmation
+boundary is unchanged. See [Shared canvas UI](../../docs/canvas-ui.md) for asset
+ownership, relative symlinks, plugin mirrors, and visual review guidance.
 
 ## Troubleshooting
 

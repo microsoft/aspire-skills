@@ -19,6 +19,7 @@ environment:
     - ../../aspire-orchestration
     - ../../aspire-deployment
     - ../../aspire-monitoring
+    - ../../aspire-terminals
 grading_environment:
   files:
     - { src: ../../../evals/project-v2-migration/grade-edit.mjs, dest: .grader/grade-edit.mjs }

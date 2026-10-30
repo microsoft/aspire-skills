@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { runInNewContext } from "node:vm";
 import {
     AppHostOperationCoordinator,
     CommandInputMetadataStore,
@@ -21,6 +22,7 @@ import {
     filterTree,
     discoverConfiguredAppHosts,
     extractJsonPayload,
+    isPathWithin,
     mapWithConcurrency,
     normalizeLsPayload,
     normalizePsPayload,
@@ -48,6 +50,16 @@ function repoPath(...segments) {
 function appsPath(...segments) {
     return join(syntheticAppsRoot, ...segments);
 }
+
+test("workspace containment distinguishes dot-prefixed children from parent traversal", () => {
+    for (const child of ["..apphost", "...", "..", "src"]) {
+        const candidate = repoPath(child, "AppHost.cs");
+        assert.equal(isPathWithin(candidate, syntheticRepoRoot), child !== "..", child);
+    }
+    assert.equal(isPathWithin(syntheticRepoRoot, syntheticRepoRoot), true);
+    assert.equal(isPathWithin(appsPath("AppHost.cs"), syntheticRepoRoot), false);
+    assert.equal(isPathWithin(`${syntheticRepoRoot}-other`, syntheticRepoRoot), false);
+});
 
 test("extractJsonPayload ignores Aspire preambles and trailing text", () => {
     const payload = extractJsonPayload("Finding AppHost...\n{\n  \"resources\": [{\"name\":\"api\"}]\n}\nDone");
@@ -237,6 +249,73 @@ test("resource status prefers lifecycle and current health checks over stale agg
         warning: 0,
         error: 1,
         inactive: 1,
+    });
+});
+
+test("pending health checks keep a running resource in a warning state", () => {
+    const projected = projectDescribePayload({
+        resources: [
+            {
+                name: "api",
+                resourceType: "Project",
+                state: "Running",
+                // Aspire reports aggregate Unhealthy until the first registered check returns.
+                healthStatus: "Unhealthy",
+                healthReports: { ready: { status: null } },
+            },
+            {
+                name: "web",
+                resourceType: "Project",
+                state: "Running",
+                healthStatus: "Unhealthy",
+                healthReports: { live: { status: "Unhealthy" }, ready: { status: null } },
+            },
+            {
+                name: "tool",
+                resourceType: "Executable",
+                state: "NotStarted",
+                healthReports: { ready: {} },
+            },
+            {
+                name: "worker",
+                resourceType: "Project",
+                state: "Exited",
+                healthReports: { live: { status: "Healthy" }, ready: { status: null } },
+            },
+        ],
+    });
+    const nodes = buildResourceTree(projected.resources, "host");
+    const byName = new Map(nodes.map((node) => [node.label, node]));
+    const healthChecks = (node) => node.children
+        .find((child) => child.kind === "health-group").children;
+
+    assert.deepEqual(projected.resources.find((resource) => resource.name === "api").healthReports,
+        [{ name: "ready", status: "Pending" }]);
+    assert.equal(byName.get("api").tone, "warning");
+    assert.equal(byName.get("api").icon, "warning");
+    assert.equal(byName.get("api").healthLabel, "0/1 healthy");
+    assert.equal(byName.get("api").healthTone, "warning");
+    assert.deepEqual(
+        healthChecks(byName.get("api")).map(({ statusLabel, icon, tone }) => ({ statusLabel, icon, tone })),
+        [{ statusLabel: "Pending", icon: "loading", tone: "warning" }],
+    );
+    assert.equal(byName.get("web").tone, "error");
+    assert.equal(byName.get("web").healthTone, "error");
+    assert.equal(byName.get("tool").tone, "inactive");
+    assert.equal(byName.get("tool").healthLabel, "Not checked");
+    assert.equal(byName.get("tool").healthTone, "inactive");
+    assert.deepEqual(
+        healthChecks(byName.get("tool")).map(({ statusLabel, icon, tone }) => ({ statusLabel, icon, tone })),
+        [{ statusLabel: "Not checked", icon: "record", tone: "inactive" }],
+    );
+    assert.equal(byName.get("worker").healthLabel, "Not checked");
+    assert.equal(byName.get("worker").healthTone, "inactive");
+    assert.deepEqual(projected.summary, {
+        total: 4,
+        healthy: 0,
+        warning: 1,
+        error: 1,
+        inactive: 2,
     });
 });
 
@@ -491,6 +570,88 @@ test("resource command arguments use the CLI delimiter and declared input names"
     ]);
 });
 
+test("text command defaults and submissions use Hosting whitespace normalization", () => {
+    const text = "  hello world  ";
+    const customChoice = "  custom region  ";
+    const argumentInputs = sanitizeCommandArgumentInputs([
+        { name: "message", inputType: "Text", value: text },
+        {
+            name: "region", inputType: "Choice", value: customChoice,
+            allowCustomChoice: true, options: ["west"],
+        },
+    ]);
+
+    assert.equal(argumentInputs[0].value, "hello world");
+    assert.equal(argumentInputs[1].value, "custom region");
+    const validation = validateCommandArguments({ argumentInputs }, {
+        message: text,
+        region: customChoice,
+    });
+    assert.equal(validation.ok, true);
+    assert.deepEqual(buildCommandArgumentTokens(validation.values), [
+        "--", "--message=hello world", "--region=custom region",
+    ]);
+});
+
+test("long interior whitespace normalizes without blocking command defaults or validation", () => {
+    const value = `\u0085a${" ".repeat(64000)}b\u0085`;
+    const expected = value.slice(1, -1);
+    const result = runInNewContext(`(() => {
+        const argumentInputs = sanitizeCommandArgumentInputs([
+            { name: "message", inputType: "Text", value },
+        ]);
+        return { argumentInputs, validation: validateCommandArguments({ argumentInputs }, { message: value }) };
+    })()`, { sanitizeCommandArgumentInputs, validateCommandArguments, value }, { timeout: 1000 });
+    assert.equal(result.argumentInputs[0].value, expected);
+    assert.equal(result.validation.ok, true);
+    assert.equal(result.validation.values.message, expected);
+});
+
+test("overlength text command defaults are rejected rather than silently shortened", () => {
+    const value = "  hello world  ";
+    const argumentInputs = sanitizeCommandArgumentInputs([
+        { name: "message", inputType: "Text", value, maxLength: 5 },
+    ]);
+    assert.equal(argumentInputs[0].value, "hello world");
+    const validation = validateCommandArguments({ argumentInputs }, { message: argumentInputs[0].value });
+    assert.equal(validation.ok, false);
+    assert.deepEqual(validation.errors, [{
+        argumentName: "message",
+        errorMessage: "message must be 5 characters or fewer.",
+    }]);
+});
+
+test("text limits and fixed choices validate the Hosting-normalized value", () => {
+    const argumentInputs = sanitizeCommandArgumentInputs([
+        { name: "message", inputType: "Text", value: "\u0085  hello  \u0085", maxLength: 5 },
+        { name: "region", inputType: "Choice", value: "  west  ", options: ["west"] },
+        { name: "bom", inputType: "Text", value: "\uFEFFhello\uFEFF" },
+    ]);
+    assert.equal(argumentInputs[0].value, "hello");
+    assert.equal(argumentInputs[1].value, "west");
+    assert.equal(argumentInputs[2].value, "\uFEFFhello\uFEFF");
+    assert.deepEqual(validateCommandArguments({ argumentInputs }, {
+        message: "\u0085  hello  \u0085",
+        region: "  west  ",
+        bom: "\uFEFFhello\uFEFF",
+    }), {
+        ok: true,
+        values: { message: "hello", region: "west", bom: "\uFEFFhello\uFEFF" },
+        errors: [],
+    });
+});
+
+test("secret argument whitespace is preserved and is not treated as missing", () => {
+    const command = {
+        argumentInputs: [{ name: "token", inputType: "SecretText", required: true, maxLength: 2 }],
+    };
+    const validation = validateCommandArguments(command, { token: "  " });
+    assert.deepEqual(validation, { ok: true, values: { token: "  " }, errors: [] });
+    assert.deepEqual(buildCommandArgumentTokens(validation.values), ["--", "--token=  "]);
+    assert.equal(validateCommandArguments(command, { token: "" }).ok, false);
+    assert.equal(validateCommandArguments(command, { token: "   " }).ok, false);
+});
+
 test("redactText strips common token and secret forms", () => {
     const value = redactText(
         "\u001b[31mfailed\u001b[0m https://localhost/login?t=abc123 password=hunter2 API_KEY: value",
@@ -526,6 +687,25 @@ test("redactAbsolutePaths handles delimited Windows and POSIX paths without swal
         redactAbsolutePaths("open /Users/jane doe/secrets.txt failed"),
         "open [path withheld] failed",
     );
+});
+
+test("redactAbsolutePaths keeps URLs and words that merely contain private root names", () => {
+    for (const text of [
+        "See https://learn.microsoft.com/dotnet/aspire/app-host/overview for details",
+        "Dashboard: http://localhost:5000/application/status",
+        "Read https://aspire.dev/data/connect first",
+        "Saved notes to ./homework/todo.txt",
+        "Run /homework/script.sh",
+        "Open https://app/foo now",
+        "Proxy http://data/foo?x=1",
+        "See https://home/foo and https://Users/bar",
+    ]) {
+        assert.equal(redactAbsolutePaths(text), text);
+    }
+    assert.equal(redactAbsolutePaths("open file:///home/jane/App.AppHost.csproj"), "open file://[path withheld]");
+    assert.equal(redactAbsolutePaths("--project=/home/jane/App.csproj failed"), "--project=[path withheld] failed");
+    assert.equal(redactAbsolutePaths("cwd (/tmp) missing"), "cwd ([path withheld]) missing");
+    assert.equal(redactAbsolutePaths("at C:/Users/jane/App.csproj"), "at C:[path withheld]");
 });
 
 test("redactKnownPaths consumes private path suffixes", () => {
@@ -595,6 +775,52 @@ test("workspace fallback discovers file-based TypeScript AppHosts with mts exten
             new Set(await discoverConfiguredAppHosts(root)),
             new Set([directAppHost, nestedAppHost]),
         );
+    } finally {
+        await rm(fixtureRoot, { recursive: true, force: true });
+    }
+});
+
+test("workspace fallback recognizes source AppHost casing at either scan depth", async (t) => {
+    for (const fileName of ["AppHost.cs", "AppHost.ts", "AppHost.mts", "APPHOST.MTS"]) {
+        await t.test(fileName, async () => {
+            const fixtureRoot = await mkdtemp(join(tmpdir(), "aspire-cased-apphost-"));
+            try {
+                const root = join(fixtureRoot, ...Array(10).fill("scope"));
+                const nestedDirectory = join(root, "nested");
+                await mkdir(nestedDirectory, { recursive: true });
+                const directAppHost = join(root, fileName);
+                const nestedAppHost = join(nestedDirectory, fileName);
+                await writeFile(directAppHost, "");
+                await writeFile(nestedAppHost, "");
+                await writeFile(join(root, `${fileName}.bak`), "");
+                await mkdir(join(root, "unrelated"));
+                await writeFile(join(root, "unrelated", "worker.mts"), "");
+
+                assert.deepEqual(
+                    new Set(await discoverConfiguredAppHosts(root)),
+                    new Set([directAppHost, nestedAppHost]),
+                );
+            } finally {
+                await rm(fixtureRoot, { recursive: true, force: true });
+            }
+        });
+    }
+});
+
+test("workspace fallback preserves root source symlinks and ignores dangling links", {
+    skip: process.platform === "win32",
+}, async () => {
+    const fixtureRoot = await mkdtemp(join(tmpdir(), "aspire-linked-apphost-"));
+    try {
+        const root = join(fixtureRoot, ...Array(10).fill("scope"));
+        await mkdir(root, { recursive: true });
+        const target = join(fixtureRoot, "source.mts");
+        const appHostPath = join(root, "apphost.mts");
+        await writeFile(target, "");
+        await symlink(target, appHostPath);
+        await symlink(join(fixtureRoot, "missing.ts"), join(root, "apphost.ts"));
+
+        assert.deepEqual(await discoverConfiguredAppHosts(root), [appHostPath]);
     } finally {
         await rm(fixtureRoot, { recursive: true, force: true });
     }
@@ -1005,12 +1231,13 @@ test("directory AppHost inputs resolve to a concrete project", async () => {
 
 test("canvas source carries the confirmed direction and protected data routes", async () => {
     const root = new URL("../extensions/aspire-apphosts/", import.meta.url);
-    const [html, client, styles, provider, model] = await Promise.all([
+    const [html, client, styles, provider, model, sharedStyles] = await Promise.all([
         import("node:fs/promises").then(({ readFile }) => readFile(new URL("ui/index.html", root), "utf8")),
         import("node:fs/promises").then(({ readFile }) => readFile(new URL("ui/app.js", root), "utf8")),
         import("node:fs/promises").then(({ readFile }) => readFile(new URL("ui/styles.css", root), "utf8")),
         import("node:fs/promises").then(({ readFile }) => readFile(new URL("extension.mjs", root), "utf8")),
         import("node:fs/promises").then(({ readFile }) => readFile(new URL("lib/app-model.mjs", root), "utf8")),
+        import("node:fs/promises").then(({ readFile }) => readFile(new URL("ui/canvas-theme.css", root), "utf8")),
     ]);
 
     assert.match(html, /THESIS: Aspire's operational model becomes a canvas-native workspace/);
@@ -1069,7 +1296,7 @@ test("canvas source carries the confirmed direction and protected data routes", 
     assert.match(client, /Structured logs/);
     assert.match(client, /Traces/);
     assert.match(client, /Metrics/);
-    assert.match(styles, /--border-strong:/);
+    assert.match(sharedStyles, /--border-strong:/);
     assert.match(styles, /view-transition-name: app-model-surface/);
     assert.doesNotMatch(styles, /\.resource-card:hover/);
     const resourceBoardStyles = styles.slice(
@@ -1160,25 +1387,24 @@ test("canvas source carries the confirmed direction and protected data routes", 
 test("canvas header links the compact Aspire mark with accessible interaction styles", async () => {
     const root = new URL("../extensions/aspire-apphosts/ui/", import.meta.url);
     const { readFile } = await import("node:fs/promises");
-    const [html, styles] = await Promise.all([
+    const [html, styles, sharedStyles] = await Promise.all([
         readFile(new URL("index.html", root), "utf8"),
         readFile(new URL("styles.css", root), "utf8"),
+        readFile(new URL("canvas-theme.css", root), "utf8"),
     ]);
-    const brandLink = html.match(/<a\b[^>]*class="brand-mark"[^>]*>[\s\S]*?<\/a>/)?.[0];
+    const brandLink = html.match(/<a\b[^>]*class="brand-mark canvas-brand"[^>]*>[\s\S]*?<\/a>/)?.[0];
     assert.ok(brandLink, "The Aspire mark must be an actionable link.");
     assert.match(brandLink, /href="https:\/\/aspire\.dev\/"/);
     assert.match(brandLink, /target="_blank"/);
     assert.match(brandLink, /rel="noopener noreferrer"/);
     assert.match(brandLink, /aria-label="Visit Aspire\.dev \(opens in a new tab\)"/);
-    assert.match(brandLink, /<svg\s+width="22"\s+height="22"\s+viewBox="0 0 32 32"/);
+    assert.match(brandLink, /<svg class="canvas-icon"\s+width="22"\s+height="22"\s+viewBox="0 0 32 32"/);
     assert.match(brandLink, /aria-hidden="true"\s+focusable="false"/);
-    assert.equal((brandLink.match(/<path\b/g) ?? []).length, 6);
-    assert.match(brandLink, /fill="#512BD4"/);
-    assert.match(styles, /\.brand-mark:focus-visible,[^{]+\{\s*outline: 2px solid var\(--accent\);\s*outline-offset: 2px;/);
-    assert.match(styles, /\.brand-mark:hover\s*\{\s*background: var\(--surface-muted\);/);
-    assert.match(styles, /\.brand-mark:active\s*\{\s*background: var\(--surface-inset\);/);
-    assert.match(styles, /@media \(max-width: 760px\)\s*\{\s*\.brand-mark\s*\{\s*width: 40px;\s*height: 40px;/);
-    assert.match(styles, /@media \(pointer: coarse\)\s*\{\s*\.brand-mark\s*\{\s*width: 40px;\s*height: 40px;/);
+    assert.match(brandLink, /<use href="\/canvas-icons\.svg#aspire"><\/use>/);
+    assert.match(sharedStyles, /a\[href\].*\[tabindex\]\):focus-visible\s*\{\s*outline: 2px solid var\(--focus\);\s*outline-offset: 2px;/);
+    assert.match(sharedStyles, /\.canvas-brand:hover\s*\{\s*background: var\(--surface-muted\);/);
+    assert.match(sharedStyles, /\.canvas-brand:active\s*\{\s*background: var\(--surface-inset\);/);
+    assert.match(sharedStyles, /@media \(max-width: 760px\), \(pointer: coarse\)\s*\{\s*\.canvas-brand\s*\{\s*width: 40px;\s*height: 40px;/);
 });
 
 test("canvas uses a focused Workspace and Global resource board instead of an explorer tree", async () => {

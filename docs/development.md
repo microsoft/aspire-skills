@@ -9,12 +9,19 @@ npm test
 ```
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for skill formatting and agent-host checks.
+Set `CHROME_BIN` to a Chromium executable when running `npm test` to include the
+AppHosts native-browser number-input regression; without it, that check is skipped.
 Dev retains `CHANGELOG.md` and generated `opencode/` catalogs. Regenerate catalogs
 with `npm run catalog` after changing shipped skills, references, or assets,
 and commit them with the source changes. Run `npm run catalog:check` to check
 the committed tree. CI rejects missing, extra, or stale V1 and V2 catalog files.
 Feature PRs update the current version's changelog notes and preserve earlier
 entries and the coordinated version.
+
+Canvas extensions use relative Git symlinks to share canonical theme and icon
+assets. Edit the canonical files directly; no synchronization step is needed.
+See [Shared canvas UI](canvas-ui.md) for token ownership, typography, icons,
+symlink-capable checkouts, plugin mirrors, and visual review.
 
 The **OpenCode catalog check** runs on every PR, including stacked PRs, on
 main/dev/release pushes, and on merge-queue candidates.
@@ -33,7 +40,7 @@ The **Release branch check** fails any PR into main unless its head is a
    regenerate catalogs with `npm run catalog`, and run `npm test`.
 4. **Release to main.** Open the release PR to main. Maintainers approve and
    merge it; the publisher tags the exact merged commit, creates the GitHub
-   release, and uploads the skills bundle.
+   release from the approved changelog notes, and uploads no generated archives.
 5. **Merge back to dev.** Create `backport/pr-<release-pr>-to-dev` from current
    dev and merge main into it. Keep dev's next version and newer work, preserve
    non-version manifest changes and dev's current changelog entry, update earlier
@@ -43,8 +50,9 @@ The **Release branch check** fails any PR into main unless its head is a
 ## Publication
 
 `.github/workflows/publish.yml` runs when a same-repository `release/*` PR
-merges into main. It uses the event's `merge_commit_sha`, builds and attests
-both bundles, and uploads only `aspire-skills-v<version>.tgz`.
+merges into main. It uses the event's `merge_commit_sha`, reruns the source,
+catalog, and version checks, then tags that commit and creates a source-only
+GitHub release from the approved changelog notes.
 
 Publishing uses `GITHUB_TOKEN`; no repo bot or stored automation credentials
 are needed. Maintainers create PRs and approve merges. Tags and releases are
