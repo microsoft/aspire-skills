@@ -9,6 +9,7 @@ import { basename, dirname, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CanvasError, createCanvas, joinSession } from "@github/copilot-sdk/extension";
 import {
+    assignResourceNames,
     classifyServiceKind,
     exactType,
     freezeSnapshot,
@@ -16,6 +17,7 @@ import {
     isCompatibleAspireResourceType,
     isDotNetType,
     presentationMode,
+    resourceNameFrom,
     stableProposalHash,
 } from "./proposal-model.mjs";
 import {
@@ -200,17 +202,6 @@ function restoreSnapshotAndHistory(domainId, snapshot, history) {
     } else {
         editHistories.delete(domainId);
     }
-}
-
-function resourceNameFrom(value, index) {
-    const normalized = String(value ?? "")
-        .trim()
-        .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
-        .replace(/[^A-Za-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "")
-        .toLowerCase();
-    const prefixed = /^[a-z]/.test(normalized) ? normalized : `service-${normalized}`;
-    return (prefixed || `service-${index + 1}`).slice(0, 64).replace(/-+$/g, "");
 }
 
 function normalizeService(service, index) {
@@ -2325,7 +2316,11 @@ const aspireifyCanvas = createCanvas({
                         "This scan result is stale. Re-run the latest scan request before loading discovery.",
                     );
                 }
-                const incomingServices = context.input.services.map(normalizeService);
+                const resourceNames = assignResourceNames(context.input.services);
+                const incomingServices = context.input.services.map((service, index) => ({
+                    ...normalizeService(service, index),
+                    resourceName: resourceNames[index],
+                }));
                 const serviceIds = new Set();
                 for (const service of incomingServices) {
                     if (!service.id) {
