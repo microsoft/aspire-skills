@@ -10,6 +10,8 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   persistent volumes), and explicitly approved AppHost-wide `--volumes` cleanup, including
   its ownership and compatibility limits. Stale-password recovery now prefers restoring
   the password or a targeted reset and treats `--volumes` as a broader, approved option.
+- Kept running AppHost resources in a warning state while their health checks are
+  still pending, instead of reporting them as errors before the first check returns.
 - Stopped Aspire AppHosts error redaction from mangling URLs and words that only
   contain a private root name, such as `https://aspire.dev/data/connect` or
   `.../aspire/app-host/overview`; whole POSIX paths under those roots are still withheld.
