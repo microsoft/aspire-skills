@@ -46,7 +46,7 @@
     },
     {
       "name": "aspire-orchestration",
-      "version": "sha512-08ea9569d2ca939a66488fff9605c31a9a1dd1c9814fbd52f38a99882bf79a677eab770b2cb57613c30cf716c52e6ff318a7552bc1cabec6e6735916b2ae5b8b",
+      "version": "sha512-d05e1683db8ed41fbe30a59f1013d0856888f7d77f94ed4dfafa2cd176e516f193a102ea8d591907b643833392ca5e39082b1aa48dc12a49b8ffb97b5bedac37",
       "files": [
         "aspire-orchestration.md",
         "references/agent-workflows.md",

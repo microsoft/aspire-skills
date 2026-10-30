@@ -66,12 +66,20 @@ the user approves both mutation scopes.
 Go AppHosts require Aspire 17.0 or later. Look for `apphost.go` next to an
 `aspire.config.json` whose `appHost.language` is `go`:
 
+Check the configuration beside **each** discovered entry point, including AppHosts in
+subdirectories; do not assume the repository-root configuration applies. This Bash example
+uses `jq` to check the nested language property and prints matching Go AppHost paths:
+
 ```bash
-find . -name "apphost.go" -not -path "*/vendor/*"
-grep -E '"language"[[:space:]]*:[[:space:]]*"go"' aspire.config.json
+while IFS= read -r -d '' APPHOST_FILE; do
+  CONFIG_FILE="$(dirname "$APPHOST_FILE")/aspire.config.json"
+  if [ -f "$CONFIG_FILE" ] && jq -e '.appHost.language == "go"' "$CONFIG_FILE" > /dev/null; then
+    printf '%s\n' "$APPHOST_FILE"
+  fi
+done < <(find . -type f -name "apphost.go" -not -path "*/vendor/*" -print0)
 ```
 
-The AppHost is its own Go module: a root `go.mod` (`module apphost`) whose `replace` points
+The AppHost is its own Go module: a `go.mod` at the AppHost directory root (`module apphost`) whose `replace` points
 `apphost/modules/aspire` at the generated `.aspire/modules` SDK, which `apphost.go` imports to
 call `aspire.CreateBuilder()`. A Go service inside a C# or TypeScript AppHost, or a `go.mod`
 on its own, does **not** make the AppHost a Go AppHost: check which AppHost entry point the
@@ -143,9 +151,13 @@ APPHOST_FILE=$(find . -name "apphost.cs" -not -path "*/node_modules/*" | head -1
 # Or for TypeScript
 APPHOST_DIR=$(dirname $(find . \( -name "apphost.mts" -o -name "apphost.ts" \) -not -path "*/node_modules/*" | head -1))
 
-# Or for Go (Aspire 17.0 or later)
-APPHOST_DIR=$(dirname $(find . -name "apphost.go" -not -path "*/vendor/*" | head -1))
+# Or for Go (Aspire 17.0 or later), choose a validated path from the detection above
+APPHOST_FILE="<selected-go-apphost-path>"
+APPHOST_DIR=$(dirname "$APPHOST_FILE")
 ```
+
+If detection returns several Go AppHosts, select the intended one before running lifecycle
+commands; do not use the first unvalidated `apphost.go` found in the repository.
 
 ## Common Project Structures
 
