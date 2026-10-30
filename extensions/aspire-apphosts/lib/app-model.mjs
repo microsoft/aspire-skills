@@ -421,7 +421,8 @@ function sanitizeHealthReports(raw) {
             if (!isRecord(report)) {
                 return undefined;
             }
-            const statusText = optionalText(report.status, 80) ?? "Unknown";
+            // Aspire reports a null status until a registered check first returns.
+            const statusText = optionalText(report.status, 80) ?? "Pending";
             const status = statusText.toLowerCase() === "healthy"
                 ? "Healthy"
                 : statusText.toLowerCase() === "degraded"
@@ -486,8 +487,9 @@ function classifyResource(resource) {
     const health = resource.healthStatus?.toLowerCase();
     const reportStatuses = resource.healthReports.map((report) => report.status.toLowerCase());
     const hasUnhealthyReport = reportStatuses.some((status) =>
-        status !== "healthy" && status !== "degraded");
+        status !== "healthy" && status !== "degraded" && status !== "pending");
     const hasDegradedReport = reportStatuses.includes("degraded");
+    const hasPendingReport = reportStatuses.includes("pending");
     if (
         resource.stateStyle === "error"
         || state === "failedtostart"
@@ -499,7 +501,8 @@ function classifyResource(resource) {
     if (["exited", "stopped", "notstarted", "finished"].includes(state)) {
         return state === "finished" && resource.stateStyle === "success" ? "healthy" : "inactive";
     }
-    if (health === "unhealthy" || hasUnhealthyReport) {
+    // The aggregate stays Unhealthy until pending checks return, so it is not a failure yet.
+    if ((health === "unhealthy" && !hasPendingReport) || hasUnhealthyReport) {
         return "error";
     }
 
@@ -507,6 +510,7 @@ function classifyResource(resource) {
         resource.stateStyle === "warning"
         || health === "degraded"
         || hasDegradedReport
+        || hasPendingReport
         || state === "starting"
         || state === "waiting"
         || state === "stopping"
@@ -743,7 +747,9 @@ function resourceLifecycleTone(resource) {
 
 function healthTone(status) {
     const normalized = status.toLowerCase();
-    return normalized === "healthy" ? "healthy" : normalized === "degraded" ? "warning" : "error";
+    return normalized === "healthy"
+        ? "healthy"
+        : normalized === "degraded" || normalized === "pending" ? "warning" : "error";
 }
 
 function resourceHealthSummary(resource) {
@@ -752,8 +758,9 @@ function resourceHealthSummary(resource) {
     if (resource.healthReports.length > 0) {
         const healthy = resource.healthReports.filter((report) => report.status === "Healthy").length;
         const degraded = resource.healthReports.some((report) => report.status === "Degraded");
+        const pending = resource.healthReports.some((report) => report.status === "Pending");
         const unhealthy = resource.healthReports.some((report) =>
-            report.status !== "Healthy" && report.status !== "Degraded");
+            report.status !== "Healthy" && report.status !== "Degraded" && report.status !== "Pending");
         const label = healthy === resource.healthReports.length
             ? "Healthy"
             : `${healthy}/${resource.healthReports.length} healthy`;
@@ -763,12 +770,14 @@ function resourceHealthSummary(resource) {
                     ? "Last known unhealthy"
                     : degraded
                         ? "Last known degraded"
-                        : "Last known healthy",
+                        : healthy === 0 && pending
+                            ? "Not checked"
+                            : "Last known healthy",
                 tone: unhealthy ? "error" : degraded ? "warning" : "inactive",
             }
             : {
                 label,
-                tone: unhealthy ? "error" : degraded ? "warning" : "healthy",
+                tone: unhealthy ? "error" : degraded || pending ? "warning" : "healthy",
             };
     }
     if (resource.healthStatus) {
@@ -1020,18 +1029,25 @@ function healthGroupNode(appHostId, resource) {
         defaultExpanded: false,
         children: [...resource.healthReports]
             .sort((left, right) => left.name.localeCompare(right.name))
-            .map((report) => ({
-                id: `apphost:${appHostId}:resource:${resource.name}:health:${stableId(report.name)}`,
-                kind: "health-check",
-                label: report.name,
-                statusLabel: inactive ? `Last ${report.status.toLowerCase()}` : report.status,
-                icon: report.status === "Healthy" ? "pass" : report.status === "Degraded" ? "warning" : "error",
-                tone: inactive && report.status === "Healthy" ? "inactive" : healthTone(report.status),
-                appHostId,
-                resourceName: resource.name,
-                healthCheckName: report.name,
-                children: [],
-            })),
+            .map((report) => {
+                const pending = report.status === "Pending";
+                return {
+                    id: `apphost:${appHostId}:resource:${resource.name}:health:${stableId(report.name)}`,
+                    kind: "health-check",
+                    label: report.name,
+                    statusLabel: pending && inactive
+                        ? "Not checked"
+                        : inactive ? `Last ${report.status.toLowerCase()}` : report.status,
+                    icon: pending
+                        ? inactive ? "record" : "loading"
+                        : report.status === "Healthy" ? "pass" : report.status === "Degraded" ? "warning" : "error",
+                    tone: inactive && (pending || report.status === "Healthy") ? "inactive" : healthTone(report.status),
+                    appHostId,
+                    resourceName: resource.name,
+                    healthCheckName: report.name,
+                    children: [],
+                };
+            }),
     };
 }
 
