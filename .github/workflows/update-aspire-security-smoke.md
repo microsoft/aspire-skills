@@ -352,6 +352,16 @@ invocation 35. Do not repeat searches once there is enough evidence for the
 smallest necessary update. If a required update cannot be finished safely,
 use `report_incomplete` with the concrete blocker rather than exhausting the cap.
 
+## Previous smoke verification feedback
+
+The previous proposal failed offline compilation with `CS9007` in
+`AgentTelemetryHookTests.cs`: a new nested-JSON payload used an interpolated
+raw string with too few `$` delimiters for its closing braces.
+Use `JsonSerializer.Serialize` for nested-JSON test payloads or correct the
+raw-string delimiters. Preserve the test coverage and assertions; do not
+change the verifier or suppress the compiler error. Reassess the current
+pinned source and base rather than copying the earlier proposal.
+
 ## Step 1: Read Pinned Source Evidence
 
 Read `/tmp/gh-aw/agent/source-pr.json` first. It contains the validated PR
