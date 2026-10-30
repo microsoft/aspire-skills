@@ -28,7 +28,7 @@ Heuristics for the **scan** and **propose** phases of `aspireify`.
 | `package.json` has `"vite"` + `.output/server/index.mjs` (TanStack/SvelteKit) | `AddViteApp` (dev) + `PublishAsNodeServer` (publish) |
 | `package.json` has Remix / Astro / Nitro Next | `PublishAsPackageScript` |
 | `pyproject.toml` with FastAPI/Flask | `AddPythonApp` (or model under TS AppHost) |
-| `go.mod` with a `main` package (a Go service, not the AppHost's own `go.mod`) | Aspire 13.4+: `AddGoApp` (`aspire add go`). Aspire older than 13.4, or Toolkit `AddGolangApp` already in the AppHost: keep the Toolkit; never migrate it unprompted |
+| `go.mod` with a `main` package (a Go service, not the AppHost's own `go.mod`) | `AddGoApp` (`aspire add go`): preview from 13.4, stable from 17.0; on 13.x require approval and an explicit compatible preview version. Aspire older than 13.4, or Toolkit `AddGolangApp` already in the AppHost: keep the Toolkit; never migrate it unprompted |
 | `Program.cs` reads `ConnectionStrings:Postgres*` / DI calls `AddNpgsql*` | `AddPostgres('pg').AddDatabase('appdb')` + `WithReference` |
 | `Program.cs` calls `AddStackExchangeRedisCache` | `AddRedis('cache')` + `WithReference` |
 | MongoClient / `MongoDB.Driver` | `AddMongoDB('mongo')` |
@@ -81,7 +81,7 @@ Bun, Yarn, and pnpm are first-class in TS AppHosts (npm remains the default).
 
 | Pattern | Add |
 |---------|-----|
-| Go module with a `main` package, Aspire 13.4+ | `AddGoApp("api", "./api")` after `aspire add go` (TS: `addGoApp('api', '../api')`; Go AppHost: `builder.AddGoApp("api", "./api")`) |
+| Go module with a `main` package, preview from 13.4 / stable from 17.0 | `AddGoApp("api", "./api")` after `aspire add go` (TS: `addGoApp('api', '../api')`; Go AppHost: `builder.AddGoApp("api", "./api")`). On 13.x, get approval and select a compatible preview with `--version`. |
 | Aspire older than 13.4, or Toolkit already in the AppHost | Toolkit `AddGolangApp` (`aspire add communitytoolkit-golang`); do not migrate unprompted |
 
 ### AI / Foundry

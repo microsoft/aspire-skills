@@ -26,7 +26,8 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   `aspire-orchestration`, `aspire-init`, `aspire-deployment` and `aspireify`
   skills, covering detection, authoring, `aspire init --language go`, `AddGoApp`
   wiring and deployment CI. Guidance for the first-party `Aspire.Hosting.Go`
-  integration applies from Aspire 13.4.
+  integration distinguishes preview packages from Aspire 13.4 and stable packages
+  from Aspire 17.0.
 
 ### Removed
 - Removed embedded `.tgz` bundle generation and uploads. Releases now publish

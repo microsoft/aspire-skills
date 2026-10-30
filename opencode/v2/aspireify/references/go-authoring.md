@@ -11,7 +11,9 @@ any change is clobbered. On older Aspire versions keep the AppHost in C# or Type
 ## Detect and Scaffold
 
 A Go AppHost is an `apphost.go` next to an `aspire.config.json` whose `appHost.language` is
-`go`, plus a root `go.mod` with `replace apphost/modules/aspire => ./.aspire/modules`. A Go
+`go`, plus a `go.mod` in that AppHost directory with
+`replace apphost/modules/aspire => ./.aspire/modules`. Resolve `appHost.path` relative to
+that configuration file, not the repository root. A Go
 *service* inside a C# or TypeScript AppHost does **not** make that AppHost a Go AppHost: keep
 authoring `apphost.cs` / `apphost.mts` and wire the service with `AddGoApp` (see
 `apphost-wiring.md`).
@@ -96,7 +98,7 @@ failure on it:
 - Checking the last handle of a fluent chain covers every call in that chain.
 - `Build()` returns only the **builder's own** error and never inspects resource handles. Check
   `Err()` on every resource you declare before calling it, as the skeleton does.
-- Methods that return `error` directly (`Build`, `Run`) are checked with `if err != nil`.
+- `Build()` returns `(app, error)` and `Run()` returns `error`; check both, as above.
 - Print errors with `aspire.FormatError(err)`: it expands `*aspire.CapabilityError` (message,
   code, capability, parameter details) and falls back to `err.Error()`. Use `errors.As` for the
   pieces:
@@ -110,9 +112,11 @@ if errors.As(err, &capErr) {
 
 ## Options Structs
 
-Required parameters are positional. Optional ones go in a trailing options struct whose fields
-are pointers, built with `aspire.StringPtr`, `aspire.IntPtr`, `aspire.BoolPtr`, and
-`aspire.Float64Ptr`. Numeric fields such as ports are `*float64`; slice fields are plain slices.
+Required parameters are positional. Optional ones usually go in a trailing
+`<Method>Options` struct. Scalar fields are pointers: use `aspire.StringPtr`,
+`aspire.BoolPtr`, and `aspire.Float64Ptr`. Numeric fields such as ports are `*float64`,
+not `*int`; slice, map, callback, and `any` fields are not pointers. Some methods take a
+specific DTO instead, such as `*aspire.DelveServerOptions`; inspect its field types.
 
 ```go
 api := builder.AddGoApp("api", "./api", &aspire.AddGoAppOptions{
@@ -125,18 +129,30 @@ api := builder.AddGoApp("api", "./api", &aspire.AddGoAppOptions{
 
 ## Go Apps: `AddGoApp`
 
-`AddGoApp(name, appDirectory, options...)` comes from `Aspire.Hosting.Go`, available from Aspire
-13.4 in a C#, TypeScript, or Go AppHost (Go AppHosts themselves need 17.0).
+`AddGoApp(name, appDirectory, options...)` comes from `Aspire.Hosting.Go`. It was introduced
+as a **preview package in Aspire 13.4** for C# and TypeScript AppHosts; its first stable
+release is part of **Aspire 17.0**, alongside Go AppHost GA. Do not assume a stable 13.x
+package exists. On 13.x, discover a compatible preview and obtain approval before adding
+it with `aspire add go --version <compatible-preview-version>`; never change the AppHost's
+release family or channel implicitly. Go AppHosts themselves need 17.0.
 
 - `appDirectory` is relative to the AppHost directory. It is the Go module root (where `go.mod`
   lives) and the Docker build context for `aspire publish`, which generates a Dockerfile unless
   `appDirectory` already has one.
 - `PackagePath` (default `.`) selects the main package, for example `./cmd/server`. Other
   options: `BuildTags`, `LdFlags`, `GcFlags`, `RaceDetector`.
+- An existing Dockerfile is used unchanged: `PackagePath` does not rewrite its build command
+  or entrypoint. Publishing a non-default package with an existing Dockerfile warns; verify
+  that file builds and starts the intended package. Generated Dockerfiles honor
+  `PackagePath`, build tags, linker flags, and compiler flags, but omit the race detector
+  because they build with `CGO_ENABLED=0`.
 - It already requires `go` on `PATH`, enables the OTLP exporter, and adds VS Code debugging.
 - `WithModTidy()` (the scaffold default), `WithModDownload()`, and `WithModVendor()` run
   `go mod tidy`, `go mod download`, and `go mod vendor` before the app starts; `WithVetTool()`
-  runs `go vet ./...`. All four apply in run mode only.
+  runs `go vet ./...`. All four apply in run mode only. Tidy actually uses
+  `go mod tidy -e` and can modify the service's `go.mod` and `go.sum` even when downloads
+  fail; inspect setup-resource logs and module diffs instead of treating its success as
+  proof that dependencies resolved. Preserve the user's existing dependency workflow.
 - The service reads its configuration from the environment. For example, `WithReference(cache)`
   on a Redis resource injects `ConnectionStrings__cache`, and `Env: aspire.StringPtr("PORT")`
   on `WithHttpEndpoint` puts the assigned port in `PORT`.
@@ -153,11 +169,19 @@ aspire restore --apphost apphost.go
 ```
 
 `aspire add` records the package under `packages` in `aspire.config.json` and regenerates the
-SDK. `aspire restore` regenerates it from that file: run it after cloning, switching branches,
+SDK. The 17.0 Go empty/init scaffold already includes `Aspire.Hosting.Go`; the starter also
+includes Redis. Inspect the existing package list before adding anything.
+`aspire restore` regenerates it from that file: run it after cloning, switching branches,
 hand-editing `packages`, and in CI before `go build` / `go vet`. Without `.aspire/modules/`, Go
 fails with `replacement directory ./.aspire/modules does not exist`. `.aspire/` is gitignored.
 
 ## Run and Validate
+
+In Aspire 17.0+, `aspire doctor --format Json` checks the selected Go AppHost's toolchain.
+It reports a missing `go`, an insufficient version, or an inconclusive/toolchain-switching
+warning. Go 1.26+ is the straightforward supported setup. With Go 1.21-1.25, the outcome
+depends on effective `GOTOOLCHAIN`: `local` fails; automatic downloads or PATH-only
+switching produce warnings, not proof that the required toolchain is available.
 
 ```bash
 aspire restore --apphost apphost.go    # regenerate the SDK
@@ -173,12 +197,17 @@ Never start the AppHost with `go run .`. `aspire.CreateBuilder()` needs the
 "REMOTE_APP_HOST_SOCKET_PATH environment variable not set". See `validation.md` for the full
 flow and the hand-off to `aspire-orchestration`.
 
+Debugging the Go AppHost itself requires a VS Code Aspire extension that advertises
+`go-apphost.v1` and the Go debug adapter. An older extension that only debugs Go services
+is not sufficient; ordinary CLI execution still uses `go run .` through Aspire.
+
 ## Hard Rules
 
 1. Edit `apphost.go` only; never `.aspire/modules/`.
 2. Check `Err()` on every resource before `Build()`.
 3. Run the AppHost with `aspire start --non-interactive` or `aspire run`, never `go run .`.
-4. Use first-party `AddGoApp` (`Aspire.Hosting.Go`, Aspire 13.4 or later). The Toolkit
+4. Prefer first-party `AddGoApp` (`Aspire.Hosting.Go`): preview from 13.4, stable from 17.0.
+   Never opt a 13.x project into preview packages without approval. The Toolkit
    `AddGolangApp` is for Aspire older than 13.4 or an AppHost that already uses it; never swap it
    on your own.
 5. Pass optional parameters in options structs built with the `aspire.*Ptr` helpers.

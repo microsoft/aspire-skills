@@ -1248,7 +1248,9 @@ stimuli:
     prompt: I need to add a Go HTTP service and a PostgreSQL database to my Aspire AppHost
     tags:
       priority: p1
-      area: init-workflow
+      area:
+        - init-workflow
+        - go
     environment:
       files:
         - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
@@ -1259,11 +1261,14 @@ stimuli:
       - type: prompt
         name: correct-tiers
         config:
-          prompt: Does the assistant's response use the correct integration tiers? PostgreSQL should use Tier
+          prompt: >
+            Does the assistant's response use the correct integration tiers? PostgreSQL should use Tier
             1 first-party Aspire.Hosting.PostgreSQL (AddPostgres). For the Go service, first-party
-            Aspire.Hosting.Go (AddGoApp) is the Tier 1 choice on Aspire 13.4 or later, and this
-            AppHost uses Aspire.AppHost.Sdk 13.5.3, so AddGoApp (added with aspire add go) is
-            correct. Community Toolkit CommunityToolkit.Aspire.Hosting.Golang (AddGolangApp) is the
+            Aspire.Hosting.Go (AddGoApp) is the Tier 1 choice: preview from 13.4, stable from
+            17.0. This AppHost uses Aspire.AppHost.Sdk 13.5.3, so recommend discovering a
+            compatible preview and obtaining approval before adding it with aspire add go
+            --version; do not claim a stable 13.5.3 package exists or upgrade implicitly.
+            Community Toolkit CommunityToolkit.Aspire.Hosting.Golang (AddGolangApp) is the
             older Tier 2 alternative, with AddExecutable as the Tier 3 fallback. The agent should
             prefer higher tiers when available. Answer based on intent.
       - type: prompt
@@ -1288,14 +1293,46 @@ stimuli:
       - type: output-not-contains
         config:
           substring: curl.*health
+  - name: orch-go-doctor-toolchain-001
+    prompt: >
+      Use the aspire-orchestration skill before answering. Our selected AppHost is a
+      Go AppHost on Aspire 17.0. Give read-only guidance about the Go toolchain checks
+      in aspire doctor --format Json. What should happen with no Go on PATH, Go 1.26,
+      Go 1.25 with GOTOOLCHAIN=local, and Go 1.25 with GOTOOLCHAIN=auto? Does a warning
+      prove that restore and execution will work? Do not run commands or edit files.
+    tags:
+      priority: p1
+      scenario: non-executing-guidance
+      area:
+        - go
+        - doctor
+    constraints:
+      max_agent_duration: 5m
+    rubric:
+      - The response identifies Aspire 17.0 Go AppHost toolchain checks in aspire doctor --format Json rather than claiming doctor has no Go checks.
+      - Missing Go and Go 1.25 with GOTOOLCHAIN=local fail; Go 1.26 passes; Go 1.25 with automatic toolchain switching warns rather than proving success.
+      - The response does not claim that a toolchain-switching warning guarantees successful restore or execution.
+    graders:
+      - type: prompt
+        name: explains-go-doctor-toolchain-checks
+        config:
+          scoring: binary
+      - type: skill-invocation
+        name: invokes-orchestration-go-doctor
+        config:
+          required:
+            - aspire-orchestration
   - name: orch-tier-go-first-party-001
     prompt: I need to add a Go HTTP service from ./go-api to my Aspire AppHost, which is on Aspire 13.5.3. How
       do I add it?
     tags:
       priority: p1
-      area: init-workflow
+      area:
+        - init-workflow
+        - go
     rubric:
-      - The assistant's response recommends the first-party Aspire.Hosting.Go integration (AddGoApp), added with aspire add, as the Tier 1 choice for a Go application on Aspire 13.4 or later, ahead of the Community Toolkit AddGolangApp.
+      - The assistant's response recommends first-party Aspire.Hosting.Go (AddGoApp) as the Tier 1 choice but explains that 13.x packages are preview and stable starts at 17.0.
+      - The assistant requires approval for a compatible preview, selected explicitly with aspire add go --version, rather than silently opting in or changing the selected 13.5.3 SDK.
     graders:
       - type: prompt
         name: prefers-first-party-go-integration

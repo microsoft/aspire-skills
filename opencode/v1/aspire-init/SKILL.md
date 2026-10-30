@@ -127,8 +127,9 @@ is no output option. In a repo with a root `go.mod`, run it from a new subdirect
 `apphost/`. `aspire.config.json` then sits next to `apphost.go`, not at the repo root.
 Choose `--language` for the language the user wants to write the AppHost in, not the language
 of the services it orchestrates: a Go service in a C# or TypeScript repo does not call for a
-Go AppHost. `aspireify` wires that service, preferring `AddGoApp` (`Aspire.Hosting.Go`) on
-Aspire 13.4 or later.
+Go AppHost. `aspireify` wires that service, preferring `AddGoApp` (`Aspire.Hosting.Go`):
+preview from 13.4, stable from 17.0. A 13.x project needs approval to add a compatible
+preview package; do not silently change its package family or channel.
 
 See [references/init-workflow.md](references/init-workflow.md) for the full sequence
 including what `aspire.config.json` contains and what to do if `aspire init` fails partway.

@@ -210,12 +210,13 @@ Use `--workers 4` to fan stimuli out and shave wall-clock time; expect higher co
 |-------|--------------|-----------------|-------|
 | `aspire` (router) | 6 | 24 | Routing precision to sub-skills; preserve selected release family |
 | `aspire-init` | 11 | 16 | Skeleton drop, `aspire new` / `aspire init` decision, aspireify handoff |
-| `aspireify` | 19 | 20 | AppHost wiring (C# / file-based C# / TS / Go), package-manager resolution, validation, never edit `.aspire/modules/` |
-| `aspire-orchestration` | 32 | 24 | Lifecycle tools, file lock recovery, `--include-hidden`, `aspire update --self` |
+| `aspireify` | 22 | 20 | AppHost wiring (C# / file-based C# / TS / Go), package-channel gates, package-manager resolution, validation, never edit `.aspire/modules/` |
+| `aspire-orchestration` | 36 | 24 | Lifecycle tools, Go toolchain doctor checks, file lock recovery, `--include-hidden`, `aspire update --self` |
 | `aspire-deployment` | 11 | 22 | Multi-target deploy, `aspire destroy`, JS publishing, pipeline previews |
 | `aspire-monitoring` | 8 | 23 | Diagnostics bridge, standalone dashboard, browser logs, `--include-hidden` |
 | `aspire-project-v2-migration` | 16 | 6 | Approval/capability stops, bounded actual edits, idempotence, and explicit migration intent |
-| **Total** | **103** | **135** | **238 stimuli** |
+| `aspire-terminals` | 10 | 2 | Resource PTYs, headless prompts, output contracts, and session lifetime |
+| **Total** | **120** | **137** | **257 stimuli** |
 
 Routing counts include `routing` in either a scalar or array `area` tag.
 

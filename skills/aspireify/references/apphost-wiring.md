@@ -34,7 +34,12 @@ Packages named `CommunityToolkit.Aspire.Hosting.*` — maintained by the communi
 
 These provide typed APIs with proper endpoint handling, health checks, and dashboard integration — significantly better than raw executables.
 
-**Go apps:** on Aspire 13.4 or later, prefer first-party `Aspire.Hosting.Go` (`AddGoApp`, Tier 1) over the Toolkit's `AddGolangApp`. Keep the Toolkit on Aspire older than 13.4 or when the user deliberately uses it, and never migrate an existing Toolkit-based AppHost unprompted.
+**Go apps:** prefer first-party `Aspire.Hosting.Go` (`AddGoApp`, Tier 1). It was introduced
+as preview in 13.4; its first stable package ships with 17.0. On 13.x, discover a compatible
+preview and get approval before `aspire add go --version <compatible-preview-version>`;
+do not imply that `Aspire.Hosting.Go` has a stable 13.x version. Keep the Toolkit on Aspire
+older than 13.4 or when the user deliberately uses it, and never migrate an existing
+Toolkit-based AppHost unprompted.
 
 #### Tier 3: Raw fallbacks (last resort)
 

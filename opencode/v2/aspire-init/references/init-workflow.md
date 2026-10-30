@@ -65,6 +65,9 @@ to the solution instead of creating a single-file AppHost.
 - **`.aspire/modules/`** generated Go SDK (do not edit by hand; regenerate with `aspire add`
   or `aspire restore`). The scaffolded `.gitignore` ignores `.aspire/`.
 - **`aspire.config.json`** next to `apphost.go`, with `appHost.language` set to `go`.
+- Its `packages` includes `Aspire.Hosting.Go` at the selected SDK version. The empty
+  template uses the same scaffold; the starter additionally includes Redis. This relies
+  on the stable Go hosting package shipping with 17.0, not a nonexistent stable 13.x package.
 
 `aspire init` has no output option, so it writes into the current directory and stops because
 it would overwrite existing files when a `go.mod` is already there. In a repo that already has a

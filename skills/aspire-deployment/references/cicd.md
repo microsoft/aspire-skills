@@ -116,7 +116,15 @@ Go AppHost setup:
   uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
   with:
     go-version-file: go.mod
+    cache: false
+
+- name: Restore Go AppHost SDK
+  run: aspire restore --apphost ./apphost.go --non-interactive
 ```
+
+The AppHost's `.aspire/modules/` is generated and gitignored; restore it before `go build`,
+`go vet`, or publish validation. `cache: false` avoids an implicit `go.sum` cache dependency
+for an AppHost module that only replaces the generated local SDK.
 
 Use repository-specific setup instead of the generic snippets when the repo already has wrapper scripts, a local SDK restore step, a package manager other than npm, an AppHost `package.json` or `go.mod` in a subdirectory (point `go-version-file` at it), or a required build command.
 

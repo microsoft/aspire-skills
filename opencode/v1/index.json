@@ -11,7 +11,7 @@
     },
     {
       "name": "aspire-deployment",
-      "version": "sha512-617bdeb1beb096325e510289a074c2e78a83de5fd3884e633f760b290892951db58ae81dd7526e5b9cbf4f0d978a4d870a4cf8a5bf1b87a2a2ab64d55e6e3be4",
+      "version": "sha512-29ca4537b83e6e9ace34bea7cdf2c595360038a57287bf8c29728a14082e0a4d05fccb43cb5c6f51dd1251fc24ebc614280e83cbd1c1774157d4290d24d95377",
       "files": [
         "SKILL.md",
         "references/aws.md",
@@ -27,7 +27,7 @@
     },
     {
       "name": "aspire-init",
-      "version": "sha512-0b6232f417c4b94aa592a74848ec5dcb08ae354900f0a3b66adffcab133836965c97c697fec67a5ea9b49ed5bd010e99e69a9669b703e2c749d754a785ea3216",
+      "version": "sha512-e2a27f2cf8083a6bf42bc25cb5189143e3ae7742a7b4ff19c2b96a2287eaedeadcfe279f2be1b79112f1292c1347a74f7d410ddc1bf6bdc7affa6930c8c9dc03",
       "files": [
         "SKILL.md",
         "references/init-workflow.md",
@@ -46,7 +46,7 @@
     },
     {
       "name": "aspire-orchestration",
-      "version": "sha512-4c6d727ff2ea817d4509cca015a4053ac0702f11362b7de46b534413d766633bc39e9929e93dea20fae514fd8a6ebac08edb7aada0faa9b5c02c54aa57c2b29b",
+      "version": "sha512-c91b52f5d8ccfdcb5ff9ed873cd9cf88dc931aee1b91d394ad31c3ab87cc38b4d120ce63ead5c1b38372c41645e55fbc1ca6cfe555c26437f3b099139d9ecc26",
       "files": [
         "SKILL.md",
         "references/agent-workflows.md",
@@ -78,7 +78,7 @@
     },
     {
       "name": "aspireify",
-      "version": "sha512-3e86412b2a1357aeb6ef378481ff5fc277a76a2f8fd2694c3a7cd2579b46a665d07fe67be8765a9f0c8bb62407b5f6ea5fe87c8daf40750f09780aae3d80acdc",
+      "version": "sha512-8ee322b692f7ff0a007bd077d92f12c389a3d163327b2c283912dd057a0e0611670b257b0b5ddaa05201a48c1092ba3d2f7d5d67cc6616d99f0d3e8e27eff1f5",
       "files": [
         "SKILL.md",
         "references/apphost-wiring.md",

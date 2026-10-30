@@ -67,7 +67,7 @@ The aspireify workflow:
 1. **Scan** the repository — discover .NET projects, Node.js apps, Python/Go services, docker-compose files
 2. **Present findings** — confirm with user which services to include
 3. **Wire the AppHost** — add resources using 3-tier API preference:
-   - Tier 1: First-party `Aspire.Hosting.*` (e.g., `AddPostgres`, `AddRedis`, `AddViteApp`, `AddNextJsApp`; for a Go application on Aspire 13.4 or later, `AddGoApp` from `Aspire.Hosting.Go` via `aspire add go`)
+   - Tier 1: First-party `Aspire.Hosting.*` (e.g., `AddPostgres`, `AddRedis`, `AddViteApp`, `AddNextJsApp`; for a Go application, `AddGoApp` from `Aspire.Hosting.Go` via `aspire add go`: preview from 13.4, stable from 17.0; require approval and an explicit compatible preview version on 13.x)
    - Tier 2: Community Toolkit `CommunityToolkit.Aspire.Hosting.*` (e.g., `AddGolangApp` via `aspire add communitytoolkit-golang` for Go applications on Aspire older than 13.4 or when the user deliberately uses it; never migrate an existing Toolkit-based AppHost implicitly)
    - Tier 3: Raw fallbacks (`AddExecutable`, `AddDockerfile`, `AddContainer`)
 4. **Configure dependencies** — ServiceDefaults for .NET, OTel for non-.NET
@@ -85,7 +85,9 @@ The aspireify workflow:
 
 ### Init Config: `aspire.config.json`
 
-Read `aspire.config.json` at repo root for init context:
+Read the selected AppHost's `aspire.config.json` for init context. For a Go AppHost
+initialized in a subdirectory, use the adjacent configuration there, not the repository
+root, and resolve `appHost.path` relative to that file:
 
 | Field | Values | Meaning |
 |-------|--------|---------|
@@ -124,6 +126,9 @@ aspire restore
 - Use `--apphost <path>` when the workspace has multiple AppHosts. The CLI's global config validates configured AppHost paths to catch typos early.
 - In 13.5, `aspire doctor --format Json` includes a structured `operating-system` check,
   detects VS Code, and runs DCP health checks.
+- In 17.0+, it also checks the selected Go AppHost's Go toolchain: missing Go fails,
+  Go 1.26+ passes, and older toolchains may fail or warn depending on `GOTOOLCHAIN`.
+  A warning about toolchain switching is not proof that restore or execution will work.
 
 ## Key Rules
 

@@ -273,6 +273,9 @@ Current rules to apply when handing off:
 Go AppHost authoring is delegated to `aspireify`. Never edit `.aspire/modules/` (the
 generated Go SDK); use `aspire add <package>` to add integrations and `aspire restore` to
 recover missing files, such as after a fresh clone.
+On Aspire 17.0+, use `aspire doctor --format Json` for the selected Go AppHost's toolchain
+checks. Missing Go fails; Go 1.26+ passes; older Go may warn about toolchain switching or
+fail when it cannot satisfy the requirement. See `go-authoring.md` in `aspireify` for details.
 
 ## Skill Routing — In-Plugin Sibling Skills
 
