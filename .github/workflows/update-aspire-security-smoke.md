@@ -2,7 +2,7 @@
 name: Aspire telemetry security smoke (PR 111)
 description: |
   Exercise the hardened telemetry workflow against pinned, unmerged PR 111.
-  Always stage outputs; never publish destination PRs.
+  Create one real draft PR only after isolated verification and native review.
 on:
   bots: ["aspire-repo-bot[bot]"]
   push:
@@ -115,11 +115,11 @@ jobs:
               context: {
                 ...context,
                 eventName: "workflow_dispatch",
-                payload: { inputs: { pr_number: "111", dry_run: true } }
+                payload: { inputs: { pr_number: "111", dry_run: false } }
               },
               directory: process.env.GITHUB_WORKSPACE
             });
-            if (source.merged || source.commit !== "7d86a04d822b69a26aaa84ed0c3d65bff96c33df" ||
+            if (source.merged || source.commit !== "8f09d3d298009d415555afa154de891b719e907f" ||
                 source.base !== "02d82d2de9ba787eeba1e2577be8377308b1b889") {
               throw new Error("PR 111 changed from the selected unmerged snapshot; do not mix revisions.");
             }
@@ -196,7 +196,7 @@ jobs:
       issues: read
 safe-outputs:
   needs: [resolve-source, verify-telemetry]
-  staged: true
+  staged: false
   report-failure-as-issue: false
   report-failed-jobs: false
   threat-detection:
@@ -256,6 +256,17 @@ safe-outputs:
     max: 1
     create-issue: false
   steps:
+    - name: Checkout trusted Aspire publication base
+      env:
+        TELEMETRY_ASPIRE_BASE: ${{ needs.resolve-source.outputs.aspire-base }}
+        GIT_CONFIG_NOSYSTEM: "1"
+        GIT_CONFIG_GLOBAL: /dev/null
+        GIT_TERMINAL_PROMPT: "0"
+      run: |
+        git -c core.hooksPath=/dev/null init --quiet --initial-branch=main .
+        git -c core.hooksPath=/dev/null remote add origin https://github.com/microsoft/aspire.git
+        git -c core.hooksPath=/dev/null fetch --quiet --no-tags origin "$TELEMETRY_ASPIRE_BASE"
+        git -c core.hooksPath=/dev/null checkout --quiet --detach "$TELEMETRY_ASPIRE_BASE"
     - name: Checkout trusted publication validator
       uses: actions/checkout@v7.0.1
       with:

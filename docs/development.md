@@ -114,7 +114,9 @@ publication:
   base. Before promoting any artifacts, the publication job independently checks
   the bundle's actual file changes against the same compiled policy; a clean
   companion patch cannot hide an out-of-scope bundle change.
-- The publisher can create one draft PR in `microsoft/aspire` on `main`, restricted
+- A clean publisher checks out the pinned Aspire base before validating frozen
+  Git transports; its nested validator checkout cannot replace that repository.
+  The publisher can create one draft PR in `microsoft/aspire` on `main`, restricted
   to telemetry paths and the protected-file policy. Its App token covers only
   Aspire; source research, input resolution, and verification use read-only
   tokens. Diagnostic issue reporting is disabled in both live and dry-run modes;

@@ -457,6 +457,21 @@ test("compiled workflow enforces verifier success, strict detection, and bounded
   assert.ok(policy.allowed_files.every(path => !/AspireSkills|\.csproj$|\.tgz$/.test(path)));
 });
 
+test("publisher prepares the pinned target repository before validating frozen Git transports", () => {
+  const steps = compiled.jobs.safe_outputs.steps;
+  const checkout = steps.findIndex(step => step.name === "Checkout trusted Aspire publication base");
+  const validator = steps.findIndex(step => step.name === "Checkout trusted publication validator");
+  const gate = steps.findIndex(step => step.with?.script?.includes("await promoteVerifiedProposal("));
+  assert.ok(checkout >= 0 && validator > checkout && gate > validator);
+  assert.equal(steps[checkout].env.TELEMETRY_ASPIRE_BASE, "${{ needs.resolve-source.outputs.aspire-base }}");
+  assert.equal(steps[checkout].env.GIT_CONFIG_NOSYSTEM, "1");
+  assert.equal(steps[checkout].env.GIT_CONFIG_GLOBAL, "/dev/null");
+  assert.match(steps[checkout].run, /remote add origin https:\/\/github\.com\/microsoft\/aspire\.git/);
+  assert.match(steps[checkout].run, /fetch --quiet --no-tags origin "\$TELEMETRY_ASPIRE_BASE"/);
+  assert.match(steps[checkout].run, /checkout --quiet --detach "\$TELEMETRY_ASPIRE_BASE"/);
+  assert.doesNotMatch(steps[checkout].run, /TOKEN|extraheader|credential/);
+});
+
 test("Linux CI exercises publication against the same pinned runtime as the workflow", () => {
   const ci = parse(readFileSync(join(root, ".github", "workflows", "test.yml"), "utf8"));
   const runtime = steps => steps.find(step => step.uses?.startsWith("github/gh-aw-actions/setup@"));

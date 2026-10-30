@@ -238,6 +238,17 @@ safe-outputs:
     max: 1
     create-issue: false
   steps:
+    - name: Checkout trusted Aspire publication base
+      env:
+        TELEMETRY_ASPIRE_BASE: ${{ needs.resolve-source.outputs.aspire-base }}
+        GIT_CONFIG_NOSYSTEM: "1"
+        GIT_CONFIG_GLOBAL: /dev/null
+        GIT_TERMINAL_PROMPT: "0"
+      run: |
+        git -c core.hooksPath=/dev/null init --quiet --initial-branch=main .
+        git -c core.hooksPath=/dev/null remote add origin https://github.com/microsoft/aspire.git
+        git -c core.hooksPath=/dev/null fetch --quiet --no-tags origin "$TELEMETRY_ASPIRE_BASE"
+        git -c core.hooksPath=/dev/null checkout --quiet --detach "$TELEMETRY_ASPIRE_BASE"
     - name: Checkout trusted publication validator
       uses: actions/checkout@v7.0.1
       with:

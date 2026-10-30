@@ -18,8 +18,12 @@ const runtime = process.env.GH_AW_ACTIONS_DIR;
 assert.ok(runtime, "Run with GH_AW_ACTIONS_DIR set to the workflow's pinned gh-aw setup directory.");
 const compiled = parse(readFileSync(join(root, ".github", "workflows", "update-aspire.lock.yml"), "utf8"));
 const steps = compiled.jobs.safe_outputs.steps;
+const checkoutIndex = steps.findIndex(step => step.name === "Checkout trusted Aspire publication base");
 const gateIndex = steps.findIndex(step => step.with?.script?.includes("await promoteVerifiedProposal("));
 const publisherIndex = steps.findIndex(step => step.with?.script?.includes("process_safe_outputs.cjs"));
+assert.ok(checkoutIndex >= 0 && checkoutIndex < gateIndex, "The publication fixture requires a real target checkout before the gate.");
+const checkout = steps[checkoutIndex];
+assert.equal(checkout.env.TELEMETRY_ASPIRE_BASE, "${{ needs.resolve-source.outputs.aspire-base }}");
 assert.ok(gateIndex >= 0 && publisherIndex > gateIndex, "The compiled publication gate must precede the native publisher.");
 const gate = steps[gateIndex];
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
@@ -73,8 +77,16 @@ async function fixture(t, { outside, telemetry = true, cleanPatch = false } = {}
   write(agent, allowedPath, "baseline\n");
   const base = commit(agent);
   git(directory, "clone", "--quiet", "--bare", agent, remote);
-  git(directory, "clone", "--quiet", remote, publisher);
-  git(publisher, "remote", "set-url", "origin", target);
+  mkdirSync(publisher);
+  execFileSync("bash", ["-euo", "pipefail", "-c", checkout.run], {
+    cwd: publisher, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
+    env: {
+      ...process.env, ...checkout.env, TELEMETRY_ASPIRE_BASE: base,
+      GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: `url.${remote}.insteadOf`, GIT_CONFIG_VALUE_0: target
+    }
+  });
+  assert.equal(git(publisher, "rev-parse", "HEAD"), base);
+  assert.equal(git(publisher, "remote", "get-url", "origin"), target);
   git(publisher, "config", `url.${remote}.insteadOf`, target);
   git(publisher, "config", "user.name", "Fixture");
   git(publisher, "config", "user.email", "fixture@example.invalid");
