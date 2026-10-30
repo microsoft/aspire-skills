@@ -622,6 +622,25 @@ test("redactAbsolutePaths handles delimited Windows and POSIX paths without swal
     );
 });
 
+test("redactAbsolutePaths keeps URLs and words that merely contain private root names", () => {
+    for (const text of [
+        "See https://learn.microsoft.com/dotnet/aspire/app-host/overview for details",
+        "Dashboard: http://localhost:5000/application/status",
+        "Read https://aspire.dev/data/connect first",
+        "Saved notes to ./homework/todo.txt",
+        "Run /homework/script.sh",
+        "Open https://app/foo now",
+        "Proxy http://data/foo?x=1",
+        "See https://home/foo and https://Users/bar",
+    ]) {
+        assert.equal(redactAbsolutePaths(text), text);
+    }
+    assert.equal(redactAbsolutePaths("open file:///home/jane/App.AppHost.csproj"), "open file://[path withheld]");
+    assert.equal(redactAbsolutePaths("--project=/home/jane/App.csproj failed"), "--project=[path withheld] failed");
+    assert.equal(redactAbsolutePaths("cwd (/tmp) missing"), "cwd ([path withheld]) missing");
+    assert.equal(redactAbsolutePaths("at C:/Users/jane/App.csproj"), "at C:[path withheld]");
+});
+
 test("redactKnownPaths consumes private path suffixes", () => {
     const workspace = "C:\\repo";
     const appHost = "C:\\repo\\Secret.AppHost\\Secret.AppHost.csproj";
