@@ -166,6 +166,18 @@ builder.AddViteApp("frontend", "../frontend")
 | `AddPromptAgent(...)` | Azure AI Foundry Prompt Agent (replaces non-functional `AddAndPublishPromptAgent`) |
 | `var subnet = builder.AddAzureVirtualNetwork("vnet").AddSubnet("pe", "10.0.1.0/24");` + `subnet.AddPrivateEndpoint(acr)` | Private endpoint from a subnet to a supported target such as ACR, Azure OpenAI, or AI Foundry (`Aspire.Hosting.Azure.Network`) |
 
+Virtual network, subnet, private endpoint, and NSP APIs come from `Aspire.Hosting.Azure.Network`.
+Target packages such as ACR, Azure OpenAI, and Foundry do not reference it, so add it to the AppHost
+with the same version as its other Aspire packages:
+
+```xml
+<PackageReference Include="Aspire.Hosting.Azure.Network" Version="<aspire-package-version>" />
+```
+
+```csharp
+#:package Aspire.Hosting.Azure.Network@<aspire-package-version>
+```
+
 ## Lifecycle Hooks
 
 ```csharp

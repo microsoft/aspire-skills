@@ -16,4 +16,9 @@ test("C# authoring documents private endpoints with the subnet-owned Aspire API"
   assert.ok(row, "Missing private endpoint API row");
   assert.match(row, /AddAzureVirtualNetwork\([^)]*\)\.AddSubnet\([^)]*\)/);
   assert.match(row, /\bsubnet\.AddPrivateEndpoint\(\w+\)/);
+
+  // Target hosting packages do not depend on Aspire.Hosting.Azure.Network, so the example only
+  // compiles when the AppHost references that package explicitly.
+  assert.match(azure, /<PackageReference Include="Aspire\.Hosting\.Azure\.Network"/);
+  assert.match(azure, /#:package Aspire\.Hosting\.Azure\.Network@/);
 });
