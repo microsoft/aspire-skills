@@ -37,6 +37,7 @@ evals/
 ├── ts-apphost/          # TypeScript AppHost (apphost.mts + .aspire/modules/)
 ├── non-aspire/          # Non-Aspire .NET project (for "should not trigger" stimuli)
 ├── project-v2-migration/ # Legacy inputs, captured-edit contracts, and qualification guidance
+├── service-defaults-template/ # Template-shaped ServiceDefaults shared project and service, with no AppHost
 ├── terminals/           # Terminal authoring fixtures, captured-edit checks and example compilation
 └── version-preservation/ # Read-only C# AppHost fixture with concrete, centrally managed Aspire versions
 ```
