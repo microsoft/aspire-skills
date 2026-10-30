@@ -20,12 +20,9 @@ test("canonical evaluation specs are present", () => {
 for (const spec of specs) {
   test(`${spec}: executor and judge coverage remain stable`, () => {
     const evaluation = parse(readFileSync(join(root, spec), "utf8"));
-    const usesSol = spec === join("skills", "aspire", "evals", "eval.yaml") ||
-      spec === join("skills", "aspire-orchestration", "evals", "eval.yaml") ||
-      spec === join("skills", "aspireify", "evals", "eval.yaml") ||
-      spec.includes("aspire-project-v2-migration") || spec.includes("aspire-terminals");
-    assert.equal(evaluation.defaults.model,
-      usesSol ? "gpt-5.6-sol" : "gpt-5-mini");
+    // The Copilot SDK executor rejects gpt-5-mini at session.create ("Model
+    // \"gpt-5-mini\" is not available"), erroring every trial before it runs.
+    assert.equal(evaluation.defaults.model, "gpt-5.6-sol");
     assert.equal(evaluation.defaults.judge_model, "gpt-5.6-sol");
   });
 
