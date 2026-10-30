@@ -339,8 +339,8 @@ well-known values:
 ```ts
 import { FoundryModels } from './.aspire/modules/aspire.mjs';
 
-await builder.addAzureFoundry('foundry')
-    .addModel('chat', FoundryModels.OpenAI.Gpt41Mini);
+await builder.addFoundry('foundry')
+    .addDeployment('chat', FoundryModels.OpenAI.Gpt41Mini);
 ```
 
 ## Other TS Additions

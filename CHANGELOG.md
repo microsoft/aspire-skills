@@ -27,6 +27,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   allowing native number controls to hide values that would still be submitted.
 - Fixed the Aspire AppHosts canvas missing mixed-case AppHost files in the
   workspace root when `aspire ls` is unavailable.
+- Corrected Aspireify's TypeScript Foundry example to use the exported
+  `addFoundry(...).addDeployment(...)` APIs instead of nonexistent
+  `addAzureFoundry(...).addModel(...)`.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
