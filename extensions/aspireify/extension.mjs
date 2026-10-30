@@ -16,6 +16,7 @@ import {
     isCompatibleAspireResourceType,
     isDotNetType,
     presentationMode,
+    resourceNameFrom,
     stableProposalHash,
 } from "./proposal-model.mjs";
 import {
@@ -199,17 +200,6 @@ function restoreSnapshotAndHistory(domainId, snapshot, history) {
     } else {
         editHistories.delete(domainId);
     }
-}
-
-function resourceNameFrom(value, index) {
-    const normalized = String(value ?? "")
-        .trim()
-        .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
-        .replace(/[^A-Za-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "")
-        .toLowerCase();
-    const prefixed = /^[a-z]/.test(normalized) ? normalized : `service-${normalized}`;
-    return (prefixed || `service-${index + 1}`).slice(0, 64).replace(/-+$/g, "");
 }
 
 function normalizeService(service, index) {

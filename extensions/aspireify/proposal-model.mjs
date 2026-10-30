@@ -12,6 +12,20 @@ export function exactType(value, fallback = "") {
     return String(value ?? "").trim() || fallback;
 }
 
+export function resourceNameFrom(value, index) {
+    const normalized = String(value ?? "")
+        .trim()
+        .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+        .replace(/[^A-Za-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .toLowerCase();
+    if (!normalized) {
+        return `service-${index + 1}`;
+    }
+    const prefixed = /^[a-z]/.test(normalized) ? normalized : `service-${normalized}`;
+    return prefixed.slice(0, 64).replace(/-+$/g, "");
+}
+
 export function presentationMode(proposal) {
     const count = Array.isArray(proposal?.resources)
         ? proposal.resources.filter((resource) => resource.include !== false).length

@@ -9,6 +9,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   persistent volumes), and explicitly approved AppHost-wide `--volumes` cleanup, including
   its ownership and compatibility limits. Stale-password recovery now prefers restoring
   the password or a targeted reset and treats `--volumes` as a broader, approved option.
+- Gave discovered services whose names contain no ASCII letters or digits distinct
+  default resource names in the Aspireify canvas. Previously they all defaulted to
+  `service`, so their names collided and proposal retries were rejected.
 - Corrected POSIX path handling in the Aspireify canvas to keep proposal
   snapshots separate for AppHost paths containing literal backslashes.
 - Restored AppHost visibility and source-file navigation in the Aspire AppHosts
