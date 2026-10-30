@@ -325,6 +325,101 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet workload install aspire
+  - name: init-go-greenfield-170-001
+    prompt: >
+      I'm starting a brand-new Aspire app from scratch and want a starter project with the
+      AppHost written in Go. Which `aspire new` template should I use, and what do I need
+      installed first? Do not run the command.
+    tags:
+      priority: p1
+      area:
+        - core-flow
+        - aspire-17-0
+        - go
+    rubric:
+      - The assistant's response says Go AppHosts require Aspire 17.0 or later.
+      - The assistant's response names the Go toolchain requirement (the scaffold's go.mod declares go 1.26).
+    graders:
+      - type: output-contains
+        name: uses-go-starter-template
+        config:
+          substring: aspire-go-starter
+      - type: prompt
+        name: states-go-version-requirements
+        config:
+          scoring: binary
+      - type: output-not-contains
+        name: no-dotnet-new-for-go
+        config:
+          substring: dotnet new aspire-go
+  - name: init-go-brownfield-170-001
+    prompt: >
+      My existing repository has a root go.mod for a Go API and no Aspire AppHost. I want the
+      AppHost written in Go as well. Explain the `aspire init` command to use and where to
+      run it. Do not run the command.
+    tags:
+      priority: p1
+      area:
+        - core-flow
+        - aspire-17-0
+        - go
+    rubric:
+      - The assistant's response explains that aspire init --language go writes apphost.go and go.mod into the current directory and stops rather than overwriting existing files, so with a go.mod already at the repository root it must run from a new subdirectory such as apphost.
+    graders:
+      - type: output-contains
+        name: uses-go-init
+        config:
+          substring: aspire init --language go
+      - type: prompt
+        name: explains-go-mod-conflict
+        config:
+          scoring: binary
+  - name: init-go-service-csharp-170-001
+    prompt: >
+      My repository is a .NET solution that also contains a Go API in ./go-api, and it has no
+      Aspire AppHost yet. Should the AppHost be written in Go because of that API? Which
+      `aspire init` language should I use? Do not run the command.
+    tags:
+      priority: p1
+      area:
+        - core-flow
+        - aspire-17-0
+        - go
+    rubric:
+      - The assistant's response says the Go API does not call for a Go AppHost and does not recommend aspire init --language go or scaffolding apphost.go for this .NET solution.
+      - The assistant's response recommends aspire init --language csharp for the .NET solution and treats the Go API as a resource to add to the AppHost afterwards.
+    graders:
+      - type: output-contains
+        name: keeps-csharp-for-dotnet-repo
+        config:
+          substring: aspire init --language csharp
+      - type: prompt
+        name: go-service-needs-no-go-apphost
+        config:
+          scoring: binary
+  - name: init-skip-go-apphost-001
+    prompt: Set up Aspire in this project.
+    tags:
+      priority: p0
+      area:
+        - safety-guardrail
+        - go
+    environment:
+      files:
+        - src: ../../../evals/go-apphost/apphost.go
+          dest: go-apphost/apphost.go
+        - src: ../../../evals/go-apphost/aspire.config.json
+          dest: go-apphost/aspire.config.json
+        - src: ../../../evals/go-apphost/go.mod
+          dest: go-apphost/go.mod
+    rubric:
+      - The assistant's response recognizes that an AppHost already exists (apphost.go next to go.mod, with aspire.config.json setting appHost.language to go) and says aspire init is not needed.
+      - The assistant's response does not claim that Go AppHosts are unsupported; Go AppHosts require Aspire 17.0 or later, and this workspace pins Aspire 17.0.0 packages.
+    graders:
+      - type: prompt
+        name: detects-existing-go-apphost
+        config:
+          scoring: binary
   - name: should_trigger_01
     description: "Reason: Existing repo without AppHost — first-run init flow"
     # Phrased as a question so the agent routes/advises instead of running a slow
@@ -432,6 +527,21 @@ stimuli:
     graders:
       - type: skill-invocation
         name: invokes-aspire-init-8
+        config:
+          required:
+            - aspire-init
+  - name: should_trigger_09
+    description: "Reason: Greenfield Go AppHost - aspire new aspire-go-starter"
+    # Question phrasing: an imperative makes the executor run the interactive scaffolder
+    # (`aspire new`), which blocks and times out the trial; the skill-invocation grader
+    # only checks routing, so intent is unchanged.
+    prompt: How do I create a new Aspire Go starter app?
+    tags:
+      priority: p1
+      area: routing
+    graders:
+      - type: skill-invocation
+        name: invokes-aspire-init-9
         config:
           required:
             - aspire-init

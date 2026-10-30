@@ -36,6 +36,12 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   Includes Aspire-specific VHS tape syntax/examples and stdout, `.txt` and
   `.ascii` output contracts, capability gates, routing and lifetime evaluations.
   Aspire CLI delivery requires refreshing its embedded skill bundle and metadata.
+- Added Go AppHost guidance (Aspire 17.0+) to the `aspire`,
+  `aspire-orchestration`, `aspire-init`, `aspire-deployment` and `aspireify`
+  skills, covering detection, authoring, `aspire init --language go`, `AddGoApp`
+  wiring and deployment CI. Guidance for the first-party `Aspire.Hosting.Go`
+  integration distinguishes preview packages from Aspire 13.4 and stable packages
+  from Aspire 17.0.
 
 ### Removed
 - Removed embedded `.tgz` bundle generation and uploads. Releases now publish

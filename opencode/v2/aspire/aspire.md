@@ -6,7 +6,7 @@ description: >-
   USE FOR: Aspire AppHost, Aspire CLI, distributed app, cloud-native .NET, aspire
   start/stop/resource/deploy/destroy/publish/init/new/add/wait/describe/ps/logs/otel,
   aspire agent init, WithBrowserLogs, WithTerminal, TerminalService, terminal prompts,
-  WithRepl, tapes, Interaction Service, apphost.mts,
+  WithRepl, tapes, Interaction Service, apphost.mts, apphost.go,
   TS package managers, Yarn Classic, custom resource commands, .aspire/modules recovery,
   ProjectResource to DotnetProjectResource migration, or Playwright URL discovery.
   DO NOT USE FOR: non-Aspire projects or ordinary build/test tasks.
@@ -57,12 +57,16 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 | C# AppHost | `.csproj` containing `Aspire.AppHost.Sdk` | ✅ Definitive | AppHost present → orchestration / deployment / monitoring |
 | File-based C# AppHost | `apphost.cs` with `#:sdk Aspire.AppHost.Sdk` | ✅ Definitive | AppHost present → orchestration / deployment / monitoring |
 | TypeScript AppHost | Current `apphost.mts` or legacy `apphost.ts` file in project | ✅ Definitive | AppHost present → orchestration / deployment / monitoring |
+| Go AppHost | `apphost.go` next to an `aspire.config.json` whose `appHost.language` is `go` | ✅ Definitive | AppHost present → orchestration / deployment / monitoring |
 | Aspire config without AppHost | `aspire.config.json` present **and no AppHost** above | High | Bootstrap → `aspireify` (skeleton dropped, needs wiring) |
 | Aspire config with AppHost | `aspire.config.json` present **and** AppHost above | High | AppHost present → orchestration / deployment / monitoring |
 | Aspire settings | `.aspire/` directory present | High | AppHost present (usually) |
-| Generated TS modules | `.aspire/modules/` directory present | High | AppHost present (TS) |
+| Generated TS or Go modules | `.aspire/modules/` directory present | High | AppHost present (TS or Go) |
 | Service defaults | `Aspire.ServiceDefaults` in project references | Medium | AppHost present |
 | **No AppHost, no `aspire.config.json`** | None of the above and user asks to add Aspire | n/a | Bootstrap → `aspire-init` (skeleton drop) |
+
+Go AppHosts require Aspire 17.0 or later. A Go service wired into a C# or TypeScript
+AppHost does not make it a Go AppHost.
 
 ## Default Workflow
 
@@ -103,11 +107,11 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 - Use `features.defaultWatchEnabled` only for Aspire default watch; do not treat it as per-resource rebuild, restart, or hot reload
 - Prefer a resource's own framework/runtime hot reload, HMR, or watch workflow when it already handles the change
 - **Always** `aspire docs search <topic>` before editing unfamiliar AppHost APIs
-- **Always** `aspire docs api search <query> --language csharp|typescript` for API reference before editing AppHost code
+- **Always** `aspire docs api search <query> --language csharp|typescript|go` for API reference before editing AppHost code (`go` needs Aspire 17.0 or later)
 - **Always** `--non-interactive` for agent execution
 - Use `aspire integration list --format Json` and `aspire integration search <query> --format Json` for read-only integration discovery
 - **Never** install the obsolete Aspire workload
-- **Never** edit `.aspire/modules/` directly in TypeScript AppHosts
+- **Never** edit `.aspire/modules/` directly in TypeScript or Go AppHosts
 - **Always** use `aspire start` for an AppHost's lifecycle. When diagnosing or repairing
   a TypeScript AppHost's package-manager toolchain, defer to
   [`aspireify`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md)
@@ -176,8 +180,8 @@ place. Do **not** use it on a repo that already contains an AppHost.
 
 ### aspireify
 Agentic AppHost wiring after `aspire init` lands the skeleton. Scans the repo, proposes a
-resource graph (Postgres / Redis / Rabbit / etc.), edits the AppHost (C#, file-based C#, or
-TypeScript), wires `Aspire.ServiceDefaults` + OTel, validates with `aspire start`, then
+resource graph (Postgres / Redis / Rabbit / etc.), edits the AppHost (C#, file-based C#,
+TypeScript, or Go), wires `Aspire.ServiceDefaults` + OTel, validates with `aspire start`, then
 self-deactivates. Owns current AppHost authoring patterns (`AddNextJsApp`, `AddViteApp`,
 `WithBrowserLogs()`, command arguments, nonterminal Interaction Service availability,
 generated `.aspire/modules/`, unified TS `withEnvironment`, endpoint references,
@@ -261,10 +265,10 @@ update command when it cannot update a managed installation in place.
   `--log-level`, dashboard MCP removal, `NameOutput` → `NameOutputReference`,
   `AddAndPublishPromptAgent` removal, TS `withEnvironment*` deprecation, and the full
   13.2 → 13.3 migration checklist).
-- [aspire-orchestration/references/agent-workflows.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-orchestration/references/agent-workflows.md) — Common agent workflows: worktrees, code changes, investigation, integrations, TypeScript generated APIs, secrets, deployment, and Playwright handoff.
+- [aspire-orchestration/references/agent-workflows.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-orchestration/references/agent-workflows.md) — Common agent workflows: worktrees, code changes, investigation, integrations, TypeScript and Go generated APIs, secrets, deployment, and Playwright handoff.
 - [aspire-orchestration/references/app-commands.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-orchestration/references/app-commands.md) — App lifecycle, bootstrap, update, restore, docs, and integration discovery commands.
 - [aspire-orchestration/references/resource-management.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-orchestration/references/resource-management.md) — Resource wait and resource-command guidance.
 - [aspire-monitoring/references/monitoring.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/references/monitoring.md) — App state, logs, traces, search filtering, dashboard links, and export workflows.
 - [aspire-monitoring/references/playwright-handoff.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/references/playwright-handoff.md) — Playwright handoff after Aspire endpoint discovery.
 - [aspire-deployment/SKILL.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-deployment/SKILL.md) — Deployment and pipeline-step workflows.
-- [aspireify/references/apphost-wiring.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/references/apphost-wiring.md) — C# and TypeScript AppHost API lookup and wiring patterns.
+- [aspireify/references/apphost-wiring.md](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/references/apphost-wiring.md) — C#, TypeScript, and Go AppHost API lookup and wiring patterns.

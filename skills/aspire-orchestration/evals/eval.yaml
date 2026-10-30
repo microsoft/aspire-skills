@@ -841,6 +841,61 @@ stimuli:
       - type: output-not-contains
         config:
           substring: curl.*health
+  - name: orch-detect-go-apphost-001
+    prompt: Use the `aspire-orchestration` skill before answering. How do I run this app?
+    tags:
+      priority: p1
+      area: detection
+    environment:
+      files:
+        - src: ../../../evals/go-apphost/apphost.go
+          dest: go-apphost/apphost.go
+        - src: ../../../evals/go-apphost/aspire.config.json
+          dest: go-apphost/aspire.config.json
+        - src: ../../../evals/go-apphost/go.mod
+          dest: go-apphost/go.mod
+    rubric:
+      - The assistant's response recognizes an Aspire project whose AppHost is written in Go (apphost.go with appHost.language set to go in aspire.config.json) and recommends the Aspire CLI, such as aspire start, to run it.
+      - The assistant's response treats the Go AppHost as supported, because Go AppHosts require Aspire 17.0 or later and this workspace pins Aspire 17.0.0 packages.
+    graders:
+      - type: prompt
+        name: recognizes-go-apphost
+        config:
+          scoring: binary
+      - type: output-matches
+        name: go-apphost-uses-aspire-cli
+        config:
+          pattern: "(?i)aspire (start|run)"
+      - type: skill-invocation
+        name: invokes-orchestration-go-apphost
+        config:
+          required: [aspire-orchestration]
+  - name: orch-detect-go-service-csharp-apphost-001
+    prompt: My Aspire app has a Go API in ./go-api next to the AppHost. What kind of AppHost is this, and how do
+      I run it?
+    tags:
+      priority: p1
+      area: detection
+    environment:
+      files:
+        - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
+          dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
+        - src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs
+          dest: csharp-apphost/MyApp.AppHost/Program.cs
+        - src: ../../../evals/csharp-apphost/aspire.config.json
+          dest: csharp-apphost/aspire.config.json
+    rubric:
+      - The assistant's response identifies the AppHost as a C# AppHost, based on the Aspire.AppHost.Sdk reference in MyApp.AppHost.csproj.
+      - The assistant's response treats the Go API as a service the C# AppHost orchestrates (or can orchestrate) and keeps the C# AppHost workflow, because a Go service in the repository does not make a C# AppHost a Go AppHost.
+    graders:
+      - type: prompt
+        name: keeps-csharp-apphost-with-go-service
+        config:
+          scoring: binary
+      - type: output-matches
+        name: go-service-csharp-apphost-uses-aspire-cli
+        config:
+          pattern: "(?i)aspire (start|run)"
   - name: orch-filelock-001
     prompt: |-
       Use the `aspire-orchestration` skill before answering. I'm in VS Code,
@@ -1193,7 +1248,9 @@ stimuli:
     prompt: I need to add a Go HTTP service and a PostgreSQL database to my Aspire AppHost
     tags:
       priority: p1
-      area: init-workflow
+      area:
+        - init-workflow
+        - go
     environment:
       files:
         - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
@@ -1204,10 +1261,16 @@ stimuli:
       - type: prompt
         name: correct-tiers
         config:
-          prompt: Does the assistant's response use the correct integration tiers? PostgreSQL should use Tier
-            1 first-party Aspire.Hosting.PostgreSQL (AddPostgres). Go should use Tier 2
-            CommunityToolkit (AddGolangApp) or Tier 3 fallback (AddExecutable). The agent should
-            prefer higher tiers when available.
+          prompt: >
+            Does the assistant's response use the correct integration tiers? PostgreSQL should use Tier
+            1 first-party Aspire.Hosting.PostgreSQL (AddPostgres). For the Go service, first-party
+            Aspire.Hosting.Go (AddGoApp) is the Tier 1 choice: preview from 13.4, stable from
+            17.0. This AppHost uses Aspire.AppHost.Sdk 13.5.3, so recommend discovering a
+            compatible preview and obtaining approval before adding it with aspire add go
+            --version; do not claim a stable 13.5.3 package exists or upgrade implicitly.
+            Community Toolkit CommunityToolkit.Aspire.Hosting.Golang (AddGolangApp) is the
+            older Tier 2 alternative, with AddExecutable as the Tier 3 fallback. The agent should
+            prefer higher tiers when available. Answer based on intent.
       - type: prompt
         name: uses-aspire-docs
         config:
@@ -1230,6 +1293,55 @@ stimuli:
       - type: output-not-contains
         config:
           substring: curl.*health
+  - name: orch-go-doctor-toolchain-001
+    prompt: >
+      Use the aspire-orchestration skill before answering. Our selected AppHost is a
+      Go AppHost on Aspire 17.0. Give read-only guidance about the Go toolchain checks
+      in aspire doctor --format Json. What should happen with no Go on PATH, Go 1.26,
+      Go 1.25 with GOTOOLCHAIN=local, and Go 1.25 with GOTOOLCHAIN=auto? Does a warning
+      prove that restore and execution will work? Do not run commands or edit files.
+    tags:
+      priority: p1
+      scenario: non-executing-guidance
+      area:
+        - go
+        - doctor
+    constraints:
+      max_agent_duration: 5m
+    rubric:
+      - The response identifies Aspire 17.0 Go AppHost toolchain checks in aspire doctor --format Json rather than claiming doctor has no Go checks.
+      - Missing Go and Go 1.25 with GOTOOLCHAIN=local fail; Go 1.26 passes; Go 1.25 with automatic toolchain switching warns rather than proving success.
+      - The response does not claim that a toolchain-switching warning guarantees successful restore or execution.
+    graders:
+      - type: prompt
+        name: explains-go-doctor-toolchain-checks
+        config:
+          scoring: binary
+      - type: skill-invocation
+        name: invokes-orchestration-go-doctor
+        config:
+          required:
+            - aspire-orchestration
+  - name: orch-tier-go-first-party-001
+    prompt: I need to add a Go HTTP service from ./go-api to my Aspire AppHost, which is on Aspire 13.5.3. How
+      do I add it?
+    tags:
+      priority: p1
+      area:
+        - init-workflow
+        - go
+    rubric:
+      - The assistant's response recommends first-party Aspire.Hosting.Go (AddGoApp) as the Tier 1 choice but explains that 13.x packages are preview and stable starts at 17.0.
+      - The assistant requires approval for a compatible preview, selected explicitly with aspire add go --version, rather than silently opting in or changing the selected 13.5.3 SDK.
+    graders:
+      - type: prompt
+        name: prefers-first-party-go-integration
+        config:
+          scoring: binary
+      - type: output-contains
+        name: first-party-go-uses-addgoapp
+        config:
+          substring: AddGoApp
   - name: orch-apidocs-001
     prompt: I need to add a custom WithCommand to my AppHost resource but I'm not sure of the API signature
     tags:

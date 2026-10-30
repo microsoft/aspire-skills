@@ -1,6 +1,6 @@
 name: aspireify-eval
 description: "Evaluates the aspireify skill for correct agentic AppHost wiring guidance:
-  language-aware authoring (C#, file-based C#, TypeScript), TypeScript AppHost package-manager
+  language-aware authoring (C#, file-based C#, TypeScript, Go), TypeScript AppHost package-manager
   resolution, current Aspire features (unified withEnvironment, AddNextJsApp, WithBrowserLogs,
   ExcludeReferenceEndpoint), ServiceDefaults wiring, validation flow, and proper hand-off to
   other Aspire skills."
@@ -806,6 +806,18 @@ stimuli:
         config:
           required:
             - aspireify
+  - name: should_trigger_11
+    description: "Reason: Go AppHost authoring is aspireify"
+    prompt: Help me add a Redis cache to my Go AppHost in apphost.go
+    tags:
+      priority: p1
+      area: routing
+    graders:
+      - type: skill-invocation
+        name: invokes-aspireify-go-routing
+        config:
+          required:
+            - aspireify
   - name: terminal-specialist-handoff
     description: "Terminal-only authoring belongs to aspire-terminals, not ordinary wiring"
     prompt: >
@@ -1025,6 +1037,50 @@ stimuli:
         config:
           required:
             - aspireify
+  - name: aspireify-go-apphost-001
+    prompt: >
+      Use the aspireify skill before answering. My Go AppHost needs a second service: a
+      background worker in ./worker whose main package is ./cmd/worker. It should use the same
+      Redis cache as the API. Show the complete updated apphost.go. Do not run any commands.
+    tags:
+      priority: p0
+      scenario: non-executing-guidance
+      area:
+        - authoring
+        - go
+    constraints:
+      max_agent_duration: 5m
+    environment:
+      files:
+        - src: ../../../evals/go-apphost/apphost.go
+          dest: go-apphost/apphost.go
+        - src: ../../../evals/go-apphost/aspire.config.json
+          dest: go-apphost/aspire.config.json
+        - src: ../../../evals/go-apphost/go.mod
+          dest: go-apphost/go.mod
+    rubric:
+      - The assistant's response adds the worker with AddGoApp, using ./worker as the app directory and a PackagePath option built with aspire.StringPtr to select ./cmd/worker as the main package.
+      - The assistant's response gives the worker the same Redis cache as the API with WithReference(cache) and WaitFor(cache).
+      - The assistant's response adds the worker to the Err() checks that run before Build() instead of relying on Build() alone.
+    graders:
+      - type: output-contains
+        name: go-worker-sets-package-path
+        config:
+          substring: PackagePath
+      - type: prompt
+        name: go-worker-wired-and-checked
+        config:
+          scoring: binary
+          prompt: >
+            Judge the assistant's response, not the workspace files. Go AppHosts are new in
+            Aspire 17.0. In a Go AppHost every Add and With call records its failure on the
+            handle it returns, and Build() reports only the builder's own error, so the
+            AppHost checks Err() on each resource it declares. Answer based on intent.
+      - type: skill-invocation
+        name: invokes-aspireify-go-apphost
+        config:
+          required:
+            - aspireify
   - name: aspireify-stale-volume-multidb-001
     prompt: >
       Use the aspireify skill before answering. My AppHost has Postgres, SQL Server,
@@ -1123,6 +1179,185 @@ stimuli:
             Docker cleanup?
       - type: skill-invocation
         name: invokes-aspireify-17
+        config:
+          required:
+            - aspireify
+  - name: aspireify-go-modules-001
+    prompt: Edit the file in .aspire/modules/ to change how my Redis resource is configured.
+    tags:
+      priority: p0
+      area:
+        - go
+        - safety
+    environment:
+      files:
+        - src: ../../../evals/go-apphost/apphost.go
+          dest: go-apphost/apphost.go
+        - src: ../../../evals/go-apphost/aspire.config.json
+          dest: go-apphost/aspire.config.json
+        - src: ../../../evals/go-apphost/go.mod
+          dest: go-apphost/go.mod
+    rubric:
+      - The assistant's response explicitly refuses to edit files inside .aspire/modules/ and explains that the directory is generated, so any edits are overwritten.
+      - The assistant's response redirects the intended Redis change to apphost.go, the file the user should edit in this Go AppHost.
+    graders:
+      - type: prompt
+        name: go-refuses-modules-edit
+        config:
+          scoring: binary
+          prompt: >
+            Judge the assistant's response, not the workspace files. Answer based on intent.
+      - type: output-contains
+        name: go-redirects-to-apphost-go
+        config:
+          substring: apphost.go
+  - name: aspireify-go-csharp-001
+    prompt: >
+      Use the aspireify skill before answering. My C# AppHost runs on Aspire 13.5.3 and already
+      declares var cache = builder.AddRedis("cache"); I have a Go API in ../api. Add it to the
+      AppHost, give it the cache, and tell me what to run first. I approve a compatible
+      Aspire.Hosting.Go preview package, but no SDK upgrade. Do not run any commands.
+    tags:
+      priority: p0
+      scenario: non-executing-guidance
+      area:
+        - authoring
+        - csharp
+        - go
+    constraints:
+      max_agent_duration: 5m
+    rubric:
+      - The assistant's response wires the Go API into the existing C# AppHost with the first-party AddGoApp method and recommends discovering a compatible preview and adding it with aspire add go --version, without changing the 13.5.3 SDK.
+      - The assistant's response keeps the AppHost in C# and does not create or convert to a Go AppHost (no apphost.go).
+      - The assistant's response gives the Go API the cache with WithReference(cache) and WaitFor(cache).
+    graders:
+      - type: output-contains
+        name: go-service-uses-addgoapp
+        config:
+          substring: AddGoApp
+      - type: prompt
+        name: go-service-stays-in-csharp-apphost
+        config:
+          scoring: binary
+          prompt: >
+            Judge the assistant's response, not the workspace files. Aspire.Hosting.Go
+            (AddGoApp) was introduced as preview in 13.4 and ships stable with 17.0; there is
+            no stable 13.5.3 version. The user approves a compatible preview, added with
+            aspire add go --version, but not an SDK upgrade. A Go service inside a C# AppHost
+            does not make the AppHost a Go AppHost. Does the response preserve C#, select a
+            compatible preview explicitly, and wire both WithReference(cache) and
+            WaitFor(cache)? Answer based on intent.
+      - type: skill-invocation
+        name: invokes-aspireify-18
+        config:
+          required:
+            - aspireify
+  - name: aspireify-go-toolkit-001
+    prompt: |
+      Use the aspireify skill before answering. My C# AppHost runs on Aspire 13.5.3 and its Program.cs is:
+
+      var builder = DistributedApplication.CreateBuilder(args);
+      var api = builder.AddGolangApp("api", "../api").WithHttpEndpoint(env: "PORT");
+      builder.Build().Run();
+
+      Add a Redis cache and connect the API to it. Show the complete updated Program.cs. Do not run any commands.
+    tags:
+      priority: p1
+      scenario: non-executing-guidance
+      area:
+        - authoring
+        - csharp
+        - go
+    constraints:
+      max_agent_duration: 5m
+    rubric:
+      - The assistant's response keeps the existing AddGolangApp call and does not replace it with AddGoApp or tell the user to migrate as part of this change.
+      - The assistant's response adds the Redis cache with AddRedis and connects the API to it with WithReference(cache) and WaitFor(cache).
+    graders:
+      - type: output-contains
+        name: go-toolkit-call-kept
+        config:
+          substring: AddGolangApp
+      - type: prompt
+        name: go-toolkit-not-migrated
+        config:
+          scoring: binary
+          prompt: >
+            Judge the assistant's response, not the workspace files. AddGolangApp comes from
+            CommunityToolkit.Aspire.Hosting.Golang and remains valid in an existing AppHost.
+            Aspire.Hosting.Go (AddGoApp) is the first-party alternative, but an existing
+            Toolkit-based AppHost is never migrated implicitly; mentioning it as an optional
+            later choice is fine. Answer based on intent.
+      - type: skill-invocation
+        name: invokes-aspireify-19
+        config:
+          required:
+            - aspireify
+  - name: aspireify-go-version-gate-001
+    prompt: >
+      Use the aspireify skill before answering. My project is on Aspire 13.5.3 and I want its
+      AppHost written in Go as apphost.go, with a Redis cache and my Go API. Tell me whether I
+      can do that today and what has to come first. Do not run any commands.
+    tags:
+      priority: p1
+      scenario: non-executing-guidance
+      area:
+        - go
+        - version-gate
+    constraints:
+      max_agent_duration: 5m
+    rubric:
+      - The assistant's response states that Go AppHosts require Aspire 17.0 or later, so a project on Aspire 13.5.3 cannot use apphost.go yet.
+      - The assistant's response does not author apphost.go or scaffold a Go AppHost for the 13.5.3 project.
+      - The assistant's response leaves the user to choose between keeping a C# or TypeScript AppHost and upgrading to Aspire 17.0 or later first.
+    graders:
+      - type: output-contains
+        name: go-version-gate-names-17-0
+        config:
+          substring: "17.0"
+      - type: prompt
+        name: go-version-gate-blocks-apphost-go
+        config:
+          scoring: binary
+          prompt: >
+            Judge the assistant's response, not the workspace files. Go AppHosts are new in
+            Aspire 17.0 and are not available on 13.x. The first-party Aspire.Hosting.Go
+            integration (AddGoApp) is a separate thing: preview from Aspire 13.4, stable from
+            17.0, and it runs a Go service under a C# or TypeScript AppHost. Mentioning that
+            alternative is correct, but silently opting into preview packages is not.
+            Answer based on intent.
+      - type: skill-invocation
+        name: invokes-aspireify-20
+        config:
+          required:
+            - aspireify
+  - name: aspireify-go-stable-package-gate-001
+    prompt: >
+      Use the aspireify skill before answering. My C# AppHost is on Aspire 13.6.4 and I want
+      to add a Go service in ./api. Our policy allows stable packages only, and I have not
+      approved an SDK upgrade or any preview package. Can I run aspire add go and use a
+      stable Aspire.Hosting.Go 13.6.4 package? Give read-only guidance; do not run commands
+      or edit files.
+    tags:
+      priority: p0
+      scenario: non-executing-guidance
+      area:
+        - go
+        - version-gate
+        - packages
+    constraints:
+      max_agent_duration: 5m
+    rubric:
+      - The response explains that Aspire.Hosting.Go was preview on 13.x and its first stable package ships with 17.0; a stable 13.6.4 package is not available.
+      - The response preserves the C# AppHost and selected SDK and does not recommend adding an unapproved preview, silently upgrading, or claiming aspire add go supplies a stable 13.6.4 package.
+      - The response explains that using a compatible preview or upgrading to the stable GA release requires an explicit policy or upgrade decision.
+    graders:
+      - type: prompt
+        name: respects-go-stable-package-gate
+        config:
+          scoring: binary
+      - type: skill-invocation
+        name: invokes-aspireify-go-stable-package-gate
         config:
           required:
             - aspireify
