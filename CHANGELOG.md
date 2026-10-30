@@ -5,6 +5,7 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
 ### Changed
+- Unified canvas styling and icons with shared assets that respect host themes.
 - Distinguished ordinary `aspire stop`, `aspire stop --force` (which preserves
   persistent volumes), and explicitly approved AppHost-wide `--volumes` cleanup, including
   its ownership and compatibility limits. Stale-password recovery now prefers restoring
@@ -12,6 +13,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Gave discovered services whose names contain no ASCII letters or digits distinct
   default resource names in the Aspireify canvas. Previously they all defaulted to
   `service`, so their names collided and proposal retries were rejected.
+- Stopped the Aspireify canvas from classifying Node.js, TypeScript, Python, and
+  container services as .NET when their type label also mentions gRPC or a worker
+  service. These services no longer default to .NET Service Defaults, and they keep
+  their runtime-compatible resource types.
 - Corrected POSIX path handling in the Aspireify canvas to keep proposal
   snapshots separate for AppHost paths containing literal backslashes.
 - Restored AppHost visibility and source-file navigation in the Aspire AppHosts

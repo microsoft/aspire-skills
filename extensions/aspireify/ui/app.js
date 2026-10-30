@@ -1128,12 +1128,10 @@ function createResourceTitleLine(resource) {
 
 function renderResourceValidation(issues) {
     const validation = createElement("div", { className: "resource-validation" });
+    const marker = createIcon("error", 14);
+    marker.classList.add("resource-validation-icon");
     validation.append(
-        createElement("span", {
-            className: "resource-validation-icon",
-            text: "!",
-            attrs: { "aria-hidden": "true" },
-        }),
+        marker,
         createElement("span", { text: issues.join(" ") }),
     );
     return validation;
@@ -1684,6 +1682,9 @@ function createConnectionHeading(resource, labeled = false) {
         },
     });
     add.hidden = snapshot.confirmed;
+    if (!labeled) {
+        add.append(createIcon("add"));
+    }
     add.disabled =
         snapshot.proposal.resources.filter((candidate) => candidate.include).length < 2;
     add.addEventListener("click", () => openConnectionDialog("", resource.name));
@@ -2138,10 +2139,10 @@ function addResourceConnectionRow() {
     fillResourceSelect(target, resources);
     const remove = createElement("button", {
         className: "btn btn-quiet btn-icon add-connection-remove",
-        text: "×",
         title: "Remove connection",
         attrs: { type: "button", "aria-label": "Remove connection" },
     });
+    remove.append(createIcon("close"));
     remove.addEventListener("click", () => {
         row.remove();
         if (!elements.addResourceConnections.children.length) {
@@ -2418,6 +2419,21 @@ function showConfirmationError(error, failureChannel) {
 function clearDialogError(element) {
     element.textContent = "";
     element.hidden = true;
+}
+
+function createIcon(name, size = 16) {
+    const namespace = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(namespace, "svg");
+    svg.setAttribute("class", "canvas-icon");
+    svg.setAttribute("width", String(size));
+    svg.setAttribute("height", String(size));
+    svg.setAttribute("viewBox", "0 0 16 16");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    const use = document.createElementNS(namespace, "use");
+    use.setAttribute("href", `/canvas-icons.svg#${name}`);
+    svg.append(use);
+    return svg;
 }
 
 function createElement(tag, options = {}) {

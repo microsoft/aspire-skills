@@ -28,6 +28,22 @@ const ok = (data) => ({ ok: true, code: 0, stdout: JSON.stringify(data), stderr:
 const fail = (error = "Synthetic CLI failure") => ({ ok: false, code: 1, stdout: "", stderr: error, error });
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
+test("shared canvas assets are served locally with their correct MIME types", async (t) => {
+    const h = await harness(t);
+    const opened = await h.open();
+    for (const [asset, type] of [["theme.css", "text/css"], ["icons.svg", "image/svg+xml"]]) {
+        const response = await fetch(new URL(`/canvas-${asset}`, opened.url));
+        assert.equal(response.status, 200);
+        assert.ok(response.headers.get("content-type").startsWith(type));
+        assert.equal(
+            await response.text(),
+            await readFile(new URL(`../../assets/canvas/${asset}`, import.meta.url), "utf8"),
+        );
+    }
+    const response = await fetch(new URL("/assets/canvas/theme.css", opened.url));
+    assert.equal(response.status, 404, "only the exact static asset allowlist is public");
+});
+
 function describe(inputs = baseInputs, state = "Running") {
     return { resources: [
         {

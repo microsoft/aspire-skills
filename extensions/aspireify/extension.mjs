@@ -44,6 +44,7 @@ const CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
     ".css": "text/css; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
+    ".svg": "image/svg+xml",
 };
 
 const APPHOST_STYLES = new Set(["csharp-sdk", "csharp-file", "typescript"]);
@@ -2151,7 +2152,7 @@ async function handleRequest(entry, request, response) {
     }
     if (
         request.method === "GET" &&
-        ["/app.js", "/styles.css", "/resource-types.js", "/interaction-model.js"].includes(
+        ["/app.js", "/styles.css", "/canvas-theme.css", "/canvas-icons.svg", "/resource-types.js", "/interaction-model.js"].includes(
             url.pathname,
         )
     ) {

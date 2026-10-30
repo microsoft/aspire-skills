@@ -514,8 +514,8 @@ async function handleRequest(entry, req, res) {
     if (req.method === "GET" && (path === "/" || path === "/index.html")) {
         return serveAsset(res, "index.html");
     }
-    if (req.method === "GET" && path === "/styles.css") {
-        return serveAsset(res, "styles.css");
+    if (req.method === "GET" && ["/styles.css", "/canvas-theme.css", "/canvas-icons.svg"].includes(path)) {
+        return serveAsset(res, path.slice(1));
     }
     if (req.method === "GET" && path === "/app.js") {
         return serveAsset(res, "app.js");
