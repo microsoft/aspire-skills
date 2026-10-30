@@ -93,7 +93,7 @@ C# AppHost setup:
     dotnet build --no-restore
 ```
 
-TypeScript AppHost setup:
+TypeScript AppHost setup (after the Aspire CLI install step, because `.aspire/modules/` is generated and gitignored and `npm run build` type-checks the AppHost against it):
 
 ```yaml
 - name: Setup Node
@@ -104,6 +104,7 @@ TypeScript AppHost setup:
 - name: Install and build TypeScript workspace
   run: |
     npm ci
+    aspire restore --apphost ./apphost.mts --non-interactive
     npm run build --if-present
 ```
 
