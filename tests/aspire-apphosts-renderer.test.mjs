@@ -12,6 +12,7 @@ import { sanitizeCommandArgumentInputs, validateCommandArguments } from "../exte
 const rendererSource = await readFile(new URL("../extensions/aspire-apphosts/ui/app.js", import.meta.url), "utf8");
 const markup = await readFile(new URL("../extensions/aspire-apphosts/ui/index.html", import.meta.url), "utf8");
 const styles = await readFile(new URL("../extensions/aspire-apphosts/ui/styles.css", import.meta.url), "utf8");
+const sharedStyles = await readFile(new URL("../extensions/aspire-apphosts/ui/canvas-theme.css", import.meta.url), "utf8");
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 // A bounded DOM/event adapter for executing the shipped renderer without a browser dependency.
@@ -1149,9 +1150,9 @@ test("pipeline focus returns to a live control after the board rerenders, and ol
 });
 
 test("responsive and theme selectors preserve host priority, the official mark, and long parent identity", async () => {
-    assert.match(styles, /@media \(prefers-color-scheme: dark\)[\s\S]*?:root:not\(\[data-color-mode\]\):not\(:has\(body\[data-color-mode\]\)\)/);
-    assert.match(styles, /--surface: var\(--background-color-default, #151b23\)/);
-    assert.match(styles, /--text: var\(--text-color-default, #f0f6fc\)/);
+    assert.match(sharedStyles, /:root:not\(\[data-color-mode\]\):has\(body\[data-color-mode="light"\]\)/);
+    assert.match(sharedStyles, /--surface: var\(--background-color-default, light-dark\(#ffffff, #0d1117\)\)/);
+    assert.match(sharedStyles, /--text: var\(--text-color-default, light-dark\(#1f2328, #f0f6fc\)\)/);
     assert.match(styles, /\.resource-parent\s*\{[^}]*min-width: 0;[^}]*overflow-wrap: anywhere;/);
     assert.match(styles, /\.apphost-heading\s*\{[^}]*max-width: 100%;/);
     assert.match(styles, /\.apphost-heading h2\s*\{[^}]*overflow-wrap: anywhere;[^}]*white-space: normal;/);
@@ -1159,8 +1160,12 @@ test("responsive and theme selectors preserve host priority, the official mark, 
     assert.match(styles, /\.host-more-actions\s*\{\s*display: none;/);
     assert.match(styles, /@media \(max-width: 520px\)[\s\S]*?\.host-more-actions\s*\{\s*display: inline-flex;/);
     assert.match(styles, /@media \(max-width: 520px\)[\s\S]*?\.title-row\s*\{[^}]*grid-template-columns: 40px minmax\(0, 1fr\) auto;/);
-    assert.match(markup, /class="brand-mark"[\s\S]*?width="22"\s+height="22"/);
+    assert.match(markup, /class="brand-mark canvas-brand"[\s\S]*?width="22"\s+height="22"/);
     const renderer = await boot();
+    const icon = renderer.context.svgIcon("warning");
+    assert.equal(icon.getAttribute("aria-hidden"), "true");
+    assert.equal(icon.getAttribute("focusable"), "false");
+    assert.equal(icon.children[0].getAttribute("href"), "/canvas-icons.svg#warning");
     const longParent = "LongParent".repeat(80);
     const card = renderer.context.renderResourceCard({
         resource: { id: "child", label: "Child", children: [] }, parentLabel: longParent, dashboardAvailable: false,

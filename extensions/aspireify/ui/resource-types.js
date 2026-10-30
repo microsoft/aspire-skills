@@ -3,7 +3,7 @@ export function classifyServiceKind(value) {
     if (/valkey|redis|\bcache\b/.test(type)) {
         return "cache";
     }
-    if (/asp\.?net|\.net|dotnet|c#|csharp|csproj|blazor|worker service|\bgrpc\b|\bmaui\b/.test(type)) {
+    if (/asp\.?net|\.net|dotnet|c#|csharp|csproj|blazor|\bmaui\b/.test(type)) {
         return "dotnet";
     }
     if (/node|javascript|typescript|next(?:\.js|js)?|vite|react/.test(type)) {
@@ -17,6 +17,10 @@ export function classifyServiceKind(value) {
     }
     if (/container|docker compose|image/.test(type)) {
         return "container";
+    }
+    // gRPC and "Worker Service" are .NET hints only when no other runtime is named.
+    if (/worker service|\bgrpc\b/.test(type)) {
+        return "dotnet";
     }
     return "executable";
 }

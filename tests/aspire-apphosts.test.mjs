@@ -689,6 +689,25 @@ test("redactAbsolutePaths handles delimited Windows and POSIX paths without swal
     );
 });
 
+test("redactAbsolutePaths keeps URLs and words that merely contain private root names", () => {
+    for (const text of [
+        "See https://learn.microsoft.com/dotnet/aspire/app-host/overview for details",
+        "Dashboard: http://localhost:5000/application/status",
+        "Read https://aspire.dev/data/connect first",
+        "Saved notes to ./homework/todo.txt",
+        "Run /homework/script.sh",
+        "Open https://app/foo now",
+        "Proxy http://data/foo?x=1",
+        "See https://home/foo and https://Users/bar",
+    ]) {
+        assert.equal(redactAbsolutePaths(text), text);
+    }
+    assert.equal(redactAbsolutePaths("open file:///home/jane/App.AppHost.csproj"), "open file://[path withheld]");
+    assert.equal(redactAbsolutePaths("--project=/home/jane/App.csproj failed"), "--project=[path withheld] failed");
+    assert.equal(redactAbsolutePaths("cwd (/tmp) missing"), "cwd ([path withheld]) missing");
+    assert.equal(redactAbsolutePaths("at C:/Users/jane/App.csproj"), "at C:[path withheld]");
+});
+
 test("redactKnownPaths consumes private path suffixes", () => {
     const workspace = "C:\\repo";
     const appHost = "C:\\repo\\Secret.AppHost\\Secret.AppHost.csproj";
@@ -1212,12 +1231,13 @@ test("directory AppHost inputs resolve to a concrete project", async () => {
 
 test("canvas source carries the confirmed direction and protected data routes", async () => {
     const root = new URL("../extensions/aspire-apphosts/", import.meta.url);
-    const [html, client, styles, provider, model] = await Promise.all([
+    const [html, client, styles, provider, model, sharedStyles] = await Promise.all([
         import("node:fs/promises").then(({ readFile }) => readFile(new URL("ui/index.html", root), "utf8")),
         import("node:fs/promises").then(({ readFile }) => readFile(new URL("ui/app.js", root), "utf8")),
         import("node:fs/promises").then(({ readFile }) => readFile(new URL("ui/styles.css", root), "utf8")),
         import("node:fs/promises").then(({ readFile }) => readFile(new URL("extension.mjs", root), "utf8")),
         import("node:fs/promises").then(({ readFile }) => readFile(new URL("lib/app-model.mjs", root), "utf8")),
+        import("node:fs/promises").then(({ readFile }) => readFile(new URL("ui/canvas-theme.css", root), "utf8")),
     ]);
 
     assert.match(html, /THESIS: Aspire's operational model becomes a canvas-native workspace/);
@@ -1276,7 +1296,7 @@ test("canvas source carries the confirmed direction and protected data routes", 
     assert.match(client, /Structured logs/);
     assert.match(client, /Traces/);
     assert.match(client, /Metrics/);
-    assert.match(styles, /--border-strong:/);
+    assert.match(sharedStyles, /--border-strong:/);
     assert.match(styles, /view-transition-name: app-model-surface/);
     assert.doesNotMatch(styles, /\.resource-card:hover/);
     const resourceBoardStyles = styles.slice(
@@ -1367,25 +1387,24 @@ test("canvas source carries the confirmed direction and protected data routes", 
 test("canvas header links the compact Aspire mark with accessible interaction styles", async () => {
     const root = new URL("../extensions/aspire-apphosts/ui/", import.meta.url);
     const { readFile } = await import("node:fs/promises");
-    const [html, styles] = await Promise.all([
+    const [html, styles, sharedStyles] = await Promise.all([
         readFile(new URL("index.html", root), "utf8"),
         readFile(new URL("styles.css", root), "utf8"),
+        readFile(new URL("canvas-theme.css", root), "utf8"),
     ]);
-    const brandLink = html.match(/<a\b[^>]*class="brand-mark"[^>]*>[\s\S]*?<\/a>/)?.[0];
+    const brandLink = html.match(/<a\b[^>]*class="brand-mark canvas-brand"[^>]*>[\s\S]*?<\/a>/)?.[0];
     assert.ok(brandLink, "The Aspire mark must be an actionable link.");
     assert.match(brandLink, /href="https:\/\/aspire\.dev\/"/);
     assert.match(brandLink, /target="_blank"/);
     assert.match(brandLink, /rel="noopener noreferrer"/);
     assert.match(brandLink, /aria-label="Visit Aspire\.dev \(opens in a new tab\)"/);
-    assert.match(brandLink, /<svg\s+width="22"\s+height="22"\s+viewBox="0 0 32 32"/);
+    assert.match(brandLink, /<svg class="canvas-icon"\s+width="22"\s+height="22"\s+viewBox="0 0 32 32"/);
     assert.match(brandLink, /aria-hidden="true"\s+focusable="false"/);
-    assert.equal((brandLink.match(/<path\b/g) ?? []).length, 6);
-    assert.match(brandLink, /fill="#512BD4"/);
-    assert.match(styles, /\.brand-mark:focus-visible,[^{]+\{\s*outline: 2px solid var\(--accent\);\s*outline-offset: 2px;/);
-    assert.match(styles, /\.brand-mark:hover\s*\{\s*background: var\(--surface-muted\);/);
-    assert.match(styles, /\.brand-mark:active\s*\{\s*background: var\(--surface-inset\);/);
-    assert.match(styles, /@media \(max-width: 760px\)\s*\{\s*\.brand-mark\s*\{\s*width: 40px;\s*height: 40px;/);
-    assert.match(styles, /@media \(pointer: coarse\)\s*\{\s*\.brand-mark\s*\{\s*width: 40px;\s*height: 40px;/);
+    assert.match(brandLink, /<use href="\/canvas-icons\.svg#aspire"><\/use>/);
+    assert.match(sharedStyles, /a\[href\].*\[tabindex\]\):focus-visible\s*\{\s*outline: 2px solid var\(--focus\);\s*outline-offset: 2px;/);
+    assert.match(sharedStyles, /\.canvas-brand:hover\s*\{\s*background: var\(--surface-muted\);/);
+    assert.match(sharedStyles, /\.canvas-brand:active\s*\{\s*background: var\(--surface-inset\);/);
+    assert.match(sharedStyles, /@media \(max-width: 760px\), \(pointer: coarse\)\s*\{\s*\.canvas-brand\s*\{\s*width: 40px;\s*height: 40px;/);
 });
 
 test("canvas uses a focused Workspace and Global resource board instead of an explorer tree", async () => {
