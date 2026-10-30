@@ -245,10 +245,20 @@ safe-outputs:
         GIT_CONFIG_GLOBAL: /dev/null
         GIT_TERMINAL_PROMPT: "0"
       run: |
-        git -c core.hooksPath=/dev/null init --quiet --initial-branch=main .
-        git -c core.hooksPath=/dev/null remote add origin https://github.com/microsoft/aspire.git
-        git -c core.hooksPath=/dev/null fetch --quiet --no-tags origin "$TELEMETRY_ASPIRE_BASE"
-        git -c core.hooksPath=/dev/null checkout --quiet --detach "$TELEMETRY_ASPIRE_BASE"
+        if ! git -c core.hooksPath=/dev/null rev-parse --git-dir >/dev/null 2>&1; then
+          git -c core.hooksPath=/dev/null init --quiet --initial-branch=main .
+          git -c core.hooksPath=/dev/null remote add origin https://github.com/microsoft/aspire.git
+          git -c core.hooksPath=/dev/null fetch --quiet --no-tags origin "$TELEMETRY_ASPIRE_BASE"
+          git -c core.hooksPath=/dev/null checkout --quiet --detach "$TELEMETRY_ASPIRE_BASE"
+        fi
+        if ! git -c core.hooksPath=/dev/null config --get remote.origin.url '^https://(x-access-token:[^/@]+@)?github[.]com/microsoft/aspire([.]git)?$' >/dev/null; then
+          echo "Unexpected Aspire publication repository." >&2
+          exit 1
+        fi
+        if ! git -c core.hooksPath=/dev/null rev-parse HEAD | grep -Fxq "$TELEMETRY_ASPIRE_BASE"; then
+          echo "Aspire publication checkout does not match the verified base." >&2
+          exit 1
+        fi
     - name: Checkout trusted publication validator
       uses: actions/checkout@v7.0.1
       with:

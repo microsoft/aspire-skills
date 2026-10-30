@@ -78,13 +78,17 @@ async function fixture(t, { outside, telemetry = true, cleanPatch = false } = {}
   const base = commit(agent);
   git(directory, "clone", "--quiet", "--bare", agent, remote);
   mkdirSync(publisher);
-  execFileSync("bash", ["-euo", "pipefail", "-c", checkout.run], {
+  const prepareCheckout = () => execFileSync("bash", ["-euo", "pipefail", "-c", checkout.run], {
     cwd: publisher, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
     env: {
       ...process.env, ...checkout.env, TELEMETRY_ASPIRE_BASE: base,
       GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: `url.${remote}.insteadOf`, GIT_CONFIG_VALUE_0: target
     }
   });
+  prepareCheckout();
+  git(publisher, "remote", "set-url", "origin", "https://x-access-token:fixture-token@github.com/microsoft/aspire.git");
+  prepareCheckout();
+  git(publisher, "remote", "set-url", "origin", target);
   assert.equal(git(publisher, "rev-parse", "HEAD"), base);
   assert.equal(git(publisher, "remote", "get-url", "origin"), target);
   git(publisher, "config", `url.${remote}.insteadOf`, target);
