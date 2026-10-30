@@ -37,7 +37,7 @@ jobs:
 
       - name: Setup pinned telemetry publisher runtime
         if: runner.os == 'Linux'
-        uses: github/gh-aw-actions/setup@2fbab69bfca02bebd76cd0fc43f2d12acfed994f
+        uses: github/gh-aw-actions/setup@866158eb5c6cbfd3c614104e3d3d6634e246d220
 
       - name: Test telemetry publication boundary
         if: runner.os == 'Linux'

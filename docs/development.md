@@ -68,17 +68,19 @@ is allowed.
 Configure `ASPIRE_BOT_APP_ID` and `ASPIRE_BOT_PRIVATE_KEY` as repository secrets.
 Source research uses a read-only GitHub CLI proxy. Optional maintenance is
 disabled in `.github/workflows/aw.json`. Regenerate the compiled workflow with
-gh-aw v0.89.22 on Linux or WSL after editing its source or configuration:
+gh-aw v0.91.8 on Linux or WSL after editing its source or configuration:
 
 ```shell
-gh aw compile update-aspire --validate --action-mode action --action-tag 2fbab69bfca02bebd76cd0fc43f2d12acfed994f
+gh aw compile update-aspire --validate --action-mode action --action-tag 866158eb5c6cbfd3c614104e3d3d6634e246d220
 ```
 
-The sandbox pins AWF v0.28.27 for the
-[Copilot custom-tool translation fix](https://github.com/github/gh-aw-firewall/pull/9075).
-The compiler includes the
+The sandbox pins AWF v0.28.49 for Copilot custom-tool handling and
+[model-supported endpoint discovery and recovery](https://github.com/github/gh-aw-firewall/pull/9559).
+The runtime includes [live model endpoint selection](https://github.com/github/gh-aw/pull/67487),
+so the harness selects the model's supported wire API without a workflow-level override.
+The compiler also includes the
 [reviewer image-propagation fix](https://github.com/github/gh-aw/pull/63014),
-so the digest-pinned sandbox images apply to both AI jobs.
+so both AI jobs use the digest-pinned sandbox images.
 
 The workflow separates input resolution, agent editing, verification, and
 publication:

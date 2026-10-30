@@ -59,12 +59,12 @@ network:
     - dnceng.pkgs.visualstudio.com
 sandbox:
   agent:
-    version: v0.28.27
+    version: v0.28.49
     images:
-      agent: ghcr.io/github/gh-aw-firewall/agent:0.28.27@sha256:8d14865f96d57d9b4f22b30b3e148d2d926384f0aa543a139f15593e450f0e90
-      apiProxy: ghcr.io/github/gh-aw-firewall/api-proxy:0.28.27@sha256:b767b95ad787fae126e0224e547e31daa22950aaa4f03c34e1224f3ce80f314e
-      cliProxy: ghcr.io/github/gh-aw-firewall/cli-proxy:0.28.27@sha256:7536c8d5b9b4f77d48f3617df6b3d303d363945c7490bd0e708ddb420986448d
-      squid: ghcr.io/github/gh-aw-firewall/squid:0.28.27@sha256:c89d35cbc15c1c8614cc01da321a26a0685a71b51858965ce6fdd78252df64a9
+      agent: ghcr.io/github/gh-aw-firewall/agent:0.28.49@sha256:39f923c51e2790a2a00085959bf8c31a06a23fb3d7fd463f704d7d41291425b3
+      api-proxy: ghcr.io/github/gh-aw-firewall/api-proxy:0.28.49@sha256:ef6d61dac70d98389384c3a760882931d20310a45b908f30dd2cc0ebf36f1b39
+      cli-proxy: ghcr.io/github/gh-aw-firewall/cli-proxy:0.28.49@sha256:147eb25d465ce0aa6b60d2b711279533b8e1aa40b9d5161f90e927252c84955c
+      squid: ghcr.io/github/gh-aw-firewall/squid:0.28.49@sha256:0041ab94c9c3e190fbd851add7dd46bf950e987322ca2bf20e9fadb5803e94e7
 tools:
   edit:
   bash: ["*"]
@@ -155,7 +155,7 @@ jobs:
           path: _aspire
           fetch-depth: 0
           persist-credentials: false
-      - uses: github/gh-aw-actions/setup@2fbab69bfca02bebd76cd0fc43f2d12acfed994f
+      - uses: github/gh-aw-actions/setup@866158eb5c6cbfd3c614104e3d3d6634e246d220
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
       - run: npm ci --ignore-scripts --no-audit --no-fund

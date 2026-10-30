@@ -360,13 +360,18 @@ test("Linux CI exercises publication against the same pinned runtime as the work
   assert.equal(regression.env.GH_AW_ACTIONS_DIR, "${{ runner.temp }}/gh-aw/actions");
 });
 
-test("Copilot custom tools use the fixed, digest-pinned firewall", () => {
-  assert.equal(authored.sandbox.agent.version, "v0.28.27");
+test("Copilot protocol selection uses the fixed, pinned runtime and firewall", () => {
+  assert.equal(authored.sandbox.agent.version, "v0.28.49");
   for (const job of ["agent", "detection"]) {
+    assert.equal(
+      compiled.jobs[job].steps.find(step => step.uses?.startsWith("github/gh-aw-actions/setup@")).uses,
+      "github/gh-aw-actions/setup@866158eb5c6cbfd3c614104e3d3d6634e246d220",
+    );
     const scripts = compiled.jobs[job].steps.map(step => step.run ?? "").join("\n");
     for (const role of ["agent", "api-proxy", "squid"]) {
-      assert.match(scripts, new RegExp(`${role}:0\\.28\\.27@sha256:[a-f0-9]{64}`));
+      assert.match(scripts, new RegExp(`${role}:0\\.28\\.49@sha256:[a-f0-9]{64}`));
     }
+    assert.ok(compiled.jobs[job].steps.every(step => !step.env?.COPILOT_PROVIDER_WIRE_API));
   }
 });
 
