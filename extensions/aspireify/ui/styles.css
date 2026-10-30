@@ -818,6 +818,56 @@ button.overview-node:hover {
     line-height: var(--leading-meta);
 }
 
+.not-proposed {
+    margin-top: 16px;
+    padding: 10px 12px;
+    border: 1px dashed var(--border-color-default, #d1d9e0);
+    border-radius: var(--radius-lg);
+}
+
+.not-proposed h2 {
+    margin: 0;
+    font-size: var(--text-detail);
+}
+
+.not-proposed > p {
+    margin: 2px 0 8px;
+    font-size: var(--text-meta);
+    line-height: var(--leading-meta);
+}
+
+.not-proposed-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.not-proposed-item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px 12px;
+}
+
+.not-proposed-identity {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
+    overflow-wrap: anywhere;
+}
+
+.not-proposed-identity code,
+.not-proposed-status {
+    color: var(--text-color-muted, #59636e);
+    font-size: var(--text-meta);
+}
+
 .relationship-list {
     display: flex;
     flex-direction: column;

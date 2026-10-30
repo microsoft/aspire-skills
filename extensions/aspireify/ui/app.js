@@ -540,6 +540,7 @@ function render(nextSnapshot) {
         elements.planContent.hidden = false;
         renderProposalIdentity();
         renderResourcePlan();
+        renderNotProposedServices();
         renderStatus();
         renderConfirmation();
         restoreFocusToken(focusToken);
@@ -632,6 +633,46 @@ function renderResourcePlan() {
         resourceIssues,
     );
     renderRelationshipList(edges, false);
+}
+
+function renderNotProposedServices() {
+    const services = Array.isArray(snapshot.notProposed) ? snapshot.notProposed : [];
+    let section = document.getElementById("not-proposed-services");
+    if (!section) {
+        section = createElement("section", {
+            className: "not-proposed",
+            attrs: { id: "not-proposed-services", "aria-labelledby": "not-proposed-title" },
+        });
+        section.append(
+            createElement("h2", { text: "Not in the proposed graph", attrs: { id: "not-proposed-title" } }),
+            createElement("p", {
+                className: "muted",
+                text: "Discovered services that no proposed resource maps. The skill supplied no decision for them.",
+            }),
+            createElement("ul", { className: "not-proposed-list" }),
+        );
+        elements.resourcePlanPanel.append(section);
+    }
+    section.hidden = services.length === 0;
+    const list = section.querySelector(".not-proposed-list");
+    list.replaceChildren(
+        ...services.map((service) => {
+            const item = createElement("li", { className: "not-proposed-item" });
+            const identity = createElement("div", { className: "not-proposed-identity" });
+            identity.append(createElement("strong", { text: service.name }));
+            if (service.path) {
+                identity.append(createElement("code", { text: service.path }));
+            }
+            item.append(
+                identity,
+                createElement("span", {
+                    className: "not-proposed-status",
+                    text: "Not assessed",
+                }),
+            );
+            return item;
+        }),
+    );
 }
 
 function resourcesInOverviewOrder(resources) {
