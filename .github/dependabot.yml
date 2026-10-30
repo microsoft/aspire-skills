@@ -2,6 +2,7 @@ version: 2
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
+    target-branch: "dev"
     groups:
       github-actions:
         patterns: ["*"]
@@ -11,6 +12,7 @@ updates:
       default-days: 7
   - package-ecosystem: "npm"
     directory: "/"
+    target-branch: "dev"
     groups:
       npm:
         patterns: ["*"]
