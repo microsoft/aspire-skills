@@ -10,6 +10,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   persistent volumes), and explicitly approved AppHost-wide `--volumes` cleanup, including
   its ownership and compatibility limits. Stale-password recovery now prefers restoring
   the password or a targeted reset and treats `--volumes` as a broader, approved option.
+- Stopped the Aspireify canvas from classifying Node.js, TypeScript, Python, and
+  container services as .NET when their type label also mentions gRPC or a worker
+  service. These services no longer default to .NET Service Defaults, and they keep
+  their runtime-compatible resource types.
 - Corrected POSIX path handling in the Aspireify canvas to keep proposal
   snapshots separate for AppHost paths containing literal backslashes.
 - Restored AppHost visibility and source-file navigation in the Aspire AppHosts
