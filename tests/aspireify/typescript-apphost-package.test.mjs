@@ -5,7 +5,7 @@ import test from "node:test";
 const referenceUrl = new URL("../../skills/aspireify/references/javascript-apps.md", import.meta.url);
 
 async function readPackageJsonSection() {
-    const source = await readFile(referenceUrl, "utf8");
+    const source = (await readFile(referenceUrl, "utf8")).replace(/\r\n/g, "\n");
     const start = source.indexOf("### package.json");
     const end = source.indexOf("### `tsconfig.apphost.json`");
     assert.ok(start >= 0 && end > start, "javascript-apps.md must keep the package.json and tsconfig.apphost.json sections");
