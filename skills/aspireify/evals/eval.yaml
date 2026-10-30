@@ -636,6 +636,71 @@ stimuli:
             Does the assistant's response avoid using obsolete
             `context.ServiceProvider` as implementation code? It may mention the old
             property only to explain migration to `context.Services`.
+  - name: aspireify-private-endpoint-001
+    prompt: >
+      Use the aspireify skill. Give a read-only plan with the C# AppHost code to add an Azure
+      Container Registry named `acr` to csharp-apphost and reach it only through a private
+      endpoint in a new virtual network subnet. Do not edit files or run commands.
+    tags:
+      priority: p1
+      area:
+        - authoring
+        - azure
+        - known-bug
+    constraints:
+      max_agent_duration: 150s
+    environment:
+      files:
+        - src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs
+          dest: csharp-apphost/MyApp.AppHost/Program.cs
+        - src: ../../../evals/csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
+          dest: csharp-apphost/MyApp.AppHost/MyApp.AppHost.csproj
+    rubric:
+      - The assistant's response creates the private endpoint from a virtual network subnet with `subnet.AddPrivateEndpoint(acr)` rather than a `WithPrivateEndpoint` call on the registry.
+      - The assistant's response adds an `Aspire.Hosting.Azure.Network` package reference compatible with the AppHost's other Aspire packages.
+      - The assistant's response opts into the experimental `ASPIREAZURE003` diagnostic around the network and private endpoint calls.
+      - The assistant's response remains read-only and does not claim unperformed execution.
+    graders:
+      - type: prompt
+        name: uses-subnet-owned-private-endpoint
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response create the private endpoint from a subnet, for
+            example `builder.AddAzureVirtualNetwork(...).AddSubnet(...)` followed by
+            `subnet.AddPrivateEndpoint(acr)`? In Aspire, AddPrivateEndpoint is an extension
+            on the subnet resource builder; there is no WithPrivateEndpoint method on target
+            resources.
+      - type: prompt
+        name: references-network-package
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response add an `Aspire.Hosting.Azure.Network` package
+            reference to the AppHost (a PackageReference or `#:package` directive) at a version
+            compatible with its other Aspire packages? The ACR hosting package does not depend
+            on it, so omitting it fails to compile.
+      - type: prompt
+        name: opts-into-experimental-network-api
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response opt into the experimental `ASPIREAZURE003`
+            diagnostic, for example by wrapping the virtual network, subnet and private
+            endpoint calls in `#pragma warning disable ASPIREAZURE003` /
+            `#pragma warning restore ASPIREAZURE003` or suppressing it in the project file?
+            Aspire.Hosting.Azure.Network is experimental, and without the opt-in the code
+            fails to compile.
+      - type: output-not-contains
+        name: avoids-nonexistent-with-private-endpoint
+        config:
+          substring: .WithPrivateEndpoint(
+      - type: skill-invocation
+        name: invokes-aspireify-for-private-endpoint
+        config:
+          required: [aspireify]
+      - type: diff-empty
+        name: keeps-private-endpoint-plan-read-only
   - name: aspireify-ts-foundry-001
     prompt: >
       Use the aspireify skill. Give a read-only plan with the apphost.mts code to add a

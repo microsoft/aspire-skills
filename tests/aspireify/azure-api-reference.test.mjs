@@ -21,4 +21,11 @@ test("C# authoring documents private endpoints with the subnet-owned Aspire API"
   // compiles when the AppHost references that package explicitly.
   assert.match(azure, /<PackageReference Include="Aspire\.Hosting\.Azure\.Network"/);
   assert.match(azure, /#:package Aspire\.Hosting\.Azure\.Network@/);
+
+  // Aspire.Hosting.Azure.Network is [Experimental("ASPIREAZURE003")] assembly-wide, so the example
+  // only compiles when the private endpoint calls are wrapped in a paired opt-in.
+  const optIn = /#pragma warning disable ASPIREAZURE003\n([\s\S]*?)#pragma warning restore ASPIREAZURE003/.exec(azure);
+  assert.ok(optIn, "Missing paired ASPIREAZURE003 opt-in");
+  assert.match(optIn[1], /AddAzureVirtualNetwork\([^)]*\)\.AddSubnet\([^)]*\)/);
+  assert.match(optIn[1], /\bsubnet\.AddPrivateEndpoint\(\w+\)/);
 });

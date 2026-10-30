@@ -59,7 +59,8 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   paginated PR files API instead of `gh pr diff`, which returns HTTP 406 once a diff
   exceeds 20,000 lines (as on the v0.0.5 release PR).
 - Replaced the nonexistent `resource.WithPrivateEndpoint()` in Aspireify's C#
-  authoring reference with Aspire's subnet-based `subnet.AddPrivateEndpoint(target)` API.
+  authoring reference with Aspire's subnet-based `subnet.AddPrivateEndpoint(target)` API,
+  including the `Aspire.Hosting.Azure.Network` package reference and `ASPIREAZURE003` opt-in.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including

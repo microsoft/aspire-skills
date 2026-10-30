@@ -178,6 +178,16 @@ with the same version as its other Aspire packages:
 #:package Aspire.Hosting.Azure.Network@<aspire-package-version>
 ```
 
+`Aspire.Hosting.Azure.Network` is experimental, so its APIs raise the `ASPIREAZURE003` diagnostic
+as a compile error. Opt in around the calls:
+
+```csharp
+#pragma warning disable ASPIREAZURE003
+var subnet = builder.AddAzureVirtualNetwork("vnet").AddSubnet("pe", "10.0.1.0/24");
+subnet.AddPrivateEndpoint(acr);
+#pragma warning restore ASPIREAZURE003
+```
+
 ## Lifecycle Hooks
 
 ```csharp
