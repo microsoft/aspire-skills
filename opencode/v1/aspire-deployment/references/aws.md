@@ -36,6 +36,8 @@ Make these changes in the C# AppHost when the AWS integration docs still show th
 2. Add the AWS CDK environment near the top of the AppHost, before resources that should deploy:
 
    ```csharp
+   using Aspire.Hosting.AWS.Deployment;
+
    #pragma warning disable ASPIREAWSPUBLISHERS001
 
    var builder = DistributedApplication.CreateBuilder(args);

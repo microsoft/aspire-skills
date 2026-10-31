@@ -52,6 +52,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Corrected Aspireify's TypeScript Foundry example to use the exported
   `addFoundry(...).addDeployment(...)` APIs instead of nonexistent
   `addAzureFoundry(...).addModel(...)`.
+- Added the missing `using Aspire.Hosting.AWS.Deployment;` to the AWS deployment
+  `AddAWSCDKEnvironment` example. Without it, `CDKDefaultsProviderFactory` does not
+  resolve and the AppHost fails to build with CS0103.
 - Fixed service-defaults detection to match template-generated `<App>.ServiceDefaults`
   projects (`IsAspireSharedProject` and `*.ServiceDefaults.csproj` references) instead
   of a nonexistent `Aspire.ServiceDefaults` package that matched nothing.
