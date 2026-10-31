@@ -80,6 +80,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Fixed Aspireify ServiceDefaults guidance to install `Aspire.ProjectTemplates` before
   `dotnet new aspire-servicedefaults` when the template is missing, as it is after a
   TypeScript `aspire init`.
+- Documented the `ASPIRECSHARPAPPS001` and `ASPIRECERTIFICATES001` suppressions that
+  Aspireify's C# `AddCSharpApp` and `WithHttpsDeveloperCertificate` examples need. Without
+  them, a C# AppHost fails to build with these experimental-API diagnostics as errors.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including

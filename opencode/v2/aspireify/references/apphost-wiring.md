@@ -125,6 +125,32 @@ After adding, run `aspire restore` (TypeScript) or `dotnet restore` (C#) to upda
 
 **Always prefer a typed integration over raw `AddExecutable`/`AddContainer`.** Typed integrations handle working directories, port injection, health checks, and dashboard integration automatically.
 
+### Experimental C# APIs used in these examples
+
+In Aspire 13.6, two C# APIs used below are experimental. A C# AppHost that calls them
+fails to build with an `error` until the diagnostic is suppressed:
+
+| API | Diagnostic |
+|-----|------------|
+| `AddCSharpApp(...)` | `ASPIRECSHARPAPPS001` |
+| `WithHttpsDeveloperCertificate()` | `ASPIRECERTIFICATES001` |
+
+Suppress only the IDs the AppHost actually uses. In a file-based `apphost.cs`, put the
+pragma after the `#:` directives:
+
+```csharp
+#pragma warning disable ASPIRECSHARPAPPS001, ASPIRECERTIFICATES001
+```
+
+In a project-based AppHost, add the IDs to the AppHost `.csproj` instead:
+
+```xml
+<NoWarn>$(NoWarn);ASPIRECSHARPAPPS001;ASPIRECERTIFICATES001</NoWarn>
+```
+
+TypeScript AppHosts need neither. If a build reports a different `ASPIRE...` diagnostic,
+confirm it with `aspire docs api get` before suppressing it.
+
 ## Service communication: `WithReference` vs `WithEnvironment`
 
 **`WithReference()`** is the primary way to connect services. It does two things:
@@ -198,7 +224,7 @@ var nodeApi = builder.AddJavaScriptApp("api", "../api", "start")
     .WithHttpsEndpoint(env: "PORT");  // Aspire injects PORT=<assigned-port>
 ```
 
-**`WithHttpsDeveloperCertificate()`** — required for JavaScript and Python apps to serve HTTPS. Configures the ASP.NET Core dev cert. .NET apps handle this automatically.
+**`WithHttpsDeveloperCertificate()`** — required for JavaScript and Python apps to serve HTTPS. Configures the ASP.NET Core dev cert. .NET apps handle this automatically. In C#, this API is experimental (`ASPIRECERTIFICATES001`; see [Experimental C# APIs](#experimental-c-apis-used-in-these-examples)).
 
 ```csharp
 var frontend = builder.AddViteApp("frontend", "../frontend")
