@@ -58,6 +58,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Fixed the Skill Eval PR gate failing on large PRs: changed files now come from the
   paginated PR files API instead of `gh pr diff`, which returns HTTP 406 once a diff
   exceeds 20,000 lines (as on the v0.0.5 release PR).
+- Fixed the TypeScript deploy workflow reference and CI/CD setup snippet to install the
+  Aspire CLI and run `aspire restore` before `npm run build`. The generated
+  `.aspire/modules/` folder is gitignored, so on a clean checkout the build failed with
+  `TS2307: Cannot find module './.aspire/modules/aspire.mjs'`.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
