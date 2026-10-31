@@ -68,6 +68,8 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ### Removed
 - Removed embedded `.tgz` bundle generation and uploads. Releases now publish
   reviewed source and approved changelog notes without generated archives.
+- Moved `track-telemetry.sh` and `track-telemetry.ps1` from this repository to
+  `microsoft/aspire`.
 
 ## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)
 

@@ -15,7 +15,7 @@ Dev retains `CHANGELOG.md` and generated `opencode/` catalogs. Regenerate catalo
 with `npm run catalog` after changing shipped skills, references, or assets,
 and commit them with the source changes. Run `npm run catalog:check` to check
 the committed tree. CI rejects missing, extra, or stale V1 and V2 catalog files.
-Feature PRs update the current version's changelog notes and preserve earlier
+Add only consumer-facing changes to the current changelog entry; preserve earlier
 entries and the coordinated version.
 
 Canvas extensions use relative Git symlinks to share canonical theme and icon
@@ -58,3 +58,12 @@ Publishing uses `GITHUB_TOKEN`; no repo bot or stored automation credentials
 are needed. Maintainers create PRs and approve merges. Tags and releases are
 published in the same run because workflow-token tag pushes do not trigger
 another workflow. Reruns must preserve the tag's commit and approved notes.
+
+## Aspire telemetry maintenance
+
+The [update-aspire workflow](../.github/workflows/update-aspire.md) keeps Aspire CLI
+telemetry for aspire-skills usage up to date, including which skills and extension
+tools agents invoke.
+It creates draft proposals with one isolated build/test attempt. Candidate build
+and test failures are reported in the draft; verifier setup, isolation, and
+security failures block publication.
