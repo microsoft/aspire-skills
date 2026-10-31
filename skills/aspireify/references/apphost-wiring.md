@@ -89,10 +89,10 @@ Before modeling environment variables, passwords, ports, or volumes for a typed 
 
 ```bash
 # Check what AddPostgres manages automatically
-aspire docs get "postgresql-hosting-integration" --section "Connection properties"
+aspire docs get "connect-to-postgresql" --section "Connection properties"
 
 # Check what AddSqlServer manages
-aspire docs get "sql-server-integration" --section "Hosting integration"
+aspire docs get "connect-to-sql-server" --section "Connection properties"
 ```
 
 Look for the **"Connection properties"** section — it lists what the integration injects into consuming services. If it lists `Password`, `Host`, `Port` — the integration manages those. Do not create `AddParameter()` for values the integration already handles.
