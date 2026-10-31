@@ -36,6 +36,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Restored AppHost visibility and source-file navigation in the Aspire AppHosts
   canvas for workspace child directories whose names begin with `..`, preserving
   checks that block paths outside the workspace.
+- Fixed the `aspire describe <resource> --format Json | jq` endpoint examples in the
+  monitoring and orchestration skills to read `.resources[0].urls[0].url`. The old
+  `.endpoints[0].url` path does not exist, returns `null`, and made the paired `curl` fail.
 - Preserved non-ASCII check messages, paths, and error diagnostics in the
   Aspire Doctor canvas by decoding UTF-8 characters across subprocess output
   chunk boundaries.

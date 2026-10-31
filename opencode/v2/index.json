@@ -36,7 +36,7 @@
     },
     {
       "name": "aspire-monitoring",
-      "version": "sha512-eedd983512cf2ff46a0aafe9df570f8422cefbb1fc2395afb605cd663a65585d71e3d3b1a9f520a99323f0654abf4be43f697032f4849599d8854a94c93ac270",
+      "version": "sha512-e1106ca0519ddeea6666c807f9895550f98d330ffff3201e114fcce37e00b34d9e855e33ee478b3fbe9b937821e799a3e364c162a15d4aa217581a2ac8ad6993",
       "files": [
         "aspire-monitoring.md",
         "references/diagnostics-bridge.md",
@@ -46,7 +46,7 @@
     },
     {
       "name": "aspire-orchestration",
-      "version": "sha512-154dc17a5202579b05c94e66e7f41363f7c58191614abb45b0254d09a584bcb9308d1149878882f2466871575c13b6b67f7982fe33024ddc50eb45874e8fb80d",
+      "version": "sha512-03963b7ddd553e47cc2c2e3fe3d06586ee7e164a2be4d5c54c54ad078c465646a26b7ba575998bc6c8b2eb6d2156994dd1a1e0e41ec618941df5c02a82a91c14",
       "files": [
         "aspire-orchestration.md",
         "references/agent-workflows.md",

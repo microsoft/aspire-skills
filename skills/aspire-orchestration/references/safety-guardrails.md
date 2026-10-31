@@ -107,7 +107,7 @@ aspire wait apiservice
 aspire wait postgres --timeout 120
 
 # ✅ Wait then interact
-aspire wait apiservice && curl $(aspire describe apiservice --format Json | jq -r '.endpoints[0].url')
+aspire wait apiservice && curl $(aspire describe apiservice --format Json | jq -r '.resources[0].urls[0].url')
 ```
 
 ### Machine-Readable Output
