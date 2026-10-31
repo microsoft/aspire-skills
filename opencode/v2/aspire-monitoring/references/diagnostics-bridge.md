@@ -79,7 +79,7 @@ aspire describe --format Json
 aspire describe --include-hidden --format Json
 
 # ✅ Get endpoints from describe, not guessing ports
-ENDPOINT=$(aspire describe apiservice --format Json | jq -r '.endpoints[0].url')
+ENDPOINT=$(aspire describe apiservice --format Json | jq -r '.resources[0].urls[0].url')
 
 # ✅ Correlate logs to a specific request
 aspire otel logs --trace-id <trace-id-from-otel-traces>
