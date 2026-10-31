@@ -69,7 +69,7 @@ Heuristics for the **scan** and **propose** phases of `aspireify`.
 | Vite SPA | `AddViteApp("web", "./web")` | `PublishAsStaticWebsite(apiPath: "/api", apiTarget: api)` |
 | Vite + TanStack/SvelteKit (SSR via Node) | `AddViteApp("web", "./web")` | `PublishAsNodeServer(entryPoint: ".output/server/index.mjs", outputPath: ".output")` |
 | Remix / Astro SSR / Nitro | `AddNodeApp` or `AddViteApp` | `PublishAsPackageScript(scriptName: "start")` |
-| Plain Node | `AddNodeApp("api", "server.js")` | `PublishAsNodeServer` |
+| Plain Node | `AddNodeApp("api", "./api", "server.js")` | `PublishAsNodeServer` |
 
 Bun, Yarn, and pnpm are first-class in TS AppHosts (npm remains the default).
 

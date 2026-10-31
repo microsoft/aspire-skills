@@ -265,7 +265,7 @@ catalog.
 | Azure Cache for Redis (Entra) | `AddAzureRedis("cache")` (now GA) | `addAzureRedis('cache')` |
 | Next.js frontend | `AddNextJsApp("web", "./web")` | `addNextJsApp('web', '../web')` |
 | Vite SPA | `AddViteApp("web", "./web")` | `addViteApp('web', '../web')` |
-| Plain Node app | `AddNodeApp("api", "server.js")` | `addNodeApp('api', 'server.js')` |
+| Plain Node app | `AddNodeApp("api", "./api", "server.js")` | `addNodeApp('api', './api', 'server.js')` |
 
 ## Current Authoring Rules
 
