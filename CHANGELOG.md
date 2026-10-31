@@ -58,6 +58,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Fixed the Skill Eval PR gate failing on large PRs: changed files now come from the
   paginated PR files API instead of `gh pr diff`, which returns HTTP 406 once a diff
   exceeds 20,000 lines (as on the v0.0.5 release PR).
+- Moved the aspire-deployment, aspire-init, and aspire-monitoring eval specs from
+  `gpt-5-mini` to `gpt-5.6-sol`. The Copilot SDK executor rejects `gpt-5-mini` as
+  unavailable, so every trial of those suites errored and the nightly eval run failed.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including

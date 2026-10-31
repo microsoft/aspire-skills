@@ -96,6 +96,9 @@ The terminal suite uses the same executor for exact experimental APIs and real
 activation: initial `gpt-5-mini` trials invented dock APIs or skipped invocation.
 The orchestration and Aspireify suites also use `gpt-5.6-sol`: their Actions
 executor rejected `gpt-5-mini` as unavailable before any trials could execute.
+The deployment, init, and monitoring suites moved for the same reason after every
+nightly trial errored with `Model "gpt-5-mini" is not available`, so all skill
+specs now use `gpt-5.6-sol`.
 This changes their model baseline and cost, not their grading thresholds.
 Actual-edit prompts expose the changed code in the reply as well as the captured
 diff, because the prompt judge's timeline may truncate tool output. The independent
@@ -196,7 +199,7 @@ For the full surface, run `vally eval --help`, `vally lint --help`, `vally serve
 
 Each stimulus runs `defaults.runs` times (default 1 in vally; some specs override to 3). Each run is one executor call plus one judge call per `prompt` grader.
 
-Rough budget with `executor: copilot-sdk` + `model: gpt-5-mini`:
+Rough budget with `executor: copilot-sdk` + `model: gpt-5.6-sol`:
 
 - ~30k–80k tokens per stimulus (routing stimuli are at the lower end; deployment / orchestration stimuli with fixtures sit higher).
 - ~10–45 seconds per stimulus.
