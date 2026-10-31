@@ -164,7 +164,29 @@ builder.AddViteApp("frontend", "../frontend")
 | `AddNetworkSecurityPerimeter("nsp").WithAccessRule(...)` + `resource.WithNetworkSecurityPerimeter(nsp)` | NSP for Storage / Key Vault / Cosmos / SQL |
 | `AddAzureKubernetesEnvironment("aks").WithSystemNodePool(sku, minCount, maxCount)` | AKS hosting |
 | `AddPromptAgent(...)` | Azure AI Foundry Prompt Agent (replaces non-functional `AddAndPublishPromptAgent`) |
-| `resource.WithPrivateEndpoint()` | Now supported on ACR, Azure OpenAI, AI Foundry |
+| `var subnet = builder.AddAzureVirtualNetwork("vnet").AddSubnet("pe", "10.0.1.0/24");` + `subnet.AddPrivateEndpoint(acr)` | Private endpoint from a subnet to a supported target such as ACR, Azure OpenAI, or AI Foundry (`Aspire.Hosting.Azure.Network`) |
+
+Virtual network, subnet, private endpoint, and NSP APIs come from `Aspire.Hosting.Azure.Network`.
+Target packages such as ACR, Azure OpenAI, and Foundry do not reference it, so add it to the AppHost
+with the same version as its other Aspire packages:
+
+```xml
+<PackageReference Include="Aspire.Hosting.Azure.Network" Version="<aspire-package-version>" />
+```
+
+```csharp
+#:package Aspire.Hosting.Azure.Network@<aspire-package-version>
+```
+
+`Aspire.Hosting.Azure.Network` is experimental, so its APIs raise the `ASPIREAZURE003` diagnostic
+as a compile error. Opt in around the calls:
+
+```csharp
+#pragma warning disable ASPIREAZURE003
+var subnet = builder.AddAzureVirtualNetwork("vnet").AddSubnet("pe", "10.0.1.0/24");
+subnet.AddPrivateEndpoint(acr);
+#pragma warning restore ASPIREAZURE003
+```
 
 ## Lifecycle Hooks
 

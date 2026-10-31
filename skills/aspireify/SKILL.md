@@ -286,6 +286,7 @@ catalog.
 | Route terminal authoring to `aspire-terminals` | Owns `WithTerminal`, `TerminalService`, dock/dialog/headless lifetimes, terminal prompts, REPLs and tapes; nonterminal interactions remain here |
 | Keep all Aspire SDK and `Aspire.Hosting.*` packages on the same release family | Mixed release families can fail at startup |
 | Migrate GitHub Models integrations to Azure AI Foundry | `Aspire.Hosting.GitHub.Models` is deprecated and absent from integration discovery |
+| For Azure virtual networks, subnets and private endpoints, use `builder.AddAzureVirtualNetwork("vnet").AddSubnet("pe", "10.0.1.0/24")` then `subnet.AddPrivateEndpoint(acr)` from `Aspire.Hosting.Azure.Network`, with its package reference and an `ASPIREAZURE003` opt-in. See [csharp-authoring.md](references/csharp-authoring.md#azure-specific) | There is no `WithPrivateEndpoint`; don't hand-write Bicep or `ConfigureInfrastructure` networking for these resources |
 | Use `WithModule(RedisModules.*)` for Redis 8 modules | Prefer typed JSON, Search, Bloom Filter, and TimeSeries constants over raw module paths |
 | Use Foundry `AsHostedAgent(...)` for hosted executable/container agents | Current Azure AI Foundry path replaces deprecated GitHub Models |
 
