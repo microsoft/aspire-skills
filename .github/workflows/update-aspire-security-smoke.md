@@ -2,7 +2,7 @@
 name: Aspire telemetry security smoke (PR 111)
 description: |
   Exercise the hardened telemetry workflow against pinned, unmerged PR 111.
-  Stage the proposal only after security regressions, isolation, and native review.
+  Publish a test draft only after security regressions, isolation, and native review.
 on:
   bots: ["aspire-repo-bot[bot]"]
   push:
@@ -115,7 +115,7 @@ jobs:
               context: {
                 ...context,
                 eventName: "workflow_dispatch",
-                payload: { inputs: { pr_number: "111", dry_run: true } }
+                payload: { inputs: { pr_number: "111", dry_run: false } }
               },
               directory: process.env.GITHUB_WORKSPACE
             });
@@ -275,7 +275,7 @@ jobs:
           TELEMETRY_SOURCE: ${{ needs.resolve-source.outputs.source }}
           TELEMETRY_RECEIPT: ${{ needs.verify-telemetry.outputs.receipt }}
           TELEMETRY_PUBLISHER_RESULT: ${{ needs.safe_outputs.result }}
-          TELEMETRY_STAGED: "true"
+          TELEMETRY_STAGED: "false"
           TELEMETRY_PR_NUMBER: ${{ needs.safe_outputs.outputs.created_pr_number }}
           TELEMETRY_PR_URL: ${{ needs.safe_outputs.outputs.created_pr_url }}
         with:
@@ -298,7 +298,7 @@ jobs:
       issues: read
 safe-outputs:
   needs: [resolve-source, verify-telemetry]
-  staged: true
+  staged: false
   report-failure-as-issue: false
   report-failed-jobs: false
   threat-detection:
