@@ -310,14 +310,11 @@ safe-outputs:
           git -c core.hooksPath=/dev/null fetch --quiet --no-tags origin "$TELEMETRY_ASPIRE_BASE"
           git -c core.hooksPath=/dev/null checkout --quiet --detach "$TELEMETRY_ASPIRE_BASE"
         fi
-        if ! git -c core.hooksPath=/dev/null config --get remote.origin.url '^https://(x-access-token:[^/@]+@)?github[.]com/microsoft/aspire([.]git)?$' >/dev/null; then
-          echo "Unexpected Aspire publication repository." >&2
-          exit 1
-        fi
         if ! git -c core.hooksPath=/dev/null rev-parse HEAD | grep -Fxq "$TELEMETRY_ASPIRE_BASE"; then
           echo "Aspire publication checkout does not match the verified base." >&2
           exit 1
         fi
+        git -c core.hooksPath=/dev/null remote set-url origin https://github.com/microsoft/aspire.git
     - name: Checkout trusted publication validator
       uses: actions/checkout@v7.0.1
       with:

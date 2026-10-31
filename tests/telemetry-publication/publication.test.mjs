@@ -377,8 +377,24 @@ test("the compiled promotion guard binds review evidence and detector success be
 test("native signed publication preserves the verified draft after unrelated main advancement", async t => {
   const f = await fixture(t);
   git(f.publisher, "remote", "set-url", "origin", "https://x-access-token:fixture-token@github.com/microsoft/aspire.git");
+  execFileSync("bash", [join(dirname(runtime), "sh", "configure_git_credentials.sh")], {
+    cwd: f.publisher, stdio: "pipe",
+    env: {
+      ...process.env, GITHUB_WORKSPACE: f.publisher, GITHUB_REPOSITORY: "microsoft/aspire-skills",
+      GITHUB_SERVER_URL: "https://github.com", GITHUB_TOKEN: "fixture-token",
+      GIT_CONFIG_GLOBAL: join(dirname(f.publisher), "native-gitconfig")
+    }
+  });
+  assert.equal(git(f.publisher, "config", "--get", "remote.origin.url"),
+    "https://x-access-token:fixture-token@github.com/microsoft/aspire-skills.git");
+  assert.throws(() => execFileSync("bash", ["-euo", "pipefail", "-c", checkout.run], {
+    cwd: f.publisher, stdio: "pipe",
+    env: { ...process.env, ...checkout.env, TELEMETRY_ASPIRE_BASE: "a".repeat(40) }
+  }), /does not match the verified base/);
+  assert.equal(git(f.publisher, "config", "--get", "remote.origin.url"),
+    "https://x-access-token:fixture-token@github.com/microsoft/aspire-skills.git");
   f.prepareCheckout();
-  git(f.publisher, "remote", "set-url", "origin", target);
+  assert.equal(git(f.publisher, "config", "--get", "remote.origin.url"), target);
   git(f.agent, "switch", "--quiet", "main");
   write(f.agent, "unrelated.txt", "unrelated main change\n");
   const advanced = commit(f.agent);
