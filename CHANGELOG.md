@@ -5,6 +5,12 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
 ### Changed
+- Fixed two Aspireify C# examples that did not compile against Aspire: lifecycle hooks now
+  subscribe through `builder.Eventing.Subscribe<BeforeStartEvent>` and
+  `Subscribe<AfterResourcesCreatedEvent>` instead of the TypeScript-only
+  `SubscribeBeforeStart` and `SubscribeAfterResourcesCreated`, and the gRPC endpoint example
+  sets `UriScheme` and `Transport` instead of assigning `"grpc"` to the `ProtocolType`
+  `Protocol` property.
 - Unified canvas styling and icons with shared assets that respect host themes.
 - Distinguished ordinary `aspire stop`, `aspire stop --force` (which preserves
   persistent volumes), and explicitly approved AppHost-wide `--volumes` cleanup, including
