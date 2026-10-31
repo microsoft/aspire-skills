@@ -58,6 +58,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Fixed the Skill Eval PR gate failing on large PRs: changed files now come from the
   paginated PR files API instead of `gh pr diff`, which returns HTTP 406 once a diff
   exceeds 20,000 lines (as on the v0.0.5 release PR).
+- Documented the `ASPIRECSHARPAPPS001` and `ASPIRECERTIFICATES001` suppressions that
+  Aspireify's C# `AddCSharpApp` and `WithHttpsDeveloperCertificate` examples need. Without
+  them, a C# AppHost fails to build with these experimental-API diagnostics as errors.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
