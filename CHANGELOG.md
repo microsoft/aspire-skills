@@ -39,6 +39,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Preserved non-ASCII check messages, paths, and error diagnostics in the
   Aspire Doctor canvas by decoding UTF-8 characters across subprocess output
   chunk boundaries.
+- Pointed Aspireify's "check what integrations auto-manage" lookups at the current
+  `connect-to-postgresql` and `connect-to-sql-server` docs pages. The retired
+  `postgresql-hosting-integration` and `sql-server-integration` slugs fail with
+  "Documentation page ... not found" in `aspire docs get`.
 - Aligned non-secret command defaults and submissions in the Aspire AppHosts
   canvas with Aspire Hosting's whitespace trimming. Replaced silent truncation
   of overlength values with validation errors.
