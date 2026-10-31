@@ -377,7 +377,7 @@ test("the compiled promotion guard binds review evidence and detector success be
 test("native signed publication preserves the verified draft after unrelated main advancement", async t => {
   const f = await fixture(t);
   git(f.publisher, "remote", "set-url", "origin", "https://x-access-token:fixture-token@github.com/microsoft/aspire.git");
-  execFileSync("bash", [join(dirname(runtime), "sh", "configure_git_credentials.sh")], {
+  execFileSync("bash", [join(runtime, "configure_git_credentials.sh")], {
     cwd: f.publisher, stdio: "pipe",
     env: {
       ...process.env, GITHUB_WORKSPACE: f.publisher, GITHUB_REPOSITORY: "microsoft/aspire-skills",
