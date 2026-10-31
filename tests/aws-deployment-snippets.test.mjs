@@ -10,7 +10,7 @@ const csharpBlocks = text =>
 // AddAWSCDKEnvironment is in the implicitly imported Aspire.Hosting namespace, but
 // CDKDefaultsProviderFactory is not. Without this using, the snippet fails with CS0103.
 test("AWS CDK snippets import the CDKDefaultsProviderFactory namespace", () => {
-  const blocks = csharpBlocks(readFileSync(awsReference, "utf8"))
+  const blocks = csharpBlocks(readFileSync(awsReference, "utf8").replace(/\r\n/g, "\n"))
     .filter(block => block.includes("CDKDefaultsProviderFactory"));
   assert.ok(blocks.length > 0, "Expected a C# snippet that uses CDKDefaultsProviderFactory");
 
