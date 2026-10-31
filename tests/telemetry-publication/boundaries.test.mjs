@@ -128,7 +128,7 @@ test("the compiled native permission check denies insufficient roles and lookup 
 
 test("hostile container output remains inside random command-suppression markers on success and failure", async t => {
   const tokens = new Set();
-  for (const [offline, status] of [[true, 0], [true, 2], [true, 7], [false, 2]]) {
+  for (const [offline, status] of [[true, 0], [true, 2], [true, 1], [true, 7], [true, 125], [false, 2]]) {
     await t.test(`${offline ? "tests" : "restore"} exit ${status}`, t => {
       const path = directory(t, "telemetry-stdout-");
       const log = join(path, "docker.log");
@@ -159,7 +159,7 @@ test("hostile container output remains inside random command-suppression markers
         }
       });
       if (result.error) throw result.error;
-      assert.equal(result.status, offline && [0, 2].includes(status) ? 0 : 1, result.stderr);
+      assert.equal(result.status, offline && status !== 125 ? 0 : 1, result.stderr);
       const stop = /^::stop-commands::([^:\r\n]+)$/m.exec(result.stdout);
       assert.ok(stop, result.stdout);
       assert.ok(!tokens.has(stop[1]), "Container commands must use a fresh suppression token.");

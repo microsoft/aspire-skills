@@ -272,10 +272,21 @@ export function cleanupContainer() {
   }
 }
 
+function completeTestCounts(tests) {
+  return Boolean(tests) && ["total", "failed", "passed", "skipped"].every(name =>
+    Number.isSafeInteger(tests[name]) && tests[name] >= 0) &&
+      tests.total === tests.failed + tests.passed + tests.skipped && tests.failed + tests.passed > 0;
+}
+
 export function testResultSummary(tests) {
-  if (!tests || !["total", "failed", "passed", "skipped"].every(name =>
-    Number.isSafeInteger(tests[name]) && tests[name] >= 0) ||
-      tests.total !== tests.failed + tests.passed + tests.skipped || tests.failed + tests.passed === 0) {
+  if (tests?.status === "incomplete") {
+    if (!Number.isSafeInteger(tests.exitCode) || tests.exitCode < 0 || tests.exitCode > 255) {
+      throw new Error("Isolated build/test diagnostics require a valid exit code.");
+    }
+    return "**Isolated telemetry build/tests: NOT COMPLETED**\n\n" +
+      `Build/test command exited with code ${tests.exitCode}. No completed test result was confirmed.`;
+  }
+  if (!completeTestCounts(tests)) {
     throw new Error("Isolated tests require complete, nonempty result counts.");
   }
   return `**Isolated telemetry tests: ${tests.failed ? "FAILED" : "PASSED"}**\n\n` +
@@ -283,17 +294,21 @@ export function testResultSummary(tests) {
 }
 
 export function parseTestResults(exitCode, output) {
+  if (!Number.isSafeInteger(exitCode) || exitCode < 0 || exitCode > 255 || [125, 126, 127].includes(exitCode)) {
+    throw new Error(`Isolated verifier execution failed (exit ${exitCode}).`);
+  }
+  const incomplete = { status: "incomplete", exitCode };
   const summaries = [...stripVTControlCharacters(output).matchAll(
     /^Test run summary: (Passed!|Failed!)\r?\n[ \t]+total: (\d+)\r?\n[ \t]+failed: (\d+)\r?\n[ \t]+succeeded: (\d+)\r?\n[ \t]+skipped: (\d+)\r?\n[ \t]+duration: [^\r\n]+/gm
   )];
   if (![0, 2].includes(exitCode) || summaries.length !== 1) {
-    throw new Error(`Isolated tests did not complete with a recognized result (exit ${exitCode}).`);
+    return incomplete;
   }
   const [, verdict, total, failed, passed, skipped] = summaries[0];
   const tests = { total: Number(total), failed: Number(failed), passed: Number(passed), skipped: Number(skipped) };
-  testResultSummary(tests);
-  if ((tests.failed > 0) !== (exitCode === 2) || verdict !== (tests.failed ? "Failed!" : "Passed!")) {
-    throw new Error("Isolated test counts, verdict, and exit code disagree.");
+  if (!completeTestCounts(tests) ||
+      (tests.failed > 0) !== (exitCode === 2) || verdict !== (tests.failed ? "Failed!" : "Passed!")) {
+    return incomplete;
   }
   return tests;
 }
@@ -363,7 +378,7 @@ export async function verifyTelemetry({ directory, source }) {
     const field = proposal ? "body" : "message";
     const runUrl = `https://github.com/microsoft/aspire-skills/actions/runs/${process.env.GITHUB_RUN_ID}/attempts/${process.env.GITHUB_RUN_ATTEMPT}`;
     item[field] = `${testResultSummary(tests)}\n\n` +
-      `[Full test output](${runUrl}) (verify-telemetry job). One test run; no automatic repair or retry.\n\n${item[field]}`;
+      `[Full test output](${runUrl}) (verify-telemetry job). One build/test attempt; no automatic repair or retry.\n\n${item[field]}`;
   }
   if (proposal) {
     item.body += `\n\n### Workflow provenance\nSource: ${source.url}\nSource commit: \`${source.commit}\`\nAspire base: \`${source.aspireBase}\`\nTested tree: \`${tree}\`\n`;

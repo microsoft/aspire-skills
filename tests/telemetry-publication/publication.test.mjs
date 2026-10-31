@@ -101,19 +101,21 @@ function proposalFixture(t, { outside, telemetry = true } = {}) {
   return { directory, agent, verified, base, source, prefix, bundle, verify };
 }
 
-async function fixture(t, { staged = false, failed = false } = {}) {
+async function fixture(t, { staged = false, testExitCode = 0 } = {}) {
   const { directory, agent, verified, base, source, prefix, bundle } = proposalFixture(t);
   const publisher = join(directory, "publisher");
   const shims = join(directory, "shims");
   const containerCalls = join(directory, "docker.log");
   const total = 189;
-  const failures = failed ? 12 : 0;
+  const failures = testExitCode === 2 ? 12 : 0;
   write(directory, "shims/docker", `#!/bin/bash
 set -euo pipefail
 printf '%s\\n' "$1" >> "$FAKE_DOCKER_LOG"
 if [[ "$1" != run || " $* " != *" --network=none "* ]]; then exit 0; fi
-printf 'Test run summary: ${failed ? "Failed!" : "Passed!"}\\n  total: ${total}\\n  failed: ${failures}\\n  succeeded: ${total - failures}\\n  skipped: 0\\n  duration: 1ms\\n'
-exit ${failed ? 2 : 0}
+${[0, 2].includes(testExitCode)
+    ? `printf 'Test run summary: ${failures ? "Failed!" : "Passed!"}\\n  total: ${total}\\n  failed: ${failures}\\n  succeeded: ${total - failures}\\n  skipped: 0\\n  duration: 1ms\\n'`
+    : "printf 'AgentTelemetryHookTests.cs(22,117): error CS9007: Invalid raw string.\\nBuild failed.\\n' >&2"}
+exit ${testExitCode}
 `, { mode: 0o755 });
   write(directory, ".github/workflows/update-aspire.lock.yml",
     readFileSync(join(root, ".github", "workflows", "update-aspire.lock.yml")));
@@ -425,7 +427,7 @@ test("native staged publication previews the same verified proposal without any 
 });
 
 test("completed functional failures remain visible on the native draft without changing its tested tree", async t => {
-  const f = await fixture(t, { failed: true });
+  const f = await fixture(t, { testExitCode: 2 });
   await f.publish();
   const request = f.writes.find(write => write.operation === "pulls.create").parameters;
   assert.equal(request.draft, true);
@@ -433,6 +435,24 @@ test("completed functional failures remain visible on the native draft without c
     "**Isolated telemetry tests: FAILED**\n\n177 passed, 12 failed, 0 skipped (189 total).\n\n"
   ));
   assert.ok(request.body.indexOf("**Isolated telemetry tests: FAILED**") < request.body.indexOf("Regression proposal."));
+  await f.audit();
+  assert.equal(f.writes.filter(write => write.operation === "pulls.create").length, 1);
+  assert.deepEqual(readFileSync(f.containerCalls, "utf8").trim().split("\n"), ["pull", "run", "rm", "run", "rm"]);
+  assert.deepEqual(f.gitPushes, []);
+});
+
+test("candidate compilation failures reach the native draft with diagnostics instead of invented test counts", async t => {
+  const f = await fixture(t, { testExitCode: 1 });
+  assert.deepEqual(f.receipt.tests, { status: "incomplete", exitCode: 1 });
+  assert.match(readFileSync(join(f.verified, "telemetry-tests.log"), "utf8"), /error CS9007/);
+  await f.publish();
+  const request = f.writes.find(write => write.operation === "pulls.create").parameters;
+  assert.equal(request.draft, true);
+  assert.ok(request.body.includes(
+    "**Isolated telemetry build/tests: NOT COMPLETED**\n\n" +
+    "Build/test command exited with code 1. No completed test result was confirmed.\n\n"
+  ));
+  assert.doesNotMatch(request.body, /\d+ passed, \d+ failed/);
   await f.audit();
   assert.equal(f.writes.filter(write => write.operation === "pulls.create").length, 1);
   assert.deepEqual(readFileSync(f.containerCalls, "utf8").trim().split("\n"), ["pull", "run", "rm", "run", "rm"]);

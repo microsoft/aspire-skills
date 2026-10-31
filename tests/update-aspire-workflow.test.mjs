@@ -363,7 +363,8 @@ test("completed assertion failures produce an explicit result instead of an exec
     .replace("succeeded: 177", "succeeded: 189");
   assert.deepEqual(parseTestResults(0, passed), { total: 189, failed: 0, passed: 189, skipped: 0 });
   for (const [status, log] of [
-    [2, "Build failed."], [0, ""], [7, output], [124, output], [null, output],
+    [1, "AgentTelemetryHookTests.cs(22,117): error CS9007: Invalid raw string.\nBuild failed."],
+    [2, "Build failed."], [0, ""], [7, output], [124, output],
     [0, output], [2, passed], [2, output + "\n" + output],
     [2, output.replace("total: 189", "total: 190")],
     [2, output.replace("  total:", "  error: 1\n  total:")],
@@ -371,8 +372,15 @@ test("completed assertion failures produce an explicit result instead of an exec
     [0, passed.replace("total: 189", "total: 0").replace("succeeded: 189", "succeeded: 0")],
     [0, passed.replace("succeeded: 189", "succeeded: 0").replace("skipped: 0", "skipped: 189")]
   ]) {
-    assert.throws(() => parseTestResults(status, log), /Isolated test/);
+    assert.deepEqual(parseTestResults(status, log), { status: "incomplete", exitCode: status });
   }
+  assert.equal(testResultSummary(parseTestResults(1, "Build failed.")),
+    "**Isolated telemetry build/tests: NOT COMPLETED**\n\n" +
+    "Build/test command exited with code 1. No completed test result was confirmed.");
+  for (const status of [null, -1, 125, 126, 127, 256]) {
+    assert.throws(() => parseTestResults(status, output), /Isolated verifier execution failed/);
+  }
+  assert.throws(() => testResultSummary({ status: "incomplete", exitCode: null }), /valid exit code/);
 });
 
 test("publication rejects altered artifacts, different source snapshots, and stale run attempts", t => {
