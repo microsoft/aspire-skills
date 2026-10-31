@@ -8,6 +8,12 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Documented `aspire new --localhost-tld` in the Aspire init templates reference. The
   `*.dev.localhost` prompt previously listed no flag, so non-interactive runs could
   only take the default plain `localhost` profile.
+- Fixed two Aspireify C# examples that did not compile against Aspire: lifecycle hooks now
+  subscribe through `builder.Eventing.Subscribe<BeforeStartEvent>` and
+  `Subscribe<AfterResourcesCreatedEvent>` instead of the TypeScript-only
+  `SubscribeBeforeStart` and `SubscribeAfterResourcesCreated`, and the gRPC endpoint example
+  sets `UriScheme` and `Transport` instead of assigning `"grpc"` to the `ProtocolType`
+  `Protocol` property.
 - Unified canvas styling and icons with shared assets that respect host themes.
 - Distinguished ordinary `aspire stop`, `aspire stop --force` (which preserves
   persistent volumes), and explicitly approved AppHost-wide `--volumes` cleanup, including

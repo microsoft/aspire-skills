@@ -169,9 +169,20 @@ builder.AddViteApp("frontend", "../frontend")
 ## Lifecycle Hooks
 
 ```csharp
-builder.SubscribeBeforeStart(async e => { /* runs before resources start */ });
-builder.SubscribeAfterResourcesCreated(async e => { /* runs after creation */ });
+builder.Eventing.Subscribe<BeforeStartEvent>((e, ct) =>
+{
+    // runs before resources start
+    return Task.CompletedTask;
+});
+builder.Eventing.Subscribe<AfterResourcesCreatedEvent>((e, ct) =>
+{
+    // runs after resources are created
+    return Task.CompletedTask;
+});
 ```
+
+`subscribeBeforeStart` and `subscribeAfterResourcesCreated` are TypeScript AppHost
+APIs; C# AppHosts have no `builder.SubscribeBeforeStart` method.
 
 ## HTTP Commands
 

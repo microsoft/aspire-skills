@@ -225,9 +225,13 @@ var grpcService = builder.AddCSharpApp("grpc", "../src/GrpcService")
     .WithEndpoint("grpc", endpoint =>
     {
         endpoint.Port = 5050;
-        endpoint.Protocol = "grpc";
+        endpoint.UriScheme = "http";  // gRPC runs over HTTP/2; use "https" for TLS
+        endpoint.Transport = "http2";
     });
 ```
+
+`EndpointAnnotation.Protocol` is the socket protocol (`ProtocolType.Tcp` or `Udp`), not an
+application protocol name; set the scheme and transport instead.
 
 **`WithExternalHttpEndpoints()`** — mark a resource's HTTP endpoints as externally visible. Use this for user-facing frontends so the URL appears prominently in the dashboard:
 
