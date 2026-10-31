@@ -13,6 +13,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Gave discovered services whose names contain no ASCII letters or digits distinct
   default resource names in the Aspireify canvas. Previously they all defaulted to
   `service`, so their names collided and proposal retries were rejected.
+- Corrected the Aspireify integration example to `aspire add javascript`. `aspire add nodejs`
+  no longer resolves after the package was renamed to `Aspire.Hosting.JavaScript`, and
+  non-interactive mode fails because it requires an exact friendly name.
 - Kept running AppHost resources in a warning state while their health checks are
   still pending, instead of reporting them as errors before the first check returns.
 - Stopped Aspire AppHosts error redaction from mangling URLs and words that only
