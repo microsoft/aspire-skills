@@ -48,3 +48,10 @@ test("existing package.json guidance preserves scripts and module type", async (
     }
     assert.match(section, /aspire:` prefix|aspire:` namespace/);
 });
+
+test("existing package.json guidance allows the CLI's engines.node update", async () => {
+    const section = await readPackageJsonSection();
+
+    assert.doesNotMatch(section, /without overwriting anything/, "the CLI overwrites engines.node, so the merge is not a blanket no-overwrite");
+    assert.match(section, /sets `engines\.node`[\s\S]{0,200}?replacing any\s+existing value/, "the guidance must say the CLI replaces an existing engines.node");
+});

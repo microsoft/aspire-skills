@@ -60,7 +60,8 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   exceeds 20,000 lines (as on the v0.0.5 release PR).
 - Aligned Aspireify's TypeScript AppHost `package.json` guidance with the scripts that
   `aspire init` generates. The `aspire:*` scripts compile with `tsc -p tsconfig.apphost.json`,
-  and existing packages keep their scripts and module type. Previously it told agents to
+  and existing packages keep their scripts and module type, while the CLI replaces
+  `engines.node` with the Node range its tooling requires. Previously it told agents to
   add bare `tsc` build scripts (which compile the app's root `tsconfig.json`) and
   `"type": "module"` to existing packages.
 

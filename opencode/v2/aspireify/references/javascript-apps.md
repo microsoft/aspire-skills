@@ -86,7 +86,8 @@ Tell the user: *"This is a yarn workspace monorepo — I'll skip `.withYarn()` o
 `aspire init` and `aspire restore` create or merge the AppHost `package.json`. Verify
 the result instead of hand-writing different scripts.
 
-If one exists at the root, the CLI augments it without overwriting anything:
+If one exists at the root, the CLI merges into it. It preserves existing scripts and the
+module type:
 
 - It keeps every existing script.
 - It adds the AppHost scripts under the `aspire:` prefix.
@@ -94,6 +95,12 @@ If one exists at the root, the CLI augments it without overwriting anything:
   `aspire:` script with the repo's package manager.
 - It does not add `"type": "module"`. `apphost.mts` is ESM by its extension, and switching
   an existing package to ESM changes how every `.js` file in it loads.
+
+The merge is not read-only for everything else. The CLI always sets `engines.node` to the
+Node range the AppHost tooling requires (`^20.19.0 || ^22.13.0 || >=24`), replacing any
+existing value; other `engines` keys are kept. It also adds missing AppHost dependencies
+and raises an existing dependency's version when the scaffold needs a newer one. Treat
+those changes as expected CLI output, not as a failed merge.
 
 ```json
 {
@@ -132,7 +139,7 @@ If no root `package.json` exists, the CLI creates one matching the canonical Asp
 
 **Important**: Run the AppHost with `aspire run`/`aspire start` — the Aspire CLI handles TypeScript compilation internally. Do not use `npx tsc && node apphost.js` patterns. Any script that type-checks the AppHost must pass `-p tsconfig.apphost.json`; bare `tsc` compiles the application's root `tsconfig.json` instead of the AppHost.
 
-Never overwrite existing `scripts`, `dependencies`, or `devDependencies` — merge only. Do not manually add Aspire SDK packages — `aspire restore` handles those.
+When editing `package.json` by hand, never overwrite existing `scripts`, `dependencies`, or `devDependencies` — merge only. Do not manually add Aspire SDK packages — `aspire restore` handles those.
 
 Run `aspire restore` to generate the `.aspire/modules/` directory with TypeScript SDK bindings, then install dependencies with the repo's package manager (`npm install`, `pnpm install`, or `yarn`).
 
