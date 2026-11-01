@@ -53,23 +53,87 @@ export function assignResourceNames(services) {
     });
 }
 
+export const SERVICE_TREATMENTS = Object.freeze(["not-modeled", "deferred"]);
+
 // Discovered services that no proposal resource or removed generated resource maps.
-// The skill supplied no treatment for them, so they are reported as not assessed.
-export function unproposedServices({ services, resources, removedGeneratedResources }) {
+// Each keeps the skill-supplied treatment, or is reported as not assessed without one.
+export function unproposedServices({
+    services,
+    resources,
+    removedGeneratedResources,
+    serviceTreatments,
+}) {
     const mappedIds = new Set(
         [...(resources ?? []), ...(removedGeneratedResources ?? [])]
             .map((resource) => resource.serviceId)
             .filter(Boolean),
     );
+    const treatments = new Map(
+        (serviceTreatments ?? []).map((treatment) => [treatment.serviceId, treatment]),
+    );
     return (services ?? [])
         .filter((service) => !mappedIds.has(service.id))
-        .map((service) => ({
-            id: service.id,
-            name: service.name,
-            type: service.type,
-            path: service.path,
-            treatment: "not-assessed",
-        }));
+        .map((service) => {
+            const entry = {
+                id: service.id,
+                name: service.name,
+                type: service.type,
+                path: service.path,
+            };
+            const supplied = treatments.get(service.id);
+            if (!supplied) {
+                return { ...entry, treatment: "not-assessed" };
+            }
+            return {
+                ...entry,
+                treatment: supplied.treatment,
+                reason: supplied.reason,
+                ...(supplied.treatment === "deferred" ? { unresolved: supplied.unresolved } : {}),
+            };
+        });
+}
+
+// Validates skill-supplied treatments for discovered services left out of the graph.
+export function normalizeServiceTreatments(input, { services, mappedServiceIds }) {
+    if (input == null) {
+        return null;
+    }
+    if (!Array.isArray(input)) {
+        throw new Error("serviceTreatments must be an array.");
+    }
+    const knownIds = new Set((services ?? []).map((service) => service.id));
+    const seen = new Set();
+    return input.map((raw, index) => {
+        const serviceId = String(raw?.serviceId ?? "").trim();
+        const treatment = String(raw?.treatment ?? "").trim();
+        const reason = String(raw?.reason ?? "").trim();
+        const unresolved = String(raw?.unresolved ?? "").trim();
+        const label = `serviceTreatments[${index}]`;
+        if (!knownIds.has(serviceId)) {
+            throw new Error(`${label} references "${serviceId}", which is not a discovered service.`);
+        }
+        if (seen.has(serviceId)) {
+            throw new Error(`${label} repeats the treatment for "${serviceId}".`);
+        }
+        seen.add(serviceId);
+        if (mappedServiceIds.has(serviceId)) {
+            throw new Error(
+                `${label} sets a treatment for "${serviceId}", but a proposed resource already maps it.`,
+            );
+        }
+        if (!SERVICE_TREATMENTS.includes(treatment)) {
+            throw new Error(`${label}.treatment must be one of: ${SERVICE_TREATMENTS.join(", ")}.`);
+        }
+        if (!reason) {
+            throw new Error(`${label}.reason is required.`);
+        }
+        if (treatment === "deferred" && !unresolved) {
+            throw new Error(`${label}.unresolved is required for a deferred service.`);
+        }
+        return treatment === "deferred"
+            ? { serviceId, treatment, reason, unresolved }
+            : { serviceId, treatment, reason };
+    });
 }
 
 export function presentationMode(proposal) {
@@ -79,10 +143,12 @@ export function presentationMode(proposal) {
     return count <= 2 ? "compact" : "relationship";
 }
 
-export function stableProposalHash({ proposalGeneration, proposal }) {
+export function stableProposalHash({ proposalGeneration, proposal, serviceTreatments }) {
     const hashInput = {
         proposalGeneration: Number(proposalGeneration) || 0,
         proposal: stripTransientProposalFields(proposal),
+        // Omitted when empty so hashes of plans without treatments are unchanged.
+        ...(serviceTreatments?.length ? { serviceTreatments } : {}),
     };
     return createHash("sha256").update(canonicalJson(hashInput)).digest("hex");
 }
