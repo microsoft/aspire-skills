@@ -8,6 +8,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Documented `aspire new --localhost-tld` in the Aspire init templates reference. The
   `*.dev.localhost` prompt previously listed no flag, so non-interactive runs could
   only take the default plain `localhost` profile.
+- Corrected the Aspireify TypeScript data-volume example to the generated AppHost SDK:
+  `withDataVolume({ name: "pg-data" })` instead of a positional name. The previous form
+  failed type checking, so `aspire start` exited before starting any resource.
 - Unified canvas styling and icons with shared assets that respect host themes.
 - Distinguished ordinary `aspire stop`, `aspire stop --force` (which preserves
   persistent volumes), and explicitly approved AppHost-wide `--volumes` cleanup, including

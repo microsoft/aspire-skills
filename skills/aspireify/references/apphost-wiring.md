@@ -349,7 +349,7 @@ This prevents data loss when restarting the AppHost — the container stays runn
 **TypeScript equivalent:**
 
 ```typescript
-import { ContainerLifetime } from './.aspire/modules/aspire.mjs';
+import { ContainerLifetime } from "./.aspire/modules/aspire.mjs";
 
 const db = await builder.addPostgres("pg")
     .withLifetime(ContainerLifetime.Persistent);
@@ -441,5 +441,5 @@ var db = builder.AddPostgres("pg")
 
 ```typescript
 const db = await builder.addPostgres("pg")
-    .withDataVolume("pg-data");
+    .withDataVolume({ name: "pg-data" });
 ```
