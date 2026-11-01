@@ -46,8 +46,8 @@ aspire docs search "golang"
 aspire docs search "python uvicorn"
 
 # Get a specific doc page by slug (returned from search results)
-aspire docs get "redis-integration"
-aspire docs get "go-integration"
+aspire docs get "set-up-redis-in-the-apphost"
+aspire docs get "set-up-go-apps-in-the-apphost"
 
 # Find the exact C# / TypeScript API reference entry for a builder method
 aspire docs api search "AddRedis" --language csharp

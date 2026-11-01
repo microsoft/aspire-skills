@@ -5,7 +5,7 @@ import test from "node:test";
 const wiringPath = new URL("../skills/aspireify/references/apphost-wiring.md", import.meta.url);
 
 // Slugs that `aspire docs get` reports as "Documentation page ... not found" on Aspire 13.6.4.
-const retiredSlugs = ["postgresql-hosting-integration", "sql-server-integration"];
+const retiredSlugs = ["postgresql-hosting-integration", "sql-server-integration", "redis-integration", "go-integration"];
 
 test("Aspireify wiring guidance does not use retired aspire docs slugs", async () => {
     const markdown = await readFile(wiringPath, "utf8");
@@ -21,4 +21,10 @@ test("Aspireify auto-managed value checks point at the Connection properties pag
     const markdown = await readFile(wiringPath, "utf8");
     assert.match(markdown, /aspire docs get "connect-to-postgresql" --section "Connection properties"/);
     assert.match(markdown, /aspire docs get "connect-to-sql-server" --section "Connection properties"/);
+});
+
+test("Aspireify package discovery examples use slugs that aspire docs get resolves", async () => {
+    const markdown = await readFile(wiringPath, "utf8");
+    assert.match(markdown, /aspire docs get "set-up-redis-in-the-apphost"/);
+    assert.match(markdown, /aspire docs get "set-up-go-apps-in-the-apphost"/);
 });
