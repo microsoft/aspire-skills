@@ -55,7 +55,7 @@ aspire new aspire-py-starter --use-redis-cache true --non-interactive
 | Project name | Output directory name | `--name <value>` |
 | Template version | Which release to use | `--version <value>` |
 | Output folder | Where files land | `--output <value>` |
-| Use `*.dev.localhost` URLs? | HTTPS subdomain launch profile vs `http://localhost:<port>` | Pass `--non-interactive` to take the default (No, standard localhost) |
+| Use `*.dev.localhost` URLs? | HTTPS subdomain launch profile vs `http://localhost:<port>` | `--localhost-tld` to opt in; omit it with `--non-interactive` to take the default (No, standard localhost) |
 
 If a project picks `*.dev.localhost`, the user must trust the developer certificate first:
 
