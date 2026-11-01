@@ -80,6 +80,11 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Fixed Aspireify ServiceDefaults guidance to install `Aspire.ProjectTemplates` before
   `dotnet new aspire-servicedefaults` when the template is missing, as it is after a
   TypeScript `aspire init`.
+- Fixed the Aspireify Node.js OpenTelemetry setup: it installed the deprecated
+  `@opentelemetry/exporter-otlp-grpc` (0.26.0) and passed `metricReader` to `NodeSDK`, so
+  the snippet failed `tsc` against current `@opentelemetry/sdk-node` and exported no traces.
+  It now uses the signal-specific OTLP gRPC exporters, installs `@opentelemetry/sdk-metrics`
+  and passes `metricReaders`.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
