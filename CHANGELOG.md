@@ -80,6 +80,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Fixed Aspireify ServiceDefaults guidance to install `Aspire.ProjectTemplates` before
   `dotnet new aspire-servicedefaults` when the template is missing, as it is after a
   TypeScript `aspire init`.
+- Fixed Aspireify C# AppHost samples that did not build against Aspire 13.6: they now pin
+  the file-based `#:sdk Aspire.AppHost.Sdk` version, reference `Aspire.Hosting.Browsers`
+  for `WithBrowserLogs()`, and suppress the experimental `ASPIREJAVASCRIPT001`
+  (`AddNextJsApp`) and `ASPIREBROWSERLOGS001` (`WithBrowserLogs`) diagnostics.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including

@@ -318,10 +318,12 @@ var api = builder.AddProject<Projects.Api>("api")
     .WithEndpoint("admin", e => e.ExcludeReferenceEndpoint = true);
 
 // Frontend wires the API via service discovery.
+#pragma warning disable ASPIREJAVASCRIPT001, ASPIREBROWSERLOGS001 // experimental APIs
 builder.AddNextJsApp("web", "./web")
     .WithReference(api)        // injects services__api__http and __https
     .WaitFor(api)
-    .WithBrowserLogs();        // browser console + screenshots
+    .WithBrowserLogs();        // browser console + screenshots (Aspire.Hosting.Browsers)
+#pragma warning restore ASPIREJAVASCRIPT001, ASPIREBROWSERLOGS001
 ```
 
 ## Validation & Recovery
