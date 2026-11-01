@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -7,10 +7,10 @@ import { fileURLToPath } from "node:url";
 const skillsRoot = fileURLToPath(new URL("../skills/", import.meta.url));
 
 function markdownFiles(dir) {
-    return readdirSync(dir).flatMap((entry) => {
-        const path = join(dir, entry);
-        if (statSync(path).isDirectory()) return markdownFiles(path);
-        return path.endsWith(".md") ? [path] : [];
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) return markdownFiles(path);
+        return entry.isFile() && path.endsWith(".md") ? [path] : [];
     });
 }
 
