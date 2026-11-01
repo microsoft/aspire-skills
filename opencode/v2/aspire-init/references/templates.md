@@ -29,7 +29,7 @@ https://aspire.dev/reference/cli/commands/aspire-new/
 | `-n, --name` | Name of the project to create |
 | `-o, --output` | Output path. Defaults to `./<template-name>` (auto-suffixed if non-empty) |
 | `-s, --source` | NuGet source for the project templates |
-| `-v, --version` | Version of the project templates to use |
+| `--version` | Version of the project templates to use (no short alias) |
 | `--channel` | Template channel: `stable` (default), `staging`, `daily` |
 | `--non-interactive` | **Required for agent execution.** Disables prompts and spinners |
 | `--nologo` | Suppress startup banner / telemetry notice |

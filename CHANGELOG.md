@@ -30,6 +30,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   OS file manager and could hand the editor a path outside the repository.
 - Corrected POSIX path handling in the Aspireify canvas to keep proposal
   snapshots separate for AppHost paths containing literal backslashes.
+- Removed the nonexistent `-v` alias from the `aspire new` options table in the
+  Aspire init templates reference. `aspire new ... -v <version>` fails with
+  "Unrecognized command or argument '-v'"; use `--version`.
 - Kept discovered services without a proposal mapping visible in the Aspireify
   canvas as **Not assessed** in a "Not in the proposed graph" section, and
   preserved them as `notProposed` in the confirmation and chat handoff.
