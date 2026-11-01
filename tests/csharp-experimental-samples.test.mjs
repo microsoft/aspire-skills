@@ -57,7 +57,8 @@ test("runnable file-based C# AppHost samples pin the Aspire.AppHost.Sdk version"
 });
 
 test("file-based C# sample references the package that provides WithBrowserLogs", () => {
-    const authoring = readFileSync(join(skillsRoot, "aspireify/references/csharp-authoring.md"), "utf8");
+    const authoring = readFileSync(join(skillsRoot, "aspireify/references/csharp-authoring.md"), "utf8")
+        .replace(/\r\n/g, "\n");
     const fileBased = /## File-based AppHost \(apphost\.cs\)[\s\S]*?```csharp\n([\s\S]*?)```/.exec(authoring)?.[1];
     assert.ok(fileBased, "csharp-authoring.md must keep its file-based AppHost sample");
     assert.match(fileBased, /\.WithBrowserLogs\(/);
