@@ -80,6 +80,10 @@ jobs:
           try {
             node --test (Join-Path $checkout "tests\canvas-ui.test.mjs")
             $testExitCode = $LASTEXITCODE
+            if ($testExitCode -eq 0) {
+              node --experimental-vm-modules --test --test-name-pattern="shared canvas assets are served locally" (Join-Path $checkout "tests\fixtures\aspire-apphosts-provider-boundary.mjs")
+              $testExitCode = $LASTEXITCODE
+            }
           } finally {
             git -c core.symlinks=false worktree remove $checkout
             if ($LASTEXITCODE -ne 0) { throw "Could not remove the placeholder test worktree." }
