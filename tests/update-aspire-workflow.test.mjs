@@ -610,6 +610,17 @@ test("publication audit distinguishes staged previews, verified no-ops, incomple
   await assert.rejects(audit(verified), /did not return a canonical Aspire PR/);
 });
 
+test("custom security-review actions remain SHA-pinned after compilation", () => {
+  for (const steps of [
+    authored["safe-outputs"]["threat-detection"].steps,
+    compiled.jobs.detection.steps
+  ]) {
+    for (const step of steps.filter(step => step.uses)) {
+      assert.match(step.uses, /@[a-f0-9]{40}$/, `${step.name ?? step.uses} must use a commit SHA`);
+    }
+  }
+});
+
 test("compiled workflow enforces verifier success, strict detection, and bounded credentials", async () => {
   assert.ok(compiled.jobs.agent.needs.includes("resolve-source"));
   assert.ok(compiled.jobs.safe_outputs.needs.includes("detection"));
