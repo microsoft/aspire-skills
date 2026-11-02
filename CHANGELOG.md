@@ -9,6 +9,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   `*.dev.localhost` prompt previously listed no flag, so non-interactive runs could
   only take the default plain `localhost` profile.
 - Unified canvas styling and icons with shared assets that respect host themes.
+- Served shared canvas CSS and icons directly from the plugin root so Windows
+  checkouts do not need working UI symlinks. Standalone extensions retain a
+  fallback to their local UI assets.
 - Distinguished ordinary `aspire stop`, `aspire stop --force` (which preserves
   persistent volumes), and explicitly approved AppHost-wide `--volumes` cleanup, including
   its ownership and compatibility limits. Stale-password recovery now prefers restoring
