@@ -21,10 +21,10 @@ and shared-asset tests fail.
 
 Enable Windows Developer Mode or use a terminal with the required symlink
 privilege, subject to your machine's policies. Then clone into a new directory
-with symlinks enabled for that repository:
+from the development branch with symlinks enabled for that repository:
 
 ```powershell
-git clone --config core.symlinks=true https://github.com/microsoft/aspire-skills.git aspire-skills-symlinks
+git clone --branch dev --config core.symlinks=true https://github.com/microsoft/aspire-skills.git aspire-skills-symlinks
 Set-Location aspire-skills-symlinks
 git config --show-origin --get core.symlinks
 Get-Item -LiteralPath .\extensions\aspire-doctor\ui\canvas-theme.css | Select-Object LinkType, Target
