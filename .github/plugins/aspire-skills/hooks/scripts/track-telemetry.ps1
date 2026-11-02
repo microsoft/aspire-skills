@@ -1,1 +1,0 @@
-../../../../../hooks/scripts/track-telemetry.ps1
