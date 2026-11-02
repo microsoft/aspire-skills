@@ -478,6 +478,7 @@ export async function promoteVerifiedProposal({ github, directory, source, recei
   const artifactDirectory = "/tmp/gh-aw";
   for (const name of Object.keys(receipt.files)) copyFileSync(join(verified, name), join(artifactDirectory, name));
   writeFileSync(join(artifactDirectory, "safeoutputs.jsonl"), `${JSON.stringify(item)}\n`);
+  return item;
 }
 
 export async function validatePublication({ github, source, receipt, publisherResult, staged, number = "", url = "" }) {

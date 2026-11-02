@@ -150,6 +150,62 @@ test("manual runs remain live by default while automatic activation requires a m
   assert.equal(authored.on.workflow_dispatch.inputs.dry_run.default, false);
 });
 
+test("workflow concurrency retains pending source assessments", () => {
+  for (const configuration of [authored.concurrency, compiled.concurrency]) {
+    assert.equal(configuration.group, "aspire-skills-to-aspire");
+    assert.equal(configuration["cancel-in-progress"], false);
+    assert.equal(configuration.queue, "max");
+  }
+});
+
+test("the configured source checkout resolves merged and diverged manual ancestry", async t => {
+  const checkout = compiled.jobs["resolve-source"].steps.find(step => step.uses?.startsWith("actions/checkout@"));
+  const depth = checkout.with["fetch-depth"] ?? 1;
+  for (const merged of [true, false]) {
+    await t.test(merged ? "merged source" : "diverged manual source", async t => {
+      const f = fixture(t);
+      withRun(t, f.directory);
+      git(f.repo, "switch", "--quiet", "--create", "feature");
+      write(f.repo, "extensions/example/extension.mjs", "selected\n");
+      const head = commit(f.repo);
+      git(f.repo, "switch", "--quiet", "main");
+      if (merged) {
+        git(f.repo, "-c", "commit.gpgsign=false", "merge", "--quiet", "--no-ff", "feature", "-m", "Merge fixture");
+      } else {
+        write(f.repo, "unrelated.txt", "main advanced\n");
+        commit(f.repo);
+      }
+      const workflowCommit = git(f.repo, "rev-parse", "HEAD");
+      const commitSha = merged ? workflowCommit : head;
+      const directory = join(f.directory, "source-checkout");
+      git(f.directory, "clone", "--quiet", "--no-local", "--depth=1", f.repo, directory);
+      git(directory, "checkout", "--quiet", "--detach", workflowCommit);
+      assert.equal(git(directory, "rev-parse", "--is-shallow-repository"), "true");
+      if (depth === 0) git(directory, "fetch", "--quiet", "--unshallow", "origin");
+      git(directory, "config", `url.${f.repo.replaceAll("\\", "/")}.insteadOf`, "https://github.com/microsoft/aspire.git");
+      const pr = {
+        merged, merge_commit_sha: merged ? commitSha : null, head: { sha: commitSha },
+        base: {
+          ref: "main", sha: merged ? f.base : workflowCommit,
+          repo: { full_name: "microsoft/aspire-skills" }
+        }
+      };
+      const github = { rest: { pulls: { get: async () => ({ data: pr }) } } };
+      const context = merged
+        ? { eventName: "pull_request", payload: { pull_request: { number: 123, merge_commit_sha: commitSha } } }
+        : { eventName: "workflow_dispatch", payload: { inputs: { pr_number: "123" } } };
+      const source = await resolveSource({ github, context, directory });
+      assert.equal(source.commit, commitSha);
+      assert.equal(source.base, f.base);
+      assert.deepEqual(JSON.parse(readFileSync(join(f.directory, "telemetry-source", "source-pr-files.json"))), [
+        { filename: "extensions/example/extension.mjs", additions: 1, deletions: 0 }
+      ]);
+    });
+  }
+  assert.equal(depth, 0);
+  assert.equal(authored.jobs["resolve-source"].steps[0].with["fetch-depth"], 0);
+});
+
 test("source evidence comes from immutable commits even when a manual PR advances", async t => {
   const f = fixture(t);
   withRun(t, f.directory);
@@ -552,6 +608,17 @@ test("publication audit distinguishes staged previews, verified no-ops, incomple
   verified = receipt(f);
   assert.equal(await audit(verified, { staged: true }), "staged");
   await assert.rejects(audit(verified), /did not return a canonical Aspire PR/);
+});
+
+test("custom security-review actions remain SHA-pinned after compilation", () => {
+  for (const steps of [
+    authored["safe-outputs"]["threat-detection"].steps,
+    compiled.jobs.detection.steps
+  ]) {
+    for (const step of steps.filter(step => step.uses)) {
+      assert.match(step.uses, /@[a-f0-9]{40}$/, `${step.name ?? step.uses} must use a commit SHA`);
+    }
+  }
 });
 
 test("compiled workflow enforces verifier success, strict detection, and bounded credentials", async () => {

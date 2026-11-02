@@ -30,6 +30,7 @@ const gate = steps[gateIndex];
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const runGate = new AsyncFunction("require", "github", "core", "context", "exec", "io", "getOctokit", gate.with.script);
 const allowedPath = "src/Aspire.Cli/Agents/Hooks/AgentTelemetryCatalog.cs";
+const readmePath = "src/Aspire.Cli/Agents/Hooks/README.md";
 const target = "https://github.com/microsoft/aspire.git";
 
 function git(directory, ...args) {
@@ -59,7 +60,7 @@ function environment(t, values) {
   }
 }
 
-function proposalFixture(t, { outside, telemetry = true } = {}) {
+function proposalFixture(t, { additionalPath, telemetry = true } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "telemetry-publication-"));
   const previousDirectory = process.cwd();
   t.after(() => {
@@ -82,11 +83,11 @@ function proposalFixture(t, { outside, telemetry = true } = {}) {
   };
   git(agent, "switch", "--quiet", "--create", source.branch);
   if (telemetry) write(agent, allowedPath, "candidate\n");
-  if (outside) write(agent, outside, "out-of-scope fixture\n");
+  if (additionalPath) write(agent, additionalPath, "additional fixture\n");
   const head = commit(agent);
   const files = git(agent, "diff", "--name-only", base, head).split("\n");
   if (telemetry) assert.ok(files.includes(allowedPath));
-  if (outside) assert.ok(files.includes(outside));
+  if (additionalPath) assert.ok(files.includes(additionalPath));
   const prefix = `aw-microsoft-aspire-${source.branch}`;
   const bundle = join(directory, `${prefix}.bundle`);
   git(agent, "bundle", "create", bundle, `${base}..${source.branch}`);
@@ -101,8 +102,8 @@ function proposalFixture(t, { outside, telemetry = true } = {}) {
   return { directory, agent, verified, base, source, prefix, bundle, verify };
 }
 
-async function fixture(t, { staged = false, testExitCode = 0 } = {}) {
-  const { directory, agent, verified, base, source, prefix, bundle } = proposalFixture(t);
+async function fixture(t, { staged = false, testExitCode = 0, additionalPath, outcome = "create_pull_request" } = {}) {
+  const { directory, agent, verified, base, source, prefix, bundle } = proposalFixture(t, { additionalPath });
   const publisher = join(directory, "publisher");
   const shims = join(directory, "shims");
   const containerCalls = join(directory, "docker.log");
@@ -134,16 +135,20 @@ exit ${testExitCode}
     GH_AW_PROMPTS_DIR: process.env.GH_AW_PROMPTS_DIR || join(dirname(runtime), "prompts")
   });
   mkdirSync("/tmp/gh-aw", { recursive: true });
-  const inputNames = ["agent_output.json", `${prefix}.bundle`, `${prefix}.patch`];
+  const inputNames = ["agent_output.json"];
+  if (outcome === "create_pull_request") inputNames.push(`${prefix}.bundle`, `${prefix}.patch`);
   for (const name of inputNames) assert.equal(existsSync(join("/tmp/gh-aw", name)), false);
   t.after(() => {
     for (const name of inputNames) rmSync(join("/tmp/gh-aw", name), { force: true });
   });
-  write("/tmp/gh-aw", "agent_output.json", JSON.stringify({ items: [{
-    type: "create_pull_request", branch: source.branch, title: "Telemetry fixture", body: "Regression proposal."
-  }], errors: [] }));
-  write("/tmp/gh-aw", `${prefix}.bundle`, readFileSync(bundle));
-  write("/tmp/gh-aw", `${prefix}.patch`, git(agent, "diff", "--binary", base, source.branch));
+  const item = outcome === "noop"
+    ? { type: outcome, message: "Baseline covers the selected source." }
+    : { type: outcome, branch: source.branch, title: "Telemetry fixture", body: "Regression proposal." };
+  write("/tmp/gh-aw", "agent_output.json", JSON.stringify({ items: [item], errors: [] }));
+  if (outcome === "create_pull_request") {
+    write("/tmp/gh-aw", `${prefix}.bundle`, readFileSync(bundle));
+    write("/tmp/gh-aw", `${prefix}.patch`, git(agent, "diff", "--binary", base, source.branch));
+  }
   git(agent, "switch", "--quiet", "main");
   const receipt = await verifyTelemetry({ directory, source });
   for (const name of inputNames) rmSync(join("/tmp/gh-aw", name));
@@ -179,6 +184,7 @@ exit ${testExitCode}
   const writes = [];
   const gitPushes = [];
   const logs = [];
+  const summaries = [];
   const outputs = {};
   const sourcePr = { merged: false, head: { sha: source.commit }, base: {
     ref: "main", repo: { full_name: "microsoft/aspire-skills" }
@@ -269,7 +275,7 @@ exit ${testExitCode}
   ]));
   core.setOutput = (name, value) => outputs[name] = value;
   core.summary = {
-    addRaw(content) { logs.push(content); return this; },
+    addRaw(content) { summaries.push(content); logs.push(content); return this; },
     async write() { return this; }
   };
   const context = {
@@ -282,12 +288,15 @@ exit ${testExitCode}
     await runGate(require, github, core, context, exec, {}, () => github);
     const { setupGlobals } = require(join(runtime, "setup_globals.cjs"));
     setupGlobals(core, github, context, exec, {}, () => github);
-    const { main } = require(join(runtime, "create_pull_request.cjs"));
-    const handler = await main(await publicationPolicy(root));
+    const { main } = require(join(runtime, outcome === "noop" ? "noop_handler.cjs" : "create_pull_request.cjs"));
+    const policy = outcome === "noop"
+      ? JSON.parse(steps[publisherIndex].env.GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG).noop
+      : await publicationPolicy(root);
+    const handler = await main(policy);
     const result = await handler(JSON.parse(readFileSync("/tmp/gh-aw/safeoutputs.jsonl", "utf8")), {});
     if (!result.success) throw new Error(`${result.error}\n${logs.join("\n")}`);
     const { emitSafeOutputActionOutputs } = require(join(runtime, "safe_outputs_action_outputs.cjs"));
-    emitSafeOutputActionOutputs({ results: [{ success: true, type: "create_pull_request", result }] });
+    emitSafeOutputActionOutputs({ results: [{ success: true, type: outcome, result }] });
     return result;
   };
   const audit = async (values = {}) => {
@@ -312,17 +321,40 @@ exit ${testExitCode}
   };
   return {
     publish, audit, outputs, writes, gitPushes, remote, remoteRefs, verified, prefix, source,
-    sourcePr, head, agent, publisher, prepareCheckout, receipt, reviewedReceipt, containerCalls
+    sourcePr, head, agent, publisher, prepareCheckout, receipt, reviewedReceipt, containerCalls, summaries
   };
+}
+
+test("the native policy exempts only the hook README from basename protection", async () => {
+  const policy = await publicationPolicy(root);
+  assert.ok(policy.protected_files.includes("README.md"));
+  assert.deepEqual(policy.protected_files_path_exclude, [readmePath]);
+  const { checkFileProtectionPostApply } = require(join(runtime, "manifest_file_helpers.cjs"));
+  for (const path of ["README.md", "src/Aspire.Cli/README.md"]) {
+    assert.deepEqual(checkFileProtectionPostApply([path], {
+      ...policy, allowed_files: [...policy.allowed_files, path]
+    }), { action: "deny", source: "protected", files: [path] });
+  }
+});
+
+for (const telemetry of [false, true]) {
+  test(`verification accepts the hook README ${telemetry ? "mixed with telemetry" : "alone"}`, async t => {
+    const f = proposalFixture(t, { additionalPath: readmePath, telemetry });
+    const result = await f.verify();
+    assert.equal(result.tree, git(f.agent, "rev-parse", `${f.source.branch}^{tree}`));
+    const patch = readFileSync(join(f.verified, result.patch), "utf8");
+    assert.ok(patch.includes(readmePath));
+    assert.equal(patch.includes(allowedPath), telemetry);
+  });
 }
 
 for (const [outside, telemetry] of [
   [".github/workflows/publish.yml", false], [".github/workflows/publish.yml", true],
   [".github/CODEOWNERS", true], ["src/Aspire.Cli/Commands/DeployCommand.cs", true],
-  ["tests/Aspire.Cli.Tests/Aspire.Cli.Tests.csproj", true]
+  ["tests/Aspire.Cli.Tests/Aspire.Cli.Tests.csproj", true], ["README.md", true]
 ]) {
   test(`verification rejects ${outside} ${telemetry ? "mixed with telemetry" : "alone"} before issuing a receipt`, async t => {
-    const f = proposalFixture(t, { outside, telemetry });
+    const f = proposalFixture(t, { additionalPath: outside, telemetry });
     await assert.rejects(f.verify(), error => {
       assert.match(error.message, /Publisher file policy rejected/);
       assert.ok(error.message.includes(outside));
@@ -334,7 +366,7 @@ for (const [outside, telemetry] of [
 
 test("verification rejects a mixed bundle even when its companion patch hides the workflow edit", async t => {
   const outside = ".github/workflows/publish.yml";
-  const f = proposalFixture(t, { outside });
+  const f = proposalFixture(t, { additionalPath: outside });
   const patch = git(f.agent, "diff", "--binary", f.base, f.source.branch, "--", allowedPath);
   assert.ok(patch.includes(allowedPath));
   assert.ok(!patch.includes(outside));
@@ -442,6 +474,18 @@ test("native staged publication previews the same verified proposal without any 
   assert.equal(git(f.remote, "show-ref"), f.remoteRefs);
 });
 
+test("native draft publication accepts the exact hook README alongside telemetry code", async t => {
+  const f = await fixture(t, { additionalPath: readmePath });
+  await f.publish();
+  const signedCommit = f.writes.find(write => write.operation === "createCommitOnBranch");
+  assert.deepEqual(signedCommit.parameters.input.fileChanges.additions.map(file => file.path).sort(),
+    [allowedPath, readmePath].sort());
+  await f.audit();
+  assert.equal(f.writes.filter(write => write.operation === "pulls.create").length, 1);
+  assert.deepEqual(f.gitPushes, []);
+  assert.equal(git(f.remote, "show-ref"), f.remoteRefs);
+});
+
 test("completed functional failures remain visible on the native draft without changing its tested tree", async t => {
   const f = await fixture(t, { testExitCode: 2 });
   await f.publish();
@@ -473,6 +517,58 @@ test("candidate compilation failures reach the native draft with diagnostics ins
   assert.equal(f.writes.filter(write => write.operation === "pulls.create").length, 1);
   assert.deepEqual(readFileSync(f.containerCalls, "utf8").trim().split("\n"), ["pull", "run", "rm", "run", "rm"]);
   assert.deepEqual(f.gitPushes, []);
+});
+
+for (const staged of [false, true]) {
+  for (const testExitCode of [0, 2, 1]) {
+    test(`compiled ${staged ? "staged" : "live"} no-op reports verified diagnostics for test exit ${testExitCode}`, async t => {
+      const f = await fixture(t, { outcome: "noop", staged, testExitCode });
+      write("/tmp/gh-aw", "agent_output.json", JSON.stringify({
+        items: [{ type: "noop", message: "Original unverified no-op." }], errors: []
+      }));
+      await f.publish();
+      const verified = JSON.parse(readFileSync(join(f.verified, "agent_output.json"), "utf8")).items[0];
+      assert.deepEqual(f.summaries, [verified.message]);
+      const expected = testExitCode === 1
+        ? "**Isolated telemetry build/tests: NOT COMPLETED**\n\n" +
+          "Build/test command exited with code 1. No completed test result was confirmed."
+        : `**Isolated telemetry tests: ${testExitCode === 2 ? "FAILED" : "PASSED"}**\n\n` +
+          `${testExitCode === 2 ? 177 : 189} passed, ${testExitCode === 2 ? 12 : 0} failed, 0 skipped (189 total).`;
+      assert.ok(f.summaries[0].startsWith(expected));
+      assert.ok(f.summaries[0].includes(
+        "[Full test output](https://github.com/microsoft/aspire-skills/actions/runs/123456/attempts/1)"
+      ));
+      assert.doesNotMatch(f.summaries[0], /Original unverified no-op/);
+      assert.equal(f.outputs.created_pr_number, undefined);
+      assert.equal(f.outputs.created_pr_url, undefined);
+      await f.audit();
+      assert.deepEqual(f.writes, []);
+      assert.deepEqual(f.gitPushes, []);
+      assert.equal(git(f.remote, "show-ref"), f.remoteRefs);
+      assert.deepEqual(readFileSync(f.containerCalls, "utf8").trim().split("\n"), ["pull", "run", "rm", "run", "rm"]);
+    });
+  }
+}
+
+test("no-op diagnostics are not displayed before artifact, review, detector and source guards pass", async t => {
+  const f = await fixture(t, { outcome: "noop", testExitCode: 2 });
+  const output = join(f.verified, "agent_output.json");
+  const original = readFileSync(output);
+  writeFileSync(output, JSON.stringify({ items: [{ type: "noop", message: "Unreviewed diagnostics." }], errors: [] }));
+  await assert.rejects(f.publish(), /Verified artifact changed/);
+  writeFileSync(output, original);
+  writeFileSync(f.reviewedReceipt, JSON.stringify({ ...f.receipt, tree: "a".repeat(40) }));
+  await assert.rejects(f.publish(), /Threat review does not match/);
+  writeFileSync(f.reviewedReceipt, JSON.stringify(f.receipt));
+  environment(t, { TELEMETRY_DETECTION_RESULT: "failure" });
+  await assert.rejects(f.publish(), /successful native threat review/);
+  process.env.TELEMETRY_DETECTION_RESULT = "success";
+  f.sourcePr.head.sha = f.head;
+  await assert.rejects(f.publish(), /Source PR advanced/);
+  assert.deepEqual(f.summaries, []);
+  assert.deepEqual(f.writes, []);
+  assert.deepEqual(f.gitPushes, []);
+  assert.equal(git(f.remote, "show-ref"), f.remoteRefs);
 });
 
 test("final promotion rejects a late source PR change after review with zero remote mutations", async t => {

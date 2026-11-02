@@ -58,5 +58,5 @@ The [update-aspire workflow](../.github/workflows/update-aspire.md) keeps Aspire
 telemetry for aspire-skills usage up to date, including which skills and extension
 tools agents invoke.
 It creates draft proposals with one isolated build/test attempt. Candidate build
-and test failures are reported in the draft; verifier setup, isolation, and
-security failures block publication.
+and test failures are reported in the draft or no-op summary; verifier setup,
+isolation, and security failures block publication.

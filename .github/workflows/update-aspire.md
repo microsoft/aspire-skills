@@ -26,6 +26,7 @@ if: >-
 concurrency:
   group: aspire-skills-to-aspire
   cancel-in-progress: false
+  queue: max
   job-discriminator: ${{ github.run_id }}
 permissions:
   contents: read
@@ -97,6 +98,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
           persist-credentials: false
       - name: Snapshot source PR and Aspire base
         id: source
@@ -160,7 +162,7 @@ jobs:
             });
             core.setOutput("receipt", JSON.stringify(receipt));
             if (receipt.tests?.status === "incomplete" || receipt.tests?.failed) {
-              core.warning("Isolated telemetry build/tests did not pass. Diagnostics will be included in the draft; no automatic repair or retry.");
+              core.warning("Isolated telemetry build/tests did not pass. Diagnostics will be included in the draft or no-op summary; no automatic repair or retry.");
             }
       - uses: actions/upload-artifact@v7.0.1
         with:
@@ -262,18 +264,19 @@ safe-outputs:
       failures demonstrating broken security or privacy guarantees still
       require rejection.
     steps:
+      # The compiler preserves custom threat-detection action refs verbatim.
       - name: Checkout trusted review validator
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.workflow_sha }}
           path: _telemetry-tools
           persist-credentials: false
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: telemetry-verified-proposal
           path: ${{ runner.temp }}/telemetry-verified/
       - name: Stage exact frozen proposal for native review
-        uses: actions/github-script@v9.0.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           TELEMETRY_SOURCE: ${{ needs.resolve-source.outputs.source }}
           TELEMETRY_RECEIPT: ${{ needs.verify-telemetry.outputs.receipt }}
@@ -286,7 +289,7 @@ safe-outputs:
               directory: "/tmp/gh-aw/threat-detection"
             });
       - name: Record immutable native review inputs
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: telemetry-reviewed-proposal
           path: ${{ runner.temp }}/telemetry-reviewed/
@@ -342,7 +345,7 @@ safe-outputs:
           const { readFileSync } = await import("node:fs");
           const { join } = await import("node:path");
           const { promoteVerifiedProposal } = await import(`${process.env.GITHUB_WORKSPACE}/_telemetry-tools/scripts/telemetry-workflow.mjs`);
-          await promoteVerifiedProposal({
+          const outcome = await promoteVerifiedProposal({
             github,
             directory: process.env.GITHUB_WORKSPACE,
             source: JSON.parse(process.env.TELEMETRY_SOURCE),
@@ -354,6 +357,9 @@ safe-outputs:
               conclusion: process.env.TELEMETRY_DETECTION_CONCLUSION
             }
           });
+          if (outcome.type === "noop") {
+            await core.summary.addRaw(outcome.message).write();
+          }
   create-pull-request:
     target-repo: microsoft/aspire
     base-branch: main
@@ -373,6 +379,7 @@ safe-outputs:
       repositories: [aspire]
     protected-files:
       policy: blocked
+      exclude: ["/src/Aspire.Cli/Agents/Hooks/README.md"]
     allowed-files:
       - src/Aspire.Cli/Agents/Hooks/*.cs
       - src/Aspire.Cli/Agents/Hooks/track-telemetry.sh
@@ -538,16 +545,24 @@ configuration.
 
 ## Step 5: Create Draft PR and Stop
 
-Prepare a title and body that include:
+Use title `Sync telemetry with microsoft/aspire-skills#<number>`, replacing
+`<number>` with the source PR number. The publisher adds `[telemetry]`; do not
+include that prefix yourself.
 
-- The source PR URL, whether it is merged, the full source commit, and
-  `<!-- aspire-skills-pr:<number> -->` with the source PR number.
-- The skill, extension, and canonical MCP changes reviewed, their impact on
-  Aspire telemetry, and any behavior already covered by Aspire.
-- The necessary telemetry changes and associated tests.
-- Commands run and any remaining cross-platform review needs. State that
-  required restore and tests run in the isolated verification job; do not claim
-  results that have not run yet.
+Use this Markdown body, replacing the source PR number and URL:
+
+```markdown
+Sync telemetry with [microsoft/aspire-skills#<number>](<source-pr-url>).
+
+- <Actual change in the proposed diff.>
+
+<!-- aspire-skills-pr:<number> -->
+```
+
+Use one to three bullets, one sentence each, describing only changes in the
+proposed diff. Do not list unchanged categories, copy the destination
+repository's PR template, or add sections or commentary. The workflow adds
+test diagnostics and provenance; do not write those yourself.
 
 Emit `create_pull_request` exactly once after preparing the changes, then
 stop. The workflow attempts the isolated build/tests once, adds their
