@@ -26,6 +26,7 @@ if: >-
 concurrency:
   group: aspire-skills-to-aspire
   cancel-in-progress: false
+  queue: max
   job-discriminator: ${{ github.run_id }}
 permissions:
   contents: read
@@ -97,6 +98,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
           persist-credentials: false
       - name: Snapshot source PR and Aspire base
         id: source
@@ -373,6 +375,7 @@ safe-outputs:
       repositories: [aspire]
     protected-files:
       policy: blocked
+      exclude: ["/src/Aspire.Cli/Agents/Hooks/README.md"]
     allowed-files:
       - src/Aspire.Cli/Agents/Hooks/*.cs
       - src/Aspire.Cli/Agents/Hooks/track-telemetry.sh

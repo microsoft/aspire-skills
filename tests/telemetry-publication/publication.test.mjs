@@ -30,6 +30,7 @@ const gate = steps[gateIndex];
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const runGate = new AsyncFunction("require", "github", "core", "context", "exec", "io", "getOctokit", gate.with.script);
 const allowedPath = "src/Aspire.Cli/Agents/Hooks/AgentTelemetryCatalog.cs";
+const readmePath = "src/Aspire.Cli/Agents/Hooks/README.md";
 const target = "https://github.com/microsoft/aspire.git";
 
 function git(directory, ...args) {
@@ -59,7 +60,7 @@ function environment(t, values) {
   }
 }
 
-function proposalFixture(t, { outside, telemetry = true } = {}) {
+function proposalFixture(t, { additionalPath, telemetry = true } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "telemetry-publication-"));
   const previousDirectory = process.cwd();
   t.after(() => {
@@ -82,11 +83,11 @@ function proposalFixture(t, { outside, telemetry = true } = {}) {
   };
   git(agent, "switch", "--quiet", "--create", source.branch);
   if (telemetry) write(agent, allowedPath, "candidate\n");
-  if (outside) write(agent, outside, "out-of-scope fixture\n");
+  if (additionalPath) write(agent, additionalPath, "additional fixture\n");
   const head = commit(agent);
   const files = git(agent, "diff", "--name-only", base, head).split("\n");
   if (telemetry) assert.ok(files.includes(allowedPath));
-  if (outside) assert.ok(files.includes(outside));
+  if (additionalPath) assert.ok(files.includes(additionalPath));
   const prefix = `aw-microsoft-aspire-${source.branch}`;
   const bundle = join(directory, `${prefix}.bundle`);
   git(agent, "bundle", "create", bundle, `${base}..${source.branch}`);
@@ -101,8 +102,8 @@ function proposalFixture(t, { outside, telemetry = true } = {}) {
   return { directory, agent, verified, base, source, prefix, bundle, verify };
 }
 
-async function fixture(t, { staged = false, testExitCode = 0 } = {}) {
-  const { directory, agent, verified, base, source, prefix, bundle } = proposalFixture(t);
+async function fixture(t, { staged = false, testExitCode = 0, additionalPath } = {}) {
+  const { directory, agent, verified, base, source, prefix, bundle } = proposalFixture(t, { additionalPath });
   const publisher = join(directory, "publisher");
   const shims = join(directory, "shims");
   const containerCalls = join(directory, "docker.log");
@@ -316,13 +317,36 @@ exit ${testExitCode}
   };
 }
 
+test("the native policy exempts only the hook README from basename protection", async () => {
+  const policy = await publicationPolicy(root);
+  assert.ok(policy.protected_files.includes("README.md"));
+  assert.deepEqual(policy.protected_files_path_exclude, [readmePath]);
+  const { checkFileProtectionPostApply } = require(join(runtime, "manifest_file_helpers.cjs"));
+  for (const path of ["README.md", "src/Aspire.Cli/README.md"]) {
+    assert.deepEqual(checkFileProtectionPostApply([path], {
+      ...policy, allowed_files: [...policy.allowed_files, path]
+    }), { action: "deny", source: "protected", files: [path] });
+  }
+});
+
+for (const telemetry of [false, true]) {
+  test(`verification accepts the hook README ${telemetry ? "mixed with telemetry" : "alone"}`, async t => {
+    const f = proposalFixture(t, { additionalPath: readmePath, telemetry });
+    const result = await f.verify();
+    assert.equal(result.tree, git(f.agent, "rev-parse", `${f.source.branch}^{tree}`));
+    const patch = readFileSync(join(f.verified, result.patch), "utf8");
+    assert.ok(patch.includes(readmePath));
+    assert.equal(patch.includes(allowedPath), telemetry);
+  });
+}
+
 for (const [outside, telemetry] of [
   [".github/workflows/publish.yml", false], [".github/workflows/publish.yml", true],
   [".github/CODEOWNERS", true], ["src/Aspire.Cli/Commands/DeployCommand.cs", true],
-  ["tests/Aspire.Cli.Tests/Aspire.Cli.Tests.csproj", true]
+  ["tests/Aspire.Cli.Tests/Aspire.Cli.Tests.csproj", true], ["README.md", true]
 ]) {
   test(`verification rejects ${outside} ${telemetry ? "mixed with telemetry" : "alone"} before issuing a receipt`, async t => {
-    const f = proposalFixture(t, { outside, telemetry });
+    const f = proposalFixture(t, { additionalPath: outside, telemetry });
     await assert.rejects(f.verify(), error => {
       assert.match(error.message, /Publisher file policy rejected/);
       assert.ok(error.message.includes(outside));
@@ -334,7 +358,7 @@ for (const [outside, telemetry] of [
 
 test("verification rejects a mixed bundle even when its companion patch hides the workflow edit", async t => {
   const outside = ".github/workflows/publish.yml";
-  const f = proposalFixture(t, { outside });
+  const f = proposalFixture(t, { additionalPath: outside });
   const patch = git(f.agent, "diff", "--binary", f.base, f.source.branch, "--", allowedPath);
   assert.ok(patch.includes(allowedPath));
   assert.ok(!patch.includes(outside));
@@ -438,6 +462,18 @@ test("native staged publication previews the same verified proposal without any 
   assert.deepEqual(f.outputs, {});
   await f.audit();
   assert.deepEqual(f.writes, []);
+  assert.deepEqual(f.gitPushes, []);
+  assert.equal(git(f.remote, "show-ref"), f.remoteRefs);
+});
+
+test("native draft publication accepts the exact hook README alongside telemetry code", async t => {
+  const f = await fixture(t, { additionalPath: readmePath });
+  await f.publish();
+  const signedCommit = f.writes.find(write => write.operation === "createCommitOnBranch");
+  assert.deepEqual(signedCommit.parameters.input.fileChanges.additions.map(file => file.path).sort(),
+    [allowedPath, readmePath].sort());
+  await f.audit();
+  assert.equal(f.writes.filter(write => write.operation === "pulls.create").length, 1);
   assert.deepEqual(f.gitPushes, []);
   assert.equal(git(f.remote, "show-ref"), f.remoteRefs);
 });
