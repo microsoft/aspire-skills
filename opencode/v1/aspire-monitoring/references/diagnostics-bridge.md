@@ -78,8 +78,10 @@ aspire describe --format Json
 #    Hidden-by-default resources (proxies, helper containers, migrations)
 aspire describe --include-hidden --format Json
 
-# ✅ Get endpoints from describe, not guessing ports
-ENDPOINT=$(aspire describe apiservice --format Json | jq -r '.resources[0].urls[0].url')
+# ✅ Get endpoints from describe, not guessing ports. Wait first; jq -e fails when
+#    there is no external URL. JSON keeps AppHost order, not the https-first table order.
+aspire wait apiservice
+ENDPOINT=$(aspire describe apiservice --format Json | jq -er '[.resources[0].urls[]? | select(.isInternal | not) | .url][0] // empty')
 
 # ✅ Correlate logs to a specific request
 aspire otel logs --trace-id <trace-id-from-otel-traces>

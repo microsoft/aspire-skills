@@ -48,8 +48,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   canvas for workspace child directories whose names begin with `..`, preserving
   checks that block paths outside the workspace.
 - Fixed the `aspire describe <resource> --format Json | jq` endpoint examples in the
-  monitoring and orchestration skills to read `.resources[0].urls[0].url`. The old
-  `.endpoints[0].url` path does not exist, returns `null`, and made the paired `curl` fail.
+  monitoring and orchestration skills to read the first non-internal URL under
+  `.resources[0].urls`, after `aspire wait`, with `jq -e` so a missing URL fails instead
+  of yielding `null`. The old `.endpoints[0].url` path does not exist, returns `null`,
+  and made the paired `curl` fail.
 - Preserved non-ASCII check messages, paths, and error diagnostics in the
   Aspire Doctor canvas by decoding UTF-8 characters across subprocess output
   chunk boundaries.
