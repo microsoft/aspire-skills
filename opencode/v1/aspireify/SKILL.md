@@ -269,7 +269,7 @@ catalog.
 | Azure Cache for Redis (Entra) | `AddAzureRedis("cache")` (now GA) | `addAzureRedis('cache')` |
 | Next.js frontend | `AddNextJsApp("web", "./web")` | `addNextJsApp('web', '../web')` |
 | Vite SPA | `AddViteApp("web", "./web")` | `addViteApp('web', '../web')` |
-| Plain Node app | `AddNodeApp("api", "server.js")` | `addNodeApp('api', 'server.js')` |
+| Plain Node app | `AddNodeApp("api", "./api", "server.js")` | `addNodeApp('api', './api', 'server.js')` |
 | Go service (`go.mod`), preview from 13.4 / stable from 17.0 | `AddGoApp("api", "./api")` via `aspire add go` (13.x needs approval and an explicit compatible preview version) | `addGoApp('api', '../api')` |
 
 ## Current Authoring Rules

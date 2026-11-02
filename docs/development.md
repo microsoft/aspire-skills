@@ -9,12 +9,19 @@ npm test
 ```
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for skill formatting and agent-host checks.
+Set `CHROME_BIN` to a Chromium executable when running `npm test` to include the
+AppHosts native-browser number-input regression; without it, that check is skipped.
 Dev retains `CHANGELOG.md` and generated `opencode/` catalogs. Regenerate catalogs
 with `npm run catalog` after changing shipped skills, references, or assets,
 and commit them with the source changes. Run `npm run catalog:check` to check
 the committed tree. CI rejects missing, extra, or stale V1 and V2 catalog files.
 Feature PRs update the current version's changelog notes and preserve earlier
 entries and the coordinated version.
+
+Canvas extensions use relative Git symlinks to share canonical theme and icon
+assets. Edit the canonical files directly; no synchronization step is needed.
+See [Shared canvas UI](canvas-ui.md) for token ownership, typography, icons,
+symlink-capable checkouts, plugin mirrors, and visual review.
 
 The **OpenCode catalog check** runs on every PR, including stacked PRs, on
 main/dev/release pushes, and on merge-queue candidates.

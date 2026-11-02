@@ -62,7 +62,7 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 | Aspire config with AppHost | `aspire.config.json` present **and** AppHost above | High | AppHost present → orchestration / deployment / monitoring |
 | Aspire settings | `.aspire/` directory present | High | AppHost present (usually) |
 | Generated TS or Go modules | `.aspire/modules/` directory present | High | AppHost present (TS or Go) |
-| Service defaults | `Aspire.ServiceDefaults` in project references | Medium | AppHost present |
+| Service defaults | `<IsAspireSharedProject>true` or a `*.ServiceDefaults.csproj` project reference | Medium | AppHost present |
 | **No AppHost, no `aspire.config.json`** | None of the above and user asks to add Aspire | n/a | Bootstrap → `aspire-init` (skeleton drop) |
 
 Go AppHosts require Aspire 17.0 or later. A Go service wired into a C# or TypeScript

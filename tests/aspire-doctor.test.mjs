@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, parse } from "node:path";
 import { PassThrough } from "node:stream";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -15,7 +16,8 @@ import {
   requestErrorStatus,
   runLatestDiagnostics,
   selectDiagnosticsResult,
-  windowsExplorerInvocation
+  windowsExplorerInvocation,
+  workspaceRelativePath
 } from "../extensions/aspire-doctor/provider-helpers.mjs";
 import {
   normalizeDoctorData,
@@ -191,10 +193,11 @@ test("loopback startup removes temporary error listeners", async () => {
 });
 
 test("renderer exposes responsive and accessible review controls", async () => {
-  const [html, app, styles] = await Promise.all([
+  const [html, app, styles, sharedStyles] = await Promise.all([
     readFile(join(extensionRoot, "ui", "index.html"), "utf8"),
     readFile(join(extensionRoot, "ui", "app.js"), "utf8"),
-    readFile(join(extensionRoot, "ui", "styles.css"), "utf8")
+    readFile(join(extensionRoot, "ui", "styles.css"), "utf8"),
+    readFile(join(extensionRoot, "ui", "canvas-theme.css"), "utf8")
   ]);
 
   assert.match(html, /<h1[^>]+id="page-title"/);
@@ -202,7 +205,7 @@ test("renderer exposes responsive and accessible review controls", async () => {
   assert.match(html, /id="error"[^>]+role="alert"/);
   assert.match(html, /id="toggle-passed"/);
   assert.match(html, /id="toggle-details"/);
-  assert.match(html, /class="brand-mark"/);
+  assert.match(html, /class="brand-mark canvas-brand"/);
   assert.match(html, /class="btn btn-outline btn-sm" id="rerun"/);
   assert.match(app, /devtools: "Developer tools"/);
   assert.match(app, /latestVersionChannel: "Latest channel"/);
@@ -213,16 +216,16 @@ test("renderer exposes responsive and accessible review controls", async () => {
   assert.match(app, /class: "diag-sec-count"/);
   assert.match(app, /class: "diag-metadata-heading"/);
   assert.match(app, /class: "tag install-meta"/);
-  assert.match(styles, /--brand: var\(--fgColor-done/);
-  assert.match(styles, /--ok: var\(--fgColor-success/);
-  assert.match(styles, /--warn: var\(--fgColor-attention/);
-  assert.match(styles, /--req: var\(--fgColor-danger/);
+  assert.match(sharedStyles, /--brand: var\(--true-color-purple/);
+  assert.match(sharedStyles, /--ok: var\(--healthy\)/);
+  assert.match(sharedStyles, /--warn: var\(--warning\)/);
+  assert.match(sharedStyles, /--req: var\(--failure\)/);
   assert.match(styles, /\.pill[\s\S]+background: var\(--surface-raised\)/);
   assert.match(styles, /\.pill\[data-zero="true"\][\s\S]+background: var\(--surface-inset\)/);
   assert.match(styles, /\.diag-ico\.warn[\s\S]+var\(--warn\) 13%/);
   assert.match(styles, /\.diag-detail[\s\S]+border-top: 1px solid var\(--border-soft\)/);
   assert.match(styles, /\.diag-fix[\s\S]+border-bottom: 1px solid var\(--border-soft\)/);
-  assert.match(styles, /--card: color-mix/);
+  assert.match(sharedStyles, /--card: var\(--card-surface\)/);
   assert.match(styles, /color-mix\(in srgb, var\(--pill-tone\), var\(--fg\) 25%\)/);
   assert.match(styles, /color-mix\(in srgb, var\(--status-tone\), var\(--fg\) 25%\)/);
   assert.match(styles, /\.diag-sec-count[\s\S]+border-radius: 999px/);
@@ -247,3 +250,33 @@ function deferred() {
   });
   return { promise, resolve };
 }
+
+test("workspace-relative paths keep dot-prefixed children inside the workspace", () => {
+  const workspace = join(parse(repoRoot).root, "workspace", "app");
+
+  assert.equal(workspaceRelativePath(workspace, join(workspace, "..config", "settings.json")), "..config/settings.json");
+  assert.equal(workspaceRelativePath(workspace, join(workspace, "..env")), "..env");
+  assert.equal(workspaceRelativePath(workspace, join(workspace, "src", "Program.cs")), "src/Program.cs");
+
+  assert.equal(workspaceRelativePath(workspace, workspace), null);
+  assert.equal(workspaceRelativePath(workspace, dirname(workspace)), null);
+  assert.equal(workspaceRelativePath(workspace, join(dirname(workspace), "other", "file.json")), null);
+  assert.equal(workspaceRelativePath(workspace, join(workspace, "..", "app-sibling", "x.json")), null);
+  assert.equal(workspaceRelativePath(undefined, join(workspace, "src", "Program.cs")), null);
+});
+
+test("open-path editor handoff uses the repository root, not session storage", { timeout: 60_000 }, () => {
+  const fixture = join(repoRoot, "tests", "fixtures", "aspire-doctor-provider-boundary.mjs");
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  const result = spawnSync(process.execPath, ["--experimental-vm-modules", "--test", "--test-reporter=tap", fixture], {
+    env,
+    encoding: "utf8",
+    timeout: 50_000,
+    windowsHide: true,
+    maxBuffer: 1024 * 1024
+  });
+  assert.equal(result.error, undefined, result.error?.message);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stdout, /# fail 0/);
+});

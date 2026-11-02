@@ -5,14 +5,70 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
 ### Changed
+- Unified canvas styling and icons with shared assets that respect host themes.
 - Distinguished ordinary `aspire stop`, `aspire stop --force` (which preserves
   persistent volumes), and explicitly approved AppHost-wide `--volumes` cleanup, including
   its ownership and compatibility limits. Stale-password recovery now prefers restoring
   the password or a targeted reset and treats `--volumes` as a broader, approved option.
-- Keep distinct Aspireify proposal snapshots for POSIX AppHost paths containing
-  literal backslashes instead of treating those characters as directory separators.
-- Keep AppHosts in workspace child directories beginning with `..` visible and
-  allow their source files to open without admitting paths outside the workspace.
+- Gave discovered services whose names contain no ASCII letters or digits distinct
+  default resource names in the Aspireify canvas. Previously they all defaulted to
+  `service`, so their names collided and proposal retries were rejected.
+- Kept running AppHost resources in a warning state while their health checks are
+  still pending, instead of reporting them as errors before the first check returns.
+- Stopped Aspire AppHosts error redaction from mangling URLs and words that only
+  contain a private root name, such as `https://aspire.dev/data/connect` or
+  `.../aspire/app-host/overview`; whole POSIX paths under those roots are still withheld.
+- Stopped the Aspireify canvas from classifying Node.js, TypeScript, Python, and
+  container services as .NET when their type label also mentions gRPC or a worker
+  service. These services no longer default to .NET Service Defaults, and they keep
+  their runtime-compatible resource types.
+- Fixed Aspire Doctor treating workspace files under child directories whose names
+  begin with `..` (for example `..config`) as outside the workspace, which revealed
+  them in the OS file manager instead of opening them in the editor canvas.
+- Fixed Aspire Doctor resolving and containing editor paths against session-state
+  storage instead of the session's working directory, which sent repository files to the
+  OS file manager and could hand the editor a path outside the repository.
+- Corrected POSIX path handling in the Aspireify canvas to keep proposal
+  snapshots separate for AppHost paths containing literal backslashes.
+- Removed the nonexistent `-v` alias from the `aspire new` options table in the
+  Aspire init templates reference. `aspire new ... -v <version>` fails with
+  "Unrecognized command or argument '-v'"; use `--version`.
+- Kept discovered services without a proposal mapping visible in the Aspireify
+  canvas as **Not assessed** in a "Not in the proposed graph" section, and
+  preserved them as `notProposed` in the confirmation and chat handoff.
+- Restored AppHost visibility and source-file navigation in the Aspire AppHosts
+  canvas for workspace child directories whose names begin with `..`, preserving
+  checks that block paths outside the workspace.
+- Preserved non-ASCII check messages, paths, and error diagnostics in the
+  Aspire Doctor canvas by decoding UTF-8 characters across subprocess output
+  chunk boundaries.
+- Aligned non-secret command defaults and submissions in the Aspire AppHosts
+  canvas with Aspire Hosting's whitespace trimming. Replaced silent truncation
+  of overlength values with validation errors.
+- Prevented command-editing stalls in the Aspire AppHosts canvas by scanning only
+  leading and trailing whitespace when normalizing values with long runs of
+  interior whitespace.
+- Kept numeric command defaults visible in the Aspire AppHosts canvas instead of
+  allowing native number controls to hide values that would still be submitted.
+- Fixed the Aspire AppHosts canvas missing mixed-case AppHost files in the
+  workspace root when `aspire ls` is unavailable.
+- Corrected Aspireify's TypeScript Foundry example to use the exported
+  `addFoundry(...).addDeployment(...)` APIs instead of nonexistent
+  `addAzureFoundry(...).addModel(...)`.
+- Added the missing `using Aspire.Hosting.AWS.Deployment;` to the AWS deployment
+  `AddAWSCDKEnvironment` example. Without it, `CDKDefaultsProviderFactory` does not
+  resolve and the AppHost fails to build with CS0103.
+- Fixed service-defaults detection to match template-generated `<App>.ServiceDefaults`
+  projects (`IsAspireSharedProject` and `*.ServiceDefaults.csproj` references) instead
+  of a nonexistent `Aspire.ServiceDefaults` package that matched nothing.
+- Fixed the Skill Eval PR gate failing on large PRs: changed files now come from the
+  paginated PR files API instead of `gh pr diff`, which returns HTTP 406 once a diff
+  exceeds 20,000 lines (as on the v0.0.5 release PR).
+- Corrected Aspireify's TypeScript examples to match the generated AppHost SDK:
+  `addNodeApp` now takes its app directory, endpoint flags use `withEndpointCallback`,
+  `addDockerfileBuilder` takes a context path and async callback, ACA custom domains use
+  `publishAsAzureContainerApp(...).configureCustomDomain(...)`, and `withLifetime` takes
+  `ContainerLifetime.Persistent`.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including

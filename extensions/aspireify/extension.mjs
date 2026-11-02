@@ -9,6 +9,7 @@ import { basename, dirname, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CanvasError, createCanvas, joinSession } from "@github/copilot-sdk/extension";
 import {
+    assignResourceNames,
     classifyServiceKind,
     exactType,
     freezeSnapshot,
@@ -16,7 +17,9 @@ import {
     isCompatibleAspireResourceType,
     isDotNetType,
     presentationMode,
+    resourceNameFrom,
     stableProposalHash,
+    unproposedServices,
 } from "./proposal-model.mjs";
 import {
     appHostIdentity,
@@ -42,6 +45,7 @@ const CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
     ".css": "text/css; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
+    ".svg": "image/svg+xml",
 };
 
 const APPHOST_STYLES = new Set(["csharp-sdk", "csharp-file", "typescript"]);
@@ -199,17 +203,6 @@ function restoreSnapshotAndHistory(domainId, snapshot, history) {
     } else {
         editHistories.delete(domainId);
     }
-}
-
-function resourceNameFrom(value, index) {
-    const normalized = String(value ?? "")
-        .trim()
-        .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
-        .replace(/[^A-Za-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "")
-        .toLowerCase();
-    const prefixed = /^[a-z]/.test(normalized) ? normalized : `service-${normalized}`;
-    return (prefixed || `service-${index + 1}`).slice(0, 64).replace(/-+$/g, "");
 }
 
 function normalizeService(service, index) {
@@ -884,6 +877,14 @@ function mappedServices(snapshot) {
     return snapshot.services.filter((service) => serviceIds.has(service.id));
 }
 
+function notProposedServices(snapshot) {
+    return unproposedServices({
+        services: snapshot.services,
+        resources: snapshot.proposal.resources,
+        removedGeneratedResources: snapshot.removedGeneratedResources,
+    });
+}
+
 function projectService(service) {
     return {
         id: service.id,
@@ -961,6 +962,7 @@ function confirmationResult(snapshot, confirmed = snapshot.confirmed) {
         apphostStyle: snapshot.apphostStyle,
         included: includedMappedServices(snapshot).map(projectService),
         excluded: excludedMappedServices(snapshot).map(projectService),
+        notProposed: notProposedServices(snapshot),
         serviceDefaults: [...serviceDefaults],
         proposal: confirmedProposal(snapshot.proposal),
     };
@@ -983,6 +985,7 @@ function snapshotForClient(snapshot) {
         proposalLoaded: snapshot.proposalLoaded,
         apphostStyle: snapshot.apphostStyle,
         services: snapshot.services.map(projectService),
+        notProposed: snapshot.confirmation?.notProposed ?? notProposedServices(snapshot),
         proposal: proposalForClient(snapshot.proposal),
         proposalEdited: snapshot.proposalEdited,
         proposalStale: snapshot.proposalStale,
@@ -1215,6 +1218,11 @@ function confirmationMessage(snapshot) {
             .map((service) => ({ name: service.name, resourceName: service.resourceName })),
         excluded: confirmation.excluded
             .map((service) => service.name),
+        notProposed: (confirmation.notProposed ?? []).map(({ name, path, treatment }) => ({
+            name,
+            path,
+            treatment,
+        })),
         proposal: confirmation.proposal,
     };
     return [
@@ -2160,7 +2168,7 @@ async function handleRequest(entry, request, response) {
     }
     if (
         request.method === "GET" &&
-        ["/app.js", "/styles.css", "/resource-types.js", "/interaction-model.js"].includes(
+        ["/app.js", "/styles.css", "/canvas-theme.css", "/canvas-icons.svg", "/resource-types.js", "/interaction-model.js"].includes(
             url.pathname,
         )
     ) {
@@ -2324,7 +2332,11 @@ const aspireifyCanvas = createCanvas({
                         "This scan result is stale. Re-run the latest scan request before loading discovery.",
                     );
                 }
-                const incomingServices = context.input.services.map(normalizeService);
+                const resourceNames = assignResourceNames(context.input.services);
+                const incomingServices = context.input.services.map((service, index) => ({
+                    ...normalizeService(service, index),
+                    resourceName: resourceNames[index],
+                }));
                 const serviceIds = new Set();
                 for (const service of incomingServices) {
                     if (!service.id) {
@@ -2795,7 +2807,7 @@ const aspireifyCanvas = createCanvas({
         {
             name: "get_confirmation",
             description:
-                "Read the user's confirmed choices before editing the AppHost. Returns final service selections and the edited proposal graph.",
+                "Read the user's confirmed choices before editing the AppHost. Returns final service selections, discovered services left unmapped as notProposed (not assessed), and the edited proposal graph.",
             inputSchema: {
                 type: "object",
                 additionalProperties: false,

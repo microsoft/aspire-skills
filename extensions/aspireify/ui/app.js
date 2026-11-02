@@ -540,6 +540,7 @@ function render(nextSnapshot) {
         elements.planContent.hidden = false;
         renderProposalIdentity();
         renderResourcePlan();
+        renderNotProposedServices();
         renderStatus();
         renderConfirmation();
         restoreFocusToken(focusToken);
@@ -632,6 +633,46 @@ function renderResourcePlan() {
         resourceIssues,
     );
     renderRelationshipList(edges, false);
+}
+
+function renderNotProposedServices() {
+    const services = Array.isArray(snapshot.notProposed) ? snapshot.notProposed : [];
+    let section = document.getElementById("not-proposed-services");
+    if (!section) {
+        section = createElement("section", {
+            className: "not-proposed",
+            attrs: { id: "not-proposed-services", "aria-labelledby": "not-proposed-title" },
+        });
+        section.append(
+            createElement("h2", { text: "Not in the proposed graph", attrs: { id: "not-proposed-title" } }),
+            createElement("p", {
+                className: "muted",
+                text: "Discovered services that no proposed resource maps. The skill supplied no decision for them.",
+            }),
+            createElement("ul", { className: "not-proposed-list" }),
+        );
+        elements.resourcePlanPanel.append(section);
+    }
+    section.hidden = services.length === 0;
+    const list = section.querySelector(".not-proposed-list");
+    list.replaceChildren(
+        ...services.map((service) => {
+            const item = createElement("li", { className: "not-proposed-item" });
+            const identity = createElement("div", { className: "not-proposed-identity" });
+            identity.append(createElement("strong", { text: service.name }));
+            if (service.path) {
+                identity.append(createElement("code", { text: service.path }));
+            }
+            item.append(
+                identity,
+                createElement("span", {
+                    className: "not-proposed-status",
+                    text: "Not assessed",
+                }),
+            );
+            return item;
+        }),
+    );
 }
 
 function resourcesInOverviewOrder(resources) {
@@ -1128,12 +1169,10 @@ function createResourceTitleLine(resource) {
 
 function renderResourceValidation(issues) {
     const validation = createElement("div", { className: "resource-validation" });
+    const marker = createIcon("error", 14);
+    marker.classList.add("resource-validation-icon");
     validation.append(
-        createElement("span", {
-            className: "resource-validation-icon",
-            text: "!",
-            attrs: { "aria-hidden": "true" },
-        }),
+        marker,
         createElement("span", { text: issues.join(" ") }),
     );
     return validation;
@@ -1684,6 +1723,9 @@ function createConnectionHeading(resource, labeled = false) {
         },
     });
     add.hidden = snapshot.confirmed;
+    if (!labeled) {
+        add.append(createIcon("add"));
+    }
     add.disabled =
         snapshot.proposal.resources.filter((candidate) => candidate.include).length < 2;
     add.addEventListener("click", () => openConnectionDialog("", resource.name));
@@ -2138,10 +2180,10 @@ function addResourceConnectionRow() {
     fillResourceSelect(target, resources);
     const remove = createElement("button", {
         className: "btn btn-quiet btn-icon add-connection-remove",
-        text: "×",
         title: "Remove connection",
         attrs: { type: "button", "aria-label": "Remove connection" },
     });
+    remove.append(createIcon("close"));
     remove.addEventListener("click", () => {
         row.remove();
         if (!elements.addResourceConnections.children.length) {
@@ -2418,6 +2460,21 @@ function showConfirmationError(error, failureChannel) {
 function clearDialogError(element) {
     element.textContent = "";
     element.hidden = true;
+}
+
+function createIcon(name, size = 16) {
+    const namespace = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(namespace, "svg");
+    svg.setAttribute("class", "canvas-icon");
+    svg.setAttribute("width", String(size));
+    svg.setAttribute("height", String(size));
+    svg.setAttribute("viewBox", "0 0 16 16");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    const use = document.createElementNS(namespace, "use");
+    use.setAttribute("href", `/canvas-icons.svg#${name}`);
+    svg.append(use);
+    return svg;
 }
 
 function createElement(tag, options = {}) {

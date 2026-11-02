@@ -70,9 +70,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          # List paths from the PR files API rather than the PR diff: the diff
+          # endpoint returns HTTP 406 once a PR's diff exceeds 20,000 lines.
           changed_files="$(
-            gh pr diff "${{ github.event.pull_request.number }}" \
-              --repo "${{ github.repository }}" --name-only
+            gh api --paginate \
+              "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" \
+              --jq '.[].filename'
           )"
 
           workflow_changed=false

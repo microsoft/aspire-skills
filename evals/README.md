@@ -38,6 +38,7 @@ evals/
 ├── go-apphost/          # Go AppHost shaped like aspire-go-starter (apphost.go + aspire.config.json + go.mod; no api/ service or generated .aspire/modules/)
 ├── non-aspire/          # Non-Aspire .NET project (for "should not trigger" stimuli)
 ├── project-v2-migration/ # Legacy inputs, captured-edit contracts, and qualification guidance
+├── service-defaults-template/ # Template-shaped ServiceDefaults shared project and service, with no AppHost
 ├── terminals/           # Terminal authoring fixtures, captured-edit checks and example compilation
 └── version-preservation/ # Read-only C# AppHost fixture with concrete, centrally managed Aspire versions
 ```

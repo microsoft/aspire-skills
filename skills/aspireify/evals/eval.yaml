@@ -636,6 +636,54 @@ stimuli:
             Does the assistant's response avoid using obsolete
             `context.ServiceProvider` as implementation code? It may mention the old
             property only to explain migration to `context.Services`.
+  - name: aspireify-ts-foundry-001
+    prompt: >
+      Use the aspireify skill. Give a read-only plan with the apphost.mts code to add a
+      Microsoft Foundry resource named `foundry` with a `chat` deployment of the OpenAI
+      GPT-4.1 mini model, using the predefined model catalog. Do not edit files or run commands.
+    tags:
+      priority: p1
+      area:
+        - authoring
+        - typescript
+        - azure
+        - known-bug
+    constraints:
+      max_agent_duration: 150s
+    environment:
+      files:
+        - src: ../../../evals/ts-apphost/apphost.mts
+          dest: ts-apphost/apphost.mts
+        - src: ../../../evals/ts-apphost/aspire.config.json
+          dest: ts-apphost/aspire.config.json
+    rubric:
+      - The assistant's response creates the resource with `builder.addFoundry('foundry')` and the deployment with `addDeployment('chat', FoundryModels.OpenAI.Gpt41Mini)` or an equivalent awaited two-step form.
+      - The assistant's response does not use `addAzureFoundry` or a Foundry `addModel` call, which the TypeScript AppHost SDK does not export.
+      - The assistant's response remains read-only and does not claim unperformed execution.
+    graders:
+      - type: prompt
+        name: uses-exported-foundry-apis
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response add Foundry with `addFoundry` and the chat model with
+            `addDeployment` using the `FoundryModels` catalog? The Aspire TypeScript SDK exports
+            `addFoundry` and `addDeployment`; chaining `addDeployment` on the `addFoundry`
+            promise and awaiting `addFoundry` first are both valid.
+      - type: output-not-contains
+        name: avoids-nonexistent-add-azure-foundry
+        config:
+          substring: addAzureFoundry
+      - type: output-contains
+        name: mentions-add-deployment
+        config:
+          substring: addDeployment
+      - type: skill-invocation
+        name: invokes-aspireify-for-foundry
+        config:
+          required: [aspireify]
+      - type: diff-empty
+        name: keeps-foundry-plan-read-only
   - name: aspireify-ts-interaction-service-135-001
     prompt: >
       Use the aspireify skill before answering. Show a TypeScript AppHost resource-command
