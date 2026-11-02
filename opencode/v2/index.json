@@ -27,7 +27,7 @@
     },
     {
       "name": "aspire-init",
-      "version": "sha512-5c654765cfca12cad1d70aeaed1852dfec6aef4c74838890977319588cf1ddcb2da8617a8d6029c87da1703f10d61c735edef97438295a84c25090d022b6ab2f",
+      "version": "sha512-48d2dcfe6c1b9154f2c1d3384e04f8a7905b83dd625d12aca635755ee8453f419c9efc328c5a444f27b0fd3b8c448700ad2eb80a89d3011185b4c55e5794b478",
       "files": [
         "aspire-init.md",
         "references/init-workflow.md",
