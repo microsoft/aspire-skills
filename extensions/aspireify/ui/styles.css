@@ -856,6 +856,7 @@ button.overview-node:hover {
 .not-proposed-identity {
     display: flex;
     min-width: 0;
+    flex: 1 1 16rem;
     flex-wrap: wrap;
     align-items: baseline;
     gap: 4px 8px;
@@ -866,6 +867,17 @@ button.overview-node:hover {
 .not-proposed-status {
     color: var(--text-color-muted, #59636e);
     font-size: var(--text-meta);
+}
+
+.not-proposed-reason,
+.not-proposed-unresolved {
+    flex-basis: 100%;
+    font-size: var(--text-meta);
+    line-height: var(--leading-meta);
+}
+
+.not-proposed-unresolved {
+    color: var(--text-color-muted, #59636e);
 }
 
 .relationship-list {

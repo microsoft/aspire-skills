@@ -36,6 +36,11 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Kept discovered services without a proposal mapping visible in the Aspireify
   canvas as **Not assessed** in a "Not in the proposed graph" section, and
   preserved them as `notProposed` in the confirmation and chat handoff.
+- Let the aspireify workflow mark unmapped discovered services as **Not modeled**
+  or **Deferred** through `set_proposal`'s optional `serviceTreatments`. The
+  canvas, confirmation, and chat handoff show the reason from chat and, for
+  deferred services, what remains unresolved. Unknown or already-mapped services
+  and treatments without a reason are rejected.
 - Restored AppHost visibility and source-file navigation in the Aspire AppHosts
   canvas for workspace child directories whose names begin with `..`, preserving
   checks that block paths outside the workspace.
