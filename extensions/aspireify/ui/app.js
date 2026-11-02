@@ -635,6 +635,12 @@ function renderResourcePlan() {
     renderRelationshipList(edges, false);
 }
 
+const NOT_PROPOSED_TREATMENT_LABELS = {
+    "not-modeled": "Not modeled",
+    deferred: "Deferred",
+    "not-assessed": "Not assessed",
+};
+
 function renderNotProposedServices() {
     const services = Array.isArray(snapshot.notProposed) ? snapshot.notProposed : [];
     let section = document.getElementById("not-proposed-services");
@@ -645,29 +651,50 @@ function renderNotProposedServices() {
         });
         section.append(
             createElement("h2", { text: "Not in the proposed graph", attrs: { id: "not-proposed-title" } }),
-            createElement("p", {
-                className: "muted",
-                text: "Discovered services that no proposed resource maps. The skill supplied no decision for them.",
-            }),
+            createElement("p", { className: "muted" }),
             createElement("ul", { className: "not-proposed-list" }),
         );
         elements.resourcePlanPanel.append(section);
     }
     section.hidden = services.length === 0;
+    section.querySelector(":scope > p").textContent = services.some(
+        (service) => service.treatment === "not-assessed",
+    )
+        ? "Discovered services that no proposed resource maps. Not assessed means the skill supplied no decision."
+        : "Discovered services that no proposed resource maps, with the decision made in chat.";
     const list = section.querySelector(".not-proposed-list");
     list.replaceChildren(
         ...services.map((service) => {
-            const item = createElement("li", { className: "not-proposed-item" });
+            const treatment = NOT_PROPOSED_TREATMENT_LABELS[service.treatment]
+                ? service.treatment
+                : "not-assessed";
+            const item = createElement("li", {
+                className: "not-proposed-item",
+                attrs: { "data-treatment": treatment },
+            });
             const identity = createElement("div", { className: "not-proposed-identity" });
             identity.append(createElement("strong", { text: service.name }));
             if (service.path) {
                 identity.append(createElement("code", { text: service.path }));
             }
+            if (service.reason) {
+                identity.append(
+                    createElement("span", { className: "not-proposed-reason", text: service.reason }),
+                );
+            }
+            if (service.unresolved) {
+                identity.append(
+                    createElement("span", {
+                        className: "not-proposed-unresolved",
+                        text: `Unresolved: ${service.unresolved}`,
+                    }),
+                );
+            }
             item.append(
                 identity,
                 createElement("span", {
                     className: "not-proposed-status",
-                    text: "Not assessed",
+                    text: NOT_PROPOSED_TREATMENT_LABELS[treatment],
                 }),
             );
             return item;
