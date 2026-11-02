@@ -27,7 +27,7 @@
     },
     {
       "name": "aspire-init",
-      "version": "sha512-f3ce2f710265e77f50034b73eb004d9882a6eb9df34ad50569012aadce0eb8c10e32e1b41145431bddece79b02e028037883e836f03547dafffab86f9ca5d391",
+      "version": "sha512-232d5bea00d1cac19b996709cf1ec54a7be4e1ef4b51cfc55d475b37ed6fe6550431caab3b971a09259ab3b5e307759de26f4d702c963269e68557450760be93",
       "files": [
         "SKILL.md",
         "references/init-workflow.md",
@@ -78,7 +78,7 @@
     },
     {
       "name": "aspireify",
-      "version": "sha512-73e03c3031911cd801429612bb5a892df4a504b73db3be2ec1ce7e4f7f060648d75fe1a42fc195097f860d60770a3ebc1db93cacf91dd3b3436016dcdc40e4e7",
+      "version": "sha512-34b85bf43a0f77981252ab15ae2669d9b889f64be4d2c8632dabec62adf18078a0dd72f696741dfe739a436c60576598960b776c5c9799e8f879963781f414a9",
       "files": [
         "SKILL.md",
         "references/apphost-wiring.md",

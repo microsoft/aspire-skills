@@ -5,6 +5,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
 ### Changed
+- Documented `aspire new --localhost-tld` in the Aspire init templates reference. The
+  `*.dev.localhost` prompt previously listed no flag, so non-interactive runs could
+  only take the default plain `localhost` profile.
 - Unified canvas styling and icons with shared assets that respect host themes.
 - Distinguished ordinary `aspire stop`, `aspire stop --force` (which preserves
   persistent volumes), and explicitly approved AppHost-wide `--volumes` cleanup, including
@@ -36,6 +39,11 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Kept discovered services without a proposal mapping visible in the Aspireify
   canvas as **Not assessed** in a "Not in the proposed graph" section, and
   preserved them as `notProposed` in the confirmation and chat handoff.
+- Let the aspireify workflow mark unmapped discovered services as **Not modeled**
+  or **Deferred** through `set_proposal`'s optional `serviceTreatments`. The
+  canvas, confirmation, and chat handoff show the reason from chat and, for
+  deferred services, what remains unresolved. Unknown or already-mapped services
+  and treatments without a reason are rejected.
 - Restored AppHost visibility and source-file navigation in the Aspire AppHosts
   canvas for workspace child directories whose names begin with `..`, preserving
   checks that block paths outside the workspace.
@@ -69,6 +77,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   `addDockerfileBuilder` takes a context path and async callback, ACA custom domains use
   `publishAsAzureContainerApp(...).configureCustomDomain(...)`, and `withLifetime` takes
   `ContainerLifetime.Persistent`.
+- Fixed Aspireify ServiceDefaults guidance to install `Aspire.ProjectTemplates` before
+  `dotnet new aspire-servicedefaults` when the template is missing, as it is after a
+  TypeScript `aspire init`.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
