@@ -69,6 +69,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   `addDockerfileBuilder` takes a context path and async callback, ACA custom domains use
   `publishAsAzureContainerApp(...).configureCustomDomain(...)`, and `withLifetime` takes
   `ContainerLifetime.Persistent`.
+- Fixed Aspireify ServiceDefaults guidance to install `Aspire.ProjectTemplates` before
+  `dotnet new aspire-servicedefaults` when the template is missing, as it is after a
+  TypeScript `aspire init`.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
