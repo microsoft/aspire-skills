@@ -97,19 +97,10 @@ URLs/API keys as parameters so they are visible in the dashboard.
 
 ### Persistent-data recovery
 
-Read and follow the existing
-[recovery safeguards](references/apphost-wiring.md#container-lifetimes)
-before recommending or performing a reset, including in read-only advice. Prefer
-restoring the previous password. Otherwise, identify the exact failing resource,
-container, and storage target. For a bind mount, verify that the host directory is
-dedicated to that resource and require explicit approval naming that exact path
-before resetting its data. Removing a Docker volume does not reset bind-mounted
-data. For a volume reset, require approval naming the exact container and volume.
-Route stopping and restarting the exact AppHost through `aspire-orchestration`.
-Never clear a shared or parent directory or recommend broad Docker cleanup.
-AppHost-wide `--volumes` cleanup needs separate approval for its broader data scope.
-A general request to fix or reset a database is not approval to delete an
-identified storage target.
+Before recommending or performing a persistent-data reset, including read-only
+advice, read and follow the
+[recovery safeguards](references/apphost-wiring.md#container-lifetimes).
+Require explicit approval for the exact destructive target; never clear shared data.
 
 ### Redis TLS edge case
 
