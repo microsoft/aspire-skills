@@ -55,6 +55,131 @@ export function assignResourceNames(services) {
 
 export const SERVICE_TREATMENTS = Object.freeze(["not-modeled", "deferred"]);
 
+const EXTERNAL_DEPENDENCY_FIELDS = [
+    "id",
+    "name",
+    "type",
+    "purpose",
+    "configurationKeys",
+    "source",
+    "lifecycleOwner",
+    "endpointSelection",
+];
+
+export function normalizeExternalDependencies(input) {
+    if (input === undefined) {
+        return null;
+    }
+    if (!Array.isArray(input)) {
+        throw new Error("externalDependencies must be an array.");
+    }
+    const seen = new Set();
+    return input.map((raw, index) => {
+        const label = `externalDependencies[${index}]`;
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+            throw new Error(`${label} must be an external dependency object.`);
+        }
+        for (const key of Object.keys(raw)) {
+            if (!EXTERNAL_DEPENDENCY_FIELDS.includes(key)) {
+                throw new Error(`${label}.${key} is not an external dependency field.`);
+            }
+        }
+        const dependency = {};
+        for (const key of EXTERNAL_DEPENDENCY_FIELDS.filter((field) => field !== "configurationKeys")) {
+            if (raw[key] === undefined && !["id", "name", "type"].includes(key)) {
+                continue;
+            }
+            if (typeof raw[key] !== "string" || !raw[key].trim()) {
+                throw new Error(`${label}.${key} must be a non-empty string.`);
+            }
+            dependency[key] = raw[key].trim();
+        }
+        if (raw.id !== dependency.id) {
+            throw new Error(`${label}.id must not have leading or trailing whitespace.`);
+        }
+        if (seen.has(dependency.id)) {
+            throw new Error(`Discovered external dependency ID "${dependency.id}" is duplicated.`);
+        }
+        seen.add(dependency.id);
+        if (raw.configurationKeys !== undefined) {
+            if (
+                !Array.isArray(raw.configurationKeys) ||
+                raw.configurationKeys.some((key) => typeof key !== "string" || !key.trim())
+            ) {
+                throw new Error(`${label}.configurationKeys must be an array of non-empty key names, not values.`);
+            }
+            dependency.configurationKeys = raw.configurationKeys.map((key) => key.trim());
+        }
+        return dependency;
+    });
+}
+
+export function validateExternalDependencyMappings(resources, externalDependencies) {
+    const knownIds = new Set((externalDependencies ?? []).map((dependency) => dependency.id));
+    for (const resource of resources) {
+        const id = resource.externalDependencyId;
+        if (id === undefined) {
+            continue;
+        }
+        if (!knownIds.has(id)) {
+            throw new Error(
+                `Resource "${resource.name}" maps "${id}", which is not a discovered external dependency.`,
+            );
+        }
+        if (resource.serviceId) {
+            throw new Error(
+                `Resource "${resource.name}" cannot map both a runnable service and an external dependency.`,
+            );
+        }
+    }
+}
+
+export function externalDependencyAccounting({
+    externalDependencies,
+    resources,
+    removedGeneratedResources,
+    externalDependencyTreatments,
+}) {
+    const mappings = new Map();
+    const currentIds = new Set((resources ?? []).map((resource) => resource.id));
+    for (const resource of [
+        ...(resources ?? []),
+        ...(removedGeneratedResources ?? [])
+            .filter((removed) => !currentIds.has(removed.id))
+            .map((removed) => ({ ...removed, include: false, removed: true })),
+    ]) {
+        if (!resource.externalDependencyId) {
+            continue;
+        }
+        const entries = mappings.get(resource.externalDependencyId) ?? [];
+        entries.push({
+            id: resource.id,
+            name: resource.name,
+            type: resource.type,
+            include: resource.include !== false,
+            ...(resource.removed ? { removed: true } : {}),
+        });
+        mappings.set(resource.externalDependencyId, entries);
+    }
+    const treatments = new Map(
+        (externalDependencyTreatments ?? []).map((entry) => [entry.externalDependencyId, entry]),
+    );
+    return (externalDependencies ?? []).map((dependency) => {
+        const resourceMappings = mappings.get(dependency.id) ?? [];
+        const supplied = treatments.get(dependency.id);
+        const decision = resourceMappings.length
+            ? { treatment: "mapped" }
+            : supplied
+              ? {
+                    treatment: supplied.treatment,
+                    reason: supplied.reason,
+                    ...(supplied.treatment === "deferred" ? { unresolved: supplied.unresolved } : {}),
+                }
+              : { treatment: "not-assessed" };
+        return { ...dependency, resourceMappings, ...decision };
+    });
+}
+
 // Discovered services that no proposal resource or removed generated resource maps.
 // Each keeps the skill-supplied treatment, or is reported as not assessed without one.
 export function unproposedServices({
@@ -98,27 +223,52 @@ export function normalizeServiceTreatments(input, { services, mappedServiceIds }
     if (input == null) {
         return null;
     }
-    if (!Array.isArray(input)) {
-        throw new Error("serviceTreatments must be an array.");
+    return normalizeTreatments(input, {
+        field: "serviceTreatments",
+        idField: "serviceId",
+        entity: "service",
+        knownIds: new Set((services ?? []).map((service) => service.id)),
+        mappedIds: mappedServiceIds,
+    });
+}
+
+export function normalizeExternalDependencyTreatments(
+    input,
+    { externalDependencies, mappedExternalDependencyIds },
+) {
+    if (input === undefined) {
+        return null;
     }
-    const knownIds = new Set((services ?? []).map((service) => service.id));
+    return normalizeTreatments(input, {
+        field: "externalDependencyTreatments",
+        idField: "externalDependencyId",
+        entity: "external dependency",
+        knownIds: new Set((externalDependencies ?? []).map((dependency) => dependency.id)),
+        mappedIds: mappedExternalDependencyIds,
+    });
+}
+
+function normalizeTreatments(input, { field, idField, entity, knownIds, mappedIds }) {
+    if (!Array.isArray(input)) {
+        throw new Error(`${field} must be an array.`);
+    }
     const seen = new Set();
     return input.map((raw, index) => {
-        const serviceId = String(raw?.serviceId ?? "").trim();
+        const id = String(raw?.[idField] ?? "").trim();
         const treatment = String(raw?.treatment ?? "").trim();
         const reason = String(raw?.reason ?? "").trim();
         const unresolved = String(raw?.unresolved ?? "").trim();
-        const label = `serviceTreatments[${index}]`;
-        if (!knownIds.has(serviceId)) {
-            throw new Error(`${label} references "${serviceId}", which is not a discovered service.`);
+        const label = `${field}[${index}]`;
+        if (!knownIds.has(id)) {
+            throw new Error(`${label} references "${id}", which is not a discovered ${entity}.`);
         }
-        if (seen.has(serviceId)) {
-            throw new Error(`${label} repeats the treatment for "${serviceId}".`);
+        if (seen.has(id)) {
+            throw new Error(`${label} repeats the treatment for "${id}".`);
         }
-        seen.add(serviceId);
-        if (mappedServiceIds.has(serviceId)) {
+        seen.add(id);
+        if (mappedIds.has(id)) {
             throw new Error(
-                `${label} sets a treatment for "${serviceId}", but a proposed resource already maps it.`,
+                `${label} sets a treatment for "${id}", but a proposed resource already maps it.`,
             );
         }
         if (!SERVICE_TREATMENTS.includes(treatment)) {
@@ -128,11 +278,11 @@ export function normalizeServiceTreatments(input, { services, mappedServiceIds }
             throw new Error(`${label}.reason is required.`);
         }
         if (treatment === "deferred" && !unresolved) {
-            throw new Error(`${label}.unresolved is required for a deferred service.`);
+            throw new Error(`${label}.unresolved is required for a deferred ${entity}.`);
         }
         return treatment === "deferred"
-            ? { serviceId, treatment, reason, unresolved }
-            : { serviceId, treatment, reason };
+            ? { [idField]: id, treatment, reason, unresolved }
+            : { [idField]: id, treatment, reason };
     });
 }
 
@@ -143,12 +293,18 @@ export function presentationMode(proposal) {
     return count <= 2 ? "compact" : "relationship";
 }
 
-export function stableProposalHash({ proposalGeneration, proposal, serviceTreatments }) {
+export function stableProposalHash({
+    proposalGeneration,
+    proposal,
+    serviceTreatments,
+    externalDependencies,
+}) {
     const hashInput = {
         proposalGeneration: Number(proposalGeneration) || 0,
         proposal: stripTransientProposalFields(proposal),
         // Omitted when empty so hashes of plans without treatments are unchanged.
         ...(serviceTreatments?.length ? { serviceTreatments } : {}),
+        ...(externalDependencies?.length ? { externalDependencies } : {}),
     };
     return createHash("sha256").update(canonicalJson(hashInput)).digest("hex");
 }

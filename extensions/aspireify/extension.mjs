@@ -12,15 +12,19 @@ import {
     assignResourceNames,
     classifyServiceKind,
     exactType,
+    externalDependencyAccounting,
     freezeSnapshot,
     isCompatibleAspireResourceKind,
     isCompatibleAspireResourceType,
     isDotNetType,
+    normalizeExternalDependencies,
+    normalizeExternalDependencyTreatments,
     normalizeServiceTreatments,
     presentationMode,
     resourceNameFrom,
     stableProposalHash,
     unproposedServices,
+    validateExternalDependencyMappings,
 } from "./proposal-model.mjs";
 import {
     appHostIdentity,
@@ -72,11 +76,13 @@ function emptySnapshot(appHostPath = "") {
         proposalLoaded: false,
         apphostStyle: null,
         services: [],
+        externalDependencies: [],
         proposal: {
             resources: [],
             edges: [],
             generatedAt: "",
             serviceTreatments: [],
+            externalDependencyTreatments: [],
         },
         removedGeneratedResources: [],
         removedGeneratedEdges: [],
@@ -160,6 +166,7 @@ function rehydrateSnapshot(persisted, appHostPath) {
         ...emptySnapshot(appHostPath),
         ...structuredClone(persisted),
         appHostPath: appHostPath || String(persisted.appHostPath ?? ""),
+        externalDependencies: normalizeExternalDependencies(persisted.externalDependencies) ?? [],
     };
     snapshot.confirmation = persisted.confirmation
         ? freezeSnapshot(persisted.confirmation)
@@ -260,6 +267,9 @@ function normalizeProposalResource(resource, index, userAdded = false) {
         name: String(resource?.name ?? `resource-${index + 1}`).trim(),
         type,
         serviceId: String(resource?.serviceId ?? "").trim(),
+        ...(resource?.externalDependencyId !== undefined
+            ? { externalDependencyId: String(resource.externalDependencyId).trim() }
+            : {}),
         detail: String(resource?.detail ?? "").trim(),
         include: typeof resource?.include === "boolean" ? resource.include : true,
         serviceDefaults:
@@ -898,6 +908,15 @@ function effectiveServiceTreatments(snapshot) {
         );
 }
 
+function accountedExternalDependencies(snapshot) {
+    return externalDependencyAccounting({
+        externalDependencies: snapshot.externalDependencies,
+        resources: snapshot.proposal.resources,
+        removedGeneratedResources: snapshot.removedGeneratedResources,
+        externalDependencyTreatments: snapshot.proposal.externalDependencyTreatments,
+    });
+}
+
 function projectService(service) {
     return {
         id: service.id,
@@ -976,6 +995,7 @@ function confirmationResult(snapshot, confirmed = snapshot.confirmed) {
         included: includedMappedServices(snapshot).map(projectService),
         excluded: excludedMappedServices(snapshot).map(projectService),
         notProposed: notProposedServices(snapshot),
+        externalDependencies: accountedExternalDependencies(snapshot),
         serviceDefaults: [...serviceDefaults],
         proposal: confirmedProposal(snapshot.proposal),
     };
@@ -999,6 +1019,8 @@ function snapshotForClient(snapshot) {
         apphostStyle: snapshot.apphostStyle,
         services: snapshot.services.map(projectService),
         notProposed: snapshot.confirmation?.notProposed ?? notProposedServices(snapshot),
+        externalDependencies:
+            snapshot.confirmation?.externalDependencies ?? accountedExternalDependencies(snapshot),
         proposal: proposalForClient(snapshot.proposal),
         proposalEdited: snapshot.proposalEdited,
         proposalStale: snapshot.proposalStale,
@@ -1023,6 +1045,7 @@ function proposalHash(snapshot) {
         proposalGeneration: snapshot.proposalGeneration,
         proposal: confirmedProposal(snapshot.proposal),
         serviceTreatments: effectiveServiceTreatments(snapshot),
+        externalDependencies: accountedExternalDependencies(snapshot),
     });
 }
 
@@ -1241,6 +1264,7 @@ function confirmationMessage(snapshot) {
                 ...(unresolved ? { unresolved } : {}),
             }),
         ),
+        externalDependencies: confirmation.externalDependencies ?? [],
         proposal: confirmation.proposal,
     };
     return [
@@ -1286,6 +1310,8 @@ function proposalRequestMessage(snapshot) {
             path: service.path,
             include: service.include,
         })),
+        externalDependencies: snapshot.externalDependencies,
+        externalDependencyTreatments: snapshot.proposal.externalDependencyTreatments ?? [],
     };
     return [
         "[aspireify canvas: review proposal]",
@@ -1851,12 +1877,19 @@ async function handlePost(entry, path, body, response) {
                 linkedService.include = false;
                 linkedService.serviceDefaults = false;
             }
-            if (!proposalResource.userAdded) {
+            if (!proposalResource.userAdded || proposalResource.externalDependencyId) {
                 const removedResource = {
                     id: proposalResource.id,
                     serviceId: proposalResource.serviceId,
                     servicePath: linkedService?.path ?? "",
                     sourceName: proposalResource.sourceName,
+                    ...(proposalResource.externalDependencyId
+                        ? {
+                              externalDependencyId: proposalResource.externalDependencyId,
+                              name: proposalResource.name,
+                              type: proposalResource.type,
+                          }
+                        : {}),
                 };
                 if (
                     !state.removedGeneratedResources.some((candidate) =>
@@ -2291,6 +2324,79 @@ const SERVICE_SCHEMA = {
     required: ["id", "name", "type", "framework", "exposesHttp", "path"],
 };
 
+const EXTERNAL_DEPENDENCY_SCHEMA = {
+    type: "object",
+    additionalProperties: false,
+    description:
+        "A significant external dependency supplied by the skill, not a runnable project. Supply facts and configuration key names only, never credentials, configuration values, or authenticated URLs.",
+    properties: {
+        id: {
+            type: "string",
+            minLength: 1,
+            pattern: "^\\S(?:[\\s\\S]*\\S)?$",
+            description: "Stable unique external dependency ID, independent of runnable service IDs.",
+        },
+        name: { type: "string", minLength: 1, pattern: "\\S" },
+        type: {
+            type: "string",
+            minLength: 1,
+            pattern: "\\S",
+            description: "Exact discovered label, such as HTTPS API, WebSocket, or SDK-selected endpoint.",
+        },
+        purpose: { type: "string", minLength: 1, pattern: "\\S" },
+        configurationKeys: {
+            type: "array",
+            items: { type: "string", minLength: 1, pattern: "\\S" },
+            description: "Configuration key names, never their values.",
+        },
+        source: {
+            type: "string",
+            minLength: 1,
+            pattern: "\\S",
+            description: "Repository evidence or configuration source, without secret values.",
+        },
+        lifecycleOwner: { type: "string", minLength: 1, pattern: "\\S" },
+        endpointSelection: {
+            type: "string",
+            minLength: 1,
+            pattern: "\\S",
+            description: "How the endpoint is selected, for example explicit configuration or SDK discovery. Not a URL.",
+        },
+    },
+    required: ["id", "name", "type"],
+};
+
+function treatmentSchema(idField, entity) {
+    return {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+            [idField]: {
+                type: "string",
+                minLength: 1,
+                description: `Exact load_discovery ${entity} ID. It must not be mapped by any resource.`,
+            },
+            treatment: {
+                type: "string",
+                enum: ["not-modeled", "deferred"],
+                description:
+                    "not-modeled: deliberately left out of the AppHost. deferred: modeling postponed by an agreed limitation.",
+            },
+            reason: {
+                type: "string",
+                minLength: 1,
+                description: "The decision or agreed limitation from chat, in the user's terms.",
+            },
+            unresolved: {
+                type: "string",
+                minLength: 1,
+                description: `Required for deferred: what remains unresolved before the ${entity} can be modeled.`,
+            },
+        },
+        required: [idField, "treatment", "reason"],
+    };
+}
+
 const aspireifyCanvas = createCanvas({
     id: CANVAS_ID,
     displayName: "Aspireify",
@@ -2305,7 +2411,7 @@ const aspireifyCanvas = createCanvas({
         {
             name: "load_discovery",
             description:
-                "Replace the proposal review's discovered runnable services. All services default to included; .NET services default to Service Defaults.",
+                "Load discovered runnable services and optional externalDependencies without creating resources. Omitted external inventory is preserved; an explicit empty array clears it.",
             inputSchema: {
                 type: "object",
                 additionalProperties: false,
@@ -2328,6 +2434,12 @@ const aspireifyCanvas = createCanvas({
                             "Start a new Aspireify review for this AppHost, replacing a previously confirmed snapshot.",
                     },
                     services: { type: "array", items: SERVICE_SCHEMA },
+                    externalDependencies: {
+                        type: "array",
+                        items: EXTERNAL_DEPENDENCY_SCHEMA,
+                        description:
+                            "External APIs, streams, or SDK-owned dependencies supplied by the skill. Omit to preserve inventory within this run; use [] to clear it. A new run starts empty.",
+                    },
                 },
                 required: ["services", "apphostStyle"],
             },
@@ -2367,6 +2479,9 @@ const aspireifyCanvas = createCanvas({
                     }
                     serviceIds.add(service.id);
                 }
+                const incomingExternalDependencies =
+                    normalizeExternalDependencies(context.input.externalDependencies) ??
+                    (startNewRun ? [] : current.externalDependencies);
                 const snapshot = await updateSnapshot(domainId, (state) => {
                     if (startNewRun) {
                         const replacement = emptySnapshot(identity.appHostPath);
@@ -2443,6 +2558,7 @@ const aspireifyCanvas = createCanvas({
                     state.scanStatus = "complete";
                     state.scanError = "";
                     state.discoveryLoaded = true;
+                    state.externalDependencies = incomingExternalDependencies;
                     state.proposalLoaded = false;
                     state.proposalError = "";
                     state.services = incomingServices.map((service, index) => {
@@ -2486,6 +2602,7 @@ const aspireifyCanvas = createCanvas({
                 return {
                     ok: true,
                     serviceCount: snapshot.services.length,
+                    externalDependencyCount: snapshot.externalDependencies.length,
                     proposalGeneration: snapshot.proposalGeneration,
                 };
                 });
@@ -2533,6 +2650,13 @@ const aspireifyCanvas = createCanvas({
                                     type: "string",
                                     description:
                                         "ID of the discovered service represented by this resource. This is not the proposal resource ID used by edge endpoints.",
+                                },
+                                externalDependencyId: {
+                                    type: "string",
+                                    minLength: 1,
+                                    pattern: "^\\S(?:[\\s\\S]*\\S)?$",
+                                    description:
+                                        "Exact externalDependencies[].id represented by this resource. Do not also set serviceId. Several resources may map the same dependency.",
                                 },
                                 detail: { type: "string" },
                                 include: { type: "boolean" },
@@ -2582,37 +2706,13 @@ const aspireifyCanvas = createCanvas({
                         type: "array",
                         description:
                             "Decisions the aspireify workflow already made for discovered runnable services that no resource maps. Omit a service to show it as not assessed.",
-                        items: {
-                            type: "object",
-                            additionalProperties: false,
-                            properties: {
-                                serviceId: {
-                                    type: "string",
-                                    minLength: 1,
-                                    description:
-                                        "Exact load_discovery service id. It must not be mapped by any resource.",
-                                },
-                                treatment: {
-                                    type: "string",
-                                    enum: ["not-modeled", "deferred"],
-                                    description:
-                                        "not-modeled: deliberately left out of the AppHost. deferred: modeling postponed by an agreed limitation.",
-                                },
-                                reason: {
-                                    type: "string",
-                                    minLength: 1,
-                                    description:
-                                        "The decision or agreed limitation from chat, in the user's terms.",
-                                },
-                                unresolved: {
-                                    type: "string",
-                                    minLength: 1,
-                                    description:
-                                        "Required for deferred: what remains unresolved before the service can be modeled.",
-                                },
-                            },
-                            required: ["serviceId", "treatment", "reason"],
-                        },
+                        items: treatmentSchema("serviceId", "service"),
+                    },
+                    externalDependencyTreatments: {
+                        type: "array",
+                        description:
+                            "Chat decisions for unmapped external dependencies. Omit to preserve previous decisions; [] clears them. Dependencies without a decision remain not assessed.",
+                        items: treatmentSchema("externalDependencyId", "external dependency"),
                     },
                 },
                 required: ["proposalGeneration"],
@@ -2645,6 +2745,7 @@ const aspireifyCanvas = createCanvas({
                     ? [...incomingResources, ...userAddedResources]
                     : current.proposal.resources;
                 validateProposalResourceIds(endpointResources);
+                validateExternalDependencyMappings(endpointResources, current.externalDependencies);
                 const resolvedIncomingEdges = Array.isArray(context.input.edges)
                     ? resolveSubmittedProposalEdges(context.input.edges, endpointResources)
                     : null;
@@ -2658,6 +2759,17 @@ const aspireifyCanvas = createCanvas({
                         mappedServiceIds: new Set(
                             [...endpointResources, ...current.removedGeneratedResources]
                                 .map((resource) => resource.serviceId)
+                                .filter(Boolean),
+                        ),
+                    },
+                );
+                const incomingExternalTreatments = normalizeExternalDependencyTreatments(
+                    context.input.externalDependencyTreatments,
+                    {
+                        externalDependencies: current.externalDependencies,
+                        mappedExternalDependencyIds: new Set(
+                            [...endpointResources, ...current.removedGeneratedResources]
+                                .map((resource) => resource.externalDependencyId)
                                 .filter(Boolean),
                         ),
                     },
@@ -2699,6 +2811,18 @@ const aspireifyCanvas = createCanvas({
                                       generated.name.toLowerCase(),
                                   );
                                   if (preserved) {
+                                      if (generated.externalDependencyId) {
+                                          if (
+                                              preserved.serviceId ||
+                                              (preserved.externalDependencyId &&
+                                                  preserved.externalDependencyId !== generated.externalDependencyId)
+                                          ) {
+                                              throw new Error(
+                                                  `Cannot map external dependency "${generated.externalDependencyId}" to "${preserved.name}": the preserved resource already maps another discovered item.`,
+                                              );
+                                          }
+                                          preserved.externalDependencyId = generated.externalDependencyId;
+                                      }
                                       generatedResourceOverrides.set(
                                           generated.id,
                                           preserved.id,
@@ -2855,6 +2979,9 @@ const aspireifyCanvas = createCanvas({
                         serviceTreatments:
                             incomingTreatments ??
                             (incomingResources ? [] : (state.proposal.serviceTreatments ?? [])),
+                        externalDependencyTreatments:
+                            incomingExternalTreatments ??
+                            (state.proposal.externalDependencyTreatments ?? []),
                     };
                     state.proposalLoaded = true;
                     state.proposalEdited = proposalHasUserEdits(state.proposal);
@@ -2875,7 +3002,7 @@ const aspireifyCanvas = createCanvas({
         {
             name: "get_confirmation",
             description:
-                "Read the user's confirmed choices before editing the AppHost. Returns final service selections, discovered services left unmapped as notProposed (with the supplied not-modeled or deferred treatment and reason, otherwise not-assessed), and the edited proposal graph.",
+                "Read the immutable confirmed plan before editing the AppHost: service selections, notProposed services, and externalDependencies with resourceMappings or not-modeled/deferred reasons, otherwise not-assessed.",
             inputSchema: {
                 type: "object",
                 additionalProperties: false,
@@ -3057,9 +3184,9 @@ const SESSION_GUIDANCE =
 
 const ASPIREFY_WORKFLOW_GUIDANCE =
     "This request is part of the aspireify workflow. Keep discovery questions and implementation tradeoffs in chat. " +
-    "When the proposal is ready, call open_aspireify, then load_discovery with the AppHost style and every runnable service's stable unique id, name, type, framework, exposesHttp, and path. " +
+    "When the proposal is ready, call open_aspireify, then load_discovery with the AppHost style and every runnable service's stable unique id, name, type, framework, exposesHttp, and path. Pass supplied external APIs, streams, and SDK-owned dependencies separately as externalDependencies with stable id, name, type, and any discovered purpose, configurationKeys, source, lifecycleOwner, and endpointSelection; never pass secret values or disguise them as runnable services. " +
     "If the same AppHost already has a confirmed snapshot and the user starts a new Aspireify run, pass startNewRun=true to load_discovery. " +
-    "Pass the proposalGeneration returned by load_discovery to set_proposal with the complete resource graph. For each runnable service the workflow deliberately left out of the graph or deferred, pass a serviceTreatments entry with its reason (and, when deferred, what remains unresolved); omit services that were not assessed. Do not invent or add fields that the Aspireify skill did not discover or propose. Preserve exact proposal type labels when supplied. " +
+    "Pass the proposalGeneration returned by load_discovery to set_proposal with the complete resource graph. Map external dependencies through resources[].externalDependencyId, not serviceId. For each item deliberately left out or deferred, pass serviceTreatments or externalDependencyTreatments with its reason and, for deferred items, what remains unresolved. Omit unassessed items from treatments. Do not invent fields or resources to make the inventory fit the graph. Preserve exact proposal type labels when supplied. " +
     "Wait for the user to confirm in the canvas, then call get_confirmation before editing any files. Never make the canvas scan the repository, resolve tradeoffs, generate the proposal, edit the AppHost, start resources, or validate the application. " +
     "If the canvas host is unavailable, present and confirm the same proposal in chat.";
 

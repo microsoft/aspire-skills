@@ -5,6 +5,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
 ### Changed
+- Kept skill-supplied external APIs, streams, and SDK-owned dependencies visible
+  in the Aspireify canvas without treating them as runnable services. Resource
+  mappings, not-modeled or deferred reasons, and unassessed items now survive
+  reload, immutable confirmation, and the chat handoff.
 - Documented `aspire new --localhost-tld` in the Aspire init templates reference. The
   `*.dev.localhost` prompt previously listed no flag, so non-interactive runs could
   only take the default plain `localhost` profile.
