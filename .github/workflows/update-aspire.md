@@ -538,16 +538,24 @@ configuration.
 
 ## Step 5: Create Draft PR and Stop
 
-Prepare a title and body that include:
+Use title `Sync telemetry with microsoft/aspire-skills#<number>`, replacing
+`<number>` with the source PR number. The publisher adds `[telemetry]`; do not
+include that prefix yourself.
 
-- The source PR URL, whether it is merged, the full source commit, and
-  `<!-- aspire-skills-pr:<number> -->` with the source PR number.
-- The skill, extension, and canonical MCP changes reviewed, their impact on
-  Aspire telemetry, and any behavior already covered by Aspire.
-- The necessary telemetry changes and associated tests.
-- Commands run and any remaining cross-platform review needs. State that
-  required restore and tests run in the isolated verification job; do not claim
-  results that have not run yet.
+Use this Markdown body, replacing the source PR number and URL:
+
+```markdown
+Sync telemetry with [microsoft/aspire-skills#<number>](<source-pr-url>).
+
+- <Actual change in the proposed diff.>
+
+<!-- aspire-skills-pr:<number> -->
+```
+
+Use one to three bullets, one sentence each, describing only changes in the
+proposed diff. Do not list unchanged categories, copy the destination
+repository's PR template, or add sections or commentary. The workflow adds
+test diagnostics and provenance; do not write those yourself.
 
 Emit `create_pull_request` exactly once after preparing the changes, then
 stop. The workflow attempts the isolated build/tests once, adds their
