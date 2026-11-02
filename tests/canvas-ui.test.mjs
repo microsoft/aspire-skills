@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = new URL("../", import.meta.url);
+const gitOptions = { cwd: fileURLToPath(repoRoot), encoding: "utf8", windowsHide: true };
 const extensions = ["aspire-apphosts", "aspire-doctor", "aspireify"];
 const theme = await readFile(new URL("assets/canvas/theme.css", repoRoot), "utf8");
 const icons = await readFile(new URL("assets/canvas/icons.svg", repoRoot), "utf8");
@@ -22,7 +23,7 @@ test("canvas providers serve canonical and standalone shared assets", { timeout:
     windowsHide: true,
     maxBuffer: 1024 * 1024,
   });
-  assert.equal(result.error, undefined, result.error?.message);
+  assert.equal(result.error, undefined, `${result.error?.message}\n${result.stdout}\n${result.stderr}`);
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
 });
 
@@ -33,6 +34,14 @@ for (const extension of extensions) {
       const target = (await lstat(link)).isSymbolicLink()
         ? await readlink(link) : await readFile(link, "utf8");
       assert.equal(target.replaceAll("\\", "/"), `../../../assets/canvas/${asset}`);
+      const index = spawnSync("git", ["ls-files", "-s", "--", fileURLToPath(link)], gitOptions);
+      assert.equal(index.error, undefined, index.error?.message);
+      assert.equal(index.status, 0, index.stderr);
+      assert.match(index.stdout, /^120000 [a-f0-9]+ 0\t/, "shared UI assets must remain Git symlinks");
+      const blob = spawnSync("git", ["cat-file", "blob", index.stdout.split(" ")[1]], gitOptions);
+      assert.equal(blob.error, undefined, blob.error?.message);
+      assert.equal(blob.status, 0, blob.stderr);
+      assert.equal(blob.stdout, `../../../assets/canvas/${asset}`);
     }
   });
 

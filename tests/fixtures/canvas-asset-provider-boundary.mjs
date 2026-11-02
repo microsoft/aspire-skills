@@ -37,14 +37,20 @@ async function openProvider(t, extension, layout) {
 
     await fs.mkdir(ui, { recursive: true });
     await fs.writeFile(join(ui, "styles.css"), ".local-style { display: block; }");
+    if (layout === "assets-file") {
+        await fs.writeFile(join(root, "assets"), "Not a directory");
+    } else if (layout === "canvas-file") {
+        await fs.mkdir(join(root, "assets"));
+        await fs.writeFile(shared, "Not a directory");
+    }
     for (const asset of assets) {
-        if (layout !== "standalone" && layout !== "missing") {
+        if (!["standalone", "assets-file", "canvas-file", "missing"].includes(layout)) {
             await fs.mkdir(shared, { recursive: true });
             await fs.writeFile(join(shared, asset.name), asset.body);
         }
         if (layout === "placeholder") {
             await fs.writeFile(join(ui, `canvas-${asset.name}`), `../../../assets/canvas/${asset.name}`);
-        } else if (layout === "standalone" || layout === "denied") {
+        } else if (["standalone", "assets-file", "canvas-file", "denied"].includes(layout)) {
             await fs.writeFile(join(ui, `canvas-${asset.name}`), `${asset.body}\n`);
         }
     }
@@ -113,6 +119,8 @@ for (const extension of ["aspire-apphosts", "aspire-doctor", "aspireify"]) {
         ["placeholder", "canonical assets override Git UI placeholders"],
         ["no-ui-assets", "canonical assets work without UI links"],
         ["standalone", "missing canonical assets fall back to standalone UI files"],
+        ["assets-file", "a regular assets file falls back to standalone UI files"],
+        ["canvas-file", "a regular assets/canvas file falls back to standalone UI files"],
         ["denied", "canonical read errors do not fall back to UI files"],
         ["missing", "missing canonical and UI assets return 404"],
     ]) {
@@ -127,7 +135,8 @@ for (const extension of ["aspire-apphosts", "aspire-doctor", "aspireify"]) {
                 assert.equal(response.status, 200);
                 assert.ok(response.headers.get("content-type").startsWith(asset.type));
                 assert.equal(response.headers.get("cache-control"), "no-store");
-                assert.equal(await response.text(), layout === "standalone" ? `${asset.body}\n` : asset.body);
+                assert.equal(await response.text(),
+                    ["standalone", "assets-file", "canvas-file"].includes(layout) ? `${asset.body}\n` : asset.body);
                 if (extension === "aspire-apphosts") {
                     assert.equal(response.headers.get("x-content-type-options"), "nosniff");
                     assert.ok(response.headers.get("content-security-policy"));

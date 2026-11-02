@@ -16,8 +16,9 @@ Git for Windows can check these links out as ordinary path-text files when
 `core.symlinks` is `false`. Providers in a source checkout or full-root plugin
 installation do not depend on these UI links, so styling and icons still work.
 
-When the canonical asset is absent, providers fall back to the corresponding
-file in their own `ui/` directory. Standalone extension packages without the
+When the canonical asset is absent (`ENOENT`) or an ancestor is not a directory
+(`ENOTDIR`), providers fall back to the corresponding file in their own `ui/`
+directory. Standalone extension packages without the
 plugin root must therefore supply readable CSS and SVG there, not Git
 placeholder files or dangling links. Other read errors do not trigger fallback.
 

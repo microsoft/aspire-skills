@@ -92,7 +92,7 @@ async function serveAsset(res, name) {
             : name === "canvas-icons.svg" ? "icons.svg" : null;
         const source = sharedAsset ? new URL(`../../assets/canvas/${sharedAsset}`, import.meta.url) : fileUrl;
         const body = await readFile(source).catch((error) => {
-            if (sharedAsset && error.code === "ENOENT") return readFile(fileUrl);
+            if (sharedAsset && (error.code === "ENOENT" || error.code === "ENOTDIR")) return readFile(fileUrl);
             throw error;
         });
         res.writeHead(200, {

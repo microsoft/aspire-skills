@@ -70,6 +70,22 @@ jobs:
           CHROME_BIN: ${{ runner.os == 'Linux' && '/usr/bin/google-chrome' || '' }}
         run: npm test
 
+      - name: Test Windows Git placeholder checkout
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $checkout = Join-Path $env:RUNNER_TEMP "canvas-placeholder-checkout"
+          git -c core.symlinks=false worktree add --detach $checkout HEAD
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          try {
+            node --test (Join-Path $checkout "tests\canvas-ui.test.mjs")
+            $testExitCode = $LASTEXITCODE
+          } finally {
+            git -c core.symlinks=false worktree remove $checkout
+            if ($LASTEXITCODE -ne 0) { throw "Could not remove the placeholder test worktree." }
+          }
+          exit $testExitCode
+
       - name: Setup pinned telemetry publisher runtime
         if: runner.os == 'Linux'
         uses: github/gh-aw-actions/setup@866158eb5c6cbfd3c614104e3d3d6634e246d220
