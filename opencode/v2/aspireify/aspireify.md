@@ -95,6 +95,21 @@ container lifetimes and data volumes for databases/caches, use HTTPS endpoints b
 default, pass endpoint references instead of hardcoded URLs, and model external SaaS
 URLs/API keys as parameters so they are visible in the dashboard.
 
+### Persistent-data recovery
+
+Before recommending or performing a reset, read the
+[recovery guidance](references/apphost-wiring.md#container-lifetimes). Prefer
+restoring the previous password. Otherwise, identify the exact failing resource,
+container, and storage target. For a bind mount, verify that the host directory is
+dedicated to that resource and require explicit approval naming that exact path
+before resetting its data. Removing a Docker volume does not reset bind-mounted
+data. For a volume reset, require approval naming the exact container and volume.
+Route stopping and restarting the exact AppHost through `aspire-orchestration`.
+Never clear a shared or parent directory or recommend broad Docker cleanup.
+AppHost-wide `--volumes` cleanup needs separate approval for its broader data scope.
+State these safeguards in read-only advice too; a general request to fix or reset
+a database is not approval to delete an identified storage target.
+
 ### Redis TLS edge case
 
 Aspire can automatically provision TLS certificates for container resources. If Redis
