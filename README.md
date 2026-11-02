@@ -267,6 +267,10 @@ The plugins do not register telemetry hooks.
 
 ## Development
 
+Canvas source checkouts require working Git symlinks. On Windows, follow the
+[canvas checkout prerequisites](docs/canvas-ui.md#windows-source-checkouts)
+before cloning.
+
 Regenerate the OpenCode catalogs after changing shipped skills, references, or
 assets, and commit the output with the source changes:
 
