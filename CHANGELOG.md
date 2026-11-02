@@ -5,6 +5,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
 ### Changed
+- Documented `aspire new --localhost-tld` in the Aspire init templates reference. The
+  `*.dev.localhost` prompt previously listed no flag, so non-interactive runs could
+  only take the default plain `localhost` profile.
 - Unified canvas styling and icons with shared assets that respect host themes.
 - Distinguished ordinary `aspire stop`, `aspire stop --force` (which preserves
   persistent volumes), and explicitly approved AppHost-wide `--volumes` cleanup, including
@@ -30,9 +33,17 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   OS file manager and could hand the editor a path outside the repository.
 - Corrected POSIX path handling in the Aspireify canvas to keep proposal
   snapshots separate for AppHost paths containing literal backslashes.
+- Removed the nonexistent `-v` alias from the `aspire new` options table in the
+  Aspire init templates reference. `aspire new ... -v <version>` fails with
+  "Unrecognized command or argument '-v'"; use `--version`.
 - Kept discovered services without a proposal mapping visible in the Aspireify
   canvas as **Not assessed** in a "Not in the proposed graph" section, and
   preserved them as `notProposed` in the confirmation and chat handoff.
+- Let the aspireify workflow mark unmapped discovered services as **Not modeled**
+  or **Deferred** through `set_proposal`'s optional `serviceTreatments`. The
+  canvas, confirmation, and chat handoff show the reason from chat and, for
+  deferred services, what remains unresolved. Unknown or already-mapped services
+  and treatments without a reason are rejected.
 - Restored AppHost visibility and source-file navigation in the Aspire AppHosts
   canvas for workspace child directories whose names begin with `..`, preserving
   checks that block paths outside the workspace.
@@ -55,12 +66,23 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Corrected Aspireify's TypeScript Foundry example to use the exported
   `addFoundry(...).addDeployment(...)` APIs instead of nonexistent
   `addAzureFoundry(...).addModel(...)`.
+- Added the missing `using Aspire.Hosting.AWS.Deployment;` to the AWS deployment
+  `AddAWSCDKEnvironment` example. Without it, `CDKDefaultsProviderFactory` does not
+  resolve and the AppHost fails to build with CS0103.
 - Fixed service-defaults detection to match template-generated `<App>.ServiceDefaults`
   projects (`IsAspireSharedProject` and `*.ServiceDefaults.csproj` references) instead
   of a nonexistent `Aspire.ServiceDefaults` package that matched nothing.
 - Fixed the Skill Eval PR gate failing on large PRs: changed files now come from the
   paginated PR files API instead of `gh pr diff`, which returns HTTP 406 once a diff
   exceeds 20,000 lines (as on the v0.0.5 release PR).
+- Corrected Aspireify's TypeScript examples to match the generated AppHost SDK:
+  `addNodeApp` now takes its app directory, endpoint flags use `withEndpointCallback`,
+  `addDockerfileBuilder` takes a context path and async callback, ACA custom domains use
+  `publishAsAzureContainerApp(...).configureCustomDomain(...)`, and `withLifetime` takes
+  `ContainerLifetime.Persistent`.
+- Fixed Aspireify ServiceDefaults guidance to install `Aspire.ProjectTemplates` before
+  `dotnet new aspire-servicedefaults` when the template is missing, as it is after a
+  TypeScript `aspire init`.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including

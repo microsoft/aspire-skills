@@ -29,7 +29,7 @@ https://aspire.dev/reference/cli/commands/aspire-new/
 | `-n, --name` | Name of the project to create |
 | `-o, --output` | Output path. Defaults to `./<template-name>` (auto-suffixed if non-empty) |
 | `-s, --source` | NuGet source for the project templates |
-| `-v, --version` | Version of the project templates to use |
+| `--version` | Version of the project templates to use (no short alias) |
 | `--channel` | Template channel: `stable` (default), `staging`, `daily` |
 | `--non-interactive` | **Required for agent execution.** Disables prompts and spinners |
 | `--nologo` | Suppress startup banner / telemetry notice |
@@ -55,7 +55,7 @@ aspire new aspire-py-starter --use-redis-cache true --non-interactive
 | Project name | Output directory name | `--name <value>` |
 | Template version | Which release to use | `--version <value>` |
 | Output folder | Where files land | `--output <value>` |
-| Use `*.dev.localhost` URLs? | HTTPS subdomain launch profile vs `http://localhost:<port>` | Pass `--non-interactive` to take the default (No, standard localhost) |
+| Use `*.dev.localhost` URLs? | HTTPS subdomain launch profile vs `http://localhost:<port>` | `--localhost-tld` to opt in; omit it with `--non-interactive` to take the default (No, standard localhost) |
 
 If a project picks `*.dev.localhost`, the user must trust the developer certificate first:
 
