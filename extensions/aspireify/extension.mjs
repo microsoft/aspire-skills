@@ -1402,7 +1402,13 @@ async function serveAsset(response, assetName) {
         return;
     }
     try {
-        const body = await readFile(assetPath);
+        const sharedAsset = assetName === "canvas-theme.css" ? "theme.css"
+            : assetName === "canvas-icons.svg" ? "icons.svg" : null;
+        const source = sharedAsset ? new URL(`../../assets/canvas/${sharedAsset}`, import.meta.url) : assetPath;
+        const body = await readFile(source).catch((error) => {
+            if (sharedAsset && error.code === "ENOENT") return readFile(assetPath);
+            throw error;
+        });
         response.writeHead(200, {
             "Content-Type": CONTENT_TYPES[extname(assetName)] ?? "application/octet-stream",
             "Cache-Control": "no-store",

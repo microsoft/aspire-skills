@@ -6,38 +6,24 @@ while preserving their own workflows.
 ## Shared assets
 
 Edit the canonical [stylesheet](../assets/canvas/theme.css) and
-[icon sprite](../assets/canvas/icons.svg). Share them through relative symlinks,
-not copied files or synchronization scripts.
+[icon sprite](../assets/canvas/icons.svg). The canvas providers serve
+`/canvas-theme.css` and `/canvas-icons.svg` directly from these files under the
+plugin root. Keep this single source of truth; do not add per-canvas copies or
+synchronization scripts.
 
-Source checkouts must support symlinks. The published plugin mirror preserves
-these relative links to the canonical extension sources.
+The extension `ui/` directories retain relative symlinks for existing packagers.
+Git for Windows can check these links out as ordinary path-text files when
+`core.symlinks` is `false`. Providers in a source checkout or full-root plugin
+installation do not depend on these UI links, so styling and icons still work.
 
-### Windows source checkouts
+When the canonical asset is absent, providers fall back to the corresponding
+file in their own `ui/` directory. Standalone extension packages without the
+plugin root must therefore supply readable CSS and SVG there, not Git
+placeholder files or dangling links. Other read errors do not trigger fallback.
 
-Git for Windows can check out symlinks as ordinary files when `core.symlinks` is
-`false`. In that checkout, `canvas-theme.css` contains a relative path instead of
-CSS, and `canvas-icons.svg` is not an SVG document. Canvas styling and icons break,
-and shared-asset tests fail.
-
-Enable Windows Developer Mode or use a terminal with the required symlink
-privilege, subject to your machine's policies. Then clone into a new directory
-from the development branch with symlinks enabled for that repository:
-
-```powershell
-git clone --branch dev --config core.symlinks=true https://github.com/microsoft/aspire-skills.git aspire-skills-symlinks
-Set-Location aspire-skills-symlinks
-git config --show-origin --get core.symlinks
-Get-Item -LiteralPath .\extensions\aspire-doctor\ui\canvas-theme.css | Select-Object LinkType, Target
-```
-
-The configuration should report `true`, and `LinkType` should be `SymbolicLink`.
-Git must also have permission to create the links; setting the configuration alone
-does not grant that permission.
-
-Changing `core.symlinks` after checkout does not replace existing placeholder
-files. Prefer a fresh clone rather than overwriting files in a checkout with local
-changes. Do not copy shared assets into each canvas or disable the symlink tests
-to work around the checkout prerequisite.
+The published plugin mirror still uses relative symlinks to the canonical
+extension sources. Direct asset serving does not change how those mirror links
+are packaged or resolved.
 
 ## Conventions
 

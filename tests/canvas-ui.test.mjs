@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { lstat, readFile, readlink } from "node:fs/promises";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 const repoRoot = new URL("../", import.meta.url);
 const extensions = ["aspire-apphosts", "aspire-doctor", "aspireify"];
@@ -9,12 +11,28 @@ const icons = await readFile(new URL("assets/canvas/icons.svg", repoRoot), "utf8
 const symbols = [...icons.matchAll(/<symbol\b[^>]*\bid="([^"]+)"/g)];
 const symbolIds = new Set(symbols.map(([, id]) => id));
 
+test("canvas providers serve canonical and standalone shared assets", { timeout: 60_000 }, () => {
+  const fixture = fileURLToPath(new URL("./fixtures/canvas-asset-provider-boundary.mjs", import.meta.url));
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  const result = spawnSync(process.execPath, ["--experimental-vm-modules", "--test", fixture], {
+    env,
+    encoding: "utf8",
+    timeout: 50_000,
+    windowsHide: true,
+    maxBuffer: 1024 * 1024,
+  });
+  assert.equal(result.error, undefined, result.error?.message);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+});
+
 for (const extension of extensions) {
-  test(`${extension} links directly to the canonical shared canvas assets`, async () => {
+  test(`${extension} retains legacy UI links to the canonical shared canvas assets`, async () => {
     for (const asset of ["theme.css", "icons.svg"]) {
       const link = new URL(`extensions/${extension}/ui/canvas-${asset}`, repoRoot);
-      assert.ok((await lstat(link)).isSymbolicLink(), "source checkouts must enable Git symlinks");
-      assert.equal((await readlink(link)).replaceAll("\\", "/"), `../../../assets/canvas/${asset}`);
+      const target = (await lstat(link)).isSymbolicLink()
+        ? await readlink(link) : await readFile(link, "utf8");
+      assert.equal(target.replaceAll("\\", "/"), `../../../assets/canvas/${asset}`);
     }
   });
 

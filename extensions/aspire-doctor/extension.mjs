@@ -88,7 +88,13 @@ async function serveAsset(res, name) {
     }
 
     try {
-        const body = await readFile(fileUrl);
+        const sharedAsset = name === "canvas-theme.css" ? "theme.css"
+            : name === "canvas-icons.svg" ? "icons.svg" : null;
+        const source = sharedAsset ? new URL(`../../assets/canvas/${sharedAsset}`, import.meta.url) : fileUrl;
+        const body = await readFile(source).catch((error) => {
+            if (sharedAsset && error.code === "ENOENT") return readFile(fileUrl);
+            throw error;
+        });
         res.writeHead(200, {
             "Content-Type": CONTENT_TYPES[extname(name)] ?? "application/octet-stream",
             "Cache-Control": "no-store",
