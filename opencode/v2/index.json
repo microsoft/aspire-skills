@@ -78,7 +78,7 @@
     },
     {
       "name": "aspireify",
-      "version": "sha512-5557698e473b6e8936cfcf0a347511478aee759975af5369d7ff7bc4644240082e3e96c785598bf50ae1572b92515d4bbcf836ee9e94f8fe3f5e03f2379f9e33",
+      "version": "sha512-0345f73f85dd2ef48d9ee79c86c896c00689fb17d3249c501165a434213a2159d3528adc409223be4b2a24be1281649f6df006c7f494da60c3cabfb274cea4f5",
       "files": [
         "aspireify.md",
         "references/apphost-wiring.md",
