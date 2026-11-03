@@ -1,0 +1,10 @@
+{
+  "request": "A slow Commerce API trace has no database child span. Is orders-db the proven bottleneck?",
+  "resource": "api",
+  "evidence": [
+    {"id":"partial-parent","resource":"api","kind":"span","traceId":"333333333333333333333333333333aa","spanId":"33333333333333aa","durationMs":2000,"status":"Error"},
+    {"id":"sampling-gap","resource":"otel-collector","kind":"coverage","message":"child spans may be dropped; only API instrumentation is confirmed"},
+    {"id":"db-green","resource":"orders-db","kind":"state","state":"Running","health":"Healthy"},
+    {"id":"old-db-warning","resource":"orders-db","kind":"log","timestamp":"09:00Z","message":"slow maintenance query"}
+  ]
+}

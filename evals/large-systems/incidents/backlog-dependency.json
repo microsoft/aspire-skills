@@ -1,0 +1,10 @@
+{
+  "request": "Commerce notifications backlog is growing. Should we blame the broker or the consumer dependency?",
+  "resource": "notification-worker",
+  "evidence": [
+    {"id":"broker-backlog","resource":"broker","kind":"metric","readyMessages":340,"consumers":1,"publishErrors":0},
+    {"id":"smtp-reject","resource":"notification-worker","kind":"log","message":"SMTP 535 authentication rejected; retry in 30s"},
+    {"id":"worker-retry","resource":"notification-worker","kind":"span","status":"Error","dependency":"smtp","durationMs":30000},
+    {"id":"search-lag","resource":"search-worker","kind":"metric","lag":120}
+  ]
+}

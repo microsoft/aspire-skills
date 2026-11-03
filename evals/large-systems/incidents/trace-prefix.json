@@ -1,0 +1,9 @@
+{
+  "request": "Commerce checkout failed in trace abcdef01234567890123456789012301; the dashboard displays only abcdef0. There is another trace with that prefix.",
+  "resource": "api",
+  "evidence": [
+    {"id":"requested-trace","resource":"api","kind":"span","traceId":"abcdef01234567890123456789012301","status":"Error","message":"checkout inventory reservation failed"},
+    {"id":"inventory-failed","resource":"inventory","kind":"log","traceId":"abcdef01234567890123456789012301","message":"reservation conflict for sku X"},
+    {"id":"prefix-distractor","resource":"payments","kind":"log","traceId":"abcdef012345678901234567890123ff","message":"payment-provider timeout"}
+  ]
+}

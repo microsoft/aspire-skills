@@ -1,0 +1,10 @@
+{
+  "request": "Analytics API requests are slow. Commerce has a louder database error; which evidence matters and what should I inspect next?",
+  "resource": "api",
+  "evidence": [
+    {"id":"analytics-latency","apphost":"src/Analytics.AppHost/Analytics.AppHost.csproj","resource":"api","kind":"span","traceId":"111111111111111111111111111111aa","durationMs":1800,"childResource":"worker","childDurationMs":1750,"status":"Error","message":"worker report query timed out"},
+    {"id":"analytics-worker","apphost":"src/Analytics.AppHost/Analytics.AppHost.csproj","resource":"worker","kind":"log","traceId":"111111111111111111111111111111aa","message":"report query exceeded local statement timeout"},
+    {"id":"commerce-auth","apphost":"src/Commerce.AppHost/Commerce.AppHost.csproj","resource":"orders-db","kind":"log","message":"password authentication failed"},
+    {"id":"sandbox-green","apphost":"tools/Sandbox.AppHost/apphost.mts","resource":"api","kind":"state","state":"Running","health":"Healthy"}
+  ]
+}

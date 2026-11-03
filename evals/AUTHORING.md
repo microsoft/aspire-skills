@@ -247,6 +247,40 @@ The per-skill `eval.yaml` `defaults` block controls model, executor, runs, and t
 - You need different scoring weights or a pass threshold — add a `scoring` block (omitted → equal weights, threshold `1.0`).
 - You need a different default model — but prefer overriding via `--model` on the CLI for ad-hoc runs.
 
+## Evidence-grounded offline incidents
+
+See the [large-system assessments](./README.md#large-system-incident-assessments)
+for a bounded way to exercise realistic telemetry reasoning without live services.
+Keep agent-visible snapshots/contracts separate from grading-only expected findings.
+Use a `program` grader for observable target, evidence, query and read-only
+constraints, then a rubric-backed `prompt` grader for causality and honest
+uncertainty. Do not treat a nonempty explanation or a cited record ID as proof that
+the explanation is true.
+
+Test both layers with negative controls. Structural controls should reject missing
+reads, wrong AppHosts, truncated trace IDs, negated required filters, fabricated
+record IDs, unsafe proposals and actual mutation/live-tool calls. Semantic controls
+should retain valid structure while inverting causality, inventing recovery or
+measurements, or hiding missing evidence. Model-backed semantic qualification is
+opt-in; an offline unit test confirming that a judge exists is not qualification.
+
+Trace IDs are 32 hexadecimal characters and span/parent IDs are 16. Label UI display
+prefixes separately rather than storing them as full IDs. Synthetic normalized
+snapshots must explicitly say they are not the CLI's wire schema. Give the agent the
+same response/command rules the hidden grader enforces, allow harmless CLI option
+reordering, and reject negated search terms rather than matching their substrings.
+Wire shared fixture/grader changes to their owning spec in CI.
+
+When a program grader reads trajectory events, distinguish the execution workspace
+from Vally's disposable grading copy. Do not compare captured absolute read paths
+to the copy's `trajectory.workDir`. Bind successful reads to a consistent original
+root and their staged fixture contents, and qualify through
+`gradeInDisposableWorkspace`, not only direct calls to the assertion helper.
+Validate command alternatives against released CLI contracts; reject contradictory
+dedicated/search selectors rather than accepting one correct fragment in an empty
+intersection. Include negative semantic controls when context IDs are allowed,
+so an excluded/recovered event cannot silently become the asserted cause.
+
 ## See also
 
 - [README.md](./README.md) — how to run evals

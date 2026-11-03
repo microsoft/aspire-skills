@@ -1,0 +1,9 @@
+{
+  "request": "Commerce checkout HTTP status is 200 and its OTel status is Unset. Does that mean this payment succeeded?",
+  "resource": "payments",
+  "evidence": [
+    {"id":"http-ok","resource":"payments","kind":"span","traceId":"999999999999999999999999999999bb","status":"Unset","httpStatus":200},
+    {"id":"payment-declined","resource":"payments","kind":"log","traceId":"999999999999999999999999999999bb","paymentOutcome":"declined","reason":"insufficient_funds","severity":"Information"},
+    {"id":"other-payment","resource":"payments","kind":"log","traceId":"999999999999999999999999999999cc","paymentOutcome":"captured"}
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "request": "Commerce trace timestamps appear backwards across API and orders. Is this proof that orders caused the request before API started?",
+  "resource": "api",
+  "evidence": [
+    {"id":"clock-parent","resource":"api","kind":"span","traceId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa01","spanId":"aaaaaaaaaaaaaa01","timestamp":"2026-01-01T10:00:01Z","durationMs":1000},
+    {"id":"clock-child","resource":"orders","kind":"span","traceId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa01","spanId":"aaaaaaaaaaaaaa02","parentSpanId":"aaaaaaaaaaaaaa01","timestamp":"2026-01-01T09:59:59Z","durationMs":500},
+    {"id":"clock-offset","resource":"orders","kind":"console","message":"local clock offset -2500ms from API clock"},
+    {"id":"different-trace","resource":"orders","kind":"span","traceId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa99","timestamp":"2026-01-01T09:59:58Z"}
+  ]
+}

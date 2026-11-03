@@ -47,6 +47,47 @@ Keep these points in mind:
 - `[resource]` is optional. Include it to filter results to a single resource; omit it to see all resources.
 - `--search` can be combined with other options like `--format Json`, `--trace-id`, `--limit`, and resource filtering.
 
+### Exact-target, bounded incident queries
+
+Use the selected AppHost on **every** proposed command. The optional positional
+argument of `otel logs`, `otel traces` and `otel spans` is a **resource name**,
+never a trace or span ID. All three commands support `--trace-id`; use a full
+32-hex-character trace ID, not the seven-character dashboard display prefix.
+These flags are present in the released
+[traces](https://github.com/microsoft/aspire/blob/v13.5.3/src/Aspire.Cli/Commands/TelemetryTracesCommand.cs),
+[spans](https://github.com/microsoft/aspire/blob/v13.5.3/src/Aspire.Cli/Commands/TelemetrySpansCommand.cs)
+and [logs](https://github.com/microsoft/aspire/blob/v13.5.3/src/Aspire.Cli/Commands/TelemetryLogsCommand.cs)
+commands.
+
+```bash
+aspire describe api --apphost <path> --format Json --non-interactive
+aspire otel logs --trace-id <full-trace-id> --apphost <path> --format Json --limit 50 --non-interactive
+aspire otel spans --trace-id <full-trace-id> --apphost <path> --format Json --limit 50 --non-interactive
+aspire otel logs inventory --trace-id <full-trace-id> --search "span-id:<full-span-id>" --apphost <path> --format Json --limit 50 --non-interactive
+aspire otel logs <worker-resource> --search "<message-id>" --apphost <path> --format Json --limit 50 --non-interactive
+aspire otel logs <api-resource> --search "<replica-name>" --apphost <path> --format Json --limit 50 --non-interactive
+aspire otel logs api --search "severity:error" --apphost <path> --format Json --limit 50 --non-interactive
+aspire logs orders-db --search "connection timeout" --apphost <path> --non-interactive
+```
+
+Do not invent `--query` or `--span-id`: use `--search` with the documented
+`span-id:` qualifier and a full 16-hex-character span ID. Console search is free
+text and needs `--search`, not an extra positional phrase or `severity:error`.
+Finite console queries are bounded by completing without `--follow`; do not
+invent an OTel-only option for them.
+
+For a cross-service trace, omit the resource positional argument and resource
+search qualifiers so the slice contains all services in that **one AppHost**.
+For a resource-specific diagnosis, retain that resource or use its positive
+`resource:` qualifier. Negation excludes evidence: `-span-id:<id>` and
+`-severity:error` are not substitutes for the requested positive filters.
+
+For missing or truncated evidence, propose a bounded error/trace query covering
+the missing time slice; do not declare an empty response healthy. The application's
+name can select the AppHost even when its telemetry is incomplete. Diagnose from
+current causal observations, and explicitly distinguish unrelated or recovered
+events rather than silently treating them as the root cause.
+
 ## Scenario: I Need Browser Console, Error, Or Network Diagnostics
 
 When a frontend already uses `WithBrowserLogs()`, Aspire creates a normal child resource named

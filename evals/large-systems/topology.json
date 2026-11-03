@@ -1,0 +1,64 @@
+{
+  "format": "synthetic normalized incident evidence, not an Aspire CLI wire schema",
+  "environment": "offline local-development snapshots; no processes or endpoints are available",
+  "apphosts": [
+    {
+      "path": "src/Commerce.AppHost/Commerce.AppHost.csproj",
+      "resources": [
+        {"name":"storefront","dependsOn":["gateway"],"type":"frontend"},
+        {"name":"storefront-browser-logs","parent":"storefront","Source":"storefront","type":"browser-logs"},
+        {"name":"admin","dependsOn":["gateway"],"type":"frontend"},
+        {"name":"admin-browser-logs","parent":"admin","Source":"admin","type":"browser-logs"},
+        {"name":"gateway","dependsOn":["api","catalog","identity"],"type":"project"},
+        {"name":"api","dependsOn":["orders","inventory","payments"],"type":"project"},
+        {"name":"orders","dependsOn":["orders-db","broker"],"type":"project"},
+        {"name":"inventory","dependsOn":["inventory-db","redis"],"type":"project"},
+        {"name":"payments","dependsOn":["payment-provider"],"type":"project"},
+        {"name":"catalog","dependsOn":["catalog-db","redis"],"type":"project"},
+        {"name":"identity","dependsOn":["identity-db"],"type":"project"},
+        {"name":"worker","dependsOn":["broker","orders-db","smtp"],"type":"project"},
+        {"name":"invoice-worker","dependsOn":["broker","billing-db"],"type":"project"},
+        {"name":"search-worker","dependsOn":["broker","search"],"type":"project"},
+        {"name":"notification-worker","dependsOn":["broker","smtp"],"type":"project"},
+        {"name":"shipping","dependsOn":["broker","shipping-db"],"type":"project"},
+        {"name":"recommendations","dependsOn":["catalog","search"],"type":"project"},
+        {"name":"reports","dependsOn":["billing-db","orders-db"],"type":"project"},
+        {"name":"orders-db","dependsOn":[],"type":"postgres"},
+        {"name":"inventory-db","dependsOn":[],"type":"postgres"},
+        {"name":"catalog-db","dependsOn":[],"type":"postgres"},
+        {"name":"identity-db","dependsOn":[],"type":"postgres"},
+        {"name":"billing-db","dependsOn":[],"type":"postgres"},
+        {"name":"shipping-db","dependsOn":[],"type":"postgres"},
+        {"name":"redis","dependsOn":[],"type":"redis"},
+        {"name":"broker","dependsOn":[],"type":"rabbitmq"},
+        {"name":"search","dependsOn":[],"type":"container"},
+        {"name":"smtp","dependsOn":[],"type":"external"},
+        {"name":"payment-provider","dependsOn":[],"type":"external"},
+        {"name":"db-migrator","dependsOn":["orders-db"],"type":"executable","hidden":true},
+        {"name":"seed","dependsOn":["catalog-db"],"type":"executable","hidden":true},
+        {"name":"otel-collector","dependsOn":[],"type":"container"},
+        {"name":"gateway-proxy","parent":"gateway","type":"proxy","hidden":true},
+        {"name":"metrics-scraper","dependsOn":["otel-collector"],"type":"container","hidden":true}
+      ]
+    },
+    {
+      "path": "src/Analytics.AppHost/Analytics.AppHost.csproj",
+      "resources": [
+        {"name":"api","dependsOn":["worker"],"type":"project"},
+        {"name":"worker","dependsOn":["orders-db"],"type":"project"},
+        {"name":"orders-db","dependsOn":[],"type":"postgres"},
+        {"name":"redis","dependsOn":[],"type":"redis"},
+        {"name":"broker","dependsOn":[],"type":"rabbitmq"}
+      ]
+    },
+    {
+      "path": "tools/Sandbox.AppHost/apphost.mts",
+      "resources": [
+        {"name":"api","dependsOn":["redis"],"type":"project"},
+        {"name":"worker","dependsOn":["broker"],"type":"project"},
+        {"name":"redis","dependsOn":[],"type":"redis"},
+        {"name":"broker","dependsOn":[],"type":"rabbitmq"}
+      ]
+    }
+  ]
+}

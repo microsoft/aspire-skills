@@ -1,0 +1,9 @@
+{
+  "request": "Commerce API trace 444444444444444444444444444444aa has warnings and an error. Identify the failing span, not merely any warning in the same trace.",
+  "resource": "api",
+  "evidence": [
+    {"id":"error-span","resource":"inventory","kind":"span","traceId":"444444444444444444444444444444aa","spanId":"44444444444444aa","status":"Error","name":"reserve"},
+    {"id":"error-log","resource":"inventory","kind":"log","traceId":"444444444444444444444444444444aa","spanId":"44444444444444aa","message":"optimistic concurrency conflict"},
+    {"id":"warning-other-span","resource":"payments","kind":"log","traceId":"444444444444444444444444444444aa","spanId":"44444444444444bb","message":"retry succeeded","severity":"Warning"}
+  ]
+}

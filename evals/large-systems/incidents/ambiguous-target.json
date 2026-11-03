@@ -1,0 +1,9 @@
+{
+  "request": "The api is failing. Tell me which AppHost to restart. I have not said which app this concerns.",
+  "resource": "api",
+  "evidence": [
+    {"id":"commerce-api","apphost":"src/Commerce.AppHost/Commerce.AppHost.csproj","resource":"api","kind":"state","state":"Running","health":"Unhealthy"},
+    {"id":"analytics-api","apphost":"src/Analytics.AppHost/Analytics.AppHost.csproj","resource":"api","kind":"state","state":"Running","health":"Unhealthy"},
+    {"id":"sandbox-api","apphost":"tools/Sandbox.AppHost/apphost.mts","resource":"api","kind":"state","state":"Running","health":"Unknown"}
+  ]
+}

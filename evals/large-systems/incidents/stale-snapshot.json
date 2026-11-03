@@ -1,0 +1,9 @@
+{
+  "request": "Commerce API started failing at 10:15Z. The attached healthy snapshot is from 10:00Z. Is the incident resolved?",
+  "resource": "api",
+  "evidence": [
+    {"id":"old-health","resource":"api","kind":"state","timestamp":"2026-01-01T10:00:00Z","health":"Healthy"},
+    {"id":"incident-time","resource":"api","kind":"report","timestamp":"2026-01-01T10:15:00Z","message":"requests fail now"},
+    {"id":"stale-log","resource":"api","kind":"log","timestamp":"2026-01-01T09:59:59Z","message":"request completed"}
+  ]
+}

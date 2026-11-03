@@ -1,0 +1,10 @@
+{
+  "request": "Commerce orders is slow although orders-db is healthy. Distinguish connection acquisition from database query execution.",
+  "resource": "orders",
+  "evidence": [
+    {"id":"pool-wait","resource":"orders","kind":"span","traceId":"888888888888888888888888888888aa","name":"connection.acquire","durationMs":950,"poolActive":100,"poolMax":100},
+    {"id":"db-execution","resource":"orders-db","kind":"span","traceId":"888888888888888888888888888888aa","name":"SELECT order","durationMs":12,"status":"Ok"},
+    {"id":"orders-timeout","resource":"orders","kind":"log","traceId":"888888888888888888888888888888aa","message":"connection pool exhausted"},
+    {"id":"db-running","resource":"orders-db","kind":"state","health":"Healthy"}
+  ]
+}

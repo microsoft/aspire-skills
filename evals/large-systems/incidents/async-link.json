@@ -1,0 +1,10 @@
+{
+  "request": "Commerce API accepted order o-17, but background processing failed. Follow message m-17 across the asynchronous trace boundary.",
+  "resource": "worker",
+  "evidence": [
+    {"id":"producer-accepted","resource":"api","kind":"span","traceId":"555555555555555555555555555555aa","spanId":"55555555555555aa","httpStatus":202,"messageId":"m-17"},
+    {"id":"consumer-link","resource":"worker","kind":"span","traceId":"666666666666666666666666666666aa","spanId":"66666666666666aa","parentSpanId":null,"links":[{"traceId":"555555555555555555555555555555aa","spanId":"55555555555555aa"}],"messageId":"m-17","status":"Error"},
+    {"id":"consumer-failed","resource":"worker","kind":"log","traceId":"666666666666666666666666666666aa","messageId":"m-17","message":"order persistence rejected: unique constraint orders_external_id"},
+    {"id":"other-message","resource":"worker","kind":"log","messageId":"m-18","message":"completed"}
+  ]
+}
