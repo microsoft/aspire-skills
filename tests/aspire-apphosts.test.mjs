@@ -1237,7 +1237,7 @@ test("canvas source carries the confirmed direction and protected data routes", 
         import("node:fs/promises").then(({ readFile }) => readFile(new URL("ui/styles.css", root), "utf8")),
         import("node:fs/promises").then(({ readFile }) => readFile(new URL("extension.mjs", root), "utf8")),
         import("node:fs/promises").then(({ readFile }) => readFile(new URL("lib/app-model.mjs", root), "utf8")),
-        import("node:fs/promises").then(({ readFile }) => readFile(new URL("ui/canvas-theme.css", root), "utf8")),
+        import("node:fs/promises").then(({ readFile }) => readFile(new URL("../assets/canvas/theme.css", import.meta.url), "utf8")),
     ]);
 
     assert.match(html, /THESIS: Aspire's operational model becomes a canvas-native workspace/);
@@ -1390,7 +1390,7 @@ test("canvas header links the compact Aspire mark with accessible interaction st
     const [html, styles, sharedStyles] = await Promise.all([
         readFile(new URL("index.html", root), "utf8"),
         readFile(new URL("styles.css", root), "utf8"),
-        readFile(new URL("canvas-theme.css", root), "utf8"),
+        readFile(new URL("../assets/canvas/theme.css", import.meta.url), "utf8"),
     ]);
     const brandLink = html.match(/<a\b[^>]*class="brand-mark canvas-brand"[^>]*>[\s\S]*?<\/a>/)?.[0];
     assert.ok(brandLink, "The Aspire mark must be an actionable link.");
