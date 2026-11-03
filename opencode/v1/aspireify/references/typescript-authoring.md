@@ -155,7 +155,7 @@ const db = builder.addPostgres('pg').addDatabase('appdb');
 
 const api = await builder.addProject('api', '../Api/Api.csproj');
 await api
-    .withEnvironment('SERVICE_URL', cache.primaryEndpoint)   // endpoint
+    .withEnvironment('SERVICE_URL', cache.primaryEndpoint()) // endpoint
     .withEnvironment('API_KEY', apiKey)                       // parameter
     .withEnvironment('DB', db);                               // connection string
 ```
