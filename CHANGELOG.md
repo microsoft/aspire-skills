@@ -9,6 +9,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   `*.dev.localhost` prompt previously listed no flag, so non-interactive runs could
   only take the default plain `localhost` profile.
 - Unified canvas styling and icons with shared assets that respect host themes.
+- Served shared canvas CSS and icons directly from the plugin root so Windows
+  checkouts do not need working UI symlinks. Standalone extensions retain a
+  fallback to their local UI assets.
 - Distinguished ordinary `aspire stop`, `aspire stop --force` (which preserves
   persistent volumes), and explicitly approved AppHost-wide `--volumes` cleanup, including
   its ownership and compatibility limits. Stale-password recovery now prefers restoring
@@ -47,6 +50,11 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Restored AppHost visibility and source-file navigation in the Aspire AppHosts
   canvas for workspace child directories whose names begin with `..`, preserving
   checks that block paths outside the workspace.
+- Fixed the `aspire describe <resource> --format Json | jq` endpoint examples in the
+  monitoring and orchestration skills to read the first non-internal URL under
+  `.resources[0].urls`, after `aspire wait`, with `jq -e` so a missing URL fails instead
+  of yielding `null`. The old `.endpoints[0].url` path does not exist, returns `null`,
+  and made the paired `curl` fail.
 - Preserved non-ASCII check messages, paths, and error diagnostics in the
   Aspire Doctor canvas by decoding UTF-8 characters across subprocess output
   chunk boundaries.
