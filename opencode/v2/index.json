@@ -36,7 +36,7 @@
     },
     {
       "name": "aspire-monitoring",
-      "version": "sha512-eedd983512cf2ff46a0aafe9df570f8422cefbb1fc2395afb605cd663a65585d71e3d3b1a9f520a99323f0654abf4be43f697032f4849599d8854a94c93ac270",
+      "version": "sha512-fc1a5a3389ceaf8c944bd2e36bccdd136cca920bbf823fe55cc919bf92eb49983913d776c16ff7e497492fb37d9bd8d98ac8f821551fede6042f7cca9f815d8c",
       "files": [
         "aspire-monitoring.md",
         "references/diagnostics-bridge.md",
@@ -46,7 +46,7 @@
     },
     {
       "name": "aspire-orchestration",
-      "version": "sha512-154dc17a5202579b05c94e66e7f41363f7c58191614abb45b0254d09a584bcb9308d1149878882f2466871575c13b6b67f7982fe33024ddc50eb45874e8fb80d",
+      "version": "sha512-2a9fb604e50ed92580459fcd3f269b1ad20129830bfd8dc0d10169a996bd4a5d99b2ab5aa747dbac0b3891ad4f6932b81cf719f38e244c9064cd3b09a83a8bc0",
       "files": [
         "aspire-orchestration.md",
         "references/agent-workflows.md",
@@ -78,7 +78,7 @@
     },
     {
       "name": "aspireify",
-      "version": "sha512-cbbce067ed921138f67ec71802fb3e09465bcd58b4a7bab7bb0e6d23b6b59e86abd9cd4097617a4faea631d937edabd9c28748b6cb894781c4d12e0056e9886f",
+      "version": "sha512-5afa74d8841dfe4979f3a413ee4b1c41c3c09296ebe31fb42685539dd760e362105e2918c1a56812f80ce9aabc8e8290fbc2af51a811e1e66b4cfb5906865ae1",
       "files": [
         "aspireify.md",
         "references/apphost-wiring.md",
