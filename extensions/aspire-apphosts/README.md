@@ -66,6 +66,9 @@ bounded request bodies.
 ## Experience
 
 - Workspace mode with a compact AppHost switcher and running hosts first.
+- When CLI discovery is unavailable, the bounded filesystem fallback recognizes
+  `apphost.cs`, `apphost.ts`, and `apphost.mts` case-insensitively in the workspace
+  root and its immediate child directories, preserving the actual file spelling.
 - Global mode with every running machine AppHost available from the same
   switcher and a bounded describe fanout of four.
 - A responsive resource board that removes explorer-style nesting while
@@ -106,8 +109,15 @@ bounded request bodies.
   until matching inputs are loaded. Live schema changes and effective non-secret
   defaults are reconciled before execution; unstable metadata or an authority
   conflict exposes **Retry inputs** without automatically retrying the command.
-- Non-secret command defaults are preserved; secret defaults are removed before
-  the model crosses into the renderer.
+- Non-secret command defaults and submitted values follow Aspire Hosting's
+  whitespace trimming. Forms show trimmed defaults and normalize edits when
+  committed or submitted. Trimming scans only the ends so long interior whitespace
+  does not stall editing. Length limits validate the normalized value without
+  shortening it. Secret defaults are removed before the model crosses into the
+  renderer, and submitted secret values are not trimmed.
+- Number inputs use text controls with a decimal keyboard hint so the browser
+  cannot silently hide preserved defaults. The provider validates and converts
+  the displayed value before execution.
 - Explicit Run, Stop, Deploy, Publish, and pipeline-step actions, with blocked
   operations explained in place and high-impact actions confirmed inline.
 - **View dashboard** opens the authenticated Aspire Dashboard in the registered
@@ -119,12 +129,21 @@ bounded request bodies.
 - Optional hidden-resource inclusion.
 - AppHost directory inputs resolve to one concrete project or source file before
   discovery, source opening, and operation locking.
+- Workspace containment accepts child directory names beginning with `..` while
+  still rejecting parent-directory traversal for source opening.
 - Older CLI compatibility retries only when the optional disabled-command flag
   is actually unsupported and marks the resulting model accordingly.
+
+## Shared canvas UI
+
+The workbench uses the shared canvas theme, typography, controls, and local SVG
+sprite. Its resource board and dense operational labels remain specific to
+AppHosts. See [Shared canvas UI](../../docs/canvas-ui.md) before changing the
+canonical assets linked by `ui/canvas-theme.css` and `ui/canvas-icons.svg`.
 
 ## Regression coverage
 
 Run `npm test` from the repository root. It includes the AppHosts model,
-provider, renderer, plugin-mirror and bundle-workflow suites as well as the
+provider, renderer, plugin-mirror, and shared-canvas suites as well as the
 nested Aspireify suites. Provider and renderer boundary fixtures use synthetic
 data and do not start, stop or deploy a real Aspire application.

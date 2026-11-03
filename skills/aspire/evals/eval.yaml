@@ -20,6 +20,7 @@ environment:
     - ../../aspire-orchestration
     - ../../aspire-deployment
     - ../../aspire-monitoring
+    - ../../aspire-terminals
 grading_environment:
   files:
     - { src: ../../../evals/grade-routing-entry.mjs, dest: .grader/grade-routing-entry.mjs }
@@ -32,6 +33,48 @@ grading_environment:
 # owner while allowing the router as an optional entry point.
 # A plausible answer without an accepted skill activation is not enough.
 stimuli:
+  - name: router-terminals-001
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. Use the aspire router skill for this
+      read-only question. Should an auxiliary interactive tool that stays open
+      after its resource command returns use WithTerminal or TerminalService?
+      Explain how that differs from a terminal prompt, including the prompt API,
+      who owns/disposes its process, and what completes it. Do not edit, install or run.
+    tags: { priority: p0, area: terminal-routing }
+    rubric:
+      - Invokes both the router and terminal specialist, not only ordinary wiring or monitoring.
+      - Chooses AppHost-owned Dock without await using inside the returning command; WithTerminal changes the actual resource process.
+      - Explains Dialog plus PromptTerminalAsync borrows a caller-owned terminal and needs explicit completion/cancellation.
+    graders:
+      - type: skill-invocation
+        name: invokes-router-and-terminal-owner
+        config: { required: [aspire, aspire-terminals] }
+      - type: prompt
+        name: selects-terminal-lifetime
+        config: { scoring: binary }
+      - type: diff-empty
+
+  - name: router-terminal-tapes-001
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. Give read-only guidance for automating
+      an existing Aspire resource terminal with a VHS tape and keeping text
+      checkpoints. Can Aspire save MP4 or .cast output? Do not execute or edit.
+    tags: { priority: p0, area: terminal-routing }
+    rubric:
+      - Invokes aspire-terminals for tape playback rather than a generic shell or lifecycle-only route.
+      - Describes aspire terminal tape play against an existing resource and .txt/.ascii text checkpoints versus final stdout.
+      - Rejects MP4 and .cast through Aspire without claiming all upstream VHS features or installing VHS.
+    graders:
+      - type: skill-invocation
+        name: invokes-tape-owner
+        config: { required: [aspire-terminals] }
+      - type: prompt
+        name: bounds-tape-formats
+        config: { scoring: binary }
+      - type: diff-empty
+
   - name: router-ordinary-wiring-preserves-136-001
     prompt: >
       Before answering, invoke the matching available Aspire skill or skills; do

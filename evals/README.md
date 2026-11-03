@@ -38,6 +38,8 @@ evals/
 ├── non-aspire/          # Non-Aspire .NET project (for "should not trigger" stimuli)
 ├── project-v2-migration/ # Legacy inputs, captured-edit contracts, and qualification guidance
 ├── large-systems/       # Offline multi-AppHost incident snapshots, diagnosis contracts, and judge controls
+├── service-defaults-template/ # Template-shaped ServiceDefaults shared project and service, with no AppHost
+├── terminals/           # Terminal authoring fixtures, captured-edit checks and example compilation
 └── version-preservation/ # Read-only C# AppHost fixture with concrete, centrally managed Aspire versions
 ```
 
@@ -59,7 +61,14 @@ Eval-level `environment.skills` is **union-merged** into every stimulus, so you 
 **Hybrid loading convention used here:**
 
 - **Capability specs** load the skill under test **plus its transitive in-repo dependencies** (whatever its `SKILL.md` `INVOKES:`). E.g. `aspireify` loads `aspireify` + `aspire-orchestration` because it validates wiring by running `aspire start`.
-- **Migration and monitoring routing stimuli** load all **seven skills** so owner selection competes with real siblings. Other legacy specs retain their existing candidate sets.
+- **Router, migration, monitoring and terminal routing stimuli** load all **eight skills** so specialists compete with real siblings. Legacy capability specs retain narrower sets, including the terminal specialist where a handoff is supported.
+
+Terminal evaluations combine read-only decisions with actual C# dock/prompt/headless
+and resource edits. Their program grader inspects the captured diff and edited
+file; explanatory mentions alone do not pass. `evals/terminals/qualify-examples.mjs`
+separately compiles the documentation recipes against real preview packages.
+Neither static edit checks nor compilation prove dashboard/runtime cancellation
+behavior; record the exact qualified build and any unperformed runtime checks.
 
 **Activation assertions:** use a `skill-invocation` grader with `config.required` / `config.disallowed` to assert which skills the agent actually invoked. Vally 0.16.0 no longer accepts `constraints.expect_skills` / `constraints.reject_skills`.
 
@@ -80,10 +89,21 @@ matching available Aspire skill or skills. The instruction never names the expec
 owner, so the evaluation still measures owner selection and router handoff rather
 than parroting a requested skill name. Negative cases omit it.
 
-The router spec deliberately uses `gpt-5.6-sol` instead of the repository's
-usual `gpt-5-mini` executor so single-trial PR gates can enforce owner activation
+The router spec deliberately uses `gpt-5.6-sol` instead of the legacy capability
+specs' `gpt-5-mini` executor so single-trial PR gates can enforce owner activation
 without naming the owner in prompts. This increases router-suite cost, but avoids
 weakening policy checks to accommodate small-model routing variance.
+The terminal suite uses the same executor for exact experimental APIs and real
+activation: initial `gpt-5-mini` trials invented dock APIs or skipped invocation.
+The orchestration and Aspireify suites also use `gpt-5.6-sol`: their Actions
+executor rejected `gpt-5-mini` as unavailable before any trials could execute.
+The deployment, init, and monitoring suites moved for the same reason after every
+nightly trial errored with `Model "gpt-5-mini" is not available`, so all skill
+specs now use `gpt-5.6-sol`.
+This changes their model baseline and cost, not their grading thresholds.
+Actual-edit prompts expose the changed code in the reply as well as the captured
+diff, because the prompt judge's timeline may truncate tool output. The independent
+program grader still checks the actual workspace; prose cannot substitute for edits.
 
 These assessments are read-only: explicit rubrics judge the route and guidance,
 not successful live deployment or log retrieval, and `diff-empty` checks the
@@ -180,7 +200,7 @@ For the full surface, run `vally eval --help`, `vally lint --help`, `vally serve
 
 Each stimulus runs `defaults.runs` times (default 1 in vally; some specs override to 3). Each run is one executor call plus one judge call per `prompt` grader.
 
-Rough budget with `executor: copilot-sdk` + `model: gpt-5-mini`:
+Rough budget with `executor: copilot-sdk` + `model: gpt-5.6-sol`:
 
 - ~30k–80k tokens per stimulus (routing stimuli are at the lower end; deployment / orchestration stimuli with fixtures sit higher).
 - ~10–45 seconds per stimulus.
@@ -451,7 +471,8 @@ Missing organization policy, permission, or runtime support is an authentication
 
 ### Trust boundary and published results
 
-- **Fork and Dependabot PRs remain excluded** from model-backed evaluation: they previously had no access to the Actions PAT secret. The job requires a same-repository PR and excludes both Dependabot authors and actors. Do not switch to `pull_request_target` or run fork code in a privileged follow-up workflow. Lint and offline tests still run for external contributions.
+- **Fork PRs remain excluded** from model-backed evaluation. Do not switch to `pull_request_target` or run fork code in a privileged follow-up workflow. Lint and offline tests still run for external contributions.
+- **Dependabot authors are allowed, but Dependabot-triggered runs remain excluded.** A same-repository Dependabot PR can run after a fresh event from a non-Dependabot actor, such as a maintainer push, under the existing path filters and eval selection. The job checks `github.actor`, not `github.triggering_actor`: rerunning a bot-triggered run retains its original actor and privileges, so a maintainer rerun does not bypass the exclusion. A non-Dependabot actor is not a per-commit review approval gate or proof that dependency contents are safe.
 - **Same-repository PR authors and manual workflow operators remain trusted.** Skills, fixtures, and evaluation tools can execute code and read the evaluation process environment. A short-lived token limits credential lifetime and repository scope, but does not sandbox agents or prevent organization-billed misuse. Changes to workflows, skills, evals, and their dependencies still need normal maintainer review.
 - **Checkout credentials are not persisted** in Git configuration. Tokens are not written to `GITHUB_ENV`, outputs, or the repository. Step-level environment scoping reduces accidental exposure; job permissions remain the actual Actions authorization boundary.
 - **Artifacts and the baseline summary are published only after successful redaction**, including after failed evaluations. The shared redactor removes the literal token and common base64 representations from file contents, rejects those credentials in file or directory paths before accessing them, preserves unrelated bytes, and rejects linked/non-regular files. Cancellation or redaction failure prevents publication. This is defense in depth against accidental disclosure, not protection against malicious arbitrary encoding or exfiltration.

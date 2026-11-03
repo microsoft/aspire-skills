@@ -1,7 +1,7 @@
 # Project v2 migration evaluations
 
 These fixtures are **legacy inputs**, not hand-written successful agent outputs.
-The migration spec loads all seven sibling skills and contains 15 read-only cases
+The migration spec loads all eight sibling skills and contains 15 read-only cases
 and seven actual-edit cases.
 
 ## Source and approval gates

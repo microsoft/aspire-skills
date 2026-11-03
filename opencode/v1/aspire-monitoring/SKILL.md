@@ -5,11 +5,12 @@ description: >-
   dashboards, including read-only advice and offline telemetry assessments.
   Bridges local CLI, deployed AKS workloads and Azure resource health.
   USE FOR: aspire logs, aspire otel logs, aspire otel traces, aspire otel spans, aspire
-  describe, aspire ps, aspire export, aspire dashboard run, --include-hidden,
-  browser logs, DevTunnel URLs, WithBrowserLogs, App Insights, AKS and container app logs.
+  describe, aspire ps, aspire export, aspire dashboard run, describe --include-hidden,
+  browser logs in dashboard, DevTunnel URLs, WithBrowserLogs, App Insights
+  query, AKS pod logs, container app logs.
   DO NOT USE FOR: start/stop/wait (use aspire-orchestration), deploy/publish/destroy (use
   aspire-deployment), AppHost code edits like WithBrowserLogs() (use aspireify), Azure
-  provisioning.
+  provisioning (use azure-prepare), terminal authoring/input/tapes (use aspire-terminals).
   INVOKES: aspire CLI, azure-diagnostics (deployed Azure), kubectl + Container Insights.
   Load this skill before diagnostic advice or queries; consult its monitoring reference.
   Lifecycle-only requests and teardown do not become monitoring when other owners
@@ -132,8 +133,10 @@ aspire describe --format Json
 # ✅ When a resource you expect is missing, retry with --include-hidden
 aspire describe --include-hidden --format Json
 
-# ✅ Get endpoints from describe, not guessing ports
-ENDPOINT=$(aspire describe apiservice --format Json | jq -r '.endpoints[0].url')
+# ✅ Get endpoints from describe, not guessing ports. Wait first; jq -e fails when
+#    there is no external URL. JSON keeps AppHost order, not the https-first table order.
+aspire wait apiservice
+ENDPOINT=$(aspire describe apiservice --format Json | jq -er '[.resources[0].urls[]? | select(.isInternal | not) | .url][0] // empty')
 
 # ✅ Use --apphost <path> when multiple AppHosts exist
 aspire describe --apphost ./src/MyApp.AppHost/
@@ -229,7 +232,8 @@ Agents inspecting a running dashboard should know:
 - **13.5 filtering** — filter telemetry by timestamp, use `==` / `!=` for exact numeric
   values, and search console-log text while streams continue updating.
 - **Terminal view** — resources configured with experimental `WithTerminal()` open as
-  interactive sessions in the dashboard.
+  interactive sessions in the dashboard. Invoke `aspire-terminals` for terminal
+  authoring, input, dock/dialog lifetimes and tapes; logs/traces remain here.
 - **No dashboard AI Assistant** — it was removed in 13.5. Use `aspire agent init` and the
   AppHost/CLI agent integration instead.
 - **VS Code launch is opt-in** — the Aspire extension no longer opens the dashboard

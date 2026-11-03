@@ -32,7 +32,7 @@ test("all 24 independent incidents are wired into the canonical monitoring spec"
   assert.deepEqual(readdirSync(join(fixture, "incidents")).sort(),
     Object.keys(incidentCases).map(name => `${name}.json`).sort());
   assert.equal(spec.scoring.threshold, 0.7, "Do not change the legacy aggregate threshold");
-  assert.equal(spec.defaults.model, "gpt-5-mini");
+  assert.equal(spec.defaults.model, "gpt-5.6-sol");
   assert.equal(spec.defaults.runs, 3);
   const ids = spec.stimuli.map(item => item.name);
   assert.equal(new Set(ids).size, ids.length);

@@ -122,6 +122,10 @@ file/volume-permission implications; a list of changed values alone is not infor
 approval. If those values cannot be established read-only, classify
 the gateway as decision-required and request approval for the preparation needed
 to resolve them. Do not invent defaults or assume deployment equivalence.
+Preserve exact prerelease identifiers from the resolved evidence when reporting
+or requesting approval: for example, say `.NET 11 RC1` and `11.0.0-rc.1`, not
+the less specific `.NET 11 RC` or `11.0 prerelease`. Approval applies to the
+specific resolved runtime and image, not merely its release channel.
 End that assessment with the gateway decision: request approval for specific
 bounded discovery, or ask whether to retain the gateway/review an owned publishing
 policy. Asking only about API edits does not resolve the gateway approval boundary.
