@@ -88,6 +88,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Fixed Aspireify ServiceDefaults guidance to install `Aspire.ProjectTemplates` before
   `dotnet new aspire-servicedefaults` when the template is missing, as it is after a
   TypeScript `aspire init`.
+- Fixed the Aspireify TypeScript `withEnvironment` example to call
+  `cache.primaryEndpoint()`. In the generated SDK `primaryEndpoint` is a method, so passing
+  it as a property failed `tsc` (TS2345) and `aspire start`.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
