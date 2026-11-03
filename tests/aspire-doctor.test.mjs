@@ -197,7 +197,7 @@ test("renderer exposes responsive and accessible review controls", async () => {
     readFile(join(extensionRoot, "ui", "index.html"), "utf8"),
     readFile(join(extensionRoot, "ui", "app.js"), "utf8"),
     readFile(join(extensionRoot, "ui", "styles.css"), "utf8"),
-    readFile(join(extensionRoot, "ui", "canvas-theme.css"), "utf8")
+    readFile(join(repoRoot, "assets", "canvas", "theme.css"), "utf8")
   ]);
 
   assert.match(html, /<h1[^>]+id="page-title"/);

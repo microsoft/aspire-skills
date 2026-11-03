@@ -12,7 +12,7 @@ import { sanitizeCommandArgumentInputs, validateCommandArguments } from "../exte
 const rendererSource = await readFile(new URL("../extensions/aspire-apphosts/ui/app.js", import.meta.url), "utf8");
 const markup = await readFile(new URL("../extensions/aspire-apphosts/ui/index.html", import.meta.url), "utf8");
 const styles = await readFile(new URL("../extensions/aspire-apphosts/ui/styles.css", import.meta.url), "utf8");
-const sharedStyles = await readFile(new URL("../extensions/aspire-apphosts/ui/canvas-theme.css", import.meta.url), "utf8");
+const sharedStyles = await readFile(new URL("../assets/canvas/theme.css", import.meta.url), "utf8");
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 // A bounded DOM/event adapter for executing the shipped renderer without a browser dependency.
