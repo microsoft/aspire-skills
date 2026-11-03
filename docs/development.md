@@ -15,13 +15,18 @@ Dev retains `CHANGELOG.md` and generated `opencode/` catalogs. Regenerate catalo
 with `npm run catalog` after changing shipped skills, references, or assets,
 and commit them with the source changes. Run `npm run catalog:check` to check
 the committed tree. CI rejects missing, extra, or stale V1 and V2 catalog files.
-Feature PRs update the current version's changelog notes and preserve earlier
+Add only consumer-facing changes to the current changelog entry; preserve earlier
 entries and the coordinated version.
 
-Canvas extensions use relative Git symlinks to share canonical theme and icon
-assets. Edit the canonical files directly; no synchronization step is needed.
+Canvas extensions serve canonical theme and icon assets directly and retain
+relative Git symlinks for packagers. Edit the canonical files directly; no
+synchronization step is needed.
 See [Shared canvas UI](canvas-ui.md) for token ownership, typography, icons,
-symlink-capable checkouts, plugin mirrors, and visual review.
+standalone packages, plugin mirrors, and visual review.
+
+The **Tests** workflow runs its three-OS matrix on PRs targeting main, dev, or
+release branches, and on pushes to main or dev. Release-branch pushes rely on PR
+checks instead of triggering a duplicate matrix.
 
 The **OpenCode catalog check** runs on every PR, including stacked PRs, on
 main/dev/release pushes, and on merge-queue candidates.
@@ -58,3 +63,12 @@ Publishing uses `GITHUB_TOKEN`; no repo bot or stored automation credentials
 are needed. Maintainers create PRs and approve merges. Tags and releases are
 published in the same run because workflow-token tag pushes do not trigger
 another workflow. Reruns must preserve the tag's commit and approved notes.
+
+## Aspire telemetry maintenance
+
+The [update-aspire workflow](../.github/workflows/update-aspire.md) keeps Aspire CLI
+telemetry for aspire-skills usage up to date, including which skills and extension
+tools agents invoke.
+It creates draft proposals with one isolated build/test attempt. Candidate build
+and test failures are reported in the draft or no-op summary; verifier setup,
+isolation, and security failures block publication.

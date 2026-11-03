@@ -258,10 +258,12 @@ In that command, `-a github-copilot` selects the target agent, `-g` installs glo
 | `opencode/` | Generated OpenCode V1 and V2 skill catalogs |
 | `docs/` | Documentation |
 | `extensions/` | Source GitHub Copilot app canvas extensions |
-| `hooks/scripts/` | Canonical Aspire CLI agent telemetry hooks |
 | `.plugin/`, `.claude-plugin/`, `.cursor-plugin/` | Plugin metadata for marketplaces |
 | `.github/plugins/aspire-skills/` | Published plugin mirror |
 | `evals/` | Shared evaluation fixtures and helpers |
+
+Aspire CLI owns agent telemetry hooks and their tests in `microsoft/aspire`.
+The plugins do not register telemetry hooks.
 
 ## Development
 
@@ -275,11 +277,6 @@ npm run catalog:check
 
 The catalog check verifies that the committed V1 and V2 catalogs match the
 committed skill source, including file lists and SHA-512 content versions.
-
-The canonical telemetry hooks under `hooks/scripts/` attribute
-`AI_AGENT=github_copilot_app_agent` to `copilot-app` before
-checking `COPILOT_CLI=1` or a CLI-compatible `toolArgs` payload. Without the app
-marker, Copilot CLI, VS Code, and Claude Code attribution stays unchanged.
 
 ### Publishing releases
 
