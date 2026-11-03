@@ -89,10 +89,11 @@ The `.aspire/` directory stores Aspire settings and secrets:
 
 ### 6. Service Defaults References (Medium Confidence)
 
-Projects that reference `Aspire.ServiceDefaults` are Aspire service projects (not the AppHost, but part of an Aspire solution):
+Aspire templates create a solution-named shared project such as `MyApp.ServiceDefaults`; it is not a NuGet package. The shared project sets `<IsAspireSharedProject>true</IsAspireSharedProject>`, and service projects reference it:
 
 ```bash
-grep -rl "Aspire.ServiceDefaults" --include="*.csproj" .
+grep -rl "<IsAspireSharedProject>true</IsAspireSharedProject>" --include="*.csproj" .
+grep -rlE '<ProjectReference[^>]*ServiceDefaults\.csproj' --include="*.csproj" .
 ```
 
 This indicates the project is **part of** an Aspire solution, but these are the service projects, not the AppHost. Look for the AppHost SDK reference separately.
@@ -110,7 +111,7 @@ When scanning a repository, check signals in this order:
 | 2 | `apphost.mts` or legacy `apphost.ts` file | TypeScript AppHost — target for `aspire start` |
 | 3 | `.aspire/modules/` directory | Aspire project — look for the AppHost |
 | 4 | `aspire.config.json` or `.aspire/` | Aspire project — look for the AppHost |
-| 5 | `Aspire.ServiceDefaults` references | Part of Aspire solution — AppHost is elsewhere |
+| 5 | `<IsAspireSharedProject>true` or `*.ServiceDefaults.csproj` references | Part of Aspire solution — AppHost is elsewhere |
 
 ## Finding the AppHost Directory
 

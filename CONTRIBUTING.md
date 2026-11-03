@@ -10,8 +10,8 @@ Thank you for your interest in contributing to the Aspire Skills plugin!
 4. Submit a pull request targeting `dev`
 
 Do not generate or commit OpenCode catalogs for source changes. CI validates
-catalog generation, and automation publishes merged development changes
-separately. Use your local checkout's `skills/` directory to test unmerged work.
+catalog generation; release automation prepares snapshots for publication on
+`main`. Use your local checkout's `skills/` directory to test development changes.
 
 ## Skill File Format
 

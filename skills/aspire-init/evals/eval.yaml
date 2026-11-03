@@ -13,12 +13,12 @@ defaults:
   # whole eval (evalHadExecutionErrors) even when the aggregate score passes.
   timeout: 600s
   executor: copilot-sdk
-  model: gpt-5-mini
+  model: gpt-5.6-sol
   judge_model: gpt-5.6-sol
 scoring:
   # Score each stimulus by the weighted share of graders that pass, then gate on
   # the aggregate (>= threshold) instead of demanding every grader pass on every
-  # trial. This absorbs gpt-5-mini nondeterminism and graders that look for code
+  # trial. This absorbs executor nondeterminism and graders that look for code
   # tokens the agent writes into edited files rather than its chat message;
   # genuine regressions still drag the aggregate below the bar.
   threshold: 0.7
@@ -279,6 +279,50 @@ stimuli:
       - type: output-not-contains
         config:
           substring: dotnet workload install aspire
+  - name: init-new-localhost-tld-001
+    prompt: >
+      Give me the exact `aspire new` command to scaffold an aspire-starter app named `shop`
+      from a CI script, with no prompts, that uses `*.dev.localhost` HTTPS URLs instead of
+      plain `http://localhost` ports. Do not run any commands.
+    tags:
+      priority: p1
+      area:
+        - core-flow
+        - non-interactive
+        - known-bug
+    rubric:
+      - The assistant's response gives an `aspire new aspire-starter` command that includes both `--localhost-tld` and `--non-interactive`.
+      - The assistant's response does not claim that `--non-interactive` alone selects `*.dev.localhost` URLs; without `--localhost-tld` it takes the default standard localhost.
+      - The assistant's response remains read-only and does not claim unperformed execution.
+    graders:
+      - type: prompt
+        name: opts-into-localhost-tld-non-interactively
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response give an `aspire new aspire-starter` command that
+            passes both `--localhost-tld` (to opt into `*.dev.localhost` URLs) and
+            `--non-interactive` in the same command? Answer based on intent.
+      - type: prompt
+        name: non-interactive-alone-is-not-opt-in
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response avoid suggesting that `--non-interactive` by
+            itself produces `*.dev.localhost` URLs? It may say that omitting
+            `--localhost-tld` keeps the standard localhost default.
+      - type: output-contains
+        name: mentions-localhost-tld-flag
+        config:
+          substring: --localhost-tld
+      - type: output-contains
+        name: mentions-non-interactive-flag
+        config:
+          substring: --non-interactive
+      - type: output-not-contains
+        name: never-dotnet-new-for-localhost-tld
+        config:
+          substring: dotnet new aspire-starter
   - name: init-py-001
     prompt: Scaffold an Aspire FastAPI + React Python starter, and please include Redis.
     tags:

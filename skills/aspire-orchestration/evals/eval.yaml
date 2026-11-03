@@ -801,6 +801,61 @@ stimuli:
       - type: output-not-contains
         config:
           substring: curl.*health
+  - name: orch-detect-service-defaults-001
+    prompt: >
+      Use the aspire-orchestration skill before answering. How do I start this app with
+      Aspire? Don't run or edit anything yet; just tell me what you'd launch.
+    tags:
+      priority: p1
+      area:
+        - detection
+        - known-bug
+    constraints:
+      max_agent_duration: 150s
+    environment:
+      files:
+        - src: ../../../evals/service-defaults-template/Shop.ServiceDefaults/Shop.ServiceDefaults.csproj
+          dest: Shop.ServiceDefaults/Shop.ServiceDefaults.csproj
+        - src: ../../../evals/service-defaults-template/Shop.ApiService/Shop.ApiService.csproj
+          dest: Shop.ApiService/Shop.ApiService.csproj
+        - src: ../../../evals/service-defaults-template/Shop.ApiService/Program.cs
+          dest: Shop.ApiService/Program.cs
+    rubric:
+      - The assistant's response recognizes the workspace as part of an Aspire solution from the template-generated `Shop.ServiceDefaults` shared project (`IsAspireSharedProject`) or the service's project reference to it.
+      - The assistant's response does not treat `Shop.ServiceDefaults` or `Shop.ApiService` as the AppHost to launch.
+      - The assistant's response says the AppHost is elsewhere and locates it or asks the user for it before starting anything.
+      - The assistant's response remains read-only and does not claim unperformed execution.
+    graders:
+      - type: prompt
+        name: recognizes-template-service-defaults
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response identify this as part of an Aspire solution because of
+            the template-generated `Shop.ServiceDefaults` shared project (it sets
+            `<IsAspireSharedProject>true</IsAspireSharedProject>`) or `Shop.ApiService`'s project
+            reference to it? Aspire templates create ServiceDefaults as a project, not an
+            `Aspire.ServiceDefaults` NuGet package.
+      - type: prompt
+        name: finds-or-asks-for-real-apphost
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response avoid treating `Shop.ServiceDefaults` or
+            `Shop.ApiService` as the AppHost, and instead say the AppHost (a project using
+            `Aspire.AppHost.Sdk`, an `apphost.cs`, or an `apphost.mts`) is not in this
+            workspace and must be located or provided before running `aspire start`?
+            No AppHost exists in this workspace.
+      - type: output-not-contains
+        name: never-dotnet-run-service-defaults
+        config:
+          substring: dotnet run
+      - type: skill-invocation
+        name: invokes-orchestration-for-detection
+        config:
+          required: [aspire-orchestration]
+      - type: diff-empty
+        name: keeps-detection-read-only
   - name: orch-detect-filebased-001
     prompt: How do I run this app?
     tags:

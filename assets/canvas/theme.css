@@ -1,0 +1,341 @@
+:root {
+    color-scheme: light dark;
+}
+
+:root[data-color-mode="light"],
+:root:not([data-color-mode]):has(body[data-color-mode="light"]) {
+    color-scheme: light;
+}
+
+:root[data-color-mode="dark"],
+:root:not([data-color-mode]):has(body[data-color-mode="dark"]) {
+    color-scheme: dark;
+}
+
+:root,
+body {
+    --surface: var(--background-color-default, light-dark(#ffffff, #0d1117));
+    --text: var(--text-color-default, light-dark(#1f2328, #f0f6fc));
+    --muted: var(--text-color-muted, light-dark(#59636e, #b1bac4));
+    --border: var(--border-color-default, light-dark(#d1d9e0, #3d444d));
+    --accent: var(--true-color-blue, light-dark(#0969da, #58a6ff));
+    --focus: var(--color-focus-outline, var(--accent));
+    --brand: var(--true-color-purple, light-dark(#8250df, #a371f7));
+    --healthy: var(--true-color-green, light-dark(#1a7f37, #3fb950));
+    --warning: var(--true-color-orange, light-dark(#9a6700, #d29922));
+    --failure: var(--true-color-red, light-dark(#cf222e, #ff7b72));
+    --accent-fg: light-dark(#ffffff, #0d1117);
+    --danger-fg: light-dark(#ffffff, #0d1117);
+    --brand-fg: light-dark(#ffffff, #0d1117);
+
+    --surface-raised: var(--surface);
+    --surface-inset: color-mix(in srgb, var(--text) 5%, transparent);
+    --surface-muted: color-mix(in srgb, var(--text) 9%, transparent);
+    --card-surface: var(--surface-raised);
+    --card-control: color-mix(in srgb, var(--surface), var(--text) 7%);
+    --card-control-hover: color-mix(in srgb, var(--surface), var(--text) 10%);
+    --card: var(--card-surface);
+    --card-hover: color-mix(in srgb, var(--surface), var(--text) 5%);
+    --border-soft: color-mix(in srgb, var(--text) 14%, transparent);
+    --border-strong: color-mix(in srgb, var(--border), var(--text) 22%);
+    --control-border: color-mix(in srgb, var(--text) 55%, var(--surface));
+    --brand-strong: color-mix(in srgb, var(--brand), var(--text) 18%);
+    --brand-wash: color-mix(in srgb, var(--brand) 7%, var(--surface));
+    --brand-soft: color-mix(in srgb, var(--brand) 12%, transparent);
+    --scrollbar-thumb: color-mix(in srgb, var(--text) 30%, transparent);
+    --scrollbar-thumb-hover: color-mix(in srgb, var(--text) 46%, transparent);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08), 0 1px 1px rgba(0, 0, 0, 0.04);
+    --shadow-medium: rgba(0, 0, 0, 0.16);
+    --shadow-high: rgba(0, 0, 0, 0.22);
+    --scrim: rgba(0, 0, 0, 0.42);
+
+    --fg: var(--text);
+    --ok: var(--healthy);
+    --warn: var(--warning);
+    --req: var(--failure);
+    --danger: var(--failure);
+
+    --font-body: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    --font-code: var(--font-mono, "SFMono-Regular", Consolas, "Liberation Mono", monospace);
+    --text-body: var(--text-body-medium, 14px);
+    --leading-body: var(--leading-body-medium, 20px);
+    --text-heading: 15px;
+    --leading-heading: 20px;
+    --text-title: var(--text-title-medium, 20px);
+    --leading-title: var(--leading-title-medium, 26px);
+    --text-section: 18px;
+    --text-detail: 13px;
+    --leading-detail: 20px;
+    --text-meta: 12px;
+    --leading-meta: 18px;
+    --text-compact: 11px;
+    --text-code: var(--text-code-inline, 12px);
+    --weight-semibold: var(--font-weight-semibold, 600);
+
+    --radius: 6px;
+    --radius-lg: 8px;
+    --radius-inline: 4px;
+    --radius-card: 8px;
+    --radius-control: 6px;
+    --radius-panel: 8px;
+    --radius-shell: 12px;
+    --gutter: 12px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+[hidden] {
+    display: none !important;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+html,
+body {
+    height: 100%;
+    margin: 0;
+}
+
+body {
+    background: var(--surface);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: var(--text-body);
+    line-height: var(--leading-body);
+}
+
+button,
+input,
+select,
+textarea {
+    font: inherit;
+}
+
+button {
+    color: inherit;
+    touch-action: manipulation;
+}
+
+.canvas-toolbar {
+    position: sticky;
+    z-index: 5;
+    top: 0;
+    flex: 0 0 auto;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-raised);
+}
+
+.canvas-heading {
+    margin: 0;
+    color: var(--text);
+    font-size: var(--text-heading);
+    font-weight: var(--weight-semibold);
+    line-height: var(--leading-heading);
+}
+
+.canvas-subtitle {
+    color: var(--muted);
+    font-size: var(--text-meta);
+    line-height: var(--leading-meta);
+}
+
+.canvas-brand {
+    display: inline-flex;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-control);
+    touch-action: manipulation;
+    transition: background-color 120ms ease;
+}
+
+.canvas-brand:hover {
+    background: var(--surface-muted);
+}
+
+.canvas-brand:active {
+    background: var(--surface-inset);
+}
+
+.canvas-brand > svg {
+    display: block;
+    width: 22px;
+    height: 22px;
+}
+
+.btn,
+.button,
+.tray-action {
+    display: inline-flex;
+    min-height: 32px;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 12px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-control);
+    background: transparent;
+    color: inherit;
+    font-family: inherit;
+    font-size: var(--text-body);
+    font-weight: var(--weight-semibold);
+    line-height: 1;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, filter 120ms ease;
+}
+
+.btn-sm,
+.button-small {
+    min-height: 28px;
+    padding: 0 10px;
+    font-size: var(--text-meta);
+}
+
+.btn-outline,
+.button-secondary,
+.tray-action {
+    border-color: var(--control-border);
+    background: var(--surface-raised);
+}
+
+.btn-quiet {
+    color: var(--muted);
+}
+
+:where(.btn-outline, .btn-quiet, .button-secondary, .tray-action):not(:disabled):hover {
+    background: var(--surface-muted);
+}
+
+:where(.btn-outline, .btn-quiet, .button-secondary, .tray-action):not(:disabled):active {
+    background: var(--surface-inset);
+}
+
+.btn-primary,
+.button-primary,
+.tray-action.is-primary {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--accent-fg);
+}
+
+.btn-danger-primary,
+.button-danger {
+    border-color: var(--failure);
+    background: var(--failure);
+    color: var(--danger-fg);
+}
+
+:where(.btn-primary, .button-primary, .tray-action.is-primary, .btn-danger-primary, .button-danger):not(:disabled):hover {
+    filter: brightness(0.96);
+}
+
+:where(.btn-primary, .button-primary, .tray-action.is-primary, .btn-danger-primary, .button-danger):not(:disabled):active {
+    filter: brightness(0.9);
+}
+
+.btn-danger {
+    color: var(--failure);
+}
+
+.btn-danger:not(:disabled):hover {
+    background: color-mix(in srgb, var(--failure) 10%, transparent);
+}
+
+.btn:disabled,
+.button:disabled,
+.tray-action:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+
+select {
+    background: var(--surface);
+    color: var(--text);
+}
+
+code,
+pre {
+    font-family: var(--font-code);
+}
+
+:where(button, input, select, textarea, summary, a[href], [tabindex]):focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+}
+
+.muted {
+    color: var(--muted);
+}
+
+.canvas-icon {
+    display: inline-block;
+    flex: 0 0 auto;
+    vertical-align: middle;
+    fill: currentColor;
+}
+
+*::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: var(--scrollbar-thumb);
+    background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+    background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+}
+
+@supports (-moz-appearance: none) {
+    * {
+        scrollbar-width: thin;
+        scrollbar-color: var(--scrollbar-thumb) transparent;
+    }
+}
+
+@media (max-width: 760px), (pointer: coarse) {
+    .canvas-brand {
+        width: 40px;
+        height: 40px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    button,
+    a,
+    input,
+    select,
+    textarea {
+        transition: none !important;
+    }
+}

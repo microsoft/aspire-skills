@@ -50,7 +50,7 @@ Activate when ANY signal is present:
 | Aspire config | `aspire.config.json` in project root | High |
 | Aspire settings | `.aspire/` directory present | High |
 | Generated TS modules | `.aspire/modules/` directory present | High |
-| Service defaults | `Aspire.ServiceDefaults` in project references | Medium |
+| Service defaults | `<IsAspireSharedProject>true` or a `*.ServiceDefaults.csproj` project reference | Medium |
 
 See [detection.md](references/detection.md) for detailed fingerprinting.
 

@@ -14,8 +14,12 @@ The canvas only:
    HTTP exposure, path, inclusion, resource name, and Service Defaults fields;
 3. receives resources and connections through `set_proposal`, using the current
    `proposalGeneration` and the skill's existing resource and edge fields;
-4. explicitly maps source services to proposed Aspire resources without showing
-   discovered services that the skill did not include in the proposal;
+4. explicitly maps source services to proposed Aspire resources and lists any
+   discovered service without a proposal mapping in a compact "Not in the
+   proposed graph" section, without adding it to the graph. Services the skill
+   passes in `set_proposal`'s optional `serviceTreatments` show as **Not
+   modeled** or **Deferred** with the reason from chat (and, when deferred, what
+   remains unresolved); every other unmapped service shows as **Not assessed**;
 5. uses a compact mapping-first review for one or two resources and a role-grouped
    overview with one focused inspector for larger plans;
 6. lets the user add or remove plan resources, add their initial connections
@@ -29,8 +33,9 @@ The canvas only:
    violated naming rule, and prevents invalid edits from being saved;
 9. keeps unresolved implementation tradeoffs in chat rather than inventing new
    canvas data; and
-10. returns the confirmed service choices, exact structured plan, generation,
-    and stable proposal hash through `get_confirmation`.
+10. returns the confirmed service choices, unmapped discovered services with
+    their treatment and reason (`notProposed`), exact structured plan, generation, and stable proposal hash
+    through `get_confirmation`.
 
 After confirmation, the canvas becomes read-only and `get_confirmation` returns
 the immutable submitted snapshot even if a stale client attempts a later mutation.
@@ -64,6 +69,13 @@ as explicit user requests.
 
 It intentionally has no repository detector, scanner, proposal generator,
 AppHost editor, deployment controls, initialization flow, or validation workflow.
+
+## Shared canvas UI
+
+Aspireify uses the shared canvas theme, typography, controls, and local SVG
+sprite. Resource-kind colors and review layouts stay local; the confirmation
+boundary is unchanged. See [Shared canvas UI](../../docs/canvas-ui.md) for asset
+ownership, relative symlinks, plugin mirrors, and visual review guidance.
 
 ## Troubleshooting
 

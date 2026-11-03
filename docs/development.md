@@ -11,12 +11,23 @@ npm test
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for skill formatting and agent-host checks.
 Set `CHROME_BIN` to a Chromium executable when running `npm test` to include the
 AppHosts native-browser number-input regression; without it, that check is skipped.
+
 Ordinary contributions, including forks and release fixes, do not run catalog
 commands or commit generated files. Dev retains `CHANGELOG.md` and, after the
 first automated release, the last released `opencode/` snapshot. That snapshot
 does not track development source.
-Feature PRs update the current version's changelog notes and preserve earlier
+Add only consumer-facing changes to the current changelog entry; preserve earlier
 entries and the coordinated version.
+
+Canvas extensions serve canonical theme and icon assets directly and retain
+relative Git symlinks for packagers. Edit the canonical files directly; no
+synchronization step is needed.
+See [Shared canvas UI](canvas-ui.md) for token ownership, typography, icons,
+standalone packages, plugin mirrors, and visual review.
+
+The **Tests** workflow runs its three-OS matrix on PRs targeting main, dev, or
+release branches, on pushes to main or dev, and on merge-queue candidates.
+Release-branch pushes rely on PR checks instead of triggering a duplicate matrix.
 
 The **OpenCode catalog check** generates V1 and V2 catalogs from committed source
 on every PR, including forks and stacked PRs, supported pushes, and merge-queue
@@ -96,14 +107,14 @@ the necessary permissions. Release preparation and backports also need the App's
 workflow-write permission so selected workflow-file changes can be pushed.
 App pushes trigger normal PR checks, unlike workflow-token pushes.
 
-The first rollout needs a maintainer-prepared `release/<version>` PR: align its
-versions, finalize its changelog, and generate and commit its stable catalogs
-with `npm run catalog`. Dispatch workflows cannot prepare this bootstrap PR
-before the helpers exist on main. Configure the App before merging that PR,
-then make the workflows and helpers available on dev. Subsequent releases use
-the automated preparation flow; ordinary contributors never generate catalogs.
-Keep the existing
-required check names. A maintainer must require **OpenCode catalog check** and
+After the workflows and helpers land on dev, the first rollout still needs a
+maintainer-prepared `release/<version>` PR to main: align its versions, finalize
+its changelog, and generate and commit its stable catalogs with `npm run catalog`.
+Dispatch workflows cannot prepare this bootstrap PR before the helpers exist on
+main. Configure the App before merging that PR. Subsequent releases use the
+automated preparation flow; ordinary contributors never generate catalogs.
+
+Keep the existing required check names. A maintainer must require **OpenCode catalog check** and
 **Test (ubuntu-latest)**, **Test (macos-latest)**, and **Test (windows-latest)**
 on main as well as dev, retaining **Release branch check** on main. This code
 does not change rulesets, approval requirements, or repository settings.
@@ -119,3 +130,12 @@ Tag/release publication still uses `GITHUB_TOKEN`; branch and PR preparation use
 the Aspire App. Maintainers approve and merge PRs. Tags and releases are
 published in the same run because workflow-token tag pushes do not trigger
 another workflow. Reruns must preserve the tag's commit and approved notes.
+
+## Aspire telemetry maintenance
+
+The [update-aspire workflow](../.github/workflows/update-aspire.md) keeps Aspire CLI
+telemetry for aspire-skills usage up to date, including which skills and extension
+tools agents invoke.
+It creates draft proposals with one isolated build/test attempt. Candidate build
+and test failures are reported in the draft or no-op summary; verifier setup,
+isolation, and security failures block publication.

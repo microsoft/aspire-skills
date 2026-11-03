@@ -122,7 +122,13 @@ async function serveAsset(res, name) {
         return sendText(res, 403, "Forbidden");
     }
     try {
-        const body = await readFile(fileUrl);
+        const sharedAsset = name === "canvas-theme.css" ? "theme.css"
+            : name === "canvas-icons.svg" ? "icons.svg" : null;
+        const source = sharedAsset ? new URL(`../../assets/canvas/${sharedAsset}`, import.meta.url) : fileUrl;
+        const body = await readFile(source).catch((error) => {
+            if (sharedAsset && (error.code === "ENOENT" || error.code === "ENOTDIR")) return readFile(fileUrl);
+            throw error;
+        });
         res.writeHead(200, securityHeaders(CONTENT_TYPES[extname(name)] ?? "application/octet-stream"));
         res.end(body);
     } catch {
@@ -1296,8 +1302,8 @@ async function handleRequest(entry, req, res) {
     if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
         return serveAsset(res, "index.html");
     }
-    if (req.method === "GET" && url.pathname === "/styles.css") {
-        return serveAsset(res, "styles.css");
+    if (req.method === "GET" && ["/styles.css", "/canvas-theme.css", "/canvas-icons.svg"].includes(url.pathname)) {
+        return serveAsset(res, url.pathname.slice(1));
     }
     if (req.method === "GET" && url.pathname === "/app.js") {
         return serveAsset(res, "app.js");

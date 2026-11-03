@@ -9,14 +9,18 @@ import { basename, dirname, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CanvasError, createCanvas, joinSession } from "@github/copilot-sdk/extension";
 import {
+    assignResourceNames,
     classifyServiceKind,
     exactType,
     freezeSnapshot,
     isCompatibleAspireResourceKind,
     isCompatibleAspireResourceType,
     isDotNetType,
+    normalizeServiceTreatments,
     presentationMode,
+    resourceNameFrom,
     stableProposalHash,
+    unproposedServices,
 } from "./proposal-model.mjs";
 import {
     appHostIdentity,
@@ -42,6 +46,7 @@ const CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
     ".css": "text/css; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
+    ".svg": "image/svg+xml",
 };
 
 const APPHOST_STYLES = new Set(["csharp-sdk", "csharp-file", "typescript"]);
@@ -71,6 +76,7 @@ function emptySnapshot(appHostPath = "") {
             resources: [],
             edges: [],
             generatedAt: "",
+            serviceTreatments: [],
         },
         removedGeneratedResources: [],
         removedGeneratedEdges: [],
@@ -199,17 +205,6 @@ function restoreSnapshotAndHistory(domainId, snapshot, history) {
     } else {
         editHistories.delete(domainId);
     }
-}
-
-function resourceNameFrom(value, index) {
-    const normalized = String(value ?? "")
-        .trim()
-        .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
-        .replace(/[^A-Za-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "")
-        .toLowerCase();
-    const prefixed = /^[a-z]/.test(normalized) ? normalized : `service-${normalized}`;
-    return (prefixed || `service-${index + 1}`).slice(0, 64).replace(/-+$/g, "");
 }
 
 function normalizeService(service, index) {
@@ -884,6 +879,25 @@ function mappedServices(snapshot) {
     return snapshot.services.filter((service) => serviceIds.has(service.id));
 }
 
+function notProposedServices(snapshot) {
+    return unproposedServices({
+        services: snapshot.services,
+        resources: snapshot.proposal.resources,
+        removedGeneratedResources: snapshot.removedGeneratedResources,
+        serviceTreatments: snapshot.proposal.serviceTreatments,
+    });
+}
+
+function effectiveServiceTreatments(snapshot) {
+    return notProposedServices(snapshot)
+        .filter((service) => service.treatment !== "not-assessed")
+        .map(({ id, treatment, reason, unresolved }) =>
+            unresolved === undefined
+                ? { serviceId: id, treatment, reason }
+                : { serviceId: id, treatment, reason, unresolved },
+        );
+}
+
 function projectService(service) {
     return {
         id: service.id,
@@ -961,6 +975,7 @@ function confirmationResult(snapshot, confirmed = snapshot.confirmed) {
         apphostStyle: snapshot.apphostStyle,
         included: includedMappedServices(snapshot).map(projectService),
         excluded: excludedMappedServices(snapshot).map(projectService),
+        notProposed: notProposedServices(snapshot),
         serviceDefaults: [...serviceDefaults],
         proposal: confirmedProposal(snapshot.proposal),
     };
@@ -983,6 +998,7 @@ function snapshotForClient(snapshot) {
         proposalLoaded: snapshot.proposalLoaded,
         apphostStyle: snapshot.apphostStyle,
         services: snapshot.services.map(projectService),
+        notProposed: snapshot.confirmation?.notProposed ?? notProposedServices(snapshot),
         proposal: proposalForClient(snapshot.proposal),
         proposalEdited: snapshot.proposalEdited,
         proposalStale: snapshot.proposalStale,
@@ -1006,6 +1022,7 @@ function proposalHash(snapshot) {
     return stableProposalHash({
         proposalGeneration: snapshot.proposalGeneration,
         proposal: confirmedProposal(snapshot.proposal),
+        serviceTreatments: effectiveServiceTreatments(snapshot),
     });
 }
 
@@ -1215,6 +1232,15 @@ function confirmationMessage(snapshot) {
             .map((service) => ({ name: service.name, resourceName: service.resourceName })),
         excluded: confirmation.excluded
             .map((service) => service.name),
+        notProposed: (confirmation.notProposed ?? []).map(
+            ({ name, path, treatment, reason, unresolved }) => ({
+                name,
+                path,
+                treatment,
+                ...(reason ? { reason } : {}),
+                ...(unresolved ? { unresolved } : {}),
+            }),
+        ),
         proposal: confirmation.proposal,
     };
     return [
@@ -1376,7 +1402,13 @@ async function serveAsset(response, assetName) {
         return;
     }
     try {
-        const body = await readFile(assetPath);
+        const sharedAsset = assetName === "canvas-theme.css" ? "theme.css"
+            : assetName === "canvas-icons.svg" ? "icons.svg" : null;
+        const source = sharedAsset ? new URL(`../../assets/canvas/${sharedAsset}`, import.meta.url) : assetPath;
+        const body = await readFile(source).catch((error) => {
+            if (sharedAsset && (error.code === "ENOENT" || error.code === "ENOTDIR")) return readFile(assetPath);
+            throw error;
+        });
         response.writeHead(200, {
             "Content-Type": CONTENT_TYPES[extname(assetName)] ?? "application/octet-stream",
             "Cache-Control": "no-store",
@@ -2160,7 +2192,7 @@ async function handleRequest(entry, request, response) {
     }
     if (
         request.method === "GET" &&
-        ["/app.js", "/styles.css", "/resource-types.js", "/interaction-model.js"].includes(
+        ["/app.js", "/styles.css", "/canvas-theme.css", "/canvas-icons.svg", "/resource-types.js", "/interaction-model.js"].includes(
             url.pathname,
         )
     ) {
@@ -2324,7 +2356,11 @@ const aspireifyCanvas = createCanvas({
                         "This scan result is stale. Re-run the latest scan request before loading discovery.",
                     );
                 }
-                const incomingServices = context.input.services.map(normalizeService);
+                const resourceNames = assignResourceNames(context.input.services);
+                const incomingServices = context.input.services.map((service, index) => ({
+                    ...normalizeService(service, index),
+                    resourceName: resourceNames[index],
+                }));
                 const serviceIds = new Set();
                 for (const service of incomingServices) {
                     if (!service.id) {
@@ -2548,6 +2584,42 @@ const aspireifyCanvas = createCanvas({
                             required: ["from", "to", "kind"],
                         },
                     },
+                    serviceTreatments: {
+                        type: "array",
+                        description:
+                            "Decisions the aspireify workflow already made for discovered runnable services that no resource maps. Omit a service to show it as not assessed.",
+                        items: {
+                            type: "object",
+                            additionalProperties: false,
+                            properties: {
+                                serviceId: {
+                                    type: "string",
+                                    minLength: 1,
+                                    description:
+                                        "Exact load_discovery service id. It must not be mapped by any resource.",
+                                },
+                                treatment: {
+                                    type: "string",
+                                    enum: ["not-modeled", "deferred"],
+                                    description:
+                                        "not-modeled: deliberately left out of the AppHost. deferred: modeling postponed by an agreed limitation.",
+                                },
+                                reason: {
+                                    type: "string",
+                                    minLength: 1,
+                                    description:
+                                        "The decision or agreed limitation from chat, in the user's terms.",
+                                },
+                                unresolved: {
+                                    type: "string",
+                                    minLength: 1,
+                                    description:
+                                        "Required for deferred: what remains unresolved before the service can be modeled.",
+                                },
+                            },
+                            required: ["serviceId", "treatment", "reason"],
+                        },
+                    },
                 },
                 required: ["proposalGeneration"],
             },
@@ -2585,6 +2657,17 @@ const aspireifyCanvas = createCanvas({
                 if (resolvedIncomingEdges) {
                     validateSubmittedProposalEdges(resolvedIncomingEdges);
                 }
+                const incomingTreatments = normalizeServiceTreatments(
+                    context.input.serviceTreatments,
+                    {
+                        services: current.services,
+                        mappedServiceIds: new Set(
+                            [...endpointResources, ...current.removedGeneratedResources]
+                                .map((resource) => resource.serviceId)
+                                .filter(Boolean),
+                        ),
+                    },
+                );
                 const snapshot = await updateSnapshot(domainId, (state) => {
                     const preservedResources = state.proposal.resources.filter(
                         (resource) => resource.userAdded,
@@ -2775,6 +2858,9 @@ const aspireifyCanvas = createCanvas({
                             state.proposalLoaded && state.proposal.generatedAt
                                 ? state.proposal.generatedAt
                                 : new Date().toISOString(),
+                        serviceTreatments:
+                            incomingTreatments ??
+                            (incomingResources ? [] : (state.proposal.serviceTreatments ?? [])),
                     };
                     state.proposalLoaded = true;
                     state.proposalEdited = proposalHasUserEdits(state.proposal);
@@ -2795,7 +2881,7 @@ const aspireifyCanvas = createCanvas({
         {
             name: "get_confirmation",
             description:
-                "Read the user's confirmed choices before editing the AppHost. Returns final service selections and the edited proposal graph.",
+                "Read the user's confirmed choices before editing the AppHost. Returns final service selections, discovered services left unmapped as notProposed (with the supplied not-modeled or deferred treatment and reason, otherwise not-assessed), and the edited proposal graph.",
             inputSchema: {
                 type: "object",
                 additionalProperties: false,
@@ -2979,7 +3065,7 @@ const ASPIREFY_WORKFLOW_GUIDANCE =
     "This request is part of the aspireify workflow. Keep discovery questions and implementation tradeoffs in chat. " +
     "When the proposal is ready, call open_aspireify, then load_discovery with the AppHost style and every runnable service's stable unique id, name, type, framework, exposesHttp, and path. " +
     "If the same AppHost already has a confirmed snapshot and the user starts a new Aspireify run, pass startNewRun=true to load_discovery. " +
-    "Pass the proposalGeneration returned by load_discovery to set_proposal with the complete resource graph. Do not invent or add fields that the Aspireify skill did not discover or propose. Preserve exact proposal type labels when supplied. " +
+    "Pass the proposalGeneration returned by load_discovery to set_proposal with the complete resource graph. For each runnable service the workflow deliberately left out of the graph or deferred, pass a serviceTreatments entry with its reason (and, when deferred, what remains unresolved); omit services that were not assessed. Do not invent or add fields that the Aspireify skill did not discover or propose. Preserve exact proposal type labels when supplied. " +
     "Wait for the user to confirm in the canvas, then call get_confirmation before editing any files. Never make the canvas scan the repository, resolve tradeoffs, generate the proposal, edit the AppHost, start resources, or validate the application. " +
     "If the canvas host is unavailable, present and confirm the same proposal in chat.";
 
