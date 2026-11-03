@@ -155,7 +155,7 @@ export function isPathWithin(candidate, parent) {
     const candidatePath = normalizePathKey(resolve(candidate));
     const parentPath = normalizePathKey(resolve(parent));
     const pathRelative = relative(parentPath, candidatePath);
-    return pathRelative === "" || (!pathRelative.startsWith("..") && !isAbsolute(pathRelative));
+    return pathRelative !== ".." && !pathRelative.startsWith(`..${sep}`) && !isAbsolute(pathRelative);
 }
 
 function findJsonEnd(text, start) {
@@ -330,6 +330,19 @@ function sanitizeOptions(raw) {
     }));
 }
 
+function normalizeCommandValue(inputType, value) {
+    if (typeof value !== "string" || inputType.toLowerCase().includes("secret")) {
+        return value;
+    }
+    // Match .NET String.Trim: U+0085 is whitespace, but U+FEFF is not.
+    const whitespace = /\p{White_Space}/u;
+    let start = 0;
+    let end = value.length;
+    while (start < end && whitespace.test(value[start])) start++;
+    while (end > start && whitespace.test(value[end - 1])) end--;
+    return value.slice(start, end);
+}
+
 function sanitizeArgumentInput(raw) {
     if (!isRecord(raw)) {
         return undefined;
@@ -346,9 +359,9 @@ function sanitizeArgumentInput(raw) {
         : [];
     const options = sanitizeOptions(raw.options);
     const allowCustomChoice = raw.allowCustomChoice === true;
-    const value = inputType.toLowerCase().includes("secret")
+    const value = raw.value == null || inputType.toLowerCase().includes("secret")
         ? undefined
-        : optionalText(raw.value, Number.isFinite(maxLength) && maxLength > 0 ? Math.min(maxLength, 100_000) : 100_000);
+        : normalizeCommandValue(inputType, String(raw.value));
     const safeValue = value && options.length > 0 && !allowCustomChoice
         ? options.some((option) => option.value === value) ? value : undefined
         : value;
@@ -408,7 +421,8 @@ function sanitizeHealthReports(raw) {
             if (!isRecord(report)) {
                 return undefined;
             }
-            const statusText = optionalText(report.status, 80) ?? "Unknown";
+            // Aspire reports a null status until a registered check first returns.
+            const statusText = optionalText(report.status, 80) ?? "Pending";
             const status = statusText.toLowerCase() === "healthy"
                 ? "Healthy"
                 : statusText.toLowerCase() === "degraded"
@@ -473,8 +487,9 @@ function classifyResource(resource) {
     const health = resource.healthStatus?.toLowerCase();
     const reportStatuses = resource.healthReports.map((report) => report.status.toLowerCase());
     const hasUnhealthyReport = reportStatuses.some((status) =>
-        status !== "healthy" && status !== "degraded");
+        status !== "healthy" && status !== "degraded" && status !== "pending");
     const hasDegradedReport = reportStatuses.includes("degraded");
+    const hasPendingReport = reportStatuses.includes("pending");
     if (
         resource.stateStyle === "error"
         || state === "failedtostart"
@@ -486,7 +501,8 @@ function classifyResource(resource) {
     if (["exited", "stopped", "notstarted", "finished"].includes(state)) {
         return state === "finished" && resource.stateStyle === "success" ? "healthy" : "inactive";
     }
-    if (health === "unhealthy" || hasUnhealthyReport) {
+    // The aggregate stays Unhealthy until pending checks return, so it is not a failure yet.
+    if ((health === "unhealthy" && !hasPendingReport) || hasUnhealthyReport) {
         return "error";
     }
 
@@ -494,6 +510,7 @@ function classifyResource(resource) {
         resource.stateStyle === "warning"
         || health === "degraded"
         || hasDegradedReport
+        || hasPendingReport
         || state === "starting"
         || state === "waiting"
         || state === "stopping"
@@ -577,9 +594,12 @@ export function redactAbsolutePaths(value) {
         )
         .replace(/(["'`])\/(?:Users|home|tmp|var|private|opt|usr|mnt|Volumes|workspaces|srv|data|app)\/[^"'`\r\n]+\1/g, "$1[path withheld]$1")
         .replace(
+            // Only whole root segments at a path start: URL paths such as
+            // https://host/app-host, URL hosts such as https://app/, and words such as
+            // /homework are not local paths.
             new RegExp(
-                `\\/(?:Users|home|tmp|var|private|opt|usr|mnt|Volumes|workspaces|srv|data|app)`
-                + `${PATH_TAIL_PATTERN}`,
+                `(?<![A-Za-z0-9._~%+-])(?<!:\\/)\\/(?:Users|home|tmp|var|private|opt|usr|mnt|Volumes|workspaces|srv|data|app)`
+                + `(?![A-Za-z0-9._-])${PATH_TAIL_PATTERN}`,
                 "g",
             ),
             "[path withheld]",
@@ -730,7 +750,9 @@ function resourceLifecycleTone(resource) {
 
 function healthTone(status) {
     const normalized = status.toLowerCase();
-    return normalized === "healthy" ? "healthy" : normalized === "degraded" ? "warning" : "error";
+    return normalized === "healthy"
+        ? "healthy"
+        : normalized === "degraded" || normalized === "pending" ? "warning" : "error";
 }
 
 function resourceHealthSummary(resource) {
@@ -739,8 +761,9 @@ function resourceHealthSummary(resource) {
     if (resource.healthReports.length > 0) {
         const healthy = resource.healthReports.filter((report) => report.status === "Healthy").length;
         const degraded = resource.healthReports.some((report) => report.status === "Degraded");
+        const pending = resource.healthReports.some((report) => report.status === "Pending");
         const unhealthy = resource.healthReports.some((report) =>
-            report.status !== "Healthy" && report.status !== "Degraded");
+            report.status !== "Healthy" && report.status !== "Degraded" && report.status !== "Pending");
         const label = healthy === resource.healthReports.length
             ? "Healthy"
             : `${healthy}/${resource.healthReports.length} healthy`;
@@ -750,12 +773,14 @@ function resourceHealthSummary(resource) {
                     ? "Last known unhealthy"
                     : degraded
                         ? "Last known degraded"
-                        : "Last known healthy",
+                        : pending
+                            ? "Not checked"
+                            : "Last known healthy",
                 tone: unhealthy ? "error" : degraded ? "warning" : "inactive",
             }
             : {
                 label,
-                tone: unhealthy ? "error" : degraded ? "warning" : "healthy",
+                tone: unhealthy ? "error" : degraded || pending ? "warning" : "healthy",
             };
     }
     if (resource.healthStatus) {
@@ -1007,18 +1032,25 @@ function healthGroupNode(appHostId, resource) {
         defaultExpanded: false,
         children: [...resource.healthReports]
             .sort((left, right) => left.name.localeCompare(right.name))
-            .map((report) => ({
-                id: `apphost:${appHostId}:resource:${resource.name}:health:${stableId(report.name)}`,
-                kind: "health-check",
-                label: report.name,
-                statusLabel: inactive ? `Last ${report.status.toLowerCase()}` : report.status,
-                icon: report.status === "Healthy" ? "pass" : report.status === "Degraded" ? "warning" : "error",
-                tone: inactive && report.status === "Healthy" ? "inactive" : healthTone(report.status),
-                appHostId,
-                resourceName: resource.name,
-                healthCheckName: report.name,
-                children: [],
-            })),
+            .map((report) => {
+                const pending = report.status === "Pending";
+                return {
+                    id: `apphost:${appHostId}:resource:${resource.name}:health:${stableId(report.name)}`,
+                    kind: "health-check",
+                    label: report.name,
+                    statusLabel: pending && inactive
+                        ? "Not checked"
+                        : inactive ? `Last ${report.status.toLowerCase()}` : report.status,
+                    icon: pending
+                        ? inactive ? "record" : "loading"
+                        : report.status === "Healthy" ? "pass" : report.status === "Degraded" ? "warning" : "error",
+                    tone: inactive && (pending || report.status === "Healthy") ? "inactive" : healthTone(report.status),
+                    appHostId,
+                    resourceName: resource.name,
+                    healthCheckName: report.name,
+                    children: [],
+                };
+            }),
     };
 }
 
@@ -1588,17 +1620,6 @@ async function configuredAppHostFrom(directory) {
 
 async function scanImmediateAppHosts(directory) {
     const results = [];
-    const directCandidates = [
-        join(directory, "apphost.cs"),
-        join(directory, "apphost.ts"),
-        join(directory, "apphost.mts"),
-    ];
-    for (const candidate of directCandidates) {
-        if (await pathExists(candidate)) {
-            results.push(candidate);
-        }
-    }
-
     let entries;
     try {
         entries = await readdir(directory, { withFileTypes: true });
@@ -1607,7 +1628,11 @@ async function scanImmediateAppHosts(directory) {
     }
 
     for (const entry of entries) {
-        if (entry.isFile() && /\.apphost\.csproj$/i.test(entry.name)) {
+        const sourceAppHost = /^apphost\.(?:cs|ts|mts)$/i.test(entry.name);
+        if (
+            (entry.isFile() && (/\.apphost\.csproj$/i.test(entry.name) || sourceAppHost))
+            || (entry.isSymbolicLink() && sourceAppHost && await pathExists(join(directory, entry.name)))
+        ) {
             results.push(join(directory, entry.name));
             continue;
         }
@@ -1905,8 +1930,8 @@ export function validateCommandArguments(command, values) {
         if (input.disabled) {
             continue;
         }
-        const value = values[input.name];
-        const missing = value === undefined || value === null || (typeof value === "string" && value.trim() === "");
+        const value = normalizeCommandValue(input.inputType, values[input.name]);
+        const missing = value === undefined || value === null || value === "";
         if (missing) {
             if (input.required) {
                 errors.push({ argumentName: input.name, errorMessage: `${input.label || input.name} is required.` });

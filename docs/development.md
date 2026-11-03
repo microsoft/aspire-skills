@@ -9,12 +9,24 @@ npm test
 ```
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for skill formatting and agent-host checks.
+Set `CHROME_BIN` to a Chromium executable when running `npm test` to include the
+AppHosts native-browser number-input regression; without it, that check is skipped.
 Dev retains `CHANGELOG.md` and generated `opencode/` catalogs. Regenerate catalogs
 with `npm run catalog` after changing shipped skills, references, or assets,
 and commit them with the source changes. Run `npm run catalog:check` to check
 the committed tree. CI rejects missing, extra, or stale V1 and V2 catalog files.
-Feature PRs update the current version's changelog notes and preserve earlier
+Add only consumer-facing changes to the current changelog entry; preserve earlier
 entries and the coordinated version.
+
+Canvas extensions serve canonical theme and icon assets directly and retain
+relative Git symlinks for packagers. Edit the canonical files directly; no
+synchronization step is needed.
+See [Shared canvas UI](canvas-ui.md) for token ownership, typography, icons,
+standalone packages, plugin mirrors, and visual review.
+
+The **Tests** workflow runs its three-OS matrix on PRs targeting main, dev, or
+release branches, and on pushes to main or dev. Release-branch pushes rely on PR
+checks instead of triggering a duplicate matrix.
 
 The **OpenCode catalog check** runs on every PR, including stacked PRs, on
 main/dev/release pushes, and on merge-queue candidates.
@@ -33,7 +45,7 @@ The **Release branch check** fails any PR into main unless its head is a
    regenerate catalogs with `npm run catalog`, and run `npm test`.
 4. **Release to main.** Open the release PR to main. Maintainers approve and
    merge it; the publisher tags the exact merged commit, creates the GitHub
-   release, and uploads the skills bundle.
+   release from the approved changelog notes, and uploads no generated archives.
 5. **Merge back to dev.** Create `backport/pr-<release-pr>-to-dev` from current
    dev and merge main into it. Keep dev's next version and newer work, preserve
    non-version manifest changes and dev's current changelog entry, update earlier
@@ -43,10 +55,20 @@ The **Release branch check** fails any PR into main unless its head is a
 ## Publication
 
 `.github/workflows/publish.yml` runs when a same-repository `release/*` PR
-merges into main. It uses the event's `merge_commit_sha`, builds and attests
-both bundles, and uploads only `aspire-skills-v<version>.tgz`.
+merges into main. It uses the event's `merge_commit_sha`, reruns the source,
+catalog, and version checks, then tags that commit and creates a source-only
+GitHub release from the approved changelog notes.
 
 Publishing uses `GITHUB_TOKEN`; no repo bot or stored automation credentials
 are needed. Maintainers create PRs and approve merges. Tags and releases are
 published in the same run because workflow-token tag pushes do not trigger
 another workflow. Reruns must preserve the tag's commit and approved notes.
+
+## Aspire telemetry maintenance
+
+The [update-aspire workflow](../.github/workflows/update-aspire.md) keeps Aspire CLI
+telemetry for aspire-skills usage up to date, including which skills and extension
+tools agents invoke.
+It creates draft proposals with one isolated build/test attempt. Candidate build
+and test failures are reported in the draft or no-op summary; verifier setup,
+isolation, and security failures block publication.

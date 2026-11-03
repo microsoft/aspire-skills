@@ -244,10 +244,42 @@ aspire start --non-interactive --apphost <filesystem-path>  # editor-tool-unavai
 
 ### Destructive persistent-resource cleanup
 
-`aspire stop --force` is not a stronger ordinary stop. It stops one selected AppHost and
-then permanently removes its persistent resource instances without another confirmation.
-Require explicit data-loss approval and an exact `--apphost` target. Never combine
-`--force` with `--all`.
+`aspire stop` has three distinct levels. Use the least destructive one that satisfies the
+user's explicit request:
+
+| Command | Effect | When to use |
+|---------|--------|-------------|
+| `aspire stop --non-interactive --apphost <filesystem-path>` | Stops the AppHost. Persistent containers and all volumes remain. | Routine shutdown, port or file-lock recovery, and task completion |
+| `aspire stop --force --apphost <filesystem-path>` | Stops the AppHost, then permanently removes its persistent resource instances (such as persistent containers and networks) without another confirmation. Persistent volumes are preserved. | The user explicitly wants that AppHost's persistent resource instances removed |
+| `aspire stop --force --volumes --apphost <filesystem-path>` | Everything `--force` does, plus deletes the named volumes Aspire created for that AppHost. | The user explicitly approves deleting that AppHost's owned volume data |
+
+`--force` is not a stronger ordinary stop, and it does not erase volume data by itself.
+Require explicit approval and an exact `--apphost` target. Never combine `--force` with
+`--all`.
+
+`--volumes` requires `--force` and is AppHost-scoped, not resource-scoped. It deletes
+every named volume that Aspire created and owns for the selected AppHost, so it can erase
+data for several databases or caches at once. Before running it, name the exact AppHost
+and state that all of its Aspire-created volume data will be deleted, then wait for
+explicit approval of that scope. Never add `--volumes` to routine shutdown, lock
+recovery, or a request that concerns only one resource.
+
+`--volumes` does not delete everything a resource mounts:
+
+- Only named volumes Aspire created and recorded as owned are removed.
+- Anonymous volumes and bind mounts (for example, `WithDataBindMount`) are untouched.
+- A named volume that already existed before the AppHost first mounted it (created with
+  `docker volume create`, by another tool, or by an AppHost before it could record volume
+  ownership) is adopted for mounting but not owned, so it is preserved.
+- The `--volumes` option requires Aspire CLI 13.6 or later. Only AppHosts that use
+  Aspire.Hosting 13.6+ or the Aspire CLI bundle record volume ownership. For older
+  non-bundle .NET AppHosts, the CLI warns that volume cleanup might be unsupported and
+  still attempts it; volumes can remain.
+
+Do not promise that `--volumes` removes every volume. If data outside Aspire's ownership
+must also be removed, identify the exact container, volume, or bind-mount path and get
+separate explicit approval for that target. Never recommend `docker volume prune`,
+`docker system prune`, or another broad cleanup in its place.
 
 ---
 

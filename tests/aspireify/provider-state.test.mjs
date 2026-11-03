@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -39,6 +39,45 @@ test("Windows UNC and device prefixes survive canonicalization", () => {
             domainId: "\\\\?\\c:\\repo\\apphost.cs",
         },
     );
+});
+
+test("POSIX AppHost identities preserve literal backslashes", () => {
+    const options = { platform: "linux", cwd: "/repo" };
+    const literal = appHostIdentity("team\\tools/AppHost.cs", options);
+    const nested = appHostIdentity("team/tools/AppHost.cs", options);
+
+    assert.equal(literal.appHostPath, "/repo/team\\tools/AppHost.cs");
+    assert.equal(literal.domainId, literal.appHostPath);
+    assert.notEqual(literal.domainId, nested.domainId);
+    assert.deepEqual(appHostIdentity("./team//tools/../tools/AppHost.cs", options), nested);
+});
+
+test("distinct POSIX AppHosts keep separate durable snapshots when a directory contains a backslash", {
+    skip: process.platform === "win32",
+}, async (context) => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "aspireify-path-state-")));
+    context.after(() => rm(root, { recursive: true, force: true }));
+    const literalPath = join(root, "team\\tools", "AppHost.cs");
+    const nestedPath = join(root, "team", "tools", "AppHost.cs");
+    await mkdir(join(root, "team\\tools"));
+    await mkdir(join(root, "team", "tools"), { recursive: true });
+    await writeFile(literalPath, "// Literal backslash directory");
+    await writeFile(nestedPath, "// Nested directories");
+
+    const literal = await resolveAppHostIdentity(literalPath);
+    const nested = await resolveAppHostIdentity(nestedPath);
+    const workspace = join(root, "session");
+    const store = new DurableSnapshotStore(workspace);
+    const literalSnapshot = { appHostPath: literalPath, proposal: { resources: [{ id: "literal" }] } };
+    const nestedSnapshot = { appHostPath: nestedPath, proposal: { resources: [{ id: "nested" }] } };
+    await store.save(literal.domainId, literalSnapshot);
+    await store.save(nested.domainId, nestedSnapshot);
+
+    const reloaded = new DurableSnapshotStore(workspace);
+    assert.deepEqual(await reloaded.load(literal.domainId), literalSnapshot);
+    assert.deepEqual(await reloaded.load(nested.domainId), nestedSnapshot);
+    assert.equal(literal.appHostPath, literalPath);
+    assert.equal(nested.appHostPath, nestedPath);
 });
 
 test("real paths collapse symlink aliases before selecting a domain", async () => {

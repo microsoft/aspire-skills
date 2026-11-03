@@ -5,17 +5,18 @@ description: >-
   and selects the right sub-skill.
   USE FOR: Aspire AppHost, Aspire CLI, distributed app, cloud-native .NET, aspire
   start/stop/resource/deploy/destroy/publish/init/new/add/wait/describe/ps/logs/otel,
-  aspire agent init, WithBrowserLogs, WithTerminal, Interaction Service, apphost.mts,
+  aspire agent init, WithBrowserLogs, WithTerminal, TerminalService, terminal prompts,
+  WithRepl, tapes, Interaction Service, apphost.mts,
   TS package managers, Yarn Classic, custom resource commands, .aspire/modules recovery,
   ProjectResource to DotnetProjectResource migration, or Playwright URL discovery.
   DO NOT USE FOR: non-Aspire projects or ordinary build/test tasks.
   INVOKES: aspire-init, aspireify, aspire-project-v2-migration,
-  aspire-orchestration, aspire-deployment, aspire-monitoring.
+  aspire-orchestration, aspire-deployment, aspire-monitoring, aspire-terminals.
   FOR SINGLE OPERATIONS: Route directly to the matching sub-skill.
 license: MIT
 metadata:
   author: Microsoft
-  version: "0.0.4"
+  version: "0.0.5"
 ---
 
 # Aspire
@@ -60,7 +61,7 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 | Aspire config with AppHost | `aspire.config.json` present **and** AppHost above | High | AppHost present → orchestration / deployment / monitoring |
 | Aspire settings | `.aspire/` directory present | High | AppHost present (usually) |
 | Generated TS modules | `.aspire/modules/` directory present | High | AppHost present (TS) |
-| Service defaults | `Aspire.ServiceDefaults` in project references | Medium | AppHost present |
+| Service defaults | `<IsAspireSharedProject>true` or a `*.ServiceDefaults.csproj` project reference | Medium | AppHost present |
 | **No AppHost, no `aspire.config.json`** | None of the above and user asks to add Aspire | n/a | Bootstrap → `aspire-init` (skeleton drop) |
 
 ## Default Workflow
@@ -78,6 +79,9 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 
 ## Key Rules
 
+- Terminal requests require invoking `aspire-terminals` **before answering**, even
+  for read-only advice. Do not answer terminal API, prompt, REPL or VHS tape
+  questions from this router's overview; the specialist owns the exact contracts.
 - For agent AppHost lifecycle requests, identify one exact AppHost and route to
   `aspire-orchestration`. New 13.5 C# templates can make `dotnet run` delegate through the
   CLI bundle, but agents still use the editor lifecycle tool or `aspire start` for
@@ -90,8 +94,11 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
   or `aspire ps --include-hidden`.
 - Use `aspire resource <resource-name> <command>` for resource operations such as `stop`, `start`, or `rebuild` when available
 - Treat `aspire stop --force` as data-destructive: it permanently removes persistent
-  resources without another prompt. Use it only after explicit confirmation for one
-  exact AppHost.
+  resources without another prompt, but preserves persistent volumes. Use it only after
+  explicit confirmation for one exact AppHost. With Aspire CLI 13.6 or later,
+  `aspire stop --force --volumes` also deletes every named volume Aspire created for
+  that AppHost; require approval for that AppHost-wide data scope and never add it to
+  routine shutdown or lock recovery.
 - Do not stop or restart the whole AppHost just because one resource changed
 - Use `features.defaultWatchEnabled` only for Aspire default watch; do not treat it as per-resource rebuild, restart, or hot reload
 - Prefer a resource's own framework/runtime hot reload, HMR, or watch workflow when it already handles the change
@@ -124,6 +131,7 @@ the bootstrap skills (`aspire-init` / `aspireify`) or to a runtime sub-skill:
 | Migrate legacy TypeScript `apphost.ts` (`aspire update --migrate`) | → [aspire-orchestration](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-orchestration/SKILL.md); hand back to aspireify only if source authoring remains |
 | Deploy, publish, destroy, pipeline steps | → [aspire-deployment](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-deployment/SKILL.md) |
 | Logs, traces, metrics, dashboard, browser logs | → [aspire-monitoring](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/SKILL.md) |
+| WithTerminal/withTerminal, TerminalService, dock/dialog/headless terminals, terminal prompts, WithRepl, terminal CLI or tapes | → [aspire-terminals](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-terminals/SKILL.md); choose owner and lifetime before code |
 | Diagnose a running app — "something's wrong", "show me what's happening", investigate errors / health / unexpected behavior | → [aspire-monitoring](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/SKILL.md) — start with `aspire describe` for resource state, then `aspire logs` / `aspire otel logs` / `aspire otel traces`; **investigate before editing code** |
 | Improve AI agent support / generate project-local Aspire agent skills | → run `aspire agent init` (see below) |
 | Explicitly configure the Aspire MCP server for agents | → `aspire agent init --mcp` on 13.6+ (see [Skills vs. MCP](#improving-ai-agent-support-aspire-agent-init)) |
@@ -171,9 +179,18 @@ Agentic AppHost wiring after `aspire init` lands the skeleton. Scans the repo, p
 resource graph (Postgres / Redis / Rabbit / etc.), edits the AppHost (C#, file-based C#, or
 TypeScript), wires `Aspire.ServiceDefaults` + OTel, validates with `aspire start`, then
 self-deactivates. Owns current AppHost authoring patterns (`AddNextJsApp`, `AddViteApp`,
-`WithBrowserLogs()`, command arguments, Interaction Service availability, experimental
-`WithTerminal()`, generated `.aspire/modules/`, unified TS `withEnvironment`, endpoint
-references, and config/secret migration).
+`WithBrowserLogs()`, command arguments, nonterminal Interaction Service availability,
+generated `.aspire/modules/`, unified TS `withEnvironment`, endpoint references,
+and config/secret migration). Terminal authoring belongs to `aspire-terminals`.
+
+### aspire-terminals
+Code-authoring-first terminal guidance: choose resource `WithTerminal` versus
+AppHost-owned dock, terminal prompt or headless process; reuse integration REPLs.
+Owns terminal lifetimes, cancellation, screen/input automation, terminal CLI and
+Aspire's VHS tape subset/output formats. Hands lifecycle to `aspire-orchestration`
+and console/telemetry diagnostics to `aspire-monitoring`. `PromptTerminalAsync`
+borrows a caller-owned Dialog terminal: caller disposal stops the process, not
+prompt completion itself.
 
 ### aspire-project-v2-migration
 Approval-first migration for eligible Aspire 13.6+ AppHosts that replaces existing
@@ -183,7 +200,8 @@ preserving supported behavior and removing only proven-obsolete AppHost referenc
 ### aspire-orchestration
 Lifecycle management: start, stop, wait, resource commands, default watch/HMR guidance, and file-lock recovery.
 Safety guardrails that prevent agent self-harm. Owns `aspire ps` for AppHost discovery,
-`aspire describe` for resource inspection, destructive `aspire stop --force` safeguards,
+`aspire describe` for resource inspection, destructive `aspire stop --force` and
+`--volumes` safeguards,
 CLI-driven legacy TypeScript migration, and CLI upgrades (`aspire update --self`). It
 hands back to `aspireify` only when AppHost source authoring remains after migration.
 
@@ -214,6 +232,7 @@ guidance there should not be overridden by the in-plugin sibling:
 | `.agents/skills/aspireify/SKILL.md` | The in-plugin `aspireify` sibling defers to it for AppHost wiring. |
 | `.agents/skills/aspire-init/SKILL.md` | The in-plugin `aspire-init` sibling defers to it for the skeleton/first-run flow. |
 | `.agents/skills/aspire-project-v2-migration/SKILL.md` | The in-plugin migration sibling defers to it for Project v2 assessment and edits. |
+| `.agents/skills/aspire-terminals/SKILL.md` | The in-plugin terminal sibling defers to it for terminal authoring and automation. |
 
 **Safety guardrails from this plugin always apply** even when project-local skills are
 active.

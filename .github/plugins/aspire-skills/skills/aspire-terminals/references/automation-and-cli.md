@@ -1,0 +1,1 @@
+../../../../../../skills/aspire-terminals/references/automation-and-cli.md

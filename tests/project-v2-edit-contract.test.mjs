@@ -102,7 +102,8 @@ function mutateBlazor(root, removeLegacyMutation = true) {
 test("every edit case has a program contract and every assessment is no-edit", () => {
   const spec = parse(readFileSync(new URL("../skills/aspire-project-v2-migration/evals/eval.yaml", import.meta.url), "utf8"));
   assert.equal(spec.scoring.threshold, 1);
-  assert.equal(spec.environment.skills.length, 7);
+  assert.equal(spec.environment.skills.length, 8);
+  assert.ok(spec.environment.skills.includes("../../aspire-terminals"));
   for (const caseName of Object.keys(editCases)) {
     const stimuli = spec.stimuli.filter(stimulus => stimulus.tags?.integration === caseName);
     assert.equal(stimuli.length, 1, `Missing or duplicated edit case: ${caseName}`);
@@ -138,6 +139,8 @@ test("gateway image decisions have read-only controls and a separately approved 
     assert.ok(stimulus.graders.some(grader => grader.type === "prompt" && grader.config.scoring === "binary"));
     assert.equal(stimulus.tags.integration, undefined);
   }
+  assert.match(skill, /Preserve exact prerelease identifiers/);
+  assert.match(skill, /say `\.NET 11 RC1` and `11\.0\.0-rc\.1`, not\s+the less specific `\.NET 11 RC`/);
   const approved = spec.stimuli.find(item => item.tags?.integration === "blazor-ef");
   assert.match(approved.prompt, /separately approve the resolved gateway/);
   assert.match(approved.prompt, /root to UID 1654/);
