@@ -6,11 +6,25 @@ while preserving their own workflows.
 ## Shared assets
 
 Edit the canonical [stylesheet](../assets/canvas/theme.css) and
-[icon sprite](../assets/canvas/icons.svg). Share them through relative symlinks,
-not copied files or synchronization scripts.
+[icon sprite](../assets/canvas/icons.svg). The canvas providers serve
+`/canvas-theme.css` and `/canvas-icons.svg` directly from these files under the
+plugin root. Keep this single source of truth; do not add per-canvas copies or
+synchronization scripts.
 
-Source checkouts must support symlinks. The published plugin mirror preserves
-these relative links to the canonical extension sources.
+The extension `ui/` directories retain relative symlinks for existing packagers.
+Git for Windows can check these links out as ordinary path-text files when
+`core.symlinks` is `false`. Providers in a source checkout or full-root plugin
+installation do not depend on these UI links, so styling and icons still work.
+
+When the canonical asset is absent (`ENOENT`) or an ancestor is not a directory
+(`ENOTDIR`), providers fall back to the corresponding file in their own `ui/`
+directory. Standalone extension packages without the
+plugin root must therefore supply readable CSS and SVG there, not Git
+placeholder files or dangling links. Other read errors do not trigger fallback.
+
+The published plugin mirror still uses relative symlinks to the canonical
+extension sources. Direct asset serving does not change how those mirror links
+are packaged or resolved.
 
 ## Conventions
 
