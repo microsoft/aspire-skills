@@ -92,7 +92,7 @@ Keep these points in mind:
 
 - Read the docs before editing the AppHost so the implementation follows a documented Aspire pattern instead of guessing the workflow.
 - Use `aspire integration list` when the user asks to discover available integrations before changing the AppHost, or `aspire integration search <query>` when the package ID is unknown.
-- Use `aspire docs api` when you need the C# or TypeScript reference entry for the exact API you are about to call.
+- Use `aspire docs api` when you need the C#, TypeScript, or Go reference entry for the exact API you are about to call.
 - If the AppHost is C# and you need to understand local overloads or builder chains, use the `dotnet-inspect` skill if it is available after checking the Aspire API reference.
 - After adding an integration, restart with `aspire start` so the updated AppHost takes effect.
 
@@ -108,6 +108,19 @@ If the AppHost is current `apphost.mts` (or legacy `apphost.ts`), the
 - For legacy `apphost.ts`, explain that migration updates Aspire packages, config,
   tsconfig, generated imports, and the entry point. After approval for the full operation,
   use `aspire update --migrate --yes --non-interactive` instead of hand-renaming files.
+
+## Scenario: The AppHost Is Go And Generated APIs Matter
+
+Go AppHosts require Aspire 17.0 or later. If the AppHost is `apphost.go`, the
+`.aspire/modules/` directory contains the generated Go SDK (`apphost/modules/aspire`) that
+the root `go.mod` points to with a `replace`.
+
+- Do not edit `.aspire/modules/` directly.
+- Use `aspire add <package>` to regenerate the available APIs when adding integrations.
+- Use `aspire restore` if `.aspire/modules/` is missing. It is git-ignored, so a fresh clone
+  has no generated SDK until it is restored.
+- Inspect `.aspire/modules/aspire.go` after regeneration or restore to see the newly available APIs.
+- Use `aspire docs api search <query> --language go` for the Go API reference.
 
 ## Scenario: I Need Secrets, Deployment, Or A Playwright Handoff
 

@@ -2,7 +2,7 @@
   "skills": [
     {
       "name": "aspire",
-      "version": "sha512-7157a128ae146248477550c38666e227119d4456d6b5bf9bc7c9d4715b2528e7eb6e28f9262939ef076f8954f1b81b406402fc5d58ee981e8f74202455903cfd",
+      "version": "sha512-771506d8e21c5ca446de481c3230fb7200d90c57134b1dfd2743577d38d32139917bc72b148e066762e0e39402e6d029d8e31af86c8c384923ea8e2bede18404",
       "files": [
         "SKILL.md",
         "references/aspire-13-3-breaking-changes.md",
@@ -11,7 +11,7 @@
     },
     {
       "name": "aspire-deployment",
-      "version": "sha512-e27f8eb141ee69e20c640c37760ad2c653527b80e5db5df31a5309f45bea64b94c71f7346c981afdd2c4ec39621e2eeec45b081da4d3986ebf9a90bf0b795ad9",
+      "version": "sha512-9bcff5462c8732a61eea0c9c8e1d45ed937e7bf837bd61357b28a1e0d92dbb96406376efc58dbaa6c2117d99f811230f9bd1e5c8496de70bb604a5e73e2d0aee",
       "files": [
         "SKILL.md",
         "references/aws.md",
@@ -27,7 +27,7 @@
     },
     {
       "name": "aspire-init",
-      "version": "sha512-b21e181cf3c1bd0000c7a4802359241b91421faa7bbed823187dbd6c2cd52f34713693a0a89f95a109bfccf0a64ae2fdacb1280c742275dcd3a31dad22f44c9a",
+      "version": "sha512-a0876e65d440d689da5ca4c9dfe85327a5c6179c5e0a27501c145c0dd9bde53ec70d5c2f4246f46c23f1c5353bf4967cb522cf0aed74bb2177a4c67606cb1875",
       "files": [
         "SKILL.md",
         "references/init-workflow.md",
@@ -46,7 +46,7 @@
     },
     {
       "name": "aspire-orchestration",
-      "version": "sha512-30cb85a63a2f801d6e5da7d0655837acb5652fd74a077980a2c89893086d182e030231cc130180ea1629cd778a58cf1611a8b7e7f6706359909a5542e8e3dd71",
+      "version": "sha512-f64998c3c9720e9136faa886de1df15aea13de782696e1afb275d2388504a4a47d086015f5b85c9b9008624d3fb7b2dfda7352ecba4638c5429e34ed9fb19af0",
       "files": [
         "SKILL.md",
         "references/agent-workflows.md",
@@ -78,13 +78,14 @@
     },
     {
       "name": "aspireify",
-      "version": "sha512-3110e5c1a43c157766f15bda6a47984a9022a2f042afb298c98f3d6c890c7280f6a9482a5a5e19bff680b5e05f827154c0ba9d1c19316849783667fd82e7c40f",
+      "version": "sha512-86c43903f908e19be0184e69c41984b3768fbaa148db643ed80874595d76690633f73bd698057aa64263f81e1438bc0dea8efe41e39b8c72c269b0d721358b2c",
       "files": [
         "SKILL.md",
         "references/apphost-wiring.md",
         "references/csharp-authoring.md",
         "references/docker-compose.md",
         "references/full-solution-apphosts.md",
+        "references/go-authoring.md",
         "references/javascript-apps.md",
         "references/opentelemetry.md",
         "references/scan-and-propose.md",
