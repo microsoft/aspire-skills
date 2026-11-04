@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { registerHooks } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 import { stableProposalHash } from "../../extensions/aspireify/proposal-model.mjs";
 import { appHostIdentity, DurableSnapshotStore } from "../../extensions/aspireify/provider-state.mjs";
 
@@ -145,6 +146,37 @@ function expectedAccounting() {
     }));
 }
 
+const rendererSource = await readFile(new URL("../../extensions/aspireify/ui/app.js", import.meta.url), "utf8");
+const outsidePlanSource = rendererSource.slice(
+    rendererSource.indexOf("const NOT_PROPOSED_TREATMENT_LABELS"),
+    rendererSource.indexOf("function resourcesInOverviewOrder"),
+);
+
+function renderOutsidePlan(snapshot) {
+    function createElement(tag, { text = "", className = "", attrs = {} } = {}) {
+        return {
+            tag, text, className, attrs, children: [],
+            append(...children) { this.children.push(...children); },
+            replaceChildren(...children) { this.children = children; },
+            querySelector(selector) {
+                return this.children.find((child) =>
+                    selector === ":scope > p" ? child.tag === "p" : child.className === selector.slice(1));
+            },
+            get textContent() { return this.text + this.children.map((child) => child.textContent).join(" "); },
+            set textContent(value) { this.text = value; },
+        };
+    }
+    const resourcePlanPanel = createElement("section");
+    runInNewContext(`${outsidePlanSource}\nrenderNotProposedItems();`, {
+        snapshot,
+        elements: { resourcePlanPanel },
+        document: { getElementById: () => null },
+        createElement,
+        renderExternalDependencyDetails: () => null,
+    });
+    return resourcePlanPanel.children[0];
+}
+
 test("external discovery reaches review, immutable confirmation, and chat without fake services", async (t) => {
     const p = await provider(t);
     const discovery = await p.load();
@@ -225,6 +257,59 @@ test("external mappings reject unknown IDs and mixed runnable identities; one de
     const view = await p.open();
     assert.deepEqual((await view.snapshot()).externalDependencies[0].resourceMappings.map(({ id }) => id),
         ["billing-resource", "billing-endpoint"]);
+});
+
+test("mixed included and excluded or removed external mappings stay visible before and after confirmation", async (t) => {
+    const p = await provider(t);
+    const { proposalGeneration } = await p.load({ externalDependencies: [externalDependencies[0]] });
+    const endpoint = {
+        id: "billing-endpoint", name: "billing-endpoint", type: "Parameter",
+        externalDependencyId: "billing",
+    };
+    await p.propose(proposalGeneration, {
+        resources: [api, billing, endpoint], externalDependencyTreatments: [],
+    });
+    const view = await p.open();
+    assert.equal(renderOutsidePlan(await view.snapshot()).hidden, true, "included-only mappings stay in the graph");
+
+    assert.equal((await view.post("/api/proposal/resource", { id: endpoint.id, include: false })).status, 200);
+    const excluded = await view.snapshot();
+    const beforeRender = structuredClone(excluded);
+    const excludedSection = renderOutsidePlan(excluded);
+    assert.equal(excludedSection.hidden, false);
+    assert.match(excludedSection.textContent, /Billing API/);
+    assert.match(excludedSection.textContent, /billing-endpoint \(Parameter; excluded\)/);
+    assert.doesNotMatch(excludedSection.textContent, /billing \(External service; excluded\)/);
+    assert.deepEqual(excluded, beforeRender, "rendering must not filter the snapshot's included mappings");
+
+    assert.equal((await view.post("/api/proposal/resource/delete", { id: endpoint.id })).status, 200);
+    let review = await view.snapshot();
+    assert.match(renderOutsidePlan(review).textContent, /billing-endpoint \(Parameter; removed\)/);
+    assert.equal(review.externalDependencies[0].resourceMappings.find(({ id }) => id === billing.id).include, true);
+
+    assert.equal((await view.post("/api/history/undo")).status, 200);
+    assert.match(renderOutsidePlan(await view.snapshot()).textContent, /billing-endpoint \(Parameter; excluded\)/);
+    assert.equal((await view.post("/api/history/redo")).status, 200);
+    assert.equal((await view.post("/api/confirm")).status, 200);
+    review = await view.snapshot();
+    assert.equal(review.confirmed, true);
+    assert.match(renderOutsidePlan(review).textContent, /billing-endpoint \(Parameter; removed\)/);
+    assert.deepEqual((await p.action("get_confirmation")).externalDependencies, review.externalDependencies);
+});
+
+test("the outside-plan renderer retains unmapped external decisions and runnable services", () => {
+    const section = renderOutsidePlan({
+        externalDependencies: expectedAccounting(),
+        notProposed: [{ id: "worker", name: "Worker", treatment: "not-assessed" }],
+    });
+    assert.equal(section.hidden, false);
+    assert.equal(section.querySelector(".not-proposed-list").children.length, 4);
+    for (const text of ["Worker", "Identity SDK", "Not modeled", "Event stream", "Deferred", "Catalog API", "Not assessed"]) {
+        assert.ok(section.textContent.includes(text), text);
+    }
+    assert.ok(section.textContent.includes(externalDependencyTreatments[1].reason));
+    assert.ok(section.textContent.includes(externalDependencyTreatments[1].unresolved));
+    assert.doesNotMatch(section.textContent, /Billing API/);
 });
 
 test("external treatments reject unknown, repeated, mapped and incomplete decisions without losing the previous proposal", async (t) => {

@@ -649,9 +649,12 @@ const NOT_PROPOSED_TREATMENT_LABELS = {
 
 function renderNotProposedItems() {
     const services = Array.isArray(snapshot.notProposed) ? snapshot.notProposed : [];
-    const externalDependencies = (snapshot.externalDependencies ?? []).filter(
-        (dependency) => !dependency.resourceMappings.some((mapping) => mapping.include),
-    );
+    const externalDependencies = (snapshot.externalDependencies ?? [])
+        .map((dependency) => ({
+            ...dependency,
+            resourceMappings: dependency.resourceMappings.filter((mapping) => !mapping.include),
+        }))
+        .filter((dependency) => dependency.treatment !== "mapped" || dependency.resourceMappings.length);
     const items = [
         ...services.map((entry) => ({ entry, external: false })),
         ...externalDependencies.map((entry) => ({ entry, external: true })),
@@ -673,8 +676,8 @@ function renderNotProposedItems() {
     section.querySelector(":scope > p").textContent = items.some(
         ({ entry }) => entry.treatment === "not-assessed",
     )
-        ? "Discovered items without an included resource. Not assessed means no decision was supplied."
-        : "Discovered items outside this plan, with their chat decisions or removed resource mappings.";
+        ? "Discovered items or resource mappings outside this plan. Not assessed means no decision was supplied."
+        : "Discovered items outside this plan, with their chat decisions or excluded or removed resource mappings.";
     const list = section.querySelector(".not-proposed-list");
     list.replaceChildren(
         ...items.map(({ entry, external }) => {

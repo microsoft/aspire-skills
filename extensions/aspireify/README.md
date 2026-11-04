@@ -84,6 +84,9 @@ configuration, authentication, health checks, or startup ordering. See
 [External inventory handoff](../../skills/aspireify/references/scan-and-propose.md#external-inventory-handoff)
 for the skill's handoff guidance.
 
+Excluded and removed resource mappings remain in "Not in the proposed graph"
+even when another resource for the same dependency is included.
+
 ## Shared canvas UI
 
 Aspireify uses the shared canvas theme, typography, controls, and local SVG

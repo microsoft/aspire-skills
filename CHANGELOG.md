@@ -2,17 +2,36 @@
 
 All notable changes to the aspire-skills plugin will be documented in this file.
 
-## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
+## [0.0.6](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.6)
+
+### Added
+- Added Go AppHost guidance (Aspire 17.0+) to the `aspire`,
+  `aspire-orchestration`, `aspire-init`, `aspire-deployment` and `aspireify`
+  skills, covering detection, authoring, `aspire init --language go`, `AddGoApp`
+  wiring and deployment CI. Guidance for the first-party `Aspire.Hosting.Go`
+  integration distinguishes preview packages from Aspire 13.4 and stable packages
+  from Aspire 17.0.
 
 ### Changed
 - Kept skill-supplied external APIs, streams, and SDK-owned dependencies visible
   in the Aspireify canvas without treating them as runnable services. Resource
   mappings, not-modeled or deferred reasons, and unassessed items now survive
   reload, immutable confirmation, and the chat handoff.
+- Corrected endpoint-discovery guidance so agents use reachable service URLs
+  instead of `null`.
+- Corrected Aspireify's TypeScript cache-wiring guidance so generated AppHosts
+  build and start.
+
+## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
+
+### Changed
 - Documented `aspire new --localhost-tld` in the Aspire init templates reference. The
   `*.dev.localhost` prompt previously listed no flag, so non-interactive runs could
   only take the default plain `localhost` profile.
 - Unified canvas styling and icons with shared assets that respect host themes.
+- Served shared canvas CSS and icons directly from the plugin root so Windows
+  checkouts do not need working UI symlinks. Standalone extensions retain a
+  fallback to their local UI assets.
 - Distinguished ordinary `aspire stop`, `aspire stop --force` (which preserves
   persistent volumes), and explicitly approved AppHost-wide `--volumes` cleanup, including
   its ownership and compatibility limits. Stale-password recovery now prefers restoring
@@ -97,6 +116,8 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ### Removed
 - Removed embedded `.tgz` bundle generation and uploads. Releases now publish
   reviewed source and approved changelog notes without generated archives.
+- Moved `track-telemetry.sh` and `track-telemetry.ps1` from this repository to
+  `microsoft/aspire`.
 
 ## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)
 
