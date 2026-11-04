@@ -110,6 +110,15 @@ not successful live deployment or log retrieval, and `diff-empty` checks the
 captured workspace. Report individual activation, outcome and read-only results
 alongside the aggregate; a passing average does not mean every case passed.
 
+### Deployed log routing
+
+The monitoring routing case `should_trigger_07` keeps its original deployed-log
+request and skill-invocation grader. Its shell simulation intercepts `az login`
+and returns an immediate non-interactive-environment error instead of waiting for
+human input. Other shell commands run normally. Login attempts and the simulated
+CLI error do not affect the activation verdict; the case checks only that
+`aspire-monitoring` was invoked.
+
 ### Gated result integrity
 
 PR and nightly workflows run
