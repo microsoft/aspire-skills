@@ -5,14 +5,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [0.0.6](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.6)
 
 ### Changed
-- Fixed the `aspire describe <resource> --format Json | jq` endpoint examples in the
-  monitoring and orchestration skills to read the first non-internal URL under
-  `.resources[0].urls`, after `aspire wait`, with `jq -e` so a missing URL fails instead
-  of yielding `null`. The old `.endpoints[0].url` path does not exist, returns `null`,
-  and made the paired `curl` fail.
-- Fixed the Aspireify TypeScript `withEnvironment` example to call
-  `cache.primaryEndpoint()`. In the generated SDK `primaryEndpoint` is a method, so passing
-  it as a property failed `tsc` (TS2345) and `aspire start`.
+- Corrected endpoint-discovery guidance so agents use reachable service URLs
+  instead of `null`.
+- Corrected Aspireify's TypeScript cache-wiring guidance so generated AppHosts
+  build and start.
 
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
