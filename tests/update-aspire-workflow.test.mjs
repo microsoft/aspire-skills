@@ -697,6 +697,15 @@ test("compiled publication audit uses trusted code and read-only destination cre
   assert.equal(validation.env.TELEMETRY_STAGED, authored["safe-outputs"].staged);
 });
 
+test("Dependabot leaves compiler-managed gh-aw actions pinned", () => {
+  const config = parse(readFileSync(join(root, ".github", "dependabot.yml"), "utf8"));
+  const actions = config.updates.find(update => update["package-ecosystem"] === "github-actions");
+  assert.deepEqual(
+    actions.ignore.find(rule => rule["dependency-name"] === "github/gh-aw-actions/*"),
+    { "dependency-name": "github/gh-aw-actions/*" },
+  );
+});
+
 test("Linux CI exercises publication against the same pinned runtime as the workflow", () => {
   const ci = parse(readFileSync(join(root, ".github", "workflows", "test.yml"), "utf8"));
   const runtime = steps => steps.find(step => step.uses?.startsWith("github/gh-aw-actions/setup@"));
@@ -719,6 +728,9 @@ test("Linux CI exercises publication against the same pinned runtime as the work
   assert.match(actionTag, /^[a-f0-9]{40}$/);
   assert.ok(compilation.run.includes(`--action-tag ${actionTag}`));
   assert.equal(compilation.if, "runner.os == 'Linux'");
+  const drift = ci.jobs.test.steps.find(step => step.name === "Reject generated workflow drift");
+  assert.equal(drift.if, "runner.os == 'Linux'");
+  assert.ok(drift.run.includes("'.github/dependabot.yml'"));
   const canary = ci.jobs.test.steps.find(step => step.run === "node tests/telemetry-publication/isolation-canary.mjs");
   assert.ok(canary);
   assert.equal(canary.if, "runner.os == 'Linux'");

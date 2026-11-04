@@ -1,5 +1,5 @@
-# gh-aw-metadata: {"schema_version":"v4","frontmatter_hash":"c12722c8634010c1d520098f223af3698fcee3f2d8b53ac9ae599d247bbb61e0","body_hash":"d953f19ae5fe0c98975c4ff427384642b203df7f04e7d676ad309d39d4f6b6aa","compiler_version":"v0.91.8","strict":true,"agent_id":"copilot","engine_versions":{"copilot":"1.0.95"}}
-# gh-aw-manifest: {"version":1,"secrets":["ASPIRE_BOT_APP_ID","ASPIRE_BOT_PRIVATE_KEY","GH_AW_CI_TRIGGER_TOKEN","GH_AW_DEFAULT_OTLP_ENDPOINT","GH_AW_DEFAULT_OTLP_HEADERS","GH_AW_GITHUB_MCP_SERVER_TOKEN","GH_AW_GITHUB_TOKEN","GITHUB_TOKEN"],"actions":[{"repo":"actions/checkout","sha":"3d3c42e5aac5ba805825da76410c181273ba90b1","version":"3d3c42e5aac5ba805825da76410c181273ba90b1"},{"repo":"actions/create-github-app-token","sha":"bcd2ba49218906704ab6c1aa796996da409d3eb1","version":"v3.2.0"},{"repo":"actions/download-artifact","sha":"3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c","version":"3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"},{"repo":"actions/download-artifact","sha":"9000827ccba6bdab643e8b6fd33ac0654aef8333","version":"v8.0.2"},{"repo":"actions/github-script","sha":"3a2844b7e9c422d3c10d287c895573f7108da1b3","version":"3a2844b7e9c422d3c10d287c895573f7108da1b3"},{"repo":"actions/setup-node","sha":"949feb2413d6458794dcd2491c4babbbce0c15c1","version":"v7.1.0"},{"repo":"actions/upload-artifact","sha":"043fb46d1a93c77aae656e7c1c64a875d1fc6a0a","version":"043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"},{"repo":"actions/upload-artifact","sha":"cf430e030ddbb5b0abf93d22962f4752f3646cd9","version":"v7.0.2"},{"repo":"github/gh-aw-actions/setup","sha":"866158eb5c6cbfd3c614104e3d3d6634e246d220","version":"866158eb5c6cbfd3c614104e3d3d6634e246d220"}],"containers":[{"image":"ghcr.io/github/gh-aw-firewall/agent:0.28.49@sha256:39f923c51e2790a2a00085959bf8c31a06a23fb3d7fd463f704d7d41291425b3"},{"image":"ghcr.io/github/gh-aw-firewall/api-proxy:0.28.49@sha256:ef6d61dac70d98389384c3a760882931d20310a45b908f30dd2cc0ebf36f1b39"},{"image":"ghcr.io/github/gh-aw-firewall/cli-proxy:0.28.49@sha256:147eb25d465ce0aa6b60d2b711279533b8e1aa40b9d5161f90e927252c84955c"},{"image":"ghcr.io/github/gh-aw-firewall/squid:0.28.49@sha256:0041ab94c9c3e190fbd851add7dd46bf950e987322ca2bf20e9fadb5803e94e7"},{"image":"ghcr.io/github/gh-aw-mcpg:v0.4.30","digest":"sha256:ab5a436a1490438db473e4e3d4c973cb1d75e3cb233fb08b73d31b42d7d18fba","pinned_image":"ghcr.io/github/gh-aw-mcpg:v0.4.30@sha256:ab5a436a1490438db473e4e3d4c973cb1d75e3cb233fb08b73d31b42d7d18fba"},{"image":"ghcr.io/github/gh-aw-node","digest":"sha256:11c2c544876cdbaffefe0f7f1283b74838c209654b4934a78e23ed11f750490f","pinned_image":"ghcr.io/github/gh-aw-node@sha256:11c2c544876cdbaffefe0f7f1283b74838c209654b4934a78e23ed11f750490f"},{"image":"ghcr.io/github/github-mcp-server:v1.12.2","digest":"sha256:508a0857ec762b1ab1cece29193345b501fab1dd9d1228a7b617062954cecac6","pinned_image":"ghcr.io/github/github-mcp-server:v1.12.2@sha256:508a0857ec762b1ab1cece29193345b501fab1dd9d1228a7b617062954cecac6"}],"has_pull_request":true,"mcp_servers":[{"name":"safeoutputs","tools":["create_pull_request","missing_data","missing_tool","noop","report_incomplete"]}],"threat_detection":{"mode":"enabled"}}
+# gh-aw-metadata: {"schema_version":"v4","frontmatter_hash":"0f1dd2ab1792b5c8d294c4e1b9b6c2bfa4fc67ac75740fedd1ed6d8364dc0056","body_hash":"d953f19ae5fe0c98975c4ff427384642b203df7f04e7d676ad309d39d4f6b6aa","compiler_version":"v0.91.8","strict":true,"agent_id":"copilot","engine_versions":{"copilot":"1.0.95"}}
+# gh-aw-manifest: {"version":1,"secrets":["ASPIRE_BOT_APP_ID","ASPIRE_BOT_PRIVATE_KEY","GH_AW_CI_TRIGGER_TOKEN","GH_AW_DEFAULT_OTLP_ENDPOINT","GH_AW_DEFAULT_OTLP_HEADERS","GH_AW_GITHUB_MCP_SERVER_TOKEN","GH_AW_GITHUB_TOKEN","GITHUB_TOKEN"],"actions":[{"repo":"actions/checkout","sha":"3d3c42e5aac5ba805825da76410c181273ba90b1","version":"3d3c42e5aac5ba805825da76410c181273ba90b1"},{"repo":"actions/create-github-app-token","sha":"64ab729a6294000f5aa4a4bc0b73d1f32bc45510","version":"v3.3.0"},{"repo":"actions/create-github-app-token","sha":"bcd2ba49218906704ab6c1aa796996da409d3eb1","version":"v3.2.0"},{"repo":"actions/download-artifact","sha":"9000827ccba6bdab643e8b6fd33ac0654aef8333","version":"9000827ccba6bdab643e8b6fd33ac0654aef8333"},{"repo":"actions/github-script","sha":"3a2844b7e9c422d3c10d287c895573f7108da1b3","version":"3a2844b7e9c422d3c10d287c895573f7108da1b3"},{"repo":"actions/setup-node","sha":"949feb2413d6458794dcd2491c4babbbce0c15c1","version":"v7.1.0"},{"repo":"actions/upload-artifact","sha":"cf430e030ddbb5b0abf93d22962f4752f3646cd9","version":"cf430e030ddbb5b0abf93d22962f4752f3646cd9"},{"repo":"github/gh-aw-actions/setup","sha":"866158eb5c6cbfd3c614104e3d3d6634e246d220","version":"866158eb5c6cbfd3c614104e3d3d6634e246d220"}],"containers":[{"image":"ghcr.io/github/gh-aw-firewall/agent:0.28.49@sha256:39f923c51e2790a2a00085959bf8c31a06a23fb3d7fd463f704d7d41291425b3"},{"image":"ghcr.io/github/gh-aw-firewall/api-proxy:0.28.49@sha256:ef6d61dac70d98389384c3a760882931d20310a45b908f30dd2cc0ebf36f1b39"},{"image":"ghcr.io/github/gh-aw-firewall/cli-proxy:0.28.49@sha256:147eb25d465ce0aa6b60d2b711279533b8e1aa40b9d5161f90e927252c84955c"},{"image":"ghcr.io/github/gh-aw-firewall/squid:0.28.49@sha256:0041ab94c9c3e190fbd851add7dd46bf950e987322ca2bf20e9fadb5803e94e7"},{"image":"ghcr.io/github/gh-aw-mcpg:v0.4.30","digest":"sha256:ab5a436a1490438db473e4e3d4c973cb1d75e3cb233fb08b73d31b42d7d18fba","pinned_image":"ghcr.io/github/gh-aw-mcpg:v0.4.30@sha256:ab5a436a1490438db473e4e3d4c973cb1d75e3cb233fb08b73d31b42d7d18fba"},{"image":"ghcr.io/github/gh-aw-node","digest":"sha256:11c2c544876cdbaffefe0f7f1283b74838c209654b4934a78e23ed11f750490f","pinned_image":"ghcr.io/github/gh-aw-node@sha256:11c2c544876cdbaffefe0f7f1283b74838c209654b4934a78e23ed11f750490f"},{"image":"ghcr.io/github/github-mcp-server:v1.12.2","digest":"sha256:508a0857ec762b1ab1cece29193345b501fab1dd9d1228a7b617062954cecac6","pinned_image":"ghcr.io/github/github-mcp-server:v1.12.2@sha256:508a0857ec762b1ab1cece29193345b501fab1dd9d1228a7b617062954cecac6"}],"has_pull_request":true,"mcp_servers":[{"name":"safeoutputs","tools":["create_pull_request","missing_data","missing_tool","noop","report_incomplete"]}],"threat_detection":{"mode":"enabled"}}
 # This file was automatically generated by gh-aw (v0.91.8). DO NOT EDIT. To debug this workflow, load the skill at https://github.com/github/gh-aw/blob/main/debug.md
 #
 #    ___                   _   _
@@ -39,15 +39,14 @@
 # Custom actions used:
 #   - actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 #   - actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+#   - actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
 #   - actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-#   - actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-#   - actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+#   - actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
 #   - actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
 #   - actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
 #   - actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
 #   - actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-#   - actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-#   - actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+#   - actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
 #   - actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
 #   - github/gh-aw-actions/setup@866158eb5c6cbfd3c614104e3d3d6634e246d220
 #   - github/gh-aw-actions/setup@866158eb5c6cbfd3c614104e3d3d6634e246d220 # 866158eb5c6cbfd3c614104e3d3d6634e246d220
@@ -609,7 +608,7 @@ jobs:
         run: bash "${RUNNER_TEMP}/gh-aw/actions/restore_inline_skills.sh"
       - id: github-read-token
         name: Generate read-only GitHub token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
           owner: microsoft
@@ -618,7 +617,7 @@ jobs:
           private-key: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
           repositories: aspire-skills,aspire
       - name: Download immutable source evidence
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: telemetry-source
           path: /tmp/gh-aw/agent
@@ -1679,7 +1678,7 @@ jobs:
           persist-credentials: false
           ref: ${{ github.workflow_sha }}
       - if: always() && steps.detection_guard.outputs.run_detection == 'true'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: telemetry-verified-proposal
           path: ${{ runner.temp }}/telemetry-verified/
@@ -1699,7 +1698,7 @@ jobs:
             });
       - name: Record immutable native review inputs
         if: always() && steps.detection_guard.outputs.run_detection == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           if-no-files-found: error
           name: telemetry-reviewed-proposal
@@ -1976,7 +1975,7 @@ jobs:
             const source = await resolveSource({ github, context, directory: process.env.GITHUB_WORKSPACE });
             core.setOutput("source", JSON.stringify(source));
             core.setOutput("aspire-base", source.aspireBase);
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           if-no-files-found: error
           name: telemetry-source
@@ -2141,11 +2140,11 @@ jobs:
           path: _telemetry-tools
           persist-credentials: false
           ref: ${{ github.workflow_sha }}
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: telemetry-verified-proposal
           path: ${{ runner.temp }}/telemetry-verified/
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: telemetry-reviewed-proposal
           path: ${{ runner.temp }}/telemetry-reviewed/
@@ -2249,14 +2248,14 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.workflow_sha }}
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: telemetry-verified-proposal
           path: ${{ runner.temp }}/telemetry-verified/
       - name: Generate read-only publication audit token
         id: publication-read-token
         if: needs.safe_outputs.outputs.created_pr_number != '' || needs.safe_outputs.outputs.created_pr_url != ''
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
           owner: microsoft
@@ -2326,7 +2325,7 @@ jobs:
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: agent
           path: /tmp/gh-aw/
@@ -2346,7 +2345,7 @@ jobs:
             if (receipt.tests?.status === "incomplete" || receipt.tests?.failed) {
               core.warning("Isolated telemetry build/tests did not pass. Diagnostics will be included in the draft or no-op summary; no automatic repair or retry.");
             }
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           if-no-files-found: error
           name: telemetry-verified-proposal
