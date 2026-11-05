@@ -21,7 +21,8 @@ function workspace(t, caseName) {
 
 function edit(root, path, change) {
   const file = join(root, "app", path);
-  const before = readFileSync(file, "utf8");
+  // Windows checkouts may convert fixtures to CRLF; the edits match LF text.
+  const before = readFileSync(file, "utf8").replace(/\r\n/g, "\n");
   const after = change(before);
   assert.notEqual(after, before, `Test edit did not change ${path}`);
   writeFileSync(file, after);
