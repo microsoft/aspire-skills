@@ -1621,18 +1621,17 @@ stimuli:
         - src: ../../../evals/aspireify-experimental-diagnostics/file-based/api
           dest: app/api
     graders:
+      # One grader checks both AddDotnetProject and the ASPIRECERTIFICATES001 suppression.
+      # With only an eval-wide 0.7 threshold, a separate suppression grader let a
+      # response that breaks the 17.0 build still pass at 3/4.
       - type: output-matches
-        name: dotnet-17-uses-add-dotnet-project
+        name: dotnet-17-adds-project-with-certificate-suppression
         config:
-          pattern: "AddDotnetProject\\(\\s*\"api\""
+          pattern: "^(?=[\\s\\S]*AddDotnetProject\\(\\s*\"api\")(?=[\\s\\S]*ASPIRECERTIFICATES001)"
       - type: output-not-contains
         name: dotnet-17-avoids-obsolete-add-csharp-app
         config:
           substring: builder.AddCSharpApp(
-      - type: output-contains
-        name: dotnet-17-keeps-certificate-suppression
-        config:
-          substring: ASPIRECERTIFICATES001
       - type: skill-invocation
         name: invokes-aspireify-dotnet-project-17
         config:

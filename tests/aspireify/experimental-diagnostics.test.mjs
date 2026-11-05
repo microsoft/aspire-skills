@@ -55,3 +55,42 @@ test("Aspireify experimental C# API guidance is version-aware for Aspire 17.0", 
     "AddDotnetProject is stable from 17.0; only 13.5 marks it ASPIREDOTNETPROJECT001");
   assert.match(text, /experimental on 13\.5 \(`ASPIREDOTNETPROJECT001`\), a preview package on 13\.6 and stable from 17\.0/);
 });
+
+// Vally 0.16 has only an eval-wide scoring threshold, so this stimulus must be weighted so that
+// omitting the ASPIRECERTIFICATES001 suppression (which breaks the 17.0 build) fails it outright.
+test("Aspireify 17.0 AddDotnetProject eval fails a response that omits the certificate suppression", async () => {
+  const { parse } = await import("yaml");
+  const spec = parse(readFileSync(new URL("evals/eval.yaml", root), "utf8"));
+  const stimulus = spec.stimuli.find(s => s.name === "aspireify-csharp-dotnet-project-17-001");
+  assert.ok(stimulus, "aspireify-csharp-dotnet-project-17-001 stimulus is missing");
+  const threshold = spec.scoring.threshold;
+
+  // Mirrors Vally's static output graders: an unweighted mean of grader scores, pass when >= threshold.
+  const score = output => {
+    const results = stimulus.graders.map(({ type, config }) => {
+      const lower = !config.case_sensitive;
+      const has = value => lower ? output.toLowerCase().includes(value.toLowerCase()) : output.includes(value);
+      switch (type) {
+        case "output-matches": return new RegExp(config.pattern).test(output);
+        case "output-contains": return has(config.value ?? config.substring);
+        case "output-not-contains": return !has(config.value ?? config.substring);
+        case "skill-invocation": return true;
+        default: assert.fail(`Unexpected grader type ${type}`);
+      }
+    });
+    return results.filter(Boolean).length / results.length;
+  };
+
+  const suppressed = [
+    "#pragma warning disable ASPIRECERTIFICATES001",
+    'var api = builder.AddDotnetProject("api", "./api")',
+    "    .WithHttpsDeveloperCertificate();",
+  ].join("\n");
+  const unsuppressed = suppressed.split("\n").slice(1).join("\n");
+
+  assert.ok(score(suppressed) >= threshold, `A correct response scores ${score(suppressed)} < ${threshold}`);
+  assert.ok(score(unsuppressed) < threshold,
+    `A response without ASPIRECERTIFICATES001 still passes at ${score(unsuppressed)} >= ${threshold}`);
+  assert.ok(score(suppressed.replace("AddDotnetProject", "AddCSharpApp")) < threshold,
+    "A response using the obsolete AddCSharpApp must fail");
+});
