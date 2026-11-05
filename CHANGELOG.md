@@ -43,6 +43,14 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   Aspire CLI and run `aspire restore` before `npm run build`. The generated
   `.aspire/modules/` folder is gitignored, so on a clean checkout the build failed with
   `TS2307: Cannot find module './.aspire/modules/aspire.mjs'`.
+- Corrected Aspireify's TypeScript AppHost `package.json` guidance to match `aspire init`.
+  With an existing root `package.json`, the AppHost goes in `aspire-apphost/` and the
+  root only gains `aspire:start`/`aspire:build`/`aspire:dev` delegates; the merge rules
+  (kept scripts and module type, replaced `engines.node`) apply to the AppHost package.
+  `aspire restore` is no longer described as creating or merging `package.json` or
+  `tsconfig.apphost.json`, and the fresh-package scripts are labeled 13.6+ alongside the
+  13.5 alias layout. The `aspire:*` scripts compile with `tsc -p tsconfig.apphost.json`
+  instead of bare `tsc`.
 
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
