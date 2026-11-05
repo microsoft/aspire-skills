@@ -26,6 +26,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   "Documentation page ... not found" in `aspire docs get`. The package-discovery examples
   now use `set-up-redis-in-the-apphost` and `set-up-go-apps-in-the-apphost` instead of the
   retired `redis-integration` and `go-integration` slugs.
+- Corrected the Aspireify integration example to `aspire add javascript`. `aspire add nodejs`
+  no longer resolves after the package was renamed to `Aspire.Hosting.JavaScript`, and
+  non-interactive mode fails because it requires an exact friendly name.
 
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 

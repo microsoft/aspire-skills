@@ -122,7 +122,7 @@ To add an integration package (which unlocks typed builder methods):
 # First-party
 aspire add redis
 aspire add python
-aspire add nodejs
+aspire add javascript
 aspire add go
 
 # Community Toolkit
