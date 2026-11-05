@@ -1600,3 +1600,41 @@ stimuli:
         config:
           required:
             - aspireify
+  - name: aspireify-csharp-dotnet-project-17-001
+    prompt: >
+      Use the aspireify skill. My file-based AppHost app/apphost.cs is on Aspire 17.0.
+      Add the ASP.NET Core API in app/api as a resource named api and serve it over HTTPS
+      with WithHttpsDeveloperCertificate(). Do not edit files or restore, build or run
+      anything; show the AppHost code in your reply.
+    tags:
+      priority: p1
+      scenario: non-executing-guidance
+      area:
+        - authoring
+        - csharp
+        - experimental-diagnostics
+        - aspire-17-0
+    environment:
+      files:
+        - src: ../../../evals/aspireify-experimental-diagnostics/file-based-17/apphost.cs
+          dest: app/apphost.cs
+        - src: ../../../evals/aspireify-experimental-diagnostics/file-based/api
+          dest: app/api
+    graders:
+      - type: output-matches
+        name: dotnet-17-uses-add-dotnet-project
+        config:
+          pattern: "AddDotnetProject\\(\\s*\"api\""
+      - type: output-not-contains
+        name: dotnet-17-avoids-obsolete-add-csharp-app
+        config:
+          substring: builder.AddCSharpApp(
+      - type: output-contains
+        name: dotnet-17-keeps-certificate-suppression
+        config:
+          substring: ASPIRECERTIFICATES001
+      - type: skill-invocation
+        name: invokes-aspireify-dotnet-project-17
+        config:
+          required:
+            - aspireify

@@ -33,7 +33,7 @@ Shared fixtures live at the **repo-root** `evals/` directory and are referenced 
 
 ```
 evals/
-├── aspireify-experimental-diagnostics/ # File- and project-based C# AppHosts plus a grader for experimental-API suppressions
+├── aspireify-experimental-diagnostics/ # File- and project-based C# AppHosts (13.6.4, plus a 17.0 file-based AppHost) and a grader for experimental-API suppressions
 ├── csharp-apphost/      # Wired C# AppHost (Aspire.AppHost.Sdk + Program.cs)
 ├── ts-apphost/          # TypeScript AppHost (apphost.mts + .aspire/modules/)
 ├── go-apphost/          # Go AppHost shaped like aspire-go-starter (apphost.go + aspire.config.json + go.mod; no api/ service or generated .aspire/modules/)

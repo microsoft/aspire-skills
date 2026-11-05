@@ -85,7 +85,7 @@ package use the same release family. Do not mix incompatible package versions.
 | File upload / progress | File inputs are stable; progress dialogs remain experimental under `ASPIREINTERACTION001`. |
 | Interactive terminal | Invoke `aspire-terminals` for `WithTerminal`, auxiliary dock/dialog/headless processes, terminal prompts, REPLs and automation. |
 | AI integration | Migrate deprecated `Aspire.Hosting.GitHub.Models` usage to Azure AI Foundry. |
-| Existing .NET project by path | `AddDotnetProject` moved to experimental `Aspire.Hosting.Dotnet` (`ASPIREDOTNETPROJECT001`). |
+| Existing .NET project by path | `AddDotnetProject` lives in `Aspire.Hosting.Dotnet`: experimental on 13.5 (`ASPIREDOTNETPROJECT001`), a preview package on 13.6 and stable from 17.0. See [Experimental C# APIs](#experimental-c-apis-used-in-these-examples) for 17.0 wiring. |
 | Dev tunnel region | Use normalized names such as `DevTunnelRegion.UKSouth` and `SoutheastAsia`. |
 
 For all 13.5 breaking changes and patch caveats, see
@@ -163,6 +163,19 @@ suppressed.
 
 TypeScript AppHosts need neither. If a build reports a different `ASPIRE...` diagnostic,
 confirm it with `aspire docs api get` before suppressing it.
+
+**Aspire 17.0.** Check the AppHost's SDK version before wiring a .NET service:
+
+- `AddCSharpApp` is obsolete in 17.0 rather than experimental. Calls report the CS0618
+  warning, so `ASPIRECSHARPAPPS001` no longer applies.
+- For a new .NET service in a 17.0 AppHost, run `aspire add Aspire.Hosting.Dotnet` and use
+  `builder.AddDotnetProject("api", "../src/Api")`. The path can be a project file, a
+  directory with exactly one project, or a file-based `.cs` app. The other examples here
+  use `AddCSharpApp` because it is the 13.6 API.
+- Don't migrate existing `AddCSharpApp` or `AddProject` calls unless the user asks. For a
+  requested migration, use the `aspire-project-v2-migration` skill.
+- `WithHttpsDeveloperCertificate()` is still experimental in 17.0, so keep the
+  `ASPIRECERTIFICATES001` suppression.
 
 ## Service communication: `WithReference` vs `WithEnvironment`
 

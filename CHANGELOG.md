@@ -42,6 +42,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Documented the `ASPIRECSHARPAPPS001` and `ASPIRECERTIFICATES001` suppressions that
   Aspireify's C# `AddCSharpApp` and `WithHttpsDeveloperCertificate` examples need. Without
   them, a C# AppHost fails to build with these experimental-API diagnostics as errors.
+  The guidance is version-aware for Aspire 17.0: `AddCSharpApp` is obsolete there, new
+  .NET services use `AddDotnetProject` from `Aspire.Hosting.Dotnet`, existing apps are not
+  migrated unprompted, and `WithHttpsDeveloperCertificate` keeps its `ASPIRECERTIFICATES001`
+  suppression.
 - Corrected Aspireify's TypeScript AppHost `package.json` guidance to match `aspire init`.
   With an existing root `package.json`, the AppHost goes in `aspire-apphost/` and the
   root only gains `aspire:start`/`aspire:build`/`aspire:dev` delegates; the merge rules

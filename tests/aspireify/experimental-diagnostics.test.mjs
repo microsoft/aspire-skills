@@ -35,3 +35,23 @@ test("Aspireify C# examples that use experimental APIs document their diagnostic
     }
   }
 });
+
+// Aspire 17.0 (microsoft/aspire main, 17.0.0) replaces AddCSharpApp's [Experimental] with
+// [Obsolete], ships AddDotnetProject as stable and keeps WithHttpsDeveloperCertificate experimental.
+test("Aspireify experimental C# API guidance is version-aware for Aspire 17.0", () => {
+  const text = readFileSync(new URL("references/apphost-wiring.md", root), "utf8").replace(/\r\n/g, "\n");
+  const section = text.match(/### Experimental C# APIs used in these examples\n([\s\S]*?)\n## /)?.[1];
+  assert.ok(section, "apphost-wiring.md is missing the experimental C# APIs section");
+
+  assert.match(section, /In Aspire 13\.6, two C# APIs used below are experimental/);
+  assert.match(section, /`AddCSharpApp` is obsolete in 17\.0/);
+  assert.match(section, /`ASPIRECSHARPAPPS001` no longer applies/);
+  assert.match(section, /aspire add Aspire\.Hosting\.Dotnet/);
+  assert.match(section, /builder\.AddDotnetProject\("api", "\.\.\/src\/Api"\)/);
+  assert.match(section, /Don't migrate existing `AddCSharpApp` or `AddProject` calls unless the user asks/);
+  assert.match(section, /`WithHttpsDeveloperCertificate\(\)` is still experimental in 17\.0[\s\S]*`ASPIRECERTIFICATES001`/);
+
+  assert.doesNotMatch(text, /`AddDotnetProject` moved to experimental/,
+    "AddDotnetProject is stable from 17.0; only 13.5 marks it ASPIREDOTNETPROJECT001");
+  assert.match(text, /experimental on 13\.5 \(`ASPIREDOTNETPROJECT001`\), a preview package on 13\.6 and stable from 17\.0/);
+});
