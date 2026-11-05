@@ -15,7 +15,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ### Changed
 - Corrected the Aspireify TypeScript data-volume example to the generated AppHost SDK:
   `withDataVolume({ name: "pg-data" })` instead of a positional name. The previous form
-  failed type checking, so `aspire start` exited before starting any resource.
+  failed type checking, so `aspire start` exited before starting any resource. A new
+  `aspireify-ts-named-volume-001` eval checks that TypeScript named-volume guidance uses
+  the options object.
 - Corrected the Aspireify TypeScript YARP example to add routes inside
   `withConfiguration(async (yarp) => ...)`. The generated AppHost SDK has no
   `addRoute` or `addCatchAllRoute` on the YARP resource, so the previous example
