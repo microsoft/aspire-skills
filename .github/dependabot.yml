@@ -3,6 +3,10 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     target-branch: "dev"
+    # Recommended by gh-aw docs:
+    # https://github.github.com/gh-aw/reference/dependabot/#compiler-managed-gh-aw-actions-ignore-rule
+    ignore:
+      - dependency-name: "github/gh-aw-actions/*" # Managed by gh aw compile. Version-locked to the gh-aw compiler; do not bump.
     groups:
       github-actions:
         patterns: ["*"]

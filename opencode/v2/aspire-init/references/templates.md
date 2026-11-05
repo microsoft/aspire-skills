@@ -11,8 +11,10 @@ https://aspire.dev/reference/cli/commands/aspire-new/
 | `aspire-ts-cs-starter` | Starter App (ASP.NET Core / React) | C# |
 | `aspire-py-starter` | Starter App (FastAPI / React) | **TypeScript** (drives Python) |
 | `aspire-ts-starter` | Starter App (Express / React) | TypeScript |
+| `aspire-go-starter` | Starter App (Go API + Redis) | Go (Aspire 17.0 or later) |
 | `aspire-empty` | Minimal scaffold, no resources pre-wired | C# |
 | `aspire-ts-empty` | Minimal scaffold, no resources pre-wired | TypeScript |
+| `aspire-go-empty` | Minimal scaffold, no resources pre-wired | Go (Aspire 17.0 or later) |
 
 > **Important — Python starter changed in 13.3.** `dotnet new aspire-py-starter` was removed.
 > The current path is `aspire new aspire-py-starter`, and the AppHost is **TypeScript**, not
@@ -21,6 +23,10 @@ https://aspire.dev/reference/cli/commands/aspire-new/
 > Aspire 13.5 templates use `apphost.mts` for TypeScript AppHosts. New C# AppHost templates
 > enable `AspireUseCliBundle=true` and can target .NET 11 preview in addition to the current
 > .NET 10 LTS.
+
+> **Go templates require Aspire 17.0 or later.** `aspire-go-starter` creates a Go AppHost, Redis,
+> and a Go `api` service; `aspire-go-empty` creates only the Go AppHost. Both need a Go toolchain
+> (the scaffolded `go.mod` declares `go 1.26`; install from https://go.dev/dl/).
 
 ## Common Options
 
@@ -85,6 +91,9 @@ aspire new aspire-starter --channel daily
 
 # TypeScript-AppHost-driven Python starter with Redis cache
 aspire new aspire-py-starter --use-redis-cache true --name py-shop --output ./py-shop --non-interactive
+
+# Go AppHost with a Go API and Redis (Aspire 17.0 or later)
+aspire new aspire-go-starter --name go-shop --output ./go-shop --non-interactive
 ```
 
 ## When `aspire new` Is Wrong
