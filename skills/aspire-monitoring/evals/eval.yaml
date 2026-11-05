@@ -540,6 +540,15 @@ stimuli:
   - name: should_trigger_07
     description: "Reason: Deployed container app logs route through monitoring bridge"
     prompt: Tail the container app logs for my deployed Aspire service
+    simulation:
+      tool_overrides:
+        bash:
+          patterns:
+            - match: '\baz\s+login\b'
+              output: >-
+                ERROR: Interactive Azure sign-in is unavailable
+                in this non-interactive environment.
+              is_error: true
     tags:
       priority: p1
       area: routing
