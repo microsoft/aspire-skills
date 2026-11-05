@@ -71,7 +71,7 @@ tools:
 pre-agent-steps:
   - name: Generate read-only GitHub token
     id: github-read-token
-    uses: actions/create-github-app-token@v3.2.0
+    uses: actions/create-github-app-token@v3.3.0
     with:
       client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
       private-key: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
@@ -80,7 +80,7 @@ pre-agent-steps:
       permission-contents: read
       permission-pull-requests: read
   - name: Download immutable source evidence
-    uses: actions/download-artifact@v8.0.1
+    uses: actions/download-artifact@v8.0.2
     with:
       name: telemetry-source
       path: /tmp/gh-aw/agent
@@ -109,7 +109,7 @@ jobs:
             const source = await resolveSource({ github, context, directory: process.env.GITHUB_WORKSPACE });
             core.setOutput("source", JSON.stringify(source));
             core.setOutput("aspire-base", source.aspireBase);
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: telemetry-source
           path: ${{ runner.temp }}/telemetry-source/
@@ -144,7 +144,7 @@ jobs:
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@v8.0.2
         with:
           name: agent
           path: /tmp/gh-aw/
@@ -164,7 +164,7 @@ jobs:
             if (receipt.tests?.status === "incomplete" || receipt.tests?.failed) {
               core.warning("Isolated telemetry build/tests did not pass. Diagnostics will be included in the draft or no-op summary; no automatic repair or retry.");
             }
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: telemetry-verified-proposal
           path: ${{ runner.temp }}/telemetry-verified/
@@ -188,14 +188,14 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@v8.0.2
         with:
           name: telemetry-verified-proposal
           path: ${{ runner.temp }}/telemetry-verified/
       - name: Generate read-only publication audit token
         id: publication-read-token
         if: needs.safe_outputs.outputs.created_pr_number != '' || needs.safe_outputs.outputs.created_pr_url != ''
-        uses: actions/create-github-app-token@v3.2.0
+        uses: actions/create-github-app-token@v3.3.0
         with:
           client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
           private-key: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
@@ -271,7 +271,7 @@ safe-outputs:
           ref: ${{ github.workflow_sha }}
           path: _telemetry-tools
           persist-credentials: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: telemetry-verified-proposal
           path: ${{ runner.temp }}/telemetry-verified/
@@ -289,7 +289,7 @@ safe-outputs:
               directory: "/tmp/gh-aw/threat-detection"
             });
       - name: Record immutable native review inputs
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: telemetry-reviewed-proposal
           path: ${{ runner.temp }}/telemetry-reviewed/
@@ -324,11 +324,11 @@ safe-outputs:
         ref: ${{ github.workflow_sha }}
         path: _telemetry-tools
         persist-credentials: false
-    - uses: actions/download-artifact@v8.0.1
+    - uses: actions/download-artifact@v8.0.2
       with:
         name: telemetry-verified-proposal
         path: ${{ runner.temp }}/telemetry-verified/
-    - uses: actions/download-artifact@v8.0.1
+    - uses: actions/download-artifact@v8.0.2
       with:
         name: telemetry-reviewed-proposal
         path: ${{ runner.temp }}/telemetry-reviewed/

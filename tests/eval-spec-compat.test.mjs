@@ -60,6 +60,28 @@ test("grader names in the authoring examples use the supported spelling", () => 
   }
 });
 
+test("shared bind-mount advice guards command execution as well as workspace edits", () => {
+  const evaluation = parse(readFileSync(join(root, "skills", "aspireify", "evals", "eval.yaml"), "utf8"));
+  const stimulus = evaluation.stimuli.find(entry => entry.name === "aspireify-shared-bind-mount-001");
+  assert.ok(stimulus.graders.some(grader => grader.type === "diff-empty"));
+  const guard = stimulus.graders.find(grader => grader.type === "tool-calls");
+  assert.ok(guard, "read-only advice needs an execution-trace guard");
+  const isDisallowed = (name, args = {}) => guard.config.disallowed.some(entry =>
+    new RegExp(entry.name).test(name)
+    && Object.entries(entry.args ?? {}).every(([key, pattern]) =>
+      typeof args[key] === "string" && new RegExp(pattern).test(args[key])));
+
+  for (const name of ["bash", "powershell", "functions.powershell", "run_command", "terminal"]) {
+    assert.ok(isDisallowed(name), `${name} must not execute even without a command argument`);
+  }
+  assert.ok(isDisallowed("custom_runner", { command: "docker volume rm pg-data" }));
+  assert.ok(isDisallowed("custom_runner", { command: "Remove-Item C:\\data -Recurse" }));
+  assert.ok(isDisallowed("custom_runner", { command: "echo first\nRemove-Item C:\\data -Recurse" }));
+  for (const name of ["skill", "view", "glob", "rg"]) {
+    assert.ok(!isDisallowed(name), `${name} must remain available for read-only inspection`);
+  }
+});
+
 test("positive routing stimuli mirror the host matching-skill policy", () => {
   const activation = /Before answering, invoke the matching available Aspire skill or skills/;
   const spec = join("skills", "aspire", "evals", "eval.yaml");

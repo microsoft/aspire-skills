@@ -18,10 +18,11 @@ the committed tree. CI rejects missing, extra, or stale V1 and V2 catalog files.
 Add only consumer-facing changes to the current changelog entry; preserve earlier
 entries and the coordinated version.
 
-Canvas extensions use relative Git symlinks to share canonical theme and icon
-assets. Edit the canonical files directly; no synchronization step is needed.
+Canvas extensions serve canonical theme and icon assets directly and retain
+relative Git symlinks for packagers. Edit the canonical files directly; no
+synchronization step is needed.
 See [Shared canvas UI](canvas-ui.md) for token ownership, typography, icons,
-symlink-capable checkouts, plugin mirrors, and visual review.
+standalone packages, plugin mirrors, and visual review.
 
 The **Tests** workflow runs its three-OS matrix on PRs targeting main, dev, or
 release branches, and on pushes to main or dev. Release-branch pushes rely on PR

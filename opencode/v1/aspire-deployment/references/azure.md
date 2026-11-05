@@ -45,17 +45,21 @@ aspire docs get "external-parameters"
 
 Some Azure deployment searches can return noisy integration results. Search first so you can find renamed pages, then prefer the known deployment slugs above when they are available. If one of these known slugs is not available in the installed Aspire docs, inspect the closest current replacement before editing.
 
-Use API docs before editing. Search for the target environment, endpoint, and customization concepts in the AppHost language you detected:
+Use API docs before editing. Search for the target environment, endpoint, and customization concepts in the AppHost language you detected (`--language go` needs the 17.0 CLI):
 
 ```bash
 aspire docs api search "AddAzureContainerAppEnvironment" --language csharp
 aspire docs api search "AddAzureContainerAppEnvironment" --language typescript
+aspire docs api search "AddAzureContainerAppEnvironment" --language go
 aspire docs api search "AddAzureAppServiceEnvironment" --language csharp
 aspire docs api search "AddAzureAppServiceEnvironment" --language typescript
+aspire docs api search "AddAzureAppServiceEnvironment" --language go
 aspire docs api search "AddAzureKubernetesEnvironment" --language csharp
 aspire docs api search "AddAzureKubernetesEnvironment" --language typescript
+aspire docs api search "AddAzureKubernetesEnvironment" --language go
 aspire docs api search "WithExternalHttpEndpoints" --language csharp
 aspire docs api search "WithExternalHttpEndpoints" --language typescript
+aspire docs api search "WithExternalHttpEndpoints" --language go
 ```
 
 ## Shared Azure preflight
@@ -87,7 +91,7 @@ aspire secret set "Azure:Location" "<region>"
 aspire secret set "Azure:ResourceGroup" "<resource-group>"
 ```
 
-Do not use `aspire secret set` as the deployment parameter mechanism. It is a local/dev convenience today. For publish/deploy, TypeScript AppHosts, CI, and other non-interactive deploys, set deployment settings and AppHost parameters as environment variables on the `aspire deploy` process:
+Do not use `aspire secret set` as the deployment parameter mechanism. It is a local/dev convenience today. For publish/deploy, TypeScript and Go AppHosts, CI, and other non-interactive deploys, set deployment settings and AppHost parameters as environment variables on the `aspire deploy` process:
 
 ```bash
 Azure__SubscriptionId="<subscription-id>" \
@@ -96,6 +100,8 @@ Azure__ResourceGroup="my-app-rg" \
 Parameters__api_key="<secret-value>" \
 aspire deploy --apphost ./apphost.mts --environment Production --non-interactive
 ```
+
+For a Go AppHost, pass `--apphost ./apphost.go` instead.
 
 Do not print secret values. Subscription/resource group/location are not secrets, but still summarize them carefully.
 
@@ -140,10 +146,16 @@ Code changes:
    const aca = await builder.addAzureContainerAppEnvironment("aca");
    ```
 
-2. Add `.WithExternalHttpEndpoints()` to C# compute resources that should be publicly reachable, such as projects, JavaScript/Python executables, containers, Dockerfiles, and similar workloads. For TypeScript AppHosts, use the endpoint/external endpoint API returned by docs.
-3. Do not add explicit compute-environment assignment for the common single-environment case. Only if the AppHost has multiple compute environments, disambiguate each Azure Container Apps workload; in C#, add `.WithComputeEnvironment(aca)` to each compute resource that should deploy there. For TypeScript AppHosts, verify the current language-specific docs before assuming an equivalent assignment API.
-4. Do not add `PublishAsAzureContainerApp(...)` / `publishAsAzureContainerApp(...)` for a default Container App deployment. Add it only when the user needs per-resource Container App customization. Use Container App Job APIs only for worker/job resources that should run as jobs.
-5. Add managed Azure resources for production dependencies when appropriate, then keep normal `WithReference` / `withReference` connections so Aspire wires app settings, identities, and connection details.
+   Go AppHost shape (Aspire 17.0 or later):
+
+   ```go
+   aca := builder.AddAzureContainerAppEnvironment("aca")
+   ```
+
+2. Add `.WithExternalHttpEndpoints()` to C# or Go compute resources that should be publicly reachable, such as projects, JavaScript/Python executables, containers, Dockerfiles, and similar workloads. For TypeScript AppHosts, use the endpoint/external endpoint API returned by docs.
+3. Do not add explicit compute-environment assignment for the common single-environment case. Only if the AppHost has multiple compute environments, disambiguate each Azure Container Apps workload; in C# or Go, add `.WithComputeEnvironment(aca)` to each compute resource that should deploy there. For TypeScript AppHosts, verify the current language-specific docs before assuming an equivalent assignment API.
+4. Do not add `PublishAsAzureContainerApp(...)` (C# or Go) / `publishAsAzureContainerApp(...)` (TypeScript) for a default Container App deployment. Add it only when the user needs per-resource Container App customization. Use Container App Job APIs only for worker/job resources that should run as jobs.
+5. Add managed Azure resources for production dependencies when appropriate, then keep normal `WithReference` (C# or Go) / `withReference` (TypeScript) connections so Aspire wires app settings, identities, and connection details.
 6. When multiple Container Apps environments deploy to one resource group and their
    normalized names collide, use `WithUniqueResourceNaming()`. It is experimental under
    `ASPIREACANAMING002` and changes the physical environment name; applying it to an
@@ -155,7 +167,7 @@ Key checks:
 - Multiple external endpoint groups are not supported.
 - External non-HTTP endpoints are not supported.
 - HTTP/HTTP2 and TCP endpoints cannot be mixed on the same target port.
-- The external HTTP endpoints API marks endpoints reachable outside the Container Apps environment; verify the exact API name for C# or TypeScript before editing.
+- The external HTTP endpoints API marks endpoints reachable outside the Container Apps environment; verify the exact API name for C#, TypeScript, or Go before editing.
 - Internal services should not be made external unless the user wants public access.
 - HTTP endpoints are upgraded to HTTPS by default for deployed endpoint URLs; only disable the upgrade when the user explicitly wants HTTP.
 - Volumes and bind mounts become Azure Files-backed mounts, with generated storage accounts, file shares, and managed environment storage.
@@ -188,10 +200,16 @@ Code changes:
    const appService = await builder.addAzureAppServiceEnvironment("appservice");
    ```
 
-2. Add `.WithExternalHttpEndpoints()` to the C# web-facing compute resources that should become websites, such as projects, JavaScript/Python executables, containers, Dockerfiles, and similar workloads. For TypeScript AppHosts, use the endpoint/external endpoint API returned by docs.
-3. Do not add explicit compute-environment assignment for the common single-environment case. Only if the AppHost has multiple compute environments, disambiguate each App Service workload; in C#, add `.WithComputeEnvironment(appService)` to each website compute resource that should deploy there.
+   Go AppHost shape (Aspire 17.0 or later):
+
+   ```go
+   appService := builder.AddAzureAppServiceEnvironment("appservice")
+   ```
+
+2. Add `.WithExternalHttpEndpoints()` to the C# or Go web-facing compute resources that should become websites, such as projects, JavaScript/Python executables, containers, Dockerfiles, and similar workloads. For TypeScript AppHosts, use the endpoint/external endpoint API returned by docs.
+3. Do not add explicit compute-environment assignment for the common single-environment case. Only if the AppHost has multiple compute environments, disambiguate each App Service workload; in C# or Go, add `.WithComputeEnvironment(appService)` to each website compute resource that should deploy there.
 4. Keep background workers, infrastructure containers, and internal-only services out of App Service unless the docs say the resource is supported. Move dependencies to managed Azure resources or choose Container Apps/Azure Kubernetes Service (AKS).
-5. Do not add `PublishAsAzureAppServiceWebsite(...)` / `publishAsAzureAppServiceWebsite(...)` for a default website deployment. Add it only when the user needs website customization such as app settings, deployment slots, tags, or infrastructure callbacks.
+5. Do not add `PublishAsAzureAppServiceWebsite(...)` (C# or Go) / `publishAsAzureAppServiceWebsite(...)` (TypeScript) for a default website deployment. Add it only when the user needs website customization such as app settings, deployment slots, tags, or infrastructure callbacks.
 6. Use `SkipEnvironmentVariableNameChecks()` only when the user intentionally accepts App Service's dashed-setting behavior and the app does not depend on the original dashed key at runtime.
 
 Key checks:
@@ -234,7 +252,13 @@ Code changes:
    const aks = await builder.addAzureKubernetesEnvironment("aks");
    ```
 
-2. Do not add explicit compute-environment assignment for the common single-environment case. Only if the AppHost has multiple compute environments, disambiguate each Azure Kubernetes Service (AKS) workload; in C#, add `.WithComputeEnvironment(aks)` to each compute resource that should deploy there, such as projects, JavaScript/Python executables, containers, Dockerfiles, and similar workloads.
+   Go AppHost shape (Aspire 17.0 or later):
+
+   ```go
+   aks := builder.AddAzureKubernetesEnvironment("aks")
+   ```
+
+2. Do not add explicit compute-environment assignment for the common single-environment case. Only if the AppHost has multiple compute environments, disambiguate each Azure Kubernetes Service (AKS) workload; in C# or Go, add `.WithComputeEnvironment(aks)` to each compute resource that should deploy there, such as projects, JavaScript/Python executables, containers, Dockerfiles, and similar workloads.
 3. Do not add a separate plain Kubernetes environment for the same Azure Kubernetes Service (AKS) target. The Azure Kubernetes environment owns the Kubernetes/Helm deployment path.
 4. Use Azure Kubernetes Service (AKS) customization APIs only when needed, such as node pools, system node pool SKU/count, subnet integration, workload identity, custom ACR, or Application Gateway for Containers.
 5. Use Kubernetes Gateway/Ingress/service customization APIs for public exposure. Do not assume adding the environment makes every workload public.
