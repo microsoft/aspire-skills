@@ -39,4 +39,4 @@ aspire resource <resource> <command>
 | .NET service project (.cs files) | Rebuild/refresh resource if exposed | `aspire resource <name> rebuild` or the resource's IDE/watch workflow |
 | JavaScript/Python/Go files | Usually no Aspire action | File watchers/HMR handle it automatically |
 | Configuration (appsettings.json) | Check first | `aspire describe` then decide |
-| TypeScript AppHost deps | Restore | `aspire restore` |
+| TypeScript or Go AppHost deps | Restore | `aspire restore` |
