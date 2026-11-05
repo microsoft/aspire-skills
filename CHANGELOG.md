@@ -17,6 +17,18 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   instead of `null`.
 - Corrected Aspireify's TypeScript cache-wiring guidance so generated AppHosts
   build and start.
+- Corrected Aspireify's C# AppHost samples so they build against Aspire 13.6.
+- Corrected Aspireify's Node.js OpenTelemetry setup so it builds against current
+  `@opentelemetry/sdk-node` and exports telemetry.
+- Pointed Aspireify's "check what integrations auto-manage" lookups at the current
+  `connect-to-postgresql` and `connect-to-sql-server` docs pages. The retired
+  `postgresql-hosting-integration` and `sql-server-integration` slugs fail with
+  "Documentation page ... not found" in `aspire docs get`. The package-discovery examples
+  now use `set-up-redis-in-the-apphost` and `set-up-go-apps-in-the-apphost` instead of the
+  retired `redis-integration` and `go-integration` slugs.
+- Corrected the Aspireify integration example to `aspire add javascript`. `aspire add nodejs`
+  no longer resolves after the package was renamed to `Aspire.Hosting.JavaScript`, and
+  non-interactive mode fails because it requires an exact friendly name.
 
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
@@ -35,9 +47,6 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Gave discovered services whose names contain no ASCII letters or digits distinct
   default resource names in the Aspireify canvas. Previously they all defaulted to
   `service`, so their names collided and proposal retries were rejected.
-- Corrected the Aspireify integration example to `aspire add javascript`. `aspire add nodejs`
-  no longer resolves after the package was renamed to `Aspire.Hosting.JavaScript`, and
-  non-interactive mode fails because it requires an exact friendly name.
 - Kept running AppHost resources in a warning state while their health checks are
   still pending, instead of reporting them as errors before the first check returns.
 - Stopped Aspire AppHosts error redaction from mangling URLs and words that only
@@ -58,6 +67,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Removed the nonexistent `-v` alias from the `aspire new` options table in the
   Aspire init templates reference. `aspire new ... -v <version>` fails with
   "Unrecognized command or argument '-v'"; use `--version`.
+- Corrected the Aspireify TypeScript YARP example to add routes inside
+  `withConfiguration(async (yarp) => ...)`. The generated AppHost SDK has no
+  `addRoute` or `addCatchAllRoute` on the YARP resource, so the previous example
+  failed type checking and `aspire start` exited before starting any resource.
 - Kept discovered services without a proposal mapping visible in the Aspireify
   canvas as **Not assessed** in a "Not in the proposed graph" section, and
   preserved them as `notProposed` in the confirmation and chat handoff.
