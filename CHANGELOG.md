@@ -29,6 +29,12 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Corrected the Aspireify integration example to `aspire add javascript`. `aspire add nodejs`
   no longer resolves after the package was renamed to `Aspire.Hosting.JavaScript`, and
   non-interactive mode fails because it requires an exact friendly name.
+- Fixed two Aspireify C# examples that did not compile against Aspire: lifecycle hooks now
+  subscribe through `builder.Eventing.Subscribe<BeforeStartEvent>` and
+  `Subscribe<AfterResourcesCreatedEvent>` instead of the TypeScript-only
+  `SubscribeBeforeStart` and `SubscribeAfterResourcesCreated`, and the gRPC endpoint example
+  sets `UriScheme` and `Transport` instead of assigning `"grpc"` to the `ProtocolType`
+  `Protocol` property.
 
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
