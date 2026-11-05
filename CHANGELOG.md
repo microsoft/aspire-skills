@@ -18,6 +18,8 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Corrected Aspireify's TypeScript cache-wiring guidance so generated AppHosts
   build and start.
 - Corrected Aspireify's C# AppHost samples so they build against Aspire 13.6.
+- Corrected Aspireify's Node.js OpenTelemetry setup so it builds against current
+  `@opentelemetry/sdk-node` and exports telemetry.
 
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
