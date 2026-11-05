@@ -75,6 +75,38 @@ test("file-based AppHost fails when the pragma comes after the call or is restor
   assert.deepEqual(grade(restored, "file").map(p => p.split(" ")[0]), ["WithHttpsDeveloperCertificate"]);
 });
 
+test("file-based AppHost fails when a specific ID is restored after a blanket pragma disable", t => {
+  const restored = workspace(t, "file");
+  edit(restored, "apphost.cs", wireApi("./api", "#pragma warning disable\n#pragma warning restore ASPIRECERTIFICATES001\n\n"));
+  assert.deepEqual(grade(restored, "file").map(p => p.split(" ")[0]), ["WithHttpsDeveloperCertificate"]);
+
+  const redisabled = workspace(t, "file");
+  edit(redisabled, "apphost.cs", wireApi("./api",
+    "#pragma warning disable\n#pragma warning restore ASPIRECERTIFICATES001\n#pragma warning disable ASPIRECERTIFICATES001\n\n"));
+  assert.deepEqual(grade(redisabled, "file"), []);
+});
+
+test("file-based AppHost checks calls split across lines on the API name's line", t => {
+  const unsuppressed = workspace(t, "file");
+  edit(unsuppressed, "apphost.cs", source => source.replace("builder.Build().Run();",
+    "var api = builder\n    .AddCSharpApp\n    (\"api\", \"./api\")\n    .WithHttpsDeveloperCertificate\n    ();\n\nbuilder.Build().Run();"));
+  const problems = grade(unsuppressed, "file");
+  assert.equal(problems.length, 2, problems.join("\n"));
+  assert.match(problems.join("\n"), /AddCSharpApp in apphost\.cs is not covered/);
+  assert.match(problems.join("\n"), /WithHttpsDeveloperCertificate in apphost\.cs is not covered/);
+
+  edit(unsuppressed, "apphost.cs", source => source.replace("var api = builder\n", `${both}var api = builder\n`));
+  assert.deepEqual(grade(unsuppressed, "file"), []);
+});
+
+test("file-based AppHost ignores a commented-out #:property NoWarn", t => {
+  const root = workspace(t, "file");
+  edit(root, "apphost.cs", wireApi("./api"));
+  edit(root, "apphost.cs", source => source.replace("#:sdk Aspire.AppHost.Sdk@13.6.4\n",
+    "#:sdk Aspire.AppHost.Sdk@13.6.4\n/*\n#:property NoWarn=$(NoWarn);ASPIRECSHARPAPPS001;ASPIRECERTIFICATES001\n*/\n"));
+  assert.equal(grade(root, "file").length, 2);
+});
+
 test("file-based AppHost accepts #:property NoWarn only when it keeps $(NoWarn)", t => {
   const root = workspace(t, "file");
   edit(root, "apphost.cs", wireApi("./api"));
@@ -104,6 +136,25 @@ test("project-based AppHost passes with a second NoWarn that chains $(NoWarn) or
   const pragma = workspace(t, "project");
   edit(pragma, "AppHost/AppHost.cs", wireApi("../Api", both));
   assert.deepEqual(grade(pragma, "project"), []);
+});
+
+test("project-based AppHost rejects conditional and commented-out NoWarn suppressions", t => {
+  const added = "$(NoWarn);ASPIRECSHARPAPPS001;ASPIRECERTIFICATES001";
+  const variants = {
+    "a NoWarn Condition": `    <NoWarn Condition="'$(Configuration)' == 'Release'">${added}</NoWarn>\n  </PropertyGroup>`,
+    "a PropertyGroup Condition": `  </PropertyGroup>\n  <PropertyGroup Condition="'$(Configuration)' == 'Release'">\n    <NoWarn>${added}</NoWarn>\n  </PropertyGroup>`,
+    "a Choose/When": `  </PropertyGroup>\n  <Choose>\n    <When Condition="'$(Configuration)' == 'Release'">\n      <PropertyGroup>\n        <NoWarn>${added}</NoWarn>\n      </PropertyGroup>\n    </When>\n  </Choose>`,
+    "an XML comment": `    <!-- <NoWarn>${added}</NoWarn> -->\n  </PropertyGroup>`,
+  };
+  for (const [label, replacement] of Object.entries(variants)) {
+    const root = workspace(t, "project");
+    edit(root, "AppHost/AppHost.cs", wireApi("../Api"));
+    edit(root, "AppHost/AppHost.csproj", source => source.replace("  </PropertyGroup>", replacement));
+    const problems = grade(root, "project").join("\n");
+    assert.match(problems, /AddCSharpApp in AppHost\/AppHost\.cs is not covered/, label);
+    assert.match(problems, /WithHttpsDeveloperCertificate in AppHost\/AppHost\.cs is not covered/, label);
+    if (label !== "an XML comment") assert.match(problems, /sets NoWarn conditionally/, label);
+  }
 });
 
 test("project-based AppHost fails without a suppression", t => {

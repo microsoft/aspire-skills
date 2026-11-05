@@ -41,31 +41,63 @@ function effectiveNoWarn(values, problems, where) {
   return new Set(ids(current));
 }
 
-const projectNoWarn = text => [...text.matchAll(/<NoWarn\b[^>]*>([\s\S]*?)<\/NoWarn>/gi)].map(match => match[1]);
-const directiveNoWarn = text => [...text.matchAll(/^#:property\s+NoWarn\s*=\s*(.*)$/gim)].map(match => match[1].trim());
+const stripXmlComments = text => text.replace(/<!--[\s\S]*?-->/g, "");
 
-// Returns, per API, whether every call line is inside an active #pragma warning disable for its ID.
+// Returns the unconditional NoWarn values in document order, ignoring commented-out elements. A
+// conditional NoWarn (on the element, its PropertyGroup or under Choose/When) applies only to some
+// configurations, so it is rejected rather than counted.
+function projectNoWarn(text, problems, where) {
+  const xml = stripXmlComments(text);
+  const conditionalRanges = [];
+  for (const group of xml.matchAll(/<(PropertyGroup|When|Otherwise)\b([^>]*)>([\s\S]*?)<\/\1>/gi)) {
+    if (/\bCondition\s*=/i.test(group[2]) || !/^PropertyGroup$/i.test(group[1])) {
+      conditionalRanges.push([group.index, group.index + group[0].length]);
+    }
+  }
+  const values = [];
+  for (const match of xml.matchAll(/<NoWarn\b([^>]*)>([\s\S]*?)<\/NoWarn>/gi)) {
+    if (/\bCondition\s*=/i.test(match[1]) || conditionalRanges.some(([start, end]) => match.index > start && match.index < end)) {
+      problems.push(`${where} sets NoWarn conditionally; suppressions must apply to every configuration`);
+      continue;
+    }
+    values.push(match[2]);
+  }
+  return values;
+}
+
+const directiveNoWarn = source => [...stripComments(source).matchAll(/^#:property\s+NoWarn\s*=\s*(.*)$/gim)].map(match => match[1].trim());
+
+const lineAt = (text, index) => text.slice(0, index).split("\n").length - 1;
+
+// Returns the IDs of APIs with a call outside an active #pragma warning disable for that ID. Calls
+// are matched across line breaks and checked on the line of the API name, where the compiler reports
+// the diagnostic. As in C#, the most recent directive naming an ID, or blanket directive, wins.
 function pragmaCoverage(code, apis) {
-  const disabled = new Set();
+  const stripped = stripComments(code);
+  const callsByLine = new Map();
+  for (const api of apis) {
+    for (const match of stripped.matchAll(new RegExp(api.call.source, "g"))) {
+      const line = lineAt(stripped, match.index + match[0].indexOf(api.name));
+      callsByLine.set(line, [...(callsByLine.get(line) ?? []), api]);
+    }
+  }
+
   let all = false;
+  const overrides = new Map();
   const uncovered = new Set();
-  for (const line of stripComments(code).split("\n")) {
+  stripped.split("\n").forEach((line, index) => {
     const pragma = line.match(/^\s*#pragma\s+warning\s+(disable|restore)\b(.*)$/);
     if (pragma) {
       const listed = ids(pragma[2]);
-      if (pragma[1] === "disable") {
-        if (listed.length === 0) all = true;
-        listed.forEach(id => disabled.add(id));
-      } else {
-        if (listed.length === 0) { all = false; disabled.clear(); }
-        listed.forEach(id => disabled.delete(id));
-      }
-      continue;
+      const disable = pragma[1] === "disable";
+      if (listed.length === 0) { all = disable; overrides.clear(); }
+      listed.forEach(id => overrides.set(id, disable));
+      return;
     }
-    for (const api of apis) {
-      if (api.call.test(line) && !all && !disabled.has(api.id)) uncovered.add(api.id);
+    for (const api of callsByLine.get(index) ?? []) {
+      if (!(overrides.has(api.id) ? overrides.get(api.id) : all)) uncovered.add(api.id);
     }
-  }
+  });
   return uncovered;
 }
 
@@ -87,7 +119,7 @@ export function gradeAppHost(appDir, caseName) {
   if (spec.project) {
     const projectPath = join(appDir, spec.project);
     if (!existsSync(projectPath)) return [...problems, `${spec.project} is missing`];
-    noWarn = effectiveNoWarn(projectNoWarn(read(projectPath)), problems, spec.project);
+    noWarn = effectiveNoWarn(projectNoWarn(read(projectPath), problems, spec.project), problems, spec.project);
   } else {
     noWarn = effectiveNoWarn(directiveNoWarn(source), problems, `${spec.source} #:property`);
   }
