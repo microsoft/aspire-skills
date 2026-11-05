@@ -42,10 +42,15 @@ supports detached, noninteractive, exact-target, and worktree-isolated execution
 aspire new
 aspire init
 aspire init --language typescript
+aspire init --language go     # Aspire 17.0 or later
 ```
 
 - Use `aspire new` when creating a brand-new Aspire app from scratch.
 - Use `aspire init` when adding Aspire to an existing application.
+- Go AppHosts require Aspire 17.0 or later and a Go toolchain on `PATH`: the CLI runs the
+  AppHost with `go run .` (start it with `aspire start`, never `go run .` directly), and the
+  scaffold's `go.mod` declares `go 1.26`. Scaffold one with `aspire init --language go`, or
+  with `aspire new` and the `aspire-go-empty` or `aspire-go-starter` template.
 
 ## After `aspire init` — Hand Off to `aspireify`
 
@@ -62,8 +67,8 @@ The aspireify workflow:
 1. **Scan** the repository — discover .NET projects, Node.js apps, Python/Go services, docker-compose files
 2. **Present findings** — confirm with user which services to include
 3. **Wire the AppHost** — add resources using 3-tier API preference:
-   - Tier 1: First-party `Aspire.Hosting.*` (e.g., `AddPostgres`, `AddRedis`, `AddViteApp`, `AddNextJsApp`)
-   - Tier 2: Community Toolkit `CommunityToolkit.Aspire.Hosting.*` (e.g., `AddGolangApp`)
+   - Tier 1: First-party `Aspire.Hosting.*` (e.g., `AddPostgres`, `AddRedis`, `AddViteApp`, `AddNextJsApp`; for a Go application, `AddGoApp` from `Aspire.Hosting.Go` via `aspire add go`: preview from 13.4, stable from 17.0; require approval and an explicit compatible preview version on 13.x)
+   - Tier 2: Community Toolkit `CommunityToolkit.Aspire.Hosting.*` (e.g., `AddGolangApp` via `aspire add communitytoolkit-golang` for Go applications on Aspire older than 13.4 or when the user deliberately uses it; never migrate an existing Toolkit-based AppHost implicitly)
    - Tier 3: Raw fallbacks (`AddExecutable`, `AddDockerfile`, `AddContainer`)
 4. **Configure dependencies** — ServiceDefaults for .NET, OTel for non-.NET
 5. **Validate** — `aspire start` until all resources are healthy
@@ -80,11 +85,13 @@ The aspireify workflow:
 
 ### Init Config: `aspire.config.json`
 
-Read `aspire.config.json` at repo root for init context:
+Read the selected AppHost's `aspire.config.json` for init context. For a Go AppHost
+initialized in a subdirectory, use the adjacent configuration there, not the repository
+root, and resolve `appHost.path` relative to that file:
 
 | Field | Values | Meaning |
 |-------|--------|---------|
-| `appHost.language` | `"typescript/nodejs"` or `"csharp"` | AppHost syntax to use |
+| `appHost.language` | `"typescript/nodejs"`, `"csharp"`, or `"go"` (Aspire 17.0 or later) | AppHost syntax to use |
 | `appHost.path` | Path to AppHost file/dir | Where to edit |
 
 C# has two sub-modes:
@@ -119,11 +126,14 @@ aspire restore
 - Use `--apphost <path>` when the workspace has multiple AppHosts. The CLI's global config validates configured AppHost paths to catch typos early.
 - In 13.5, `aspire doctor --format Json` includes a structured `operating-system` check,
   detects VS Code, and runs DCP health checks.
+- In 17.0+, it also checks the selected Go AppHost's Go toolchain: missing Go fails,
+  Go 1.26+ passes, and older toolchains may fail or warn depending on `GOTOOLCHAIN`.
+  A warning about toolchain switching is not proof that restore or execution will work.
 
 ## Key Rules
 
 - **Never install the obsolete Aspire workload** (`dotnet workload install aspire`). Use `aspire add`, `aspire init`, or `aspire new` instead.
-- **Never edit `.aspire/modules/` directly** in TypeScript AppHosts. Use `aspire add <package>` to regenerate APIs, `aspire restore` if files are missing.
+- **Never edit `.aspire/modules/` directly** in TypeScript or Go AppHosts. Use `aspire add <package>` to regenerate APIs, `aspire restore` if files are missing.
 - For unfamiliar C# AppHost APIs, use `aspire docs search` as primary reference. If the `dotnet-inspect` skill is available, use it to inspect local symbols and overloads — but keep docs as the source of truth.
 - For custom dashboard or resource commands (`WithCommand`), always run `aspire docs search "custom resource commands"` before implementing.
 
@@ -134,11 +144,12 @@ aspire docs search <query>
 aspire docs get <slug>
 aspire docs api search <query> --language csharp
 aspire docs api search <query> --language typescript
+aspire docs api search <query> --language go     # Aspire 17.0 or later
 aspire docs api list <scope>
 aspire docs api get <id>
 ```
 
 - Use `aspire docs search` and `aspire docs get` for workflow guidance and documented patterns.
-- Use `aspire docs api search` when you need the C# or TypeScript API reference entry for a resource builder, extension method, or member.
+- Use `aspire docs api search` when you need the C#, TypeScript, or Go API reference entry for a resource builder, extension method, or member.
 - Use `aspire docs api list <scope>` to browse children under a language, package, module, type, or symbol.
-- Always specify `--language csharp` or `--language typescript` to get the correct API surface.
+- Always specify `--language csharp`, `--language typescript`, or `--language go` (Aspire 17.0 or later) to get the correct API surface.
