@@ -7,14 +7,22 @@ const referencesUrl = new URL("../skills/aspire-deployment/references/", import.
 
 // TypeScript AppHosts import ./.aspire/modules/aspire.mjs, which `aspire init` gitignores.
 // A clean CI checkout must run `aspire restore` before any step that type-checks the AppHost.
-function assertRestoresBeforeBuild(commands, label) {
+// The full workflow runs on a clean runner, so it must install the CLI itself. The cicd.md
+// snippet is a fragment placed after the shared install step, so installation is optional there.
+function assertRestoresBeforeBuild(commands, label, { requireInstall = false } = {}) {
     const install = commands.findIndex((command) => /aspire\.dev\/install\.sh/.test(command));
+    const addToPath = commands.findIndex((command) => /\.aspire\/bin\b.*>>\s*"?\$GITHUB_PATH"?/.test(command));
     const restore = commands.findIndex((command) => /^aspire restore\b/.test(command));
     const build = commands.findIndex((command) => /\bnpm run build\b/.test(command));
 
     assert.ok(build >= 0, `${label} must build the TypeScript workspace`);
     assert.ok(restore >= 0, `${label} must run aspire restore to generate .aspire/modules`);
     assert.ok(restore < build, `${label} must run aspire restore before npm run build`);
+    if (requireInstall) {
+        assert.ok(install >= 0, `${label} must install the Aspire CLI before aspire restore`);
+        assert.ok(addToPath > install && addToPath < restore,
+            `${label} must add $HOME/.aspire/bin to $GITHUB_PATH after installing and before aspire restore`);
+    }
     if (install >= 0) {
         assert.ok(install < restore, `${label} must install the Aspire CLI before aspire restore`);
     }
@@ -29,7 +37,9 @@ function runCommands(steps) {
 
 test("TypeScript deploy workflow restores the AppHost SDK before building", async () => {
     const workflow = parse(await readFile(new URL("github-actions-azure-typescript.yml", referencesUrl), "utf8"));
-    assertRestoresBeforeBuild(runCommands(workflow.jobs.deploy.steps), "github-actions-azure-typescript.yml");
+    assertRestoresBeforeBuild(runCommands(workflow.jobs.deploy.steps), "github-actions-azure-typescript.yml", {
+        requireInstall: true,
+    });
 });
 
 test("CI/CD TypeScript setup snippet restores the AppHost SDK before building", async () => {
