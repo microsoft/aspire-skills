@@ -9,6 +9,10 @@ Thank you for your interest in contributing to the Aspire Skills plugin!
 3. Make your changes
 4. Submit a pull request targeting `dev`
 
+Do not generate or commit OpenCode catalogs for source changes. CI validates
+catalog generation; release automation prepares snapshots for publication on
+`main`. Use your local checkout's `skills/` directory to test development changes.
+
 ## Skill File Format
 
 Skills follow the standard SKILL.md format:

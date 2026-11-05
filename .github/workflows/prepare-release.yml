@@ -1,0 +1,125 @@
+name: Prepare release
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: Full dev source commit SHA
+        required: true
+        type: string
+      version:
+        description: Release version without v
+        required: true
+        type: string
+      next_version:
+        description: Next development version without v
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prepare-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.repository == 'microsoft/aspire-skills' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout trusted automation
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "22"
+      - run: npm ci --ignore-scripts
+      - name: Prepare release commits
+        id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          NEXT_VERSION: ${{ inputs.next_version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          plan=$(node scripts/release-automation.mjs prepare "$SOURCE_SHA" "$RELEASE_VERSION" "$NEXT_VERSION")
+          echo "plan=$(jq -c . <<< "$plan")" >> "$GITHUB_OUTPUT"
+      - name: Generate Aspire App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
+          private-key: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: write
+      - name: Push release and development branches
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_PLAN: ${{ steps.prepare.outputs.plan }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r entry; do
+            if [[ "$(jq -r .existing <<< "$entry")" == "true" ]]; then
+              continue
+            fi
+            branch=$(jq -r .branch <<< "$entry")
+            base=$(jq -r .base <<< "$entry")
+            base_commit=$(jq -r .baseCommit <<< "$entry")
+            commit=$(jq -r .commit <<< "$entry")
+            current=$(git ls-remote --heads origin "refs/heads/$base" | cut -f1)
+            if [[ "$current" != "$base_commit" ]]; then
+              echo "::error::$base advanced during preparation; retry."
+              exit 1
+            fi
+            git -c credential.helper= -c 'credential.helper=!gh auth git-credential' \
+              push "--force-with-lease=refs/heads/$branch:" origin "$commit:refs/heads/$branch"
+          done < <(jq -c '.branches[]' <<< "$RELEASE_PLAN")
+      - name: Open release and development PRs
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          RELEASE_PLAN: ${{ steps.prepare.outputs.plan }}
+          SOURCE_SHA: ${{ inputs.source }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          NEXT_VERSION: ${{ inputs.next_version }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const {marker, branches} = JSON.parse(process.env.RELEASE_PLAN);
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            core.summary.addHeading("Prepared release");
+            for (const {branch, base} of branches) {
+              const pulls = await github.paginate(github.rest.pulls.list, {
+                ...context.repo, state: "all", head: `${context.repo.owner}:${branch}`, per_page: 100
+              });
+              if (pulls.length > 1) throw new Error(`Multiple PRs exist for ${branch}; resolve manually.`);
+              let pull = pulls[0];
+              if (pull) {
+                if (pull.base.ref !== base || !pull.body?.includes(marker)) {
+                  throw new Error(`Existing PR does not match this automation operation: ${branch}`);
+                }
+                if (pull.state !== "open") {
+                  throw new Error(`PR #${pull.number} is already closed or merged; it will not be reopened.`);
+                }
+              } else {
+                const release = base === "main";
+                const title = release ? `Release ${process.env.RELEASE_VERSION}` : `Advance dev to ${process.env.NEXT_VERSION}`;
+                const notes = release
+                  ? "Finalize the release notes, review the catalog snapshot, and merge after required checks pass."
+                  : "Advances coordinated versions and adds the next changelog heading. The released catalog snapshot is unchanged.";
+                ({data: pull} = await github.rest.pulls.create({
+                  ...context.repo, head: branch, base, title,
+                  body: `${marker}\n\nSource commit: ${process.env.SOURCE_SHA}\n\n${notes}\n\nWorkflow: ${runUrl}`
+                }));
+              }
+              core.info(`${branch}: ${pull.html_url}`);
+              core.summary.addLink(pull.title, pull.html_url).addEOL();
+            }
+            await core.summary.write();

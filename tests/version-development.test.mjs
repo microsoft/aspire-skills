@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { Repository } from "../scripts/release-git.mjs";
 import { versionSnapshot } from "../scripts/release-versions.mjs";
 import { prepareDevelopmentVersion } from "../scripts/version-development.mjs";
+import { buildCatalog } from "../scripts/build-opencode-catalog.mjs";
 
 function fixture(t, newline = "\n") {
   const root = mkdtempSync(join(tmpdir(), "dev-version-"));
@@ -37,13 +38,14 @@ function fixture(t, newline = "\n") {
     "## [0.0.3](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.3)", "", "Older notes.", ""
   ].join(newline);
   write("CHANGELOG.md", changelog);
+  buildCatalog(root);
   repo.run(["add", "--all"]);
   repo.run(["commit", "--quiet", "-m", "Version fixture"]);
   return { root, repo, changelog, skill };
 }
 
 for (const newline of ["\n", "\r\n"]) {
-  test(`version bump stages aligned versions, catalogs, and a new heading with ${JSON.stringify(newline)} line endings`, t => {
+  test(`version bump stages aligned versions and a heading without catalogs with ${JSON.stringify(newline)} line endings`, t => {
     const f = fixture(t, newline);
     prepareDevelopmentVersion(f.repo, "0.0.5");
     assert.equal(versionSnapshot(f.repo, f.repo.run(["write-tree"]).trim()).version, "0.0.5");
@@ -57,18 +59,26 @@ for (const newline of ["\n", "\r\n"]) {
     assert.equal(JSON.parse(readFileSync(join(f.root, ".claude-plugin", "marketplace.json"))).plugins[0].version, "9.0.0");
     const staged = f.repo.run(["diff", "--cached", "--name-only"]);
     assert.match(staged, /CHANGELOG\.md/);
-    assert.match(staged, /opencode\/v1\/index\.json/);
-    assert.match(staged, /opencode\/v2\/index\.json/);
+    assert.doesNotMatch(staged, /opencode\//);
     assert.equal(f.repo.run(["diff", "--name-only"]), "");
   });
 }
 
-test("a failed catalog build leaves the working tree clean so the bump can be retried", t => {
+test("development bumps do not generate catalogs even when skill source has a broken link", t => {
   const f = fixture(t);
   mkdirSync(join(f.root, "skills", "aspire", "references"), { recursive: true });
   writeFileSync(join(f.root, "skills", "aspire", "references", "broken.md"), "[Missing](missing.md)\n");
   f.repo.run(["add", "--all"]);
   f.repo.run(["commit", "--quiet", "-m", "Add a broken link"]);
-  assert.throws(() => prepareDevelopmentVersion(f.repo, "0.0.5"), /Broken relative Markdown link/);
+  prepareDevelopmentVersion(f.repo, "0.0.5");
+  assert.doesNotMatch(f.repo.run(["diff", "--cached", "--name-only"]), /opencode\//);
+});
+
+test("an invalid current heading leaves the working tree clean", t => {
+  const f = fixture(t);
+  writeFileSync(join(f.root, "CHANGELOG.md"), "# Invalid changelog\n");
+  f.repo.run(["add", "--all"]);
+  f.repo.run(["commit", "--quiet", "-m", "Invalid heading"]);
+  assert.throws(() => prepareDevelopmentVersion(f.repo, "0.0.5"), /newest changelog heading/);
   assert.equal(f.repo.run(["status", "--porcelain"]), "");
 });

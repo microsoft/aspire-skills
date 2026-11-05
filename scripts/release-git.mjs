@@ -35,13 +35,15 @@ export class Repository {
     this.trees = new Map();
   }
 
-  run(args, { binary = false, input } = {}) {
+  run(args, { binary = false, input, indexFile } = {}) {
     const environment = gitEnvironment();
+    if (indexFile) environment.GIT_INDEX_FILE = indexFile;
     const result = spawnSync("git", [
       "-c", `safe.directory=${this.root}`, "-c", "core.hooksPath=/dev/null",
       "-c", "core.fsmonitor=false", "-c", "commit.gpgsign=false",
       "-c", "core.autocrlf=false", "-c", "user.name=Aspire Skills Bot",
-      "-c", "user.email=aspire-skills-bot@users.noreply.github.com", ...args
+      "-c", "user.email=aspire-skills-bot@users.noreply.github.com",
+      ...(environment.GH_TOKEN ? ["-c", "credential.helper=!gh auth git-credential"] : []), ...args
     ], {
       cwd: this.root, env: environment, encoding: binary ? undefined : "utf8",
       maxBuffer: 64 * 1024 * 1024, input

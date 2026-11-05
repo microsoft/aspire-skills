@@ -199,11 +199,12 @@ Only flag concrete, high-confidence problems. Categories:
 6. **Bugs** — invalid YAML/JSON, broken cross-skill links (`../<wrong-name>/SKILL.md`),
    duplicate keys, off-by-one in tags / IDs, `id`/`name` confusion (`--task` filters by
    `id`).
-7. **Release history** — stale or missing `opencode/` catalogs, edits to earlier
+7. **Release history** — stale or missing release-candidate `opencode/` catalogs, edits to earlier
    changelog entries, backflow that loses current dev notes or main's approved
    history, release source changes outside the selected snapshot, unfinished
    release notes, or inconsistent canonical versions. Check documentation
-   readiness and maintainer publication/dev-backflow steps in the Release Checklist.
+   readiness and maintainer publication/patch-backport steps in the Release Checklist.
+   Ordinary source PRs need no generated commits; dev retains the last released snapshot.
 8. **13.5 staleness** — treating legacy `apphost.ts` as current, inspecting resources
    through `aspire ps`, using obsolete `.ServiceProvider` / `PublishAsConnectionString`,
    mixing 13.4/13.5 package families, or omitting experimental qualifications.
