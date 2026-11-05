@@ -35,6 +35,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   `SubscribeBeforeStart` and `SubscribeAfterResourcesCreated`, and the gRPC endpoint example
   sets `UriScheme` and `Transport` instead of assigning `"grpc"` to the `ProtocolType`
   `Protocol` property.
+- Replaced the nonexistent `resource.WithPrivateEndpoint()` in Aspireify's C#
+  authoring reference with Aspire's subnet-based `subnet.AddPrivateEndpoint(target)` API,
+  including the `Aspire.Hosting.Azure.Network` package reference and `ASPIREAZURE003` opt-in.
+  Aspireify's authoring rules now route private endpoint requests to that API instead of raw Bicep.
 
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
