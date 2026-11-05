@@ -13,6 +13,15 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   from Aspire 17.0.
 
 ### Changed
+- Corrected the Aspireify TypeScript data-volume example to the generated AppHost SDK:
+  `withDataVolume({ name: "pg-data" })` instead of a positional name. The previous form
+  failed type checking, so `aspire start` exited before starting any resource. A new
+  `aspireify-ts-named-volume-001` eval checks that TypeScript named-volume guidance uses
+  the options object.
+- Corrected the Aspireify TypeScript YARP example to add routes inside
+  `withConfiguration(async (yarp) => ...)`. The generated AppHost SDK has no
+  `addRoute` or `addCatchAllRoute` on the YARP resource, so the previous example
+  failed type checking and `aspire start` exited before starting any resource.
 - Corrected endpoint-discovery guidance so agents use reachable service URLs
   instead of `null`.
 - Corrected Aspireify's TypeScript cache-wiring guidance so generated AppHosts
@@ -85,10 +94,6 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Removed the nonexistent `-v` alias from the `aspire new` options table in the
   Aspire init templates reference. `aspire new ... -v <version>` fails with
   "Unrecognized command or argument '-v'"; use `--version`.
-- Corrected the Aspireify TypeScript YARP example to add routes inside
-  `withConfiguration(async (yarp) => ...)`. The generated AppHost SDK has no
-  `addRoute` or `addCatchAllRoute` on the YARP resource, so the previous example
-  failed type checking and `aspire start` exited before starting any resource.
 - Kept discovered services without a proposal mapping visible in the Aspireify
   canvas as **Not assessed** in a "Not in the proposed graph" section, and
   preserved them as `notProposed` in the confirmation and chat handoff.
