@@ -54,7 +54,7 @@ aspire docs search "golang"
 aspire docs search "python uvicorn"
 
 # Get a specific doc page by slug (returned from search results)
-aspire docs get "redis-integration"
+aspire docs get "set-up-redis-in-the-apphost"
 aspire docs get "set-up-go-apps-in-the-apphost"
 
 # Find the exact C# / TypeScript API reference entry for a builder method
@@ -97,10 +97,10 @@ Before modeling environment variables, passwords, ports, or volumes for a typed 
 
 ```bash
 # Check what AddPostgres manages automatically
-aspire docs get "postgresql-hosting-integration" --section "Connection properties"
+aspire docs get "connect-to-postgresql" --section "Connection properties"
 
 # Check what AddSqlServer manages
-aspire docs get "sql-server-integration" --section "Hosting integration"
+aspire docs get "connect-to-sql-server" --section "Connection properties"
 ```
 
 Look for the **"Connection properties"** section — it lists what the integration injects into consuming services. If it lists `Password`, `Host`, `Port` — the integration manages those. Do not create `AddParameter()` for values the integration already handles.
@@ -122,7 +122,7 @@ To add an integration package (which unlocks typed builder methods):
 # First-party
 aspire add redis
 aspire add python
-aspire add nodejs
+aspire add javascript
 aspire add go
 
 # Community Toolkit
@@ -234,9 +234,13 @@ var grpcService = builder.AddCSharpApp("grpc", "../src/GrpcService")
     .WithEndpoint("grpc", endpoint =>
     {
         endpoint.Port = 5050;
-        endpoint.Protocol = "grpc";
+        endpoint.UriScheme = "http";  // gRPC runs over HTTP/2; use "https" for TLS
+        endpoint.Transport = "http2";
     });
 ```
+
+`EndpointAnnotation.Protocol` is the socket protocol (`ProtocolType.Tcp` or `Udp`), not an
+application protocol name; set the scheme and transport instead.
 
 **`WithExternalHttpEndpoints()`** — mark a resource's HTTP endpoints as externally visible. Use this for user-facing frontends so the URL appears prominently in the dashboard:
 

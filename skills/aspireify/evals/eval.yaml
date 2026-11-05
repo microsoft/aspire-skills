@@ -749,6 +749,70 @@ stimuli:
           required: [aspireify]
       - type: diff-empty
         name: keeps-foundry-plan-read-only
+  - name: aspireify-ts-yarp-routing-001
+    prompt: >
+      Use the aspireify skill. Give a read-only plan with the apphost.mts code to add a YARP
+      gateway named `gateway` that routes `/api/{**catch-all}` to the `apiservice` project and
+      sends every other request to the `web` project. Do not edit files or run commands.
+    tags:
+      priority: p1
+      area:
+        - authoring
+        - typescript
+        - yarp
+        - known-bug
+    constraints:
+      max_agent_duration: 150s
+    environment:
+      files:
+        - src: ../../../evals/ts-apphost/apphost.mts
+          dest: ts-apphost/apphost.mts
+        - src: ../../../evals/ts-apphost/aspire.config.json
+          dest: ts-apphost/aspire.config.json
+    rubric:
+      - The assistant's response adds the routes inside `builder.addYarp('gateway').withConfiguration(async (yarp) => { ... })`, calling `addRoute` and `addCatchAllRoute` on the configuration builder parameter.
+      - The assistant's response awaits each `addRoute` and `addCatchAllRoute` call inside the callback.
+      - The assistant's response routes only to resources it declares or reuses from the existing AppHost, such as `apiservice` and `web`, rather than referencing undeclared variables.
+      - The assistant's response does not chain `addRoute` or `addCatchAllRoute` directly on the YARP resource returned by `addYarp`, which the TypeScript AppHost SDK does not export.
+      - The assistant's response remains read-only and does not claim unperformed execution.
+    graders:
+      - type: prompt
+        name: routes-inside-with-configuration
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response add the YARP routes inside a
+            `withConfiguration(async (...) => { ... })` callback on the `addYarp('gateway')`
+            resource, calling `addRoute` and `addCatchAllRoute` on the callback's
+            configuration builder parameter and awaiting each call?
+      - type: prompt
+        name: declares-route-targets
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response pass endpoints only from resources that its code
+            declares or that already exist in the AppHost (for example by keeping the `web`
+            project in a variable before calling `web.getEndpoint(...)`), rather than
+            referencing an undeclared variable?
+      - type: prompt
+        name: avoids-resource-level-route-methods
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response avoid calling `addRoute` or `addCatchAllRoute`
+            directly on the YARP resource returned by `addYarp` (for example
+            `builder.addYarp('gateway').addRoute(...)`) as implementation code? It may
+            mention that shape only to explain why it is wrong.
+      - type: output-contains
+        name: mentions-with-configuration
+        config:
+          substring: withConfiguration
+      - type: skill-invocation
+        name: invokes-aspireify-for-yarp
+        config:
+          required: [aspireify]
+      - type: diff-empty
+        name: keeps-yarp-plan-read-only
   - name: aspireify-ts-interaction-service-135-001
     prompt: >
       Use the aspireify skill before answering. Show a TypeScript AppHost resource-command

@@ -26,13 +26,20 @@ builder.AddProject<Projects.Worker>("worker")
     .WithReference(pg)
     .WaitFor(pg);
 
+#pragma warning disable ASPIREJAVASCRIPT001, ASPIREBROWSERLOGS001 // experimental APIs
 builder.AddNextJsApp("web", "../web")
     .WithReference(api)
     .WaitFor(api)
     .WithBrowserLogs();
+#pragma warning restore ASPIREJAVASCRIPT001, ASPIREBROWSERLOGS001
 
 builder.Build().Run();
 ```
+
+`WithBrowserLogs()` comes from the `Aspire.Hosting.Browsers` package (`aspire add browsers`;
+preview in 13.6). `AddNextJsApp` (`ASPIREJAVASCRIPT001`) and `WithBrowserLogs`
+(`ASPIREBROWSERLOGS001`) are experimental and fail the build unless those diagnostics are
+suppressed — scope the `#pragma` to the calls that need it.
 
 The `Projects.X` strongly-typed reference comes from the SDK — `<Sdk Name="Aspire.AppHost.Sdk" />`
 in `.csproj` and `<ProjectReference>` for each project.
@@ -52,15 +59,18 @@ builder.AddProject("api", "../Api/Api.csproj")
 
 Top of file uses `#:sdk` and `#:package` directives — no `.csproj` required:
 
-Replace the version placeholders with package versions compatible with the AppHost's
-selected Aspire release.
+Replace the version placeholders with the AppHost's selected Aspire release and compatible
+package versions — `#:sdk` needs an explicit version (`Aspire.AppHost.Sdk@13.6.4`) or the
+build cannot resolve the SDK. `aspire add <integration>` writes a matching `#:package`
+directive, including preview-only packages such as `Aspire.Hosting.Browsers`.
 
 ```csharp
-#:sdk Aspire.AppHost.Sdk
+#:sdk Aspire.AppHost.Sdk@<aspire-version>
 #:property AspireUseCliBundle=true
 #:package Aspire.Hosting.PostgreSQL@<postgres-package-version>
 #:package Aspire.Hosting.Redis@<redis-package-version>
 #:package Aspire.Hosting.JavaScript@<javascript-package-version>
+#:package Aspire.Hosting.Browsers@<browsers-package-version>
 
 var builder = DistributedApplication.CreateBuilder(args);
 
@@ -72,9 +82,11 @@ var api = builder.AddProject("api", "../Api/Api.csproj")
     .WithReference(cache)
     .WithExternalHttpEndpoints();
 
+#pragma warning disable ASPIREJAVASCRIPT001, ASPIREBROWSERLOGS001 // experimental APIs
 builder.AddNextJsApp("web", "../web")
     .WithReference(api)
     .WithBrowserLogs();
+#pragma warning restore ASPIREJAVASCRIPT001, ASPIREBROWSERLOGS001
 
 builder.Build().Run();
 ```
@@ -152,8 +164,10 @@ needed. Set `output: "standalone"` in `next.config.js`.
 ## Browser Logs
 
 ```csharp
+#pragma warning disable ASPIREBROWSERLOGS001 // WithBrowserLogs is experimental
 builder.AddViteApp("frontend", "../frontend")
     .WithBrowserLogs();   // Aspire.Hosting.Browsers — adds console + screenshots to dashboard
+#pragma warning restore ASPIREBROWSERLOGS001
 ```
 
 ## Azure-Specific
@@ -191,9 +205,20 @@ subnet.AddPrivateEndpoint(acr);
 ## Lifecycle Hooks
 
 ```csharp
-builder.SubscribeBeforeStart(async e => { /* runs before resources start */ });
-builder.SubscribeAfterResourcesCreated(async e => { /* runs after creation */ });
+builder.Eventing.Subscribe<BeforeStartEvent>((e, ct) =>
+{
+    // runs before resources start
+    return Task.CompletedTask;
+});
+builder.Eventing.Subscribe<AfterResourcesCreatedEvent>((e, ct) =>
+{
+    // runs after resources are created
+    return Task.CompletedTask;
+});
 ```
+
+`subscribeBeforeStart` and `subscribeAfterResourcesCreated` are TypeScript AppHost
+APIs; C# AppHosts have no `builder.SubscribeBeforeStart` method.
 
 ## HTTP Commands
 
