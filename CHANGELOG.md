@@ -20,6 +20,12 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Corrected Aspireify's C# AppHost samples so they build against Aspire 13.6.
 - Corrected Aspireify's Node.js OpenTelemetry setup so it builds against current
   `@opentelemetry/sdk-node` and exports telemetry.
+- Pointed Aspireify's "check what integrations auto-manage" lookups at the current
+  `connect-to-postgresql` and `connect-to-sql-server` docs pages. The retired
+  `postgresql-hosting-integration` and `sql-server-integration` slugs fail with
+  "Documentation page ... not found" in `aspire docs get`. The package-discovery examples
+  now use `set-up-redis-in-the-apphost` and `set-up-go-apps-in-the-apphost` instead of the
+  retired `redis-integration` and `go-integration` slugs.
 
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
