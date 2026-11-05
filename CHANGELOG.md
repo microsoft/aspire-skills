@@ -2,6 +2,24 @@
 
 All notable changes to the aspire-skills plugin will be documented in this file.
 
+## [0.0.6](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.6)
+
+### Added
+- Added Go AppHost guidance (Aspire 17.0+) to the `aspire`,
+  `aspire-orchestration`, `aspire-init`, `aspire-deployment` and `aspireify`
+  skills, covering detection, authoring, `aspire init --language go`, `AddGoApp`
+  wiring and deployment CI. Guidance for the first-party `Aspire.Hosting.Go`
+  integration distinguishes preview packages from Aspire 13.4 and stable packages
+  from Aspire 17.0.
+
+### Changed
+- Corrected endpoint-discovery guidance so agents use reachable service URLs
+  instead of `null`.
+- Corrected Aspireify's TypeScript cache-wiring guidance so generated AppHosts
+  build and start.
+- Corrected Aspireify's Node.js OpenTelemetry setup so it builds against current
+  `@opentelemetry/sdk-node` and exports telemetry.
+
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
 ### Changed
@@ -50,11 +68,6 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Restored AppHost visibility and source-file navigation in the Aspire AppHosts
   canvas for workspace child directories whose names begin with `..`, preserving
   checks that block paths outside the workspace.
-- Fixed the `aspire describe <resource> --format Json | jq` endpoint examples in the
-  monitoring and orchestration skills to read the first non-internal URL under
-  `.resources[0].urls`, after `aspire wait`, with `jq -e` so a missing URL fails instead
-  of yielding `null`. The old `.endpoints[0].url` path does not exist, returns `null`,
-  and made the paired `curl` fail.
 - Preserved non-ASCII check messages, paths, and error diagnostics in the
   Aspire Doctor canvas by decoding UTF-8 characters across subprocess output
   chunk boundaries.
@@ -88,14 +101,6 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Fixed Aspireify ServiceDefaults guidance to install `Aspire.ProjectTemplates` before
   `dotnet new aspire-servicedefaults` when the template is missing, as it is after a
   TypeScript `aspire init`.
-- Fixed the Aspireify Node.js OpenTelemetry setup: it installed the deprecated
-  `@opentelemetry/exporter-otlp-grpc` (0.26.0) and passed `metricReader` to `NodeSDK`, so
-  the snippet failed `tsc` against current `@opentelemetry/sdk-node` and exported no traces.
-  It now uses the signal-specific OTLP gRPC exporters, installs `@opentelemetry/sdk-metrics`
-  and passes `metricReaders`.
-- Fixed the Aspireify TypeScript `withEnvironment` example to call
-  `cache.primaryEndpoint()`. In the generated SDK `primaryEndpoint` is a method, so passing
-  it as a property failed `tsc` (TS2345) and `aspire start`.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
