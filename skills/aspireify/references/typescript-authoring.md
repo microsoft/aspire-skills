@@ -310,11 +310,17 @@ await builder.addDockerfileBuilder('myimage', '.', async context => {
 
 ## YARP Routing
 
+Routes are added on the configuration builder passed to `withConfiguration`;
+`addRoute` and `addCatchAllRoute` are not methods of the YARP resource itself:
+
 ```ts
 const api = await builder.addProject('api', '../Api/Api.csproj');
+const web = await builder.addViteApp('web', '../web');
 const yarp = await builder.addYarp('gateway')
-    .addRoute('/api/{**catch-all}', api.getEndpoint('http'))
-    .addCatchAllRoute(web.getEndpoint('http'));
+    .withConfiguration(async (yarp) => {
+        await yarp.addRoute('/api/{**catch-all}', api.getEndpoint('http'));
+        await yarp.addCatchAllRoute(web.getEndpoint('http'));
+    });
 ```
 
 ## Compute Environments
