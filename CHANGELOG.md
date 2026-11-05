@@ -21,6 +21,36 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   instead of `null`.
 - Corrected Aspireify's TypeScript cache-wiring guidance so generated AppHosts
   build and start.
+- Corrected Aspireify's C# AppHost samples so they build against Aspire 13.6.
+- Corrected Aspireify's Node.js OpenTelemetry setup so it builds against current
+  `@opentelemetry/sdk-node` and exports telemetry.
+- Pointed Aspireify's "check what integrations auto-manage" lookups at the current
+  `connect-to-postgresql` and `connect-to-sql-server` docs pages. The retired
+  `postgresql-hosting-integration` and `sql-server-integration` slugs fail with
+  "Documentation page ... not found" in `aspire docs get`. The package-discovery examples
+  now use `set-up-redis-in-the-apphost` and `set-up-go-apps-in-the-apphost` instead of the
+  retired `redis-integration` and `go-integration` slugs.
+- Corrected the Aspireify integration example to `aspire add javascript`. `aspire add nodejs`
+  no longer resolves after the package was renamed to `Aspire.Hosting.JavaScript`, and
+  non-interactive mode fails because it requires an exact friendly name.
+- Fixed two Aspireify C# examples that did not compile against Aspire: lifecycle hooks now
+  subscribe through `builder.Eventing.Subscribe<BeforeStartEvent>` and
+  `Subscribe<AfterResourcesCreatedEvent>` instead of the TypeScript-only
+  `SubscribeBeforeStart` and `SubscribeAfterResourcesCreated`, and the gRPC endpoint example
+  sets `UriScheme` and `Transport` instead of assigning `"grpc"` to the `ProtocolType`
+  `Protocol` property.
+- Replaced the nonexistent `resource.WithPrivateEndpoint()` in Aspireify's C#
+  authoring reference with Aspire's subnet-based `subnet.AddPrivateEndpoint(target)` API,
+  including the `Aspire.Hosting.Azure.Network` package reference and `ASPIREAZURE003` opt-in.
+  Aspireify's authoring rules now route private endpoint requests to that API instead of raw Bicep.
+- Corrected Aspireify's TypeScript AppHost `package.json` guidance to match `aspire init`.
+  With an existing root `package.json`, the AppHost goes in `aspire-apphost/` and the
+  root only gains `aspire:start`/`aspire:build`/`aspire:dev` delegates; the merge rules
+  (kept scripts and module type, replaced `engines.node`) apply to the AppHost package.
+  `aspire restore` is no longer described as creating or merging `package.json` or
+  `tsconfig.apphost.json`, and the fresh-package scripts are labeled 13.6+ alongside the
+  13.5 alias layout. The `aspire:*` scripts compile with `tsc -p tsconfig.apphost.json`
+  instead of bare `tsc`.
 
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
@@ -59,6 +89,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Removed the nonexistent `-v` alias from the `aspire new` options table in the
   Aspire init templates reference. `aspire new ... -v <version>` fails with
   "Unrecognized command or argument '-v'"; use `--version`.
+- Corrected the Aspireify TypeScript YARP example to add routes inside
+  `withConfiguration(async (yarp) => ...)`. The generated AppHost SDK has no
+  `addRoute` or `addCatchAllRoute` on the YARP resource, so the previous example
+  failed type checking and `aspire start` exited before starting any resource.
 - Kept discovered services without a proposal mapping visible in the Aspireify
   canvas as **Not assessed** in a "Not in the proposed graph" section, and
   preserved them as `notProposed` in the confirmation and chat handoff.
