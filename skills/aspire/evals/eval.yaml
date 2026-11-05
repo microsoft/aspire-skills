@@ -598,6 +598,28 @@ stimuli:
         config: { scoring: binary }
       - type: diff-empty
 
+  - name: should_trigger_11
+    description: Go AppHost detection
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      My apphost.go file needs updating. Give read-only guidance on the owning
+      workflow and what information is needed before edits; do not update,
+      restore, install or run it.
+    tags: { priority: p1, area: routing }
+    rubric:
+      - The response recognizes a Go Aspire AppHost and routes ordinary source authoring to aspireify.
+      - Asking for its path, contents or desired change is appropriate when missing; the filename alone does not request Project v2 migration.
+      - No actual update is required or permitted.
+    graders:
+      - type: skill-invocation
+        name: required-skills-should-trigger-11
+        config: { required: [aspireify] }
+      - type: prompt
+        name: engages-go-apphost
+        config: { scoring: binary }
+      - type: diff-empty
+
   - name: should_not_trigger_01
     description: Non-Aspire project
     prompt: Give read-only guidance for building my React frontend. Do not run commands or edit files.
