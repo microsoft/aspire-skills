@@ -38,8 +38,7 @@ Choose the path that matches your agent host.
 
 ### Aspire CLI
 
-Aspire's first-party agent setup configures detected agent environments to load
-content from the [`aspire-skills` repository](https://github.com/microsoft/aspire-skills).
+Aspire's first-party agent setup configures detected agent environments with Aspire guidance.
 Aspire MCP server configuration is separate and opt-in.
 
 `aspire new` and `aspire init` offer agent setup without MCP configuration.
