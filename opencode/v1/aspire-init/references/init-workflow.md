@@ -24,7 +24,7 @@ aspire init [options]
 
 | Option | Purpose |
 |--------|---------|
-| `--language` | `csharp` or `typescript`. Required in `--non-interactive` mode if both paths are available |
+| `--language` | `csharp`, `typescript`, or `go` (Aspire 17.0 or later). Required in `--non-interactive` mode if more than one path is available |
 | `--channel` | `stable` (default), `staging`, `daily` |
 | `--skill-locations` | Comma-separated agent skill locations, `all`, or `none` |
 | `--skills` | Comma-separated skills, `all`, or `none` |
@@ -58,6 +58,23 @@ to the solution instead of creating a single-file AppHost.
 - **`.aspire/modules/`** generated folder (do not edit by hand — regenerate with `aspire add`).
 - **`aspire.config.json`** at repo root.
 
+### Go Path (`--language go`, Aspire 17.0 or later)
+
+- **`apphost.go`** and **`go.mod`** in the current directory. The `go.mod` has a `replace` that
+  points the generated `apphost/modules/aspire` module at `./.aspire/modules`.
+- **`.aspire/modules/`** generated Go SDK (do not edit by hand; regenerate with `aspire add`
+  or `aspire restore`). The scaffolded `.gitignore` ignores `.aspire/`.
+- **`aspire.config.json`** next to `apphost.go`, with `appHost.language` set to `go`.
+- Its `packages` includes `Aspire.Hosting.Go` at the selected SDK version. The empty
+  template uses the same scaffold; the starter additionally includes Redis. This relies
+  on the stable Go hosting package shipping with 17.0, not a nonexistent stable 13.x package.
+
+`aspire init` has no output option, so it writes into the current directory and stops because
+it would overwrite existing files when a `go.mod` is already there. In a repo that already has a
+root `go.mod` (for example a Go service), run it from a new subdirectory such as `apphost/`.
+The existing `go.mod` stays untouched and `aspire.config.json` lands next to `apphost.go`
+instead of at the repo root.
+
 ### `aspireify` Skill
 
 - A Markdown skill file is installed into the AI agent's skill directory — the same
@@ -74,7 +91,7 @@ to the solution instead of creating a single-file AppHost.
 
 | Field | Values | Meaning |
 |-------|--------|---------|
-| `appHost.language` | `"csharp"` or `"typescript/nodejs"` | Which AppHost syntax to use |
+| `appHost.language` | `"csharp"`, `"typescript/nodejs"`, or `"go"` | Which AppHost syntax to use |
 | `appHost.path` | Path to AppHost file or directory | Where the AppHost lives |
 
 C# has two sub-modes the agent may encounter:
@@ -89,12 +106,13 @@ C# has two sub-modes the agent may encounter:
    `aspireify` or `aspire-orchestration`.
 2. **Run init**:
    ```bash
-   aspire init --language <csharp|typescript> --non-interactive
+   aspire init --language <csharp|typescript|go> --non-interactive
    ```
-3. **Confirm artifacts** — verify root `aspire.config.json`, resolve its
-   `appHost.path` relative to that file, and confirm the selected `apphost.cs`, AppHost
-   project, or TypeScript `apphost.mts` exists there. For TypeScript, also confirm the
-   adjacent generated `.aspire/modules/`; do not assume the AppHost is at the repo root.
+3. **Confirm artifacts** — verify `aspire.config.json` (at the repo root, or next to
+   `apphost.go` when a Go init ran in a subdirectory), resolve its `appHost.path` relative to
+   that file, and confirm the selected `apphost.cs`, AppHost project, TypeScript `apphost.mts`,
+   or Go `apphost.go` (next to its `go.mod`) exists there. For TypeScript and Go, also confirm
+   the adjacent generated `.aspire/modules/`; do not assume the AppHost is at the repo root.
 4. **Confirm `aspireify` skill installed** — the agent's skill directory contains
    `aspireify/SKILL.md`. If missing, run
    `aspire agent init --non-interactive --skills aspireify` to install it. If the user
@@ -108,6 +126,8 @@ C# has two sub-modes the agent may encounter:
    - Optionally configure OpenTelemetry
    - For a TypeScript AppHost toolchain problem, detect and preserve the repository's
      existing package-manager convention before recommending a dependency command
+   - For a Go AppHost toolchain problem, check that `go version` runs and the toolchain
+     satisfies the `go` directive in `go.mod` (the scaffold declares `go 1.26`)
    - Validate with a smoke-test `aspire start`
 6. **Validate** — once `aspireify` finishes wiring, run `aspire start` (handled by
    `aspire-orchestration`) and confirm resources reach a healthy state.
@@ -127,7 +147,8 @@ The same precedence applies to a legacy `.agents/skills/aspire-init/SKILL.md` fr
 | Symptom | Cause | Recovery |
 |---------|-------|----------|
 | `aspire init` reports an AppHost already exists | Repo is already an Aspire app | Stop. Route to `aspireify` or `aspire-orchestration` |
-| `aspire init` fails without `--language` in `--non-interactive` | CLI needs the language explicitly when prompts are disabled | Re-run with `--language csharp` or `--language typescript` |
+| `aspire init` fails without `--language` in `--non-interactive` | CLI needs the language explicitly when prompts are disabled | Re-run with `--language csharp`, `--language typescript`, or `--language go` (Aspire 17.0 or later) |
+| `aspire init --language go` stops because it would overwrite existing files | The directory already has a `go.mod`, for example a Go service at the repo root | Run it from a new subdirectory such as `apphost/`; leave the existing `go.mod` alone |
 | Skeleton dropped but no `aspireify` skill | Agent skill directory not detected, or `aspireify` not selected (13.5 doesn't preselect it) | Run `aspire agent init --non-interactive --skills aspireify` (append to any explicit `--skills` list, keep `--skill-locations`, no `--mcp`), then continue |
 | No MCP config after a successful init | Expected in 13.6+ — chained agent setup does not offer MCP | Leave as-is unless the user explicitly asks for MCP; then use `aspire agent init --mcp` (13.6+) |
 | `apphost.cs` references a missing `#:package` | Channel mismatch or transient feed issue | Re-run with `--channel stable` (or `daily` for pre-release) |
@@ -138,8 +159,11 @@ The same precedence applies to a legacy `.agents/skills/aspire-init/SKILL.md` fr
 
 - **Don't run `aspire init` if any AppHost signal already exists** — it duplicates the
   skeleton and confuses subsequent tooling.
-- **Don't edit `.aspire/modules/`** in TypeScript AppHosts. Use `aspire add` to regenerate APIs;
-  use `aspire restore` if files are missing.
+- **Don't edit `.aspire/modules/`** in TypeScript and Go AppHosts (the generated Go SDK lives
+  there). Use `aspire add` to regenerate APIs; use `aspire restore` if files are missing.
+- **Don't pick `--language go` because the repo contains Go services.** The AppHost language is
+  the one the user wants to write the AppHost in; a Go service in a C# or TypeScript repo does
+  not call for a Go AppHost.
 - **Don't install the obsolete Aspire workload** (`dotnet workload install aspire`). Use
   `aspire init`, `aspire new`, or `aspire add` instead.
 - **Don't perform the resource wiring inside this skill.** Hand off to `aspireify`. This
