@@ -24,10 +24,21 @@ function csharpBlocks() {
     });
 }
 
-function suppressedBefore(code, call, diagnostic) {
-    const at = code.indexOf(call);
-    const disables = [...code.slice(0, at).matchAll(/#pragma warning disable ([^\n/]+)/g)];
-    return disables.some((m) => m[1].split(",").map((id) => id.trim()).includes(diagnostic));
+function suppressedAt(code, at, diagnostic) {
+    let suppressed = false;
+    for (const m of code.slice(0, at).matchAll(/#pragma warning (disable|restore)\b([^\n/]*)/g)) {
+        const ids = m[2].split(",").map((id) => id.trim()).filter(Boolean);
+        if (ids.length === 0 || ids.includes(diagnostic)) suppressed = m[1] === "disable";
+    }
+    return suppressed;
+}
+
+function unsuppressedCalls(code, call, diagnostic) {
+    const offsets = [];
+    for (let at = code.indexOf(call); at !== -1; at = code.indexOf(call, at + call.length)) {
+        if (!suppressedAt(code, at, diagnostic)) offsets.push(at);
+    }
+    return offsets;
 }
 
 // Aspire 13.6.4: these APIs are [Experimental] and fail the C# build unless suppressed.
@@ -40,12 +51,26 @@ test("C# samples suppress the experimental diagnostics of the APIs they call", (
     const offenders = [];
     for (const { where, code } of csharpBlocks()) {
         for (const { call, diagnostic } of experimental) {
-            if (code.includes(call) && !suppressedBefore(code, call, diagnostic)) {
+            if (unsuppressedCalls(code, call, diagnostic).length > 0) {
                 offenders.push(`${where}: ${call} without #pragma warning disable ${diagnostic}`);
             }
         }
     }
     assert.deepEqual(offenders, []);
+});
+
+test("experimental suppression check tracks disable/restore state at every call", () => {
+    const call = ".WithBrowserLogs(";
+    const id = "ASPIREBROWSERLOGS001";
+    assert.deepEqual(unsuppressedCalls(`#pragma warning disable ${id}\na${call});`, call, id), []);
+    assert.equal(
+        unsuppressedCalls(`#pragma warning disable ${id}\n#pragma warning restore ${id}\na${call});`, call, id).length, 1);
+    assert.equal(
+        unsuppressedCalls(`#pragma warning disable ${id}\na${call});\n#pragma warning restore ${id}\nb${call});`, call, id).length, 1);
+    assert.equal(
+        unsuppressedCalls(`#pragma warning disable ${id}\n#pragma warning restore\na${call});`, call, id).length, 1);
+    assert.deepEqual(
+        unsuppressedCalls(`#pragma warning disable OTHER001, ${id}\na${call});\nb${call});`, call, id), []);
 });
 
 test("runnable file-based C# AppHost samples pin the Aspire.AppHost.Sdk version", () => {
