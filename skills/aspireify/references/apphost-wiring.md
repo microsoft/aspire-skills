@@ -148,6 +148,10 @@ In a project-based AppHost, add the IDs to the AppHost `.csproj` instead:
 <NoWarn>$(NoWarn);ASPIRECSHARPAPPS001;ASPIRECERTIFICATES001</NoWarn>
 ```
 
+If the AppHost project already sets `<NoWarn>`, append the IDs to that value. Keep
+`$(NoWarn)` and the existing IDs, because dropping them brings back the diagnostics they
+suppressed.
+
 TypeScript AppHosts need neither. If a build reports a different `ASPIRE...` diagnostic,
 confirm it with `aspire docs api get` before suppressing it.
 

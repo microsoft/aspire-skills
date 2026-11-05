@@ -32,6 +32,10 @@ environment:
     - ../../aspireify
     - ../../aspire-orchestration
     - ../../aspire-terminals
+grading_environment:
+  files:
+    - src: ../../../evals/aspireify-experimental-diagnostics/grade-suppressions.mjs
+      dest: .grader/grade-suppressions.mjs
 stimuli:
   - name: aspireify-preserves-selected-version-001
     prompt: >
@@ -1171,6 +1175,71 @@ stimuli:
             Docker cleanup?
       - type: skill-invocation
         name: invokes-aspireify-17
+        config:
+          required:
+            - aspireify
+  - name: aspireify-csharp-experimental-file-001
+    prompt: >
+      Use the aspireify skill. Add the ASP.NET Core API in app/api to my file-based
+      AppHost app/apphost.cs as a C# app resource named api using AddCSharpApp, and
+      serve it over HTTPS with WithHttpsDeveloperCertificate(). Edit the AppHost so it
+      builds on Aspire 13.6.4, but do not restore, build or run anything. Show the
+      changed AppHost code in your reply.
+    tags:
+      priority: p0
+      area:
+        - authoring
+        - csharp
+        - experimental-diagnostics
+    environment:
+      files:
+        - src: ../../../evals/aspireify-experimental-diagnostics/file-based
+          dest: app
+    rubric:
+      - The assistant edits app/apphost.cs to add the api resource with AddCSharpApp and WithHttpsDeveloperCertificate().
+      - The edited AppHost suppresses ASPIRECSHARPAPPS001 and ASPIRECERTIFICATES001, which Aspire 13.6 reports as build errors for these experimental APIs.
+    graders:
+      - type: diff-contains
+        name: file-apphost-adds-csharp-app
+        config: { value: AddCSharpApp }
+      - type: program
+        name: file-apphost-suppresses-experimental-diagnostics
+        config: { program: node, args: [.grader/grade-suppressions.mjs, file] }
+      - type: skill-invocation
+        name: invokes-aspireify-experimental-file
+        config:
+          required:
+            - aspireify
+  - name: aspireify-csharp-experimental-project-001
+    prompt: >
+      Use the aspireify skill. Add the ASP.NET Core API in app/Api to my AppHost project
+      in app/AppHost as a C# app resource named api using AddCSharpApp, and serve it over
+      HTTPS with WithHttpsDeveloperCertificate(). Keep the existing echo container. Edit
+      the AppHost so it builds on Aspire 13.6.4, but do not restore, build or run
+      anything. Show the changed AppHost code and project file in your reply.
+    tags:
+      priority: p0
+      area:
+        - authoring
+        - csharp
+        - experimental-diagnostics
+    environment:
+      files:
+        - src: ../../../evals/aspireify-experimental-diagnostics/project-based
+          dest: app
+    rubric:
+      - The assistant edits app/AppHost/AppHost.cs to add the api resource with AddCSharpApp and WithHttpsDeveloperCertificate(), keeping the echo container.
+      - The edited AppHost suppresses ASPIRECSHARPAPPS001 and ASPIRECERTIFICATES001 with a project-level NoWarn or a #pragma, which Aspire 13.6 requires for these experimental APIs.
+      - Any NoWarn change keeps $(NoWarn) and the existing ASPIREPROBES001 suppression.
+    graders:
+      - type: diff-contains
+        name: project-apphost-adds-csharp-app
+        config: { value: AddCSharpApp }
+      - type: program
+        name: project-apphost-suppresses-experimental-diagnostics
+        config: { program: node, args: [.grader/grade-suppressions.mjs, project] }
+      - type: skill-invocation
+        name: invokes-aspireify-experimental-project
         config:
           required:
             - aspireify

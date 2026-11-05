@@ -33,6 +33,7 @@ Shared fixtures live at the **repo-root** `evals/` directory and are referenced 
 
 ```
 evals/
+├── aspireify-experimental-diagnostics/ # File- and project-based C# AppHosts plus a grader for experimental-API suppressions
 ├── csharp-apphost/      # Wired C# AppHost (Aspire.AppHost.Sdk + Program.cs)
 ├── ts-apphost/          # TypeScript AppHost (apphost.mts + .aspire/modules/)
 ├── non-aspire/          # Non-Aspire .NET project (for "should not trigger" stimuli)
