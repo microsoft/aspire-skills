@@ -13,6 +13,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   from Aspire 17.0.
 
 ### Changed
+- Corrected the Aspireify TypeScript data-volume example to the generated AppHost SDK:
+  `withDataVolume({ name: "pg-data" })` instead of a positional name. The previous form
+  failed type checking, so `aspire start` exited before starting any resource.
 - Corrected endpoint-discovery guidance so agents use reachable service URLs
   instead of `null`.
 - Corrected Aspireify's TypeScript cache-wiring guidance so generated AppHosts
@@ -54,9 +57,6 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Documented `aspire new --localhost-tld` in the Aspire init templates reference. The
   `*.dev.localhost` prompt previously listed no flag, so non-interactive runs could
   only take the default plain `localhost` profile.
-- Corrected the Aspireify TypeScript data-volume example to the generated AppHost SDK:
-  `withDataVolume({ name: "pg-data" })` instead of a positional name. The previous form
-  failed type checking, so `aspire start` exited before starting any resource.
 - Unified canvas styling and icons with shared assets that respect host themes.
 - Served shared canvas CSS and icons directly from the plugin root so Windows
   checkouts do not need working UI symlinks. Standalone extensions retain a
