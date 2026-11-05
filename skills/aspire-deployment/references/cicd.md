@@ -74,7 +74,7 @@ Add each setup block that applies before Aspire commands:
 | AppHost/resources | Setup guidance |
 |-------------------|----------------|
 | C# AppHost or .NET project resources | Install .NET with `actions/setup-dotnet`, then use the repo's restore/build command. |
-| TypeScript AppHost or JavaScript resources | Install Node with `actions/setup-node`, then run the repo's package-manager install/build commands. |
+| TypeScript AppHost or JavaScript resources | Install Node with `actions/setup-node`, then run the repo's package-manager install/build commands. Run `aspire restore` before the build only for a TypeScript AppHost. |
 | Go AppHost (Aspire 17.0 or later) | Install Go with `actions/setup-go`. The CLI runs the AppHost with `go run .`, so the AppHost needs no separate build step. |
 | Mixed C#/TypeScript/Go graph | Use each setup block that applies so the AppHost and all compute resources can be restored, built, and published. |
 
@@ -94,7 +94,7 @@ C# AppHost setup:
     dotnet build --no-restore
 ```
 
-TypeScript AppHost setup (after the Aspire CLI install step, because `.aspire/modules/` is generated and gitignored and `npm run build` type-checks the AppHost against it):
+Node setup for a TypeScript AppHost or JavaScript resources (after the Aspire CLI install step):
 
 ```yaml
 - name: Setup Node
@@ -102,12 +102,21 @@ TypeScript AppHost setup (after the Aspire CLI install step, because `.aspire/mo
   with:
     node-version: 22.x
 
-- name: Install and build TypeScript workspace
-  run: |
-    npm ci
-    aspire restore --apphost ./apphost.mts --non-interactive
-    npm run build --if-present
+- name: Install Node dependencies
+  run: npm ci
+
+- name: Restore TypeScript AppHost SDK
+  if: hashFiles('apphost.mts') != ''
+  run: aspire restore --apphost ./apphost.mts --non-interactive
+
+- name: Build Node workspace
+  run: npm run build --if-present
 ```
+
+The restore step applies only to a TypeScript AppHost. Its `.aspire/modules/` is generated and
+gitignored, and `npm run build` type-checks the AppHost against it. A C# or Go AppHost with
+JavaScript resources has no `apphost.mts`, so the `if:` skips the step there. If the AppHost
+lives in a subdirectory, point both `hashFiles` and `--apphost` at that path.
 
 Go AppHost setup:
 
