@@ -57,6 +57,7 @@ jobs:
         run: |
           changes=$(git status --porcelain --untracked-files=all -- \
             '.github/aw/actions-lock.json' \
+            '.github/dependabot.yml' \
             '.github/workflows/*.lock.yml' \
             '.github/workflows/agentics-maintenance*.yml')
           if [[ -n "$changes" ]]; then

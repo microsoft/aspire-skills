@@ -1,0 +1,10 @@
+{
+  "appHost": {
+    "path": "apphost.go",
+    "language": "go"
+  },
+  "packages": {
+    "Aspire.Hosting.Go": "17.0.0",
+    "Aspire.Hosting.Redis": "17.0.0"
+  }
+}

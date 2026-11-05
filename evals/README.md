@@ -36,6 +36,7 @@ evals/
 ├── aspireify-experimental-diagnostics/ # File- and project-based C# AppHosts plus a grader for experimental-API suppressions
 ├── csharp-apphost/      # Wired C# AppHost (Aspire.AppHost.Sdk + Program.cs)
 ├── ts-apphost/          # TypeScript AppHost (apphost.mts + .aspire/modules/)
+├── go-apphost/          # Go AppHost shaped like aspire-go-starter (apphost.go + aspire.config.json + go.mod; no api/ service or generated .aspire/modules/)
 ├── non-aspire/          # Non-Aspire .NET project (for "should not trigger" stimuli)
 ├── project-v2-migration/ # Legacy inputs, captured-edit contracts, and qualification guidance
 ├── service-defaults-template/ # Template-shaped ServiceDefaults shared project and service, with no AppHost
@@ -109,6 +110,15 @@ These assessments are read-only: explicit rubrics judge the route and guidance,
 not successful live deployment or log retrieval, and `diff-empty` checks the
 captured workspace. Report individual activation, outcome and read-only results
 alongside the aggregate; a passing average does not mean every case passed.
+
+### Deployed log routing
+
+The monitoring routing case `should_trigger_07` keeps its original deployed-log
+request and skill-invocation grader. Its shell simulation intercepts `az login`
+and returns an immediate non-interactive-environment error instead of waiting for
+human input. Other shell commands run normally. Login attempts and the simulated
+CLI error do not affect the activation verdict; the case checks only that
+`aspire-monitoring` was invoked.
 
 ### Gated result integrity
 
@@ -212,14 +222,15 @@ Use `--workers 4` to fan stimuli out and shave wall-clock time; expect higher co
 
 | Skill | Task stimuli | Routing stimuli | Focus |
 |-------|--------------|-----------------|-------|
-| `aspire` (router) | 2 | 23 | Routing precision to sub-skills; preserve selected release family |
-| `aspire-init` | 6 | 15 | Skeleton drop, `aspire new` / `aspire init` decision, aspireify handoff |
-| `aspireify` | 14 | 19 | AppHost wiring (C# / file-based C# / TS), package-manager resolution, validation, never edit `.aspire/modules/` |
-| `aspire-orchestration` | 29 | 24 | Lifecycle tools, file lock recovery, `--include-hidden`, `aspire update --self` |
+| `aspire` (router) | 6 | 24 | Routing precision to sub-skills; preserve selected release family |
+| `aspire-init` | 11 | 16 | Skeleton drop, `aspire new` / `aspire init` decision, aspireify handoff |
+| `aspireify` | 22 | 20 | AppHost wiring (C# / file-based C# / TS / Go), package-channel gates, package-manager resolution, validation, never edit `.aspire/modules/` |
+| `aspire-orchestration` | 36 | 24 | Lifecycle tools, Go toolchain doctor checks, file lock recovery, `--include-hidden`, `aspire update --self` |
 | `aspire-deployment` | 11 | 22 | Multi-target deploy, `aspire destroy`, JS publishing, pipeline previews |
 | `aspire-monitoring` | 8 | 23 | Diagnostics bridge, standalone dashboard, browser logs, `--include-hidden` |
 | `aspire-project-v2-migration` | 16 | 6 | Approval/capability stops, bounded actual edits, idempotence, and explicit migration intent |
-| **Total** | **86** | **132** | **218 stimuli** |
+| `aspire-terminals` | 10 | 2 | Resource PTYs, headless prompts, output contracts, and session lifetime |
+| **Total** | **120** | **137** | **257 stimuli** |
 
 Routing counts include `routing` in either a scalar or array `area` tag.
 

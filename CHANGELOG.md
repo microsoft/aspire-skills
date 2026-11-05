@@ -2,6 +2,47 @@
 
 All notable changes to the aspire-skills plugin will be documented in this file.
 
+## [0.0.6](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.6)
+
+### Added
+- Added Go AppHost guidance (Aspire 17.0+) to the `aspire`,
+  `aspire-orchestration`, `aspire-init`, `aspire-deployment` and `aspireify`
+  skills, covering detection, authoring, `aspire init --language go`, `AddGoApp`
+  wiring and deployment CI. Guidance for the first-party `Aspire.Hosting.Go`
+  integration distinguishes preview packages from Aspire 13.4 and stable packages
+  from Aspire 17.0.
+
+### Changed
+- Corrected endpoint-discovery guidance so agents use reachable service URLs
+  instead of `null`.
+- Corrected Aspireify's TypeScript cache-wiring guidance so generated AppHosts
+  build and start.
+- Corrected Aspireify's C# AppHost samples so they build against Aspire 13.6.
+- Corrected Aspireify's Node.js OpenTelemetry setup so it builds against current
+  `@opentelemetry/sdk-node` and exports telemetry.
+- Pointed Aspireify's "check what integrations auto-manage" lookups at the current
+  `connect-to-postgresql` and `connect-to-sql-server` docs pages. The retired
+  `postgresql-hosting-integration` and `sql-server-integration` slugs fail with
+  "Documentation page ... not found" in `aspire docs get`. The package-discovery examples
+  now use `set-up-redis-in-the-apphost` and `set-up-go-apps-in-the-apphost` instead of the
+  retired `redis-integration` and `go-integration` slugs.
+- Corrected the Aspireify integration example to `aspire add javascript`. `aspire add nodejs`
+  no longer resolves after the package was renamed to `Aspire.Hosting.JavaScript`, and
+  non-interactive mode fails because it requires an exact friendly name.
+- Fixed two Aspireify C# examples that did not compile against Aspire: lifecycle hooks now
+  subscribe through `builder.Eventing.Subscribe<BeforeStartEvent>` and
+  `Subscribe<AfterResourcesCreatedEvent>` instead of the TypeScript-only
+  `SubscribeBeforeStart` and `SubscribeAfterResourcesCreated`, and the gRPC endpoint example
+  sets `UriScheme` and `Transport` instead of assigning `"grpc"` to the `ProtocolType`
+  `Protocol` property.
+- Replaced the nonexistent `resource.WithPrivateEndpoint()` in Aspireify's C#
+  authoring reference with Aspire's subnet-based `subnet.AddPrivateEndpoint(target)` API,
+  including the `Aspire.Hosting.Azure.Network` package reference and `ASPIREAZURE003` opt-in.
+  Aspireify's authoring rules now route private endpoint requests to that API instead of raw Bicep.
+- Documented the `ASPIRECSHARPAPPS001` and `ASPIRECERTIFICATES001` suppressions that
+  Aspireify's C# `AddCSharpApp` and `WithHttpsDeveloperCertificate` examples need. Without
+  them, a C# AppHost fails to build with these experimental-API diagnostics as errors.
+
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
 ### Changed
@@ -39,6 +80,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Removed the nonexistent `-v` alias from the `aspire new` options table in the
   Aspire init templates reference. `aspire new ... -v <version>` fails with
   "Unrecognized command or argument '-v'"; use `--version`.
+- Corrected the Aspireify TypeScript YARP example to add routes inside
+  `withConfiguration(async (yarp) => ...)`. The generated AppHost SDK has no
+  `addRoute` or `addCatchAllRoute` on the YARP resource, so the previous example
+  failed type checking and `aspire start` exited before starting any resource.
 - Kept discovered services without a proposal mapping visible in the Aspireify
   canvas as **Not assessed** in a "Not in the proposed graph" section, and
   preserved them as `notProposed` in the confirmation and chat handoff.
@@ -50,11 +95,6 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Restored AppHost visibility and source-file navigation in the Aspire AppHosts
   canvas for workspace child directories whose names begin with `..`, preserving
   checks that block paths outside the workspace.
-- Fixed the `aspire describe <resource> --format Json | jq` endpoint examples in the
-  monitoring and orchestration skills to read the first non-internal URL under
-  `.resources[0].urls`, after `aspire wait`, with `jq -e` so a missing URL fails instead
-  of yielding `null`. The old `.endpoints[0].url` path does not exist, returns `null`,
-  and made the paired `curl` fail.
 - Preserved non-ASCII check messages, paths, and error diagnostics in the
   Aspire Doctor canvas by decoding UTF-8 characters across subprocess output
   chunk boundaries.
@@ -88,12 +128,6 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Fixed Aspireify ServiceDefaults guidance to install `Aspire.ProjectTemplates` before
   `dotnet new aspire-servicedefaults` when the template is missing, as it is after a
   TypeScript `aspire init`.
-- Documented the `ASPIRECSHARPAPPS001` and `ASPIRECERTIFICATES001` suppressions that
-  Aspireify's C# `AddCSharpApp` and `WithHttpsDeveloperCertificate` examples need. Without
-  them, a C# AppHost fails to build with these experimental-API diagnostics as errors.
-- Fixed the Aspireify TypeScript `withEnvironment` example to call
-  `cache.primaryEndpoint()`. In the generated SDK `primaryEndpoint` is a method, so passing
-  it as a property failed `tsc` (TS2345) and `aspire start`.
 
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
