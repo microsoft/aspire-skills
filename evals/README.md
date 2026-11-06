@@ -18,7 +18,8 @@ vally --version
 
 ```
 skills/<skill>/evals/
-└── eval.yaml            # Vally eval spec: config + stimuli (inline)
+├── eval.yaml            # General spec: config + stimuli (inline)
+└── <case>/eval.yaml     # Optional separate scoring policy, such as strict safety
 ```
 
 Each `eval.yaml` is a single canonical [vally `EvalSchema`](https://www.npmjs.com/package/@microsoft/vally-cli) document containing:
@@ -27,7 +28,11 @@ Each `eval.yaml` is a single canonical [vally `EvalSchema`](https://www.npmjs.co
 - `environment.skills` — **(vally 0.8.0)** the skill directories loaded for this spec. See [Skills & baselines](#skills--baselines-vally-080). Omit it and the stimuli run with **no skills** (the baseline).
 - `tags` (optional) — record of `{ skill: <name>, priority: pN, area: <area> }` inherited by stimuli that don't override.
 - `stimuli` — array of prompts to execute. Each stimulus has `name`, `prompt`, optional `tags`, optional `environment.files` (and may add `environment.skills`), and `graders`.
-- `scoring` (optional) — explicit weights per grader plus a pass-rate threshold. When omitted, vally applies equal weights and threshold `1.0` (every grader must pass).
+- `scoring` (optional): evaluation-level weights by grader type and an aggregate-score threshold. Without a threshold, every graded trial must pass. Stimulus-level scoring overrides are not supported.
+
+Mandatory safety cases use a separate spec without a scoring threshold.
+Every grader on every trial must pass, so other scores cannot mask a safety failure.
+See [mandatory safety verdicts](./AUTHORING.md#mandatory-safety-verdicts).
 
 Shared fixtures live at the **repo-root** `evals/` directory and are referenced from `stimulus.environment.files` by `{ src, dest }` pairs:
 
@@ -124,7 +129,8 @@ CLI error do not affect the activation verdict; the case checks only that
 PR and nightly workflows run
 `node scripts/check-eval-results.mjs <results> <expected-run>...` after attempted
 evaluations, including failures, but not after cancellation or intentional skips.
-Scoped PR runs pass every changed skill output root; single-process full/nightly
+Scoped PR runs include each changed skill's root and nested specs in one process
+and pass that skill's output root; single-process full/nightly
 suites pass `.`. Every expected run must produce exactly one `results.jsonl`, and
 the checker reconciles each summary's stimulus count plus every stimulus's complete
 trial-index range. Execution/grading errors and missing, malformed, incomplete or
@@ -142,7 +148,7 @@ experiment below remains informational rather than adopting this gating policy.
 
 ```yaml
 name: skill-lift
-evals: [skills/*/evals/eval.yaml]
+evals: [skills/*/evals/**/eval.yaml]
 vary: [/environment/skills]
 baseline: no-skills
 variants:
@@ -164,14 +170,14 @@ The `with-skills` − `no-skills` pass-rate delta is the measured lift. The expe
 
 | Goal | Command |
 |------|---------|
-| Reproduce the PR gate for one changed skill | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --tag priority=p0,p1 --runs 1 --max-retries 2` |
+| Reproduce the PR gate for one changed skill, including nested specs | `vally eval --tag "skill=<skill>" --tag priority=p0,p1 --runs 1 --max-retries 2 --require-pass` |
 | Run p0 + p1 across all skills | `vally eval --suite ci-gate` |
 | Run full nightly suite | `vally eval --suite nightly` |
 | Run one skill | `vally eval --eval-spec skills/aspire-deployment/evals/eval.yaml` |
 | Run one stimulus by tag | `vally eval --eval-spec skills/aspire/evals/eval.yaml --tag area=routing` |
 | Run the skill-lift baseline experiment | `vally experiment run skill-lift.experiment.yaml --output-dir ./results` |
 | Plan the experiment (no model calls) | `vally experiment run skill-lift.experiment.yaml --dry-run` |
-| Save PR-gate results for one skill | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --tag priority=p0,p1 --output-dir ./results` |
+| Save PR-gate results for one spec | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --tag priority=p0,p1 --output-dir ./results` |
 | Emit JUnit XML for the all-skill p0 + p1 suite | `vally eval --suite ci-gate --junit --output-dir ./results` |
 | Browse results in the dashboard | `vally serve ./results` |
 | Persist runs to a SQLite store | `vally ingest ./results --store ./vally.sqlite` |
@@ -308,7 +314,8 @@ vally serve --store ./vally.sqlite
 ```bash
 # Validate every spec without running a model
 vally lint skills
-for spec in skills/*/evals/eval.yaml; do vally lint --eval-spec "$spec"; done
+shopt -s globstar
+for spec in skills/*/evals/**/eval.yaml; do vally lint --eval-spec "$spec"; done
 
 # Run just the p0 routing stimuli for the router skill (~2 minutes, ~150k tokens)
 vally eval --eval-spec skills/aspire/evals/eval.yaml --tag priority=p0 --tag area=routing
