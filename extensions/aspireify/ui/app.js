@@ -533,6 +533,7 @@ function render(nextSnapshot) {
                 elements.addResourceDialog,
                 elements.connectionDialog,
                 elements.removeDialog,
+                elements.restartDialog,
             ]) {
                 if (dialog.open) {
                     dialog.close();
