@@ -145,7 +145,7 @@ jobs:
     steps:
       - name: Setup Scripts
         id: setup
-        uses: github/gh-aw-actions/setup@866158eb5c6cbfd3c614104e3d3d6634e246d220 # 866158eb5c6cbfd3c614104e3d3d6634e246d220
+        uses: github/gh-aw-actions/setup@221ba4f4319de6b8e809d1a15528b3ae6a818aa5 # 866158eb5c6cbfd3c614104e3d3d6634e246d220
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
           job-name: ${{ github.job }}
@@ -479,7 +479,7 @@ jobs:
     steps:
       - name: Setup Scripts
         id: setup
-        uses: github/gh-aw-actions/setup@866158eb5c6cbfd3c614104e3d3d6634e246d220 # 866158eb5c6cbfd3c614104e3d3d6634e246d220
+        uses: github/gh-aw-actions/setup@221ba4f4319de6b8e809d1a15528b3ae6a818aa5 # 866158eb5c6cbfd3c614104e3d3d6634e246d220
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
           job-name: ${{ github.job }}
@@ -511,7 +511,7 @@ jobs:
         run: bash "${RUNNER_TEMP}/gh-aw/actions/check_otlp_default_credentials.sh"
       - name: Generate GitHub App token for checkout (0)
         id: checkout-app-token-0
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
           private-key: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
@@ -1298,7 +1298,7 @@ jobs:
     steps:
       - name: Setup Scripts
         id: setup
-        uses: github/gh-aw-actions/setup@866158eb5c6cbfd3c614104e3d3d6634e246d220 # 866158eb5c6cbfd3c614104e3d3d6634e246d220
+        uses: github/gh-aw-actions/setup@221ba4f4319de6b8e809d1a15528b3ae6a818aa5 # 866158eb5c6cbfd3c614104e3d3d6634e246d220
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
           job-name: ${{ github.job }}
@@ -1590,7 +1590,7 @@ jobs:
     steps:
       - name: Setup Scripts
         id: setup
-        uses: github/gh-aw-actions/setup@866158eb5c6cbfd3c614104e3d3d6634e246d220 # 866158eb5c6cbfd3c614104e3d3d6634e246d220
+        uses: github/gh-aw-actions/setup@221ba4f4319de6b8e809d1a15528b3ae6a818aa5 # 866158eb5c6cbfd3c614104e3d3d6634e246d220
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
           job-name: ${{ github.job }}
@@ -1913,7 +1913,7 @@ jobs:
     steps:
       - name: Setup Scripts
         id: setup
-        uses: github/gh-aw-actions/setup@866158eb5c6cbfd3c614104e3d3d6634e246d220 # 866158eb5c6cbfd3c614104e3d3d6634e246d220
+        uses: github/gh-aw-actions/setup@221ba4f4319de6b8e809d1a15528b3ae6a818aa5 # 866158eb5c6cbfd3c614104e3d3d6634e246d220
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
           job-name: ${{ github.job }}
@@ -2035,7 +2035,7 @@ jobs:
     steps:
       - name: Setup Scripts
         id: setup
-        uses: github/gh-aw-actions/setup@866158eb5c6cbfd3c614104e3d3d6634e246d220 # 866158eb5c6cbfd3c614104e3d3d6634e246d220
+        uses: github/gh-aw-actions/setup@221ba4f4319de6b8e809d1a15528b3ae6a818aa5 # 866158eb5c6cbfd3c614104e3d3d6634e246d220
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
           job-name: ${{ github.job }}
@@ -2076,7 +2076,7 @@ jobs:
       - name: Generate GitHub App token for checkout (0)
         if: (!cancelled()) && needs.agent.result != 'skipped' && contains(needs.agent.outputs.output_types, 'create_pull_request')
         id: checkout-app-token-0
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
           private-key: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
@@ -2178,7 +2178,7 @@ jobs:
             }
       - name: Generate GitHub App token (create-pull-request)
         id: create-pull-request-app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
           private-key: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
@@ -2321,7 +2321,7 @@ jobs:
           persist-credentials: false
           ref: ${{ needs.resolve-source.outputs.aspire-base }}
           repository: microsoft/aspire
-      - uses: github/gh-aw-actions/setup@866158eb5c6cbfd3c614104e3d3d6634e246d220
+      - uses: github/gh-aw-actions/setup@221ba4f4319de6b8e809d1a15528b3ae6a818aa5
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
       - run: npm ci --ignore-scripts --no-audit --no-fund

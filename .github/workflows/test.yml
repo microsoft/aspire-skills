@@ -38,7 +38,7 @@ jobs:
 
       - name: Setup pinned workflow compiler
         if: runner.os == 'Linux'
-        uses: github/gh-aw-actions/setup-cli@866158eb5c6cbfd3c614104e3d3d6634e246d220
+        uses: github/gh-aw-actions/setup-cli@221ba4f4319de6b8e809d1a15528b3ae6a818aa5
         with:
           version: v0.91.8
 
@@ -93,7 +93,7 @@ jobs:
 
       - name: Setup pinned telemetry publisher runtime
         if: runner.os == 'Linux'
-        uses: github/gh-aw-actions/setup@866158eb5c6cbfd3c614104e3d3d6634e246d220
+        uses: github/gh-aw-actions/setup@221ba4f4319de6b8e809d1a15528b3ae6a818aa5
 
       - name: Test telemetry publication boundary
         if: runner.os == 'Linux'
