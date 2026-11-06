@@ -47,6 +47,8 @@ test("Aspireify experimental C# API guidance is version-aware for Aspire 17.0", 
   assert.match(section, /`AddCSharpApp` is obsolete in 17\.0/);
   assert.match(section, /`ASPIRECSHARPAPPS001` no longer applies/);
   assert.match(section, /aspire add Aspire\.Hosting\.Dotnet/);
+  assert.match(section, /The 17\.0 SDK doesn't\s+reference `Aspire\.Hosting\.Dotnet` implicitly/);
+  assert.match(section, /`#:package Aspire\.Hosting\.Dotnet@<AppHost SDK version>`/);
   assert.match(section, /builder\.AddDotnetProject\("api", "\.\.\/src\/Api"\)/);
   assert.match(section, /Don't migrate existing `AddCSharpApp` or `AddProject` calls unless the user asks/);
   assert.match(section, /`WithHttpsDeveloperCertificate\(\)` is still experimental in 17\.0[\s\S]*`ASPIRECERTIFICATES001`/);
@@ -57,8 +59,10 @@ test("Aspireify experimental C# API guidance is version-aware for Aspire 17.0", 
 });
 
 // Vally 0.16 has only an eval-wide scoring threshold, so this stimulus must be weighted so that
-// omitting the ASPIRECERTIFICATES001 suppression (which breaks the 17.0 build) fails it outright.
-test("Aspireify 17.0 AddDotnetProject eval fails a response that omits the certificate suppression", async () => {
+// omitting anything the requested 17.0 AppHost needs fails it outright: the
+// Aspire.Hosting.Dotnet reference (not implicit in the 17.0 SDK), the requested
+// WithHttpsDeveloperCertificate() call and its ASPIRECERTIFICATES001 suppression.
+test("Aspireify 17.0 AddDotnetProject eval fails a response that omits the package, certificate call or suppression", async () => {
   const { parse } = await import("yaml");
   const spec = parse(readFileSync(new URL("evals/eval.yaml", root), "utf8"));
   const stimulus = spec.stimuli.find(s => s.name === "aspireify-csharp-dotnet-project-17-001");
@@ -81,16 +85,28 @@ test("Aspireify 17.0 AddDotnetProject eval fails a response that omits the certi
     return results.filter(Boolean).length / results.length;
   };
 
-  const suppressed = [
+  const lines = [
+    "#:sdk Aspire.AppHost.Sdk@17.0.0",
+    "#:package Aspire.Hosting.Dotnet@17.0.0",
+    "",
     "#pragma warning disable ASPIRECERTIFICATES001",
+    "",
     'var api = builder.AddDotnetProject("api", "./api")',
     "    .WithHttpsDeveloperCertificate();",
-  ].join("\n");
-  const unsuppressed = suppressed.split("\n").slice(1).join("\n");
+  ];
+  const suppressed = lines.join("\n");
+  const without = text => lines.filter(line => !line.includes(text)).join("\n");
+  const failing = {
+    "the ASPIRECERTIFICATES001 suppression": without("ASPIRECERTIFICATES001"),
+    "the requested WithHttpsDeveloperCertificate() call": without("WithHttpsDeveloperCertificate"),
+    "the Aspire.Hosting.Dotnet package reference": without("Aspire.Hosting.Dotnet"),
+    "AddDotnetProject (uses the obsolete AddCSharpApp)": suppressed.replace("AddDotnetProject", "AddCSharpApp"),
+  };
 
   assert.ok(score(suppressed) >= threshold, `A correct response scores ${score(suppressed)} < ${threshold}`);
-  assert.ok(score(unsuppressed) < threshold,
-    `A response without ASPIRECERTIFICATES001 still passes at ${score(unsuppressed)} >= ${threshold}`);
-  assert.ok(score(suppressed.replace("AddDotnetProject", "AddCSharpApp")) < threshold,
-    "A response using the obsolete AddCSharpApp must fail");
+  assert.ok(score(suppressed.replace("#:package Aspire.Hosting.Dotnet@17.0.0", "aspire add Aspire.Hosting.Dotnet")) >= threshold,
+    "A response that adds the package with `aspire add Aspire.Hosting.Dotnet` must pass");
+  for (const [omitted, output] of Object.entries(failing)) {
+    assert.ok(score(output) < threshold, `A response without ${omitted} still passes at ${score(output)} >= ${threshold}`);
+  }
 });

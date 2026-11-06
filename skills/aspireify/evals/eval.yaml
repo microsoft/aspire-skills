@@ -1667,13 +1667,15 @@ stimuli:
         - src: ../../../evals/aspireify-experimental-diagnostics/file-based/api
           dest: app/api
     graders:
-      # One grader checks both AddDotnetProject and the ASPIRECERTIFICATES001 suppression.
-      # With only an eval-wide 0.7 threshold, a separate suppression grader let a
-      # response that breaks the 17.0 build still pass at 3/4.
+      # One grader checks everything the requested 17.0 AppHost needs: AddDotnetProject, its
+      # Aspire.Hosting.Dotnet reference (not implicit in the 17.0 SDK), the requested
+      # WithHttpsDeveloperCertificate() call and its ASPIRECERTIFICATES001 suppression.
+      # With only an eval-wide 0.7 threshold, separate graders would let an answer that
+      # misses one of them still pass.
       - type: output-matches
-        name: dotnet-17-adds-project-with-certificate-suppression
+        name: dotnet-17-adds-project-with-package-and-certificate
         config:
-          pattern: "^(?=[\\s\\S]*AddDotnetProject\\(\\s*\"api\")(?=[\\s\\S]*ASPIRECERTIFICATES001)"
+          pattern: "^(?=[\\s\\S]*AddDotnetProject\\(\\s*\"api\")(?=[\\s\\S]*Aspire\\.Hosting\\.Dotnet\\b)(?=[\\s\\S]*\\.WithHttpsDeveloperCertificate\\()(?=[\\s\\S]*ASPIRECERTIFICATES001)"
       - type: output-not-contains
         name: dotnet-17-avoids-obsolete-add-csharp-app
         config:
