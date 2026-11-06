@@ -602,6 +602,52 @@ stimuli:
       - type: output-not-contains
         config:
           substring: modify .aspire/modules/
+  - name: aspireify-ts-named-volume-001
+    prompt: >
+      Use the aspireify skill before answering. Add a Postgres resource named `pg`
+      to ts-apphost/apphost.mts and keep its data in a named volume called `pg-data`
+      so it survives container restarts. Show the AppHost code only; do not edit
+      files or run build, restore, or start commands.
+    tags:
+      priority: p1
+      scenario: non-executing-guidance
+      area:
+        - authoring
+        - typescript
+        - persistence
+        - volumes
+    constraints:
+      max_agent_duration: 5m
+    environment:
+      files:
+        - src: ../../../evals/ts-apphost/apphost.mts
+          dest: ts-apphost/apphost.mts
+        - src: ../../../evals/ts-apphost/aspire.config.json
+          dest: ts-apphost/aspire.config.json
+    # Two graders check the `pg-data` options-object volume, so a missing volume or
+    # a wrong name fails 2 of 5 graders (0.6) and falls below the 0.7 threshold.
+    graders:
+      - type: output-matches
+        name: ts-data-volume-options-object
+        config:
+          pattern: "withDataVolume\\(\\s*\\{\\s*name\\s*:\\s*[\"']pg-data[\"']"
+      - type: output-matches
+        name: ts-pg-resource-chains-named-volume
+        config:
+          pattern: "addPostgres\\(\\s*[\"']pg[\"'][^;]*?\\.withDataVolume\\(\\s*\\{\\s*name\\s*:\\s*[\"']pg-data[\"']"
+      - type: output-not-contains
+        name: no-ts-positional-volume-name-double
+        config:
+          substring: withDataVolume("pg-data")
+      - type: output-not-contains
+        name: no-ts-positional-volume-name-single
+        config:
+          substring: withDataVolume('pg-data')
+      - type: skill-invocation
+        name: invokes-aspireify-ts-named-volume
+        config:
+          required:
+            - aspireify
   - name: aspireify-command-arguments-135-001
     prompt: >
       Add a C# AppHost resource command named `echo` that requires a `message`
