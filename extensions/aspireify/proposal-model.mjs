@@ -323,6 +323,7 @@ function stripTransientProposalFields(proposal) {
                     userAdded,
                     userEdited,
                     sourceName,
+                    generatedResourceId,
                     generated,
                     origin,
                     edited,

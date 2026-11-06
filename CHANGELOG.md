@@ -16,7 +16,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 - Kept skill-supplied external APIs, streams, and SDK-owned dependencies visible
   in the Aspireify canvas without treating them as runnable services. Resource
   mappings, not-modeled or deferred reasons, and unassessed items now survive
-  reload, immutable confirmation, and the chat handoff.
+  reload, immutable confirmation, and the chat handoff. Regenerated proposals
+  honor removals and withdraw obsolete mappings; discovery refreshes clear
+  references to removed dependencies.
 - Corrected endpoint-discovery guidance so agents use reachable service URLs
   instead of `null`.
 - Corrected Aspireify's TypeScript cache-wiring guidance so generated AppHosts

@@ -87,6 +87,13 @@ for the skill's handoff guidance.
 Excluded and removed resource mappings remain in "Not in the proposed graph"
 even when another resource for the same dependency is included.
 
+Regenerating a proposal honors removals even when a generated resource mapped to
+a user-added resource with a different ID. Replacing the resource list withdraws
+generated mappings no longer supplied, while preserving user-added resources and
+connections. Omitting the list preserves mappings. Replacing discovery detaches
+mappings for removed dependency IDs and clears their treatments and removal
+records.
+
 ## Shared canvas UI
 
 Aspireify uses the shared canvas theme, typography, controls, and local SVG

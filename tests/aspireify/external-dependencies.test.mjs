@@ -352,9 +352,10 @@ test("omitted external inventory and decisions survive legacy refreshes; explici
     });
     assert.equal((await view.snapshot()).externalDependencies[1].treatment, "not-assessed");
     discovery = await p.load({ externalDependencies: [] });
-    await assert.rejects(p.action("set_proposal", {
+    await p.action("set_proposal", {
         proposalGeneration: discovery.proposalGeneration,
-    }), /not a discovered external dependency/);
+    });
+    assert.equal((await view.snapshot()).proposal.resources[1].externalDependencyId, undefined);
     await p.action("set_proposal", {
         proposalGeneration: discovery.proposalGeneration,
         resources: [api],
@@ -415,7 +416,7 @@ test("effective external decisions follow current mappings and return when a reg
     assert.equal((await view.snapshot()).externalDependencies[1].reason, externalDependencyTreatments[0].reason);
 });
 
-test("external mappings follow preserved same-name resources and their removal instead of disappearing", async (t) => {
+test("removed coalesced mappings stay removed through undo, reload, regeneration and confirmation", async (t) => {
     const p = await provider(t);
     const { proposalGeneration } = await p.load();
     await p.propose(proposalGeneration, { resources: [api], edges: [] });
@@ -424,14 +425,156 @@ test("external mappings follow preserved same-name resources and their removal i
         name: "billing", type: "External service",
     })).status, 200);
     const added = (await view.snapshot()).proposal.resources.find(({ name }) => name === "billing");
-    await p.propose(proposalGeneration);
+    const endpoint = {
+        ...billing, id: "billing-endpoint", name: "billing-endpoint", type: "Parameter",
+    };
+    const resources = [api, billing, endpoint];
+    await p.propose(proposalGeneration, { resources, edges: [] });
     let review = await view.snapshot();
-    assert.equal(review.externalDependencies[0].resourceMappings[0].id, added.id);
+    assert.equal(review.externalDependencies[0].resourceMappings.find(({ id }) => id === added.id).include, true);
     assert.equal(review.proposal.resources.find(({ id }) => id === added.id).externalDependencyId, "billing");
+    const renamed = "billing-config";
+    assert.equal((await view.post("/api/proposal/resource", { id: added.id, name: renamed })).status, 200);
+    await p.propose(proposalGeneration, { resources, edges: [] });
+    assert.equal((await view.snapshot()).proposal.resources.find(({ id }) => id === added.id).name, renamed);
     assert.equal((await view.post("/api/proposal/resource/delete", { id: added.id })).status, 200);
     review = await view.snapshot();
-    assert.equal(review.externalDependencies[0].resourceMappings[0].removed, true);
-    assert.equal(review.externalDependencies[0].resourceMappings[0].include, false);
+    const removed = review.externalDependencies[0];
+    assert.deepEqual(removed.resourceMappings, [
+        { id: endpoint.id, name: endpoint.name, type: endpoint.type, include: true },
+        { id: added.id, name: renamed, type: added.type, include: false, removed: true },
+    ]);
+    assert.equal((await view.post("/api/history/undo")).status, 200);
+    assert.equal((await view.snapshot()).proposal.resources.find(({ id }) => id === added.id).externalDependencyId, "billing");
+    assert.equal((await view.post("/api/history/redo")).status, 200);
+
+    const reloaded = await provider(t, p.workspacePath);
+    await reloaded.propose(proposalGeneration, { resources, edges: [] });
+    const restored = await reloaded.open("regenerated");
+    review = await restored.snapshot();
+    assert.deepEqual(review.externalDependencies[0], removed);
+    assert.deepEqual(review.proposal.resources.map(({ id }) => id), [api.id, endpoint.id]);
+    assert.equal((await restored.post("/api/confirm")).status, 200);
+    const confirmed = await reloaded.action("get_confirmation", {}, "regenerated");
+    assert.deepEqual(confirmed.externalDependencies[0], removed);
+    assert.deepEqual(confirmed.proposal.resources.map(({ id }) => id), [api.id, endpoint.id]);
+});
+
+test("inventory replacement reconciles preserved mappings, treatments and tombstones", async (t) => {
+    for (const [name, inventory] of [
+        ["shrink", externalDependencies.slice(2)],
+        ["clear", []],
+    ]) {
+        await t.test(name, async (t) => {
+            const p = await provider(t);
+            let { proposalGeneration } = await p.load();
+            await p.propose(proposalGeneration, { resources: [api], edges: [] });
+            const view = await p.open();
+            assert.equal((await view.post("/api/proposal/resource/add", {
+                name: "billing", type: "External service",
+                connections: [{ direction: "incoming", target: "api", kind: "reference" }],
+            })).status, 200);
+            const added = (await view.snapshot()).proposal.resources.find(({ name }) => name === "billing");
+            await p.action("set_proposal", {
+                proposalGeneration,
+                resources: [
+                    api, billing,
+                    { id: "identity-resource", name: "identity", type: "External service", externalDependencyId: "identity" },
+                    { id: "catalog-resource", name: "catalog", type: "External service", externalDependencyId: "catalog" },
+                ],
+                edges: [],
+            });
+            for (const id of ["identity-resource", "catalog-resource"]) {
+                assert.equal((await view.post("/api/proposal/resource/delete", { id })).status, 200);
+            }
+            const before = await view.snapshot();
+            ({ proposalGeneration } = await p.action("load_discovery", { apphostStyle: "typescript", services }));
+            await p.action("set_proposal", { proposalGeneration });
+            assert.deepEqual((await view.snapshot()).externalDependencies, before.externalDependencies);
+
+            ({ proposalGeneration } = await p.load({ externalDependencies: inventory }));
+            const refreshed = await view.snapshot();
+            const preserved = refreshed.proposal.resources.find(({ id }) => id === added.id);
+            assert.equal(preserved.name, added.name);
+            assert.equal(preserved.externalDependencyId, undefined);
+            assert.deepEqual(refreshed.proposal.edges, before.proposal.edges);
+            await p.action("set_proposal", { proposalGeneration });
+            await p.action("set_proposal", { proposalGeneration, resources: [api], edges: [] });
+
+            const reloaded = await provider(t, p.workspacePath);
+            const restored = await reloaded.open("replacement");
+            const review = await restored.snapshot();
+            assert.equal(review.proposal.resources.find(({ id }) => id === added.id).externalDependencyId, undefined);
+            assert.deepEqual(review.proposal.edges, before.proposal.edges);
+            assert.deepEqual(review.externalDependencies.map(({ id }) => id), inventory.map(({ id }) => id));
+            if (inventory.length) {
+                assert.equal(review.externalDependencies[0].reason, externalDependencyTreatments[1].reason);
+                assert.equal(review.externalDependencies[1].resourceMappings[0].removed, true);
+            }
+            ({ proposalGeneration } = await reloaded.load());
+            await reloaded.action("set_proposal", { proposalGeneration, resources: [api], edges: [] });
+            const rediscovered = await restored.snapshot();
+            const unassessed = externalDependencies.map((dependency) => ({
+                ...dependency, resourceMappings: [], treatment: "not-assessed",
+            }));
+            assert.deepEqual(rediscovered.externalDependencies,
+                inventory.length ? [...unassessed.slice(0, 2), ...review.externalDependencies] : unassessed);
+            assert.equal((await restored.post("/api/confirm")).status, 200);
+            const confirmed = await reloaded.action("get_confirmation", {}, "replacement");
+            assert.deepEqual(confirmed.externalDependencies, rediscovered.externalDependencies);
+            assert.equal(confirmed.proposal.resources.find(({ id }) => id === added.id).externalDependencyId, undefined);
+        });
+    }
+});
+
+test("complete proposal replacements withdraw coalesced mappings without deleting user resources or connections", async (t) => {
+    const { externalDependencyId, ...unmappedBilling } = billing;
+    for (const [name, replacement, decision, retainDecision] of [
+        ["absent resource", [], { externalDependencyId, treatment: "not-modeled", reason: "Keep SDK ownership." }, false],
+        ["unmapped resource", [unmappedBilling], {
+            externalDependencyId, treatment: "deferred", reason: "Review local scope.", unresolved: "Agree on a test endpoint.",
+        }, false],
+        ["retained decision", [], { externalDependencyId, treatment: "not-modeled", reason: "Keep SDK ownership." }, true],
+    ]) {
+        await t.test(name, async (t) => {
+            const p = await provider(t);
+            const { proposalGeneration } = await p.load();
+            await p.propose(proposalGeneration, {
+                resources: [api], edges: [],
+                externalDependencyTreatments: [decision, ...externalDependencyTreatments],
+            });
+            const view = await p.open();
+            assert.equal((await view.post("/api/proposal/resource/add", {
+                name: "billing", type: "External service", detail: "Keep my resource fields.",
+                connections: [{ direction: "incoming", target: "api", kind: "reference" }],
+            })).status, 200);
+            const added = (await view.snapshot()).proposal.resources.find(({ name }) => name === "billing");
+            await p.action("set_proposal", { proposalGeneration, resources: [api, billing], edges: [] });
+            const mapped = await view.snapshot();
+            await p.action("set_proposal", { proposalGeneration });
+            assert.deepEqual((await view.snapshot()).externalDependencies, mapped.externalDependencies);
+
+            await p.action("set_proposal", {
+                proposalGeneration, resources: [api, ...replacement], edges: [],
+                ...(retainDecision ? {} : { externalDependencyTreatments: [decision, ...externalDependencyTreatments] }),
+            });
+            const review = await view.snapshot();
+            assert.deepEqual(review.proposal.resources.find(({ id }) => id === added.id), added);
+            assert.deepEqual(review.proposal.edges, mapped.proposal.edges);
+            const expected = {
+                ...externalDependencies[0], resourceMappings: [], treatment: decision.treatment, reason: decision.reason,
+                ...(decision.unresolved ? { unresolved: decision.unresolved } : {}),
+            };
+            assert.deepEqual(review.externalDependencies[0], expected);
+            assert.equal((await view.post("/api/confirm")).status, 200);
+            const confirmed = await p.action("get_confirmation");
+            assert.deepEqual(confirmed.externalDependencies[0], expected);
+            assert.equal(confirmed.proposal.resources.find(({ id }) => id === added.id).externalDependencyId, undefined);
+            assert.equal(confirmed.proposal.resources.find(({ id }) => id === added.id).generatedResourceId, undefined);
+            const handoff = p.session.messages.find((message) => message.includes("findings confirmed"));
+            assert.deepEqual(JSON.parse(handoff.split("\n")[3]).externalDependencies[0], expected);
+        });
+    }
 });
 
 test("conflicting preserved external mappings fail atomically rather than replacing another dependency", async (t) => {
@@ -528,6 +671,10 @@ test("legacy persisted snapshots and empty external inputs preserve existing pro
     const proposal = { resources: [api], edges: [], generatedAt: "2025-01-01T00:00:00.000Z" };
     const oldHash = stableProposalHash({ proposalGeneration: 1, proposal });
     assert.equal(oldHash, "1ba66e3937d60873e0beaa8f0f48996ea6e67caa439a68a243a87747137997d6");
+    assert.equal(stableProposalHash({
+        proposalGeneration: 1,
+        proposal: { ...proposal, resources: [{ ...api, generatedResourceId: "coalesced-resource" }] },
+    }), oldHash);
     assert.equal(stableProposalHash({ proposalGeneration: 1, proposal, externalDependencies: [] }), oldHash);
     assert.notEqual(stableProposalHash({ proposalGeneration: 1, proposal, externalDependencies: expectedAccounting() }), oldHash);
 });

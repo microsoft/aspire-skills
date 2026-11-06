@@ -334,7 +334,12 @@ function resourceIdentitiesMatch(left, right) {
         return left.serviceId === right.serviceId;
     }
     if (left.id && right.id) {
-        return left.id === right.id;
+        return (
+            left.id === right.id ||
+            left.generatedResourceId === right.id ||
+            left.id === right.generatedResourceId ||
+            Boolean(left.generatedResourceId && left.generatedResourceId === right.generatedResourceId)
+        );
     }
     return Boolean(
         left.sourceName &&
@@ -845,7 +850,7 @@ function confirmedProposal(proposal) {
     const names = new Set(resources.map((resource) => resource.name));
     return {
         resources: resources.map(
-            ({ userAdded, userEdited, sourceName, generated, ...resource }) => resource,
+            ({ userAdded, userEdited, sourceName, generatedResourceId, generated, ...resource }) => resource,
         ),
         edges: proposal.edges
             .filter(
@@ -934,7 +939,7 @@ function projectService(service) {
 function proposalForClient(proposal) {
     return {
         resources: proposal.resources.map(
-            ({ userAdded, userEdited, sourceName, generated, ...resource }) => ({
+            ({ userAdded, userEdited, sourceName, generatedResourceId, generated, ...resource }) => ({
                 ...resource,
                 origin: userAdded ? "user" : "generated",
                 edited: resourceDiffersFromGenerated({
@@ -1883,12 +1888,19 @@ async function handlePost(entry, path, body, response) {
                 linkedService.include = false;
                 linkedService.serviceDefaults = false;
             }
-            if (!proposalResource.userAdded || proposalResource.externalDependencyId) {
+            if (
+                !proposalResource.userAdded ||
+                proposalResource.externalDependencyId ||
+                proposalResource.generatedResourceId
+            ) {
                 const removedResource = {
                     id: proposalResource.id,
                     serviceId: proposalResource.serviceId,
                     servicePath: linkedService?.path ?? "",
                     sourceName: proposalResource.sourceName,
+                    ...(proposalResource.generatedResourceId
+                        ? { generatedResourceId: proposalResource.generatedResourceId }
+                        : {}),
                     ...(proposalResource.externalDependencyId
                         ? {
                               externalDependencyId: proposalResource.externalDependencyId,
@@ -2565,6 +2577,23 @@ const aspireifyCanvas = createCanvas({
                     state.scanError = "";
                     state.discoveryLoaded = true;
                     state.externalDependencies = incomingExternalDependencies;
+                    const externalDependencyIds = new Set(
+                        incomingExternalDependencies.map((dependency) => dependency.id),
+                    );
+                    for (const resource of state.proposal.resources) {
+                        if (
+                            resource.externalDependencyId &&
+                            !externalDependencyIds.has(resource.externalDependencyId)
+                        ) {
+                            delete resource.externalDependencyId;
+                        }
+                    }
+                    state.removedGeneratedResources = state.removedGeneratedResources.filter(
+                        (resource) => !resource.externalDependencyId || externalDependencyIds.has(resource.externalDependencyId),
+                    );
+                    state.proposal.externalDependencyTreatments = (state.proposal.externalDependencyTreatments ?? []).filter(
+                        (treatment) => externalDependencyIds.has(treatment.externalDependencyId),
+                    );
                     state.proposalLoaded = false;
                     state.proposalError = "";
                     state.services = incomingServices.map((service, index) => {
@@ -2744,11 +2773,34 @@ const aspireifyCanvas = createCanvas({
                           normalizeProposalResource(resource, index),
                       )
                     : null;
-                const userAddedResources = current.proposal.resources.filter(
-                    (resource) => resource.userAdded,
+                const preservedResources = structuredClone(
+                    current.proposal.resources.filter((resource) => resource.userAdded),
                 );
+                const preservedResourcesByName = new Map(
+                    preservedResources.map((resource) => [resource.name.toLowerCase(), resource]),
+                );
+                const preservedResourcesByGeneratedId = new Map(
+                    preservedResources
+                        .filter((resource) => resource.generatedResourceId)
+                        .map((resource) => [resource.generatedResourceId, resource]),
+                );
+                const preservedResourceFor = (generated) =>
+                    preservedResourcesByGeneratedId.get(generated.id) ??
+                    preservedResourcesByName.get(generated.name.toLowerCase());
+                if (incomingResources) {
+                    const mappedPreservedResources = new Set(
+                        incomingResources
+                            .filter((resource) => resource.externalDependencyId)
+                            .map(preservedResourceFor),
+                    );
+                    for (const resource of preservedResources) {
+                        if (!mappedPreservedResources.has(resource)) {
+                            delete resource.externalDependencyId;
+                        }
+                    }
+                }
                 const endpointResources = incomingResources
-                    ? [...incomingResources, ...userAddedResources]
+                    ? [...incomingResources, ...preservedResources]
                     : current.proposal.resources;
                 validateProposalResourceIds(endpointResources);
                 validateExternalDependencyMappings(endpointResources, current.externalDependencies);
@@ -2781,15 +2833,6 @@ const aspireifyCanvas = createCanvas({
                     },
                 );
                 const snapshot = await updateSnapshot(domainId, (state) => {
-                    const preservedResources = state.proposal.resources.filter(
-                        (resource) => resource.userAdded,
-                    );
-                    const preservedResourcesByName = new Map(
-                        preservedResources.map((resource) => [
-                            resource.name.toLowerCase(),
-                            resource,
-                        ]),
-                    );
                     const previousGenerated = state.proposal.resources.filter(
                         (resource) => !resource.userAdded,
                     );
@@ -2813,9 +2856,7 @@ const aspireifyCanvas = createCanvas({
                                   return enrichResourceFromService(generated, linkedService);
                               })
                               .map((generated) => {
-                                  const preserved = preservedResourcesByName.get(
-                                      generated.name.toLowerCase(),
-                                  );
+                                  const preserved = preservedResourceFor(generated);
                                   if (preserved) {
                                       if (generated.externalDependencyId) {
                                           if (
@@ -2828,6 +2869,7 @@ const aspireifyCanvas = createCanvas({
                                               );
                                           }
                                           preserved.externalDependencyId = generated.externalDependencyId;
+                                          preserved.generatedResourceId = generated.id;
                                       }
                                       generatedResourceOverrides.set(
                                           generated.id,
