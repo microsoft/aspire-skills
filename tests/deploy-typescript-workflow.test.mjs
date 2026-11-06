@@ -9,11 +9,14 @@ const referencesUrl = new URL("../skills/aspire-deployment/references/", import.
 // A clean CI checkout must run `aspire restore` before any step that type-checks the AppHost.
 // The full workflow runs on a clean runner, so it must install the CLI itself. The cicd.md
 // snippet is a fragment placed after the shared install step, so installation is optional there.
+// GitHub Actions applies $GITHUB_PATH additions only to later steps, so the PATH update must be
+// in an earlier step than `aspire restore` unless that step also exports PATH before restoring.
 function assertRestoresBeforeBuild(commands, label, { requireInstall = false } = {}) {
-    const install = commands.findIndex((command) => /aspire\.dev\/install\.sh/.test(command));
-    const addToPath = commands.findIndex((command) => /\.aspire\/bin\b.*>>\s*"?\$GITHUB_PATH"?/.test(command));
-    const restore = commands.findIndex((command) => /^aspire restore\b/.test(command));
-    const build = commands.findIndex((command) => /\bnpm run build\b/.test(command));
+    const find = (pattern) => commands.findIndex(({ command }) => pattern.test(command));
+    const install = find(/aspire\.dev\/install\.sh/);
+    const addToPath = find(/\.aspire\/bin\b.*>>\s*"?\$GITHUB_PATH"?/);
+    const restore = find(/^aspire restore\b/);
+    const build = find(/\bnpm run build\b/);
 
     assert.ok(build >= 0, `${label} must build the TypeScript workspace`);
     assert.ok(restore >= 0, `${label} must run aspire restore to generate .aspire/modules`);
@@ -22,6 +25,11 @@ function assertRestoresBeforeBuild(commands, label, { requireInstall = false } =
         assert.ok(install >= 0, `${label} must install the Aspire CLI before aspire restore`);
         assert.ok(addToPath > install && addToPath < restore,
             `${label} must add $HOME/.aspire/bin to $GITHUB_PATH after installing and before aspire restore`);
+        const restoreStep = commands[restore].step;
+        const exportedInRestoreStep = commands.some(({ command, step }, index) =>
+            step === restoreStep && index < restore && /^export PATH=.*\.aspire\/bin\b/.test(command));
+        assert.ok(commands[addToPath].step < restoreStep || exportedInRestoreStep,
+            `${label} must update $GITHUB_PATH in an earlier step than aspire restore, because GitHub Actions applies it only to later steps`);
     }
     if (install >= 0) {
         assert.ok(install < restore, `${label} must install the Aspire CLI before aspire restore`);
@@ -29,10 +37,10 @@ function assertRestoresBeforeBuild(commands, label, { requireInstall = false } =
 }
 
 function runCommands(steps) {
-    return steps
-        .flatMap((step) => (typeof step.run === "string" ? step.run.split("\n") : []))
+    return steps.flatMap((step, stepIndex) => (typeof step.run === "string" ? step.run.split("\n") : [])
         .map((line) => line.trim())
-        .filter(Boolean);
+        .filter(Boolean)
+        .map((command) => ({ command, step: stepIndex })));
 }
 
 test("TypeScript deploy workflow restores the AppHost SDK before building", async () => {
