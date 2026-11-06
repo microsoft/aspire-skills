@@ -4,6 +4,29 @@ import { dirname, join, posix, win32 } from "node:path";
 
 const STORE_VERSION = 1;
 
+// AppHosts keeps this policy locally too because the extensions install independently.
+export function assertLocalAppHostPath(value) {
+    const raw = String(value ?? "").trim();
+    const separators = raw.replace(/\//g, "\\");
+    const path = separators.startsWith("\\\\")
+        ? `\\\\${separators.slice(2).replace(/\\+/g, "\\")}`
+        : separators.replace(/\\+/g, "\\");
+    const devicePrefix = ["\\\\?\\", "\\\\.\\", "\\??\\"].find((prefix) => path.startsWith(prefix));
+    const deviceTarget = (devicePrefix ? path.slice(devicePrefix.length) : path.replace(/^\\/, ""))
+        .replace(/^(?:(?:GLOBALROOT|GLOBAL\?\?|\?\?|DosDevices)\\)+/i, "");
+    if (
+        /^(?:smb|cifs|nfs):\/\//i.test(raw) ||
+        /^file:\/\/[^/\\]/i.test(raw) ||
+        (path.startsWith("\\\\") && !devicePrefix) ||
+        ((devicePrefix || /^\\(?:Device|GLOBALROOT|GLOBAL\?\?|DosDevices)\\/i.test(path)) &&
+            /^(?:UNC(?:\\|$)|Device\\(?:Mup|LanmanRedirector|WebDavRedirector)(?:\\|$))/i.test(deviceTarget))
+    ) {
+        const error = new Error("UNC and explicit network AppHost targets are not supported. Choose a local path.");
+        error.code = "network_apphost_target";
+        throw error;
+    }
+}
+
 export function appHostIdentity(value, options = {}) {
     const platform = options.platform ?? process.platform;
     const pathApi = platform === "win32" ? win32 : posix;
@@ -13,8 +36,11 @@ export function appHostIdentity(value, options = {}) {
     }
 
     const cwd = options.cwd ?? process.cwd();
+    assertLocalAppHostPath(rawPath);
+    assertLocalAppHostPath(cwd);
     const normalizedInput = normalizePathSeparators(rawPath, platform);
     const appHostPath = trimTrailingSeparator(pathApi.resolve(cwd, normalizedInput), pathApi);
+    assertLocalAppHostPath(appHostPath);
     return {
         appHostPath,
         domainId: platform === "win32" ? appHostPath.toLowerCase() : appHostPath,

@@ -88,6 +88,12 @@ const elements = {
     footerNote: document.getElementById("footer-note"),
     historyAnnouncement: document.getElementById("history-announcement"),
     confirm: document.getElementById("confirm"),
+    restartReview: document.getElementById("restart-review"),
+    restartDialog: document.getElementById("restart-review-dialog"),
+    restartForm: document.getElementById("restart-review-form"),
+    restartTarget: document.getElementById("restart-review-target"),
+    restartError: document.getElementById("restart-review-error"),
+    approveRestart: document.getElementById("approve-restart"),
     error: document.getElementById("error"),
     errorMessage: document.getElementById("error-message"),
     retry: document.getElementById("retry"),
@@ -130,6 +136,7 @@ let confirmationError = "";
 let handoffError = "";
 let connectionRowSequence = 0;
 let pendingRemoval;
+let restartSnapshot;
 let eventsConnected = false;
 let activeViewTransition;
 let selectedResourceId = "";
@@ -151,6 +158,25 @@ const detailResizeObserver =
 document.addEventListener("DOMContentLoaded", () => {
     elements.retry.addEventListener("click", () => void retryProposalOrSnapshot());
     elements.confirm.addEventListener("click", () => void confirmSnapshot());
+    elements.restartReview.addEventListener("click", () => {
+        restartSnapshot = structuredClone(snapshot);
+        elements.restartTarget.textContent = `AppHost: ${snapshot.appHostPath}. Revision: ${snapshot.revision}.`;
+        elements.restartError.textContent = "";
+        elements.restartDialog.showModal();
+    });
+    elements.restartForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        await runBusy(elements.approveRestart, async () => {
+            const result = await post("/api/approve-restart", {}, restartSnapshot);
+            restartSnapshot = structuredClone(snapshot);
+            if (!result.delivered) {
+                throw new Error(result.error || "New review authorized, but chat could not be notified. Retry the notification.");
+            }
+            elements.restartDialog.close();
+        }, (error) => {
+            elements.restartError.textContent = error.message;
+        });
+    });
     elements.undo.addEventListener("click", () => void applyHistoryChange("undo", elements.undo));
     elements.redo.addEventListener("click", () => void applyHistoryChange("redo", elements.redo));
     elements.compactAddResource.addEventListener("click", () => openAddResourceDialog("all"));
@@ -278,8 +304,7 @@ function connectEvents() {
     };
 }
 
-async function post(path, body) {
-    const requestSnapshot = snapshot;
+async function post(path, body, requestSnapshot = snapshot) {
     const previousRevision = requestSnapshot?.revision ?? -1;
     const requestBody = {
         ...body,
@@ -660,8 +685,8 @@ function renderNotProposedServices() {
     section.querySelector(":scope > p").textContent = services.some(
         (service) => service.treatment === "not-assessed",
     )
-        ? "Discovered services that no proposed resource maps. Not assessed means the skill supplied no decision."
-        : "Discovered services that no proposed resource maps, with the decision made in chat.";
+        ? "Agent-supplied discovery and exclusion or deferral reasons. Not assessed means the agent supplied no treatment."
+        : "Agent-supplied discovery and exclusion or deferral reasons. These reasons do not establish that a decision occurred in chat.";
     const list = section.querySelector(".not-proposed-list");
     list.replaceChildren(
         ...services.map((service) => {
@@ -679,14 +704,14 @@ function renderNotProposedServices() {
             }
             if (service.reason) {
                 identity.append(
-                    createElement("span", { className: "not-proposed-reason", text: service.reason }),
+                    createElement("span", { className: "not-proposed-reason", text: `Agent-supplied reason: ${service.reason}` }),
                 );
             }
             if (service.unresolved) {
                 identity.append(
                     createElement("span", {
                         className: "not-proposed-unresolved",
-                        text: `Unresolved: ${service.unresolved}`,
+                        text: `Agent-supplied unresolved issue: ${service.unresolved}`,
                     }),
                 );
             }
@@ -1858,6 +1883,13 @@ function renderProposalIdentity() {
     );
     elements.proposalHash.textContent = shortHash(snapshot.proposalHash);
     elements.proposalHash.title = snapshot.proposalHash || "";
+    elements.restartReview.hidden = !snapshot.confirmed;
+    elements.restartReview.disabled = Boolean(snapshot.restartApproved) && !snapshot.restartNotificationPending;
+    elements.restartReview.textContent = snapshot.restartNotificationPending
+        ? "Retry new review notification"
+        : snapshot.restartApproved
+        ? "New review authorized"
+        : "Start new review";
 }
 
 function shortHash(hash) {
