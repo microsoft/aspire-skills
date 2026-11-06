@@ -47,9 +47,9 @@ including `aspireify`.
 
 In Aspire 17.0 and later, agent setup lets you choose which agent clients,
 skills, and CLI tools to configure. You can choose project-specific settings or
-global settings shared across projects. The CLI configures the selected agent
-clients to fetch and load content directly from the `aspire-skills` repository
-instead of copying bundled skill files.
+global settings shared across projects. By default, the CLI configures the
+selected agent clients to fetch and load content directly from the `aspire-skills`
+repository instead of copying bundled skill files.
 
 Standalone `aspire agent init` also offers MCP configuration, which is off by
 default. Non-interactive runs configure MCP only when you pass `--mcp`.
@@ -81,10 +81,13 @@ aspire agent init --scope project
 Use `--scope global` for settings shared across projects. For update options, see
 [Automatic updates and version pinning](#automatic-updates-and-version-pinning).
 
-Before running setup, review the
-[`aspire-skills` repository](https://github.com/microsoft/aspire-skills).
+The official [`microsoft/aspire-skills` repository](https://github.com/microsoft/aspire-skills)
+is the default source. Workspace or global `skillSources` settings can add other
+plugin repositories or skill catalogs, override the default source, or disable it.
+Review every source URL shown by setup before enabling remote skills.
+
 Existing local Aspire skill files may take precedence over skills loaded from
-the repository.
+remote sources.
 
 In Aspire 13.6, run `aspire agent init` interactively to select the bundled
 Aspire skills and installation locations. Aspire 13.6 has no `--agents` or
