@@ -44,6 +44,96 @@ test("shared canvas assets are served locally with their correct MIME types", as
     assert.equal(response.status, 404, "only the exact static asset allowlist is public");
 });
 
+test("generic reopen rejects invalid retargets while retaining the existing panel", async (t) => {
+    const h = await harness(t);
+    const opened = await h.open();
+    await h.action("refresh_model");
+    const before = await h.request(opened, "/api/state");
+    await assert.rejects(
+        h.open("test", { appHostPath: join(tmpdir(), "missing-apphost-target", "AppHost.cs") }),
+    );
+    const retained = await sse(h, opened);
+    t.after(() => retained.close());
+    const failed = (await retained.waitFor((event) => event.type === "state")).state;
+    assert.equal(failed.stale, true);
+    assert.ok(failed.error, "the retained panel must explain the failure");
+    const after = await h.request(opened, "/api/state");
+    assert.equal(after.status, 200);
+    assert.deepEqual(after.state.roots, before.state.roots);
+    assert.equal(h.servers.length, 1, "failed retargeting must not replace the listener");
+});
+
+test("Global mode rejects discovered network targets without disabling local hosts or hidden visibility", async (t) => {
+    const network = "\\\\server\\share\\AppHost.cs";
+    const h = await harness(t, {
+        cliOverride: (args) => args[0] === "ps"
+            ? ok([...paths, network].map((appHostPath) => ({ appHostPath, status: "running" })))
+            : undefined,
+    });
+    const opened = await h.open("network-policy", { viewMode: "global", includeHidden: true });
+    const { state } = await h.request(opened, "/api/state");
+    assert.equal(state.viewMode, "global");
+    assert.equal(state.includeHidden, true);
+    assert.equal(state.summary.running, paths.length);
+    assert.match(state.error, /1 AppHost target was rejected.*network paths/);
+    const describes = h.calls.filter(({ args }) => args[0] === "describe");
+    assert.ok(describes.length > 0);
+    assert.ok(describes.every(({ args }) => args.includes("--include-hidden")));
+    assert.ok(describes.every(({ args }) => !args.includes(network)));
+});
+
+test("workspace discovery rejects explicit network candidates with a visible warning", async (t) => {
+    const h = await harness(t, {
+        cliOverride: (args) => args[0] === "ls"
+            ? ok([
+                { path: paths[0], status: "buildable" },
+                { path: "//server/share/AppHost.cs", status: "buildable" },
+            ])
+            : undefined,
+    });
+    const opened = await h.open("network-workspace", { viewMode: "workspace" });
+    const { state } = await h.request(opened, "/api/state");
+    assert.match(state.error, /1 AppHost target was rejected.*network paths/);
+    assert.ok(state.roots.length > 0, "local candidates remain available");
+    assert.doesNotMatch(JSON.stringify(state.roots), /server|share/);
+});
+
+test("AppHosts rejects network targets before stat, readdir, or target-file reads", async () => {
+    const url = new URL("../../extensions/aspire-apphosts/lib/app-model.mjs", import.meta.url);
+    const context = createContext({ Buffer, process, URL, setTimeout, clearTimeout });
+    const filesystemCalls = [];
+    let configuredPath;
+    const module = new SourceTextModule(await readFile(url, "utf8"), { context });
+    await module.link(async (specifier) => {
+        const exports = specifier === "node:fs/promises"
+            ? {
+                stat: async () => { filesystemCalls.push("stat"); throw new Error("unexpected stat"); },
+                readdir: async () => { filesystemCalls.push("readdir"); throw new Error("unexpected readdir"); },
+                readFile: async () => {
+                    filesystemCalls.push("readFile");
+                    if (configuredPath) {
+                        return JSON.stringify({ appHost: { path: configuredPath } });
+                    }
+                    throw new Error("unexpected readFile");
+                },
+            }
+            : await import(specifier);
+        return new SyntheticModule(Object.keys(exports), function () {
+            for (const [key, value] of Object.entries(exports)) this.setExport(key, value);
+        }, { context });
+    });
+    await module.evaluate();
+    for (const path of ["\\\\server\\share\\AppHost.cs", "//server/share/AppHost.cs", "\\\\?\\UNC\\server\\share\\AppHost.cs", "smb://server/share"]) {
+        await assert.rejects(module.namespace.resolveRequestedAppHostPath(path, process.cwd()), { code: "network_apphost_target" });
+    }
+    await assert.rejects(module.namespace.discoverConfiguredAppHosts("\\\\server\\share"), { code: "network_apphost_target" });
+    await assert.rejects(module.namespace.resolveRequestedAppHostPath("AppHost.cs", "\\\\server\\share"), { code: "network_apphost_target" });
+    assert.deepEqual(filesystemCalls, []);
+    configuredPath = "\\\\server\\share\\AppHost.cs";
+    await assert.rejects(module.namespace.discoverConfiguredAppHosts(process.cwd()), { code: "network_apphost_target" });
+    assert.deepEqual(filesystemCalls, ["readFile"], "a network config target is rejected after reading only the local config");
+});
+
 function describe(inputs = baseInputs, state = "Running") {
     return { resources: [
         {
