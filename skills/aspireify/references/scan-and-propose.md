@@ -130,3 +130,21 @@ QUESTIONS BEFORE I EDIT
 ```
 
 Wait for confirmation before editing.
+
+## External inventory handoff
+
+Send discovered external APIs, WebSocket streams, and SDK-selected endpoints
+through `load_discovery.externalDependencies`, not runnable `services`. Use the
+action schemas for fields; supply configuration key names and evidence, never
+secret values or authenticated URLs.
+
+Map proposal resources with `externalDependencyId`, not `serviceId`. For unmapped
+dependencies, pass `set_proposal.externalDependencyTreatments`: `not-modeled`
+with a `reason`, or `deferred` with a `reason` and `unresolved`. Without a decision,
+leave the item **Not assessed**. Resolve tradeoffs in chat; do not invent resources
+merely for visibility or change configuration, SDK/authentication, health-check,
+or startup ownership.
+
+Carry `get_confirmation.externalDependencies`, including its `resourceMappings`
+and decisions, into implementation. Omitting inventory or treatments preserves
+them within the current run; explicit empty arrays clear them.

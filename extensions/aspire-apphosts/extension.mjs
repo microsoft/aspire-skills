@@ -1518,6 +1518,12 @@ async function startServer(ctx) {
     };
 
     const server = createServer((req, res) => {
+        res.once("finish", () => {
+            if (entry.closed) {
+                // In-flight responses become idle after close() performs its initial cleanup.
+                server.closeIdleConnections();
+            }
+        });
         Promise.resolve(handleRequest(entry, req, res)).catch((error) => {
             log(`Aspire AppHosts request failed: ${error?.message ?? error}`, "error");
             if (!res.headersSent) {

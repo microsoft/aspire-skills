@@ -13,6 +13,14 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   from Aspire 17.0.
 
 ### Changed
+- Closed Aspire AppHosts canvas listeners promptly after in-flight commands
+  finish, without canceling those commands.
+- Kept skill-supplied external APIs, streams, and SDK-owned dependencies visible
+  in the Aspireify canvas without treating them as runnable services. Resource
+  mappings, not-modeled or deferred reasons, and unassessed items now survive
+  reload, immutable confirmation, and the chat handoff. Regenerated proposals
+  honor removals and withdraw obsolete mappings; discovery refreshes clear
+  references to removed dependencies.
 - Corrected the Aspireify TypeScript data-volume example to the generated AppHost SDK:
   `withDataVolume({ name: "pg-data" })` instead of a positional name. The previous form
   failed type checking, so `aspire start` exited before starting any resource. A new
