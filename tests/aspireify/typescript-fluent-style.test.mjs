@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = path => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const reference = read("skills/aspireify/references/typescript-authoring.md");
-const parenthesizedAwaitChain = /\(\s*await\s+builder\b[^;]*?\)\s*\)\s*\.\s*(?:with\w*|waitFor\w*|getEndpoint)\s*\(/;
+const parenthesizedAwaitChain = /\(\s*await\s+builder\b[^;]*?\)\s*\)\s*\.\s*[A-Za-z_$][\w$]*\s*\(/;
 const section = heading => {
   const content = reference.split(`## ${heading}\n`)[1]?.split("\n## ")[0];
   assert.ok(content, `Missing ${heading} section`);
@@ -38,6 +38,9 @@ test("fluent-chain guard permits awaiting a concrete resource value", () => {
   for (const code of [
     "(await builder.addViteApp('web', './web')).withReference(api);",
     "const api = (await builder.addProject('api', './Api.csproj'))\n  .withEnvironment('KEY', value);",
+    "(await builder.addViteApp('web', './web')).publishAsStaticWebsite({ apiTarget: api });",
+    "(await builder.addProject('api', './Api.csproj')).publishAsAzureContainerApp(async () => {});",
+    "(await builder.addPostgres('pg')).addDatabase('appdb');",
   ]) {
     assert.match(code, parenthesizedAwaitChain);
   }
