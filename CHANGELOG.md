@@ -13,6 +13,8 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   from Aspire 17.0.
 
 ### Changed
+- Simplified Aspireify's TypeScript AppHost examples to chain resource promises
+  without redundant `await`, while retaining required lifecycle and callback awaits.
 - Corrected the Aspireify TypeScript data-volume example to the generated AppHost SDK:
   `withDataVolume({ name: "pg-data" })` instead of a positional name. The previous form
   failed type checking, so `aspire start` exited before starting any resource. A new

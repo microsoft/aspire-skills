@@ -33,6 +33,56 @@ environment:
     - ../../aspire-orchestration
     - ../../aspire-terminals
 stimuli:
+  - name: aspireify-ts-fluent-resources-001
+    prompt: >
+      Use the aspireify skill before answering. Show a read-only TypeScript AppHost
+      example for ts-apphost/apphost.mts with Postgres database `appdb`, Redis
+      `cache`, API project `../Api/Api.csproj`, and Vite frontend `../web`. Wire the
+      API to both dependencies, wait for the database, and pass the API's http
+      endpoint reference directly to the frontend's VITE_API_URL environment
+      variable. Include builder creation and run.
+      Explain whether resource variables and endpoint references need await, and
+      whether async callback operations still need it. Do not edit files or run commands.
+    tags:
+      priority: p1
+      scenario: non-executing-guidance
+      area:
+        - authoring
+        - typescript
+        - fluent-resources
+    constraints:
+      max_agent_duration: 150s
+    environment:
+      files:
+        - src: ../../../evals/ts-apphost/apphost.mts
+          dest: ts-apphost/apphost.mts
+        - src: ../../../evals/ts-apphost/aspire.config.json
+          dest: ts-apphost/aspire.config.json
+    graders:
+      - type: prompt
+        name: declares-unawaited-fluent-resources
+        config:
+          scoring: binary
+          prompt: >
+            Does the example declare Postgres, Redis, API, and Vite resources
+            without awaiting add/with/waitFor calls or parenthesizing awaited
+            resources to continue chaining? It must wire the API to both
+            dependencies, wait for the database, pass api.getEndpoint('http')
+            directly to the frontend's VITE_API_URL, and await createBuilder()
+            and builder.build().run().
+      - type: prompt
+        name: explains-promise-fluent-types-and-async-boundaries
+        config:
+          scoring: binary
+          prompt: >
+            Does the response explain that ResourcePromise types expose the fluent
+            API and EndpointReferencePromise is accepted directly by withEnvironment,
+            while genuinely asynchronous callback operations still need await?
+            Reject a blanket claim that only two awaits are ever needed in any AppHost.
+      - type: skill-invocation
+        name: invokes-aspireify-fluent-resources
+        config:
+          required: [aspireify]
   - name: aspireify-preserves-selected-version-001
     prompt: >
       Use the aspireify skill before answering. Give a read-only plan for ordinary Redis
