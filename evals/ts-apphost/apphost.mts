@@ -2,12 +2,12 @@ import { createBuilder } from "./.aspire/modules/aspire.mjs";
 
 const builder = await createBuilder();
 
-const redis = await builder.addRedis("cache");
-const api = await builder
+const redis = builder.addRedis("cache");
+const api = builder
   .addProject("apiservice", "../api")
   .withReference(redis);
 
-await builder
+builder
   .addProject("web", "../web")
   .withReference(api)
   .withExternalHttpEndpoints();
