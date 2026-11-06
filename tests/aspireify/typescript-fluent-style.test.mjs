@@ -4,13 +4,14 @@ import test from "node:test";
 
 const read = path => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const reference = read("skills/aspireify/references/typescript-authoring.md");
+const parenthesizedAwaitChain = /\(\s*await\s+builder\b[^;]*?\)\s*\)\s*\.\s*(?:with\w*|waitFor\w*|getEndpoint)\s*\(/;
 const section = heading => {
   const content = reference.split(`## ${heading}\n`)[1]?.split("\n## ")[0];
   assert.ok(content, `Missing ${heading} section`);
   return content;
 };
 
-test("Aspireify TypeScript examples declare fluent resources without intermediate awaits", () => {
+test("Aspireify TypeScript examples do not parenthesize awaits to continue fluent chains", () => {
   const root = new URL("../../skills/aspireify/", import.meta.url);
   const files = readdirSync(root, { recursive: true }).filter(file => file.endsWith(".md"));
   let count = 0;
@@ -18,12 +19,28 @@ test("Aspireify TypeScript examples declare fluent resources without intermediat
     const markdown = readFileSync(new URL(file, root), "utf8");
     for (const [, code] of markdown.matchAll(/```(?:ts|typescript)\r?\n([\s\S]*?)\r?\n```/g)) {
       count++;
-      assert.doesNotMatch(code, /\bawait\s+builder(?!\s*\.\s*build\s*\()/, file);
-      assert.doesNotMatch(code, /\bawait\s+\w+\s*\.\s*(?:with\w+|getEndpoint|publishAs\w+)\s*\(/, file);
+      assert.doesNotMatch(code, parenthesizedAwaitChain, file);
     }
   }
   assert.ok(count > 0, "Missing TypeScript examples");
   assert.match(read("skills/aspireify/SKILL.md"), /\| Add project \|.*\| `builder\.addProject\(/);
+});
+
+test("fluent-chain guard permits awaiting a concrete resource value", () => {
+  for (const code of [
+    "const resource = await builder.addProject('api', './Api.csproj');",
+    "const resource = await builder.addProject('api', './Api.csproj').withReference(db);",
+    "builder.addViteApp('web', './web').withReference(api);",
+    "await builder.build().run();",
+  ]) {
+    assert.doesNotMatch(code, parenthesizedAwaitChain);
+  }
+  for (const code of [
+    "(await builder.addViteApp('web', './web')).withReference(api);",
+    "const api = (await builder.addProject('api', './Api.csproj'))\n  .withEnvironment('KEY', value);",
+  ]) {
+    assert.match(code, parenthesizedAwaitChain);
+  }
 });
 
 test("canonical skeleton awaits lifecycle boundaries and passes fluent resources directly", () => {
