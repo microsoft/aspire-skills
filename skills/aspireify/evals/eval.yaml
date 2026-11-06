@@ -32,6 +32,10 @@ environment:
     - ../../aspireify
     - ../../aspire-orchestration
     - ../../aspire-terminals
+grading_environment:
+  files:
+    - src: ../../../evals/aspireify-experimental-diagnostics/grade-suppressions.mjs
+      dest: .grader/grade-suppressions.mjs
 stimuli:
   - name: aspireify-preserves-selected-version-001
     prompt: >
@@ -1581,6 +1585,103 @@ stimuli:
           scoring: binary
       - type: skill-invocation
         name: invokes-aspireify-go-stable-package-gate
+        config:
+          required:
+            - aspireify
+  - name: aspireify-csharp-experimental-file-001
+    prompt: >
+      Use the aspireify skill. Add the ASP.NET Core API in app/api to my file-based
+      AppHost app/apphost.cs as a C# app resource named api using AddCSharpApp, and
+      serve it over HTTPS with WithHttpsDeveloperCertificate(). Edit the AppHost so it
+      builds on Aspire 13.6.4, but do not restore, build or run anything. Show the
+      changed AppHost code in your reply.
+    tags:
+      priority: p0
+      area:
+        - authoring
+        - csharp
+        - experimental-diagnostics
+    environment:
+      files:
+        - src: ../../../evals/aspireify-experimental-diagnostics/file-based
+          dest: app
+    graders:
+      - type: diff-contains
+        name: file-apphost-adds-csharp-app
+        config: { value: AddCSharpApp }
+      - type: program
+        name: file-apphost-suppresses-experimental-diagnostics
+        config: { program: node, args: [.grader/grade-suppressions.mjs, file] }
+      - type: skill-invocation
+        name: invokes-aspireify-experimental-file
+        config:
+          required:
+            - aspireify
+  - name: aspireify-csharp-experimental-project-001
+    prompt: >
+      Use the aspireify skill. Add the ASP.NET Core API in app/Api to my AppHost project
+      in app/AppHost as a C# app resource named api using AddCSharpApp, and serve it over
+      HTTPS with WithHttpsDeveloperCertificate(). Keep the existing echo container. Edit
+      the AppHost so it builds on Aspire 13.6.4, but do not restore, build or run
+      anything. Show the changed AppHost code and project file in your reply.
+    tags:
+      priority: p0
+      area:
+        - authoring
+        - csharp
+        - experimental-diagnostics
+    environment:
+      files:
+        - src: ../../../evals/aspireify-experimental-diagnostics/project-based
+          dest: app
+    graders:
+      - type: diff-contains
+        name: project-apphost-adds-csharp-app
+        config: { value: AddCSharpApp }
+      - type: program
+        name: project-apphost-suppresses-experimental-diagnostics
+        config: { program: node, args: [.grader/grade-suppressions.mjs, project] }
+      - type: skill-invocation
+        name: invokes-aspireify-experimental-project
+        config:
+          required:
+            - aspireify
+  - name: aspireify-csharp-dotnet-project-17-001
+    prompt: >
+      Use the aspireify skill. My file-based AppHost app/apphost.cs is on Aspire 17.0.
+      Add the ASP.NET Core API in app/api as a resource named api and serve it over HTTPS
+      with WithHttpsDeveloperCertificate(). Do not edit files or restore, build or run
+      anything; show the AppHost code in your reply.
+    tags:
+      priority: p1
+      scenario: non-executing-guidance
+      area:
+        - authoring
+        - csharp
+        - experimental-diagnostics
+        - aspire-17-0
+    environment:
+      files:
+        - src: ../../../evals/aspireify-experimental-diagnostics/file-based-17/apphost.cs
+          dest: app/apphost.cs
+        - src: ../../../evals/aspireify-experimental-diagnostics/file-based/api
+          dest: app/api
+    graders:
+      # One grader checks everything the requested 17.0 AppHost needs: AddDotnetProject, its
+      # Aspire.Hosting.Dotnet reference (not implicit in the 17.0 SDK), the requested
+      # WithHttpsDeveloperCertificate() call and its ASPIRECERTIFICATES001 suppression.
+      # With only an eval-wide 0.7 threshold, separate graders would let an answer that
+      # misses one of them still pass.
+      - type: output-matches
+        name: dotnet-17-adds-project-with-package-and-certificate
+        config:
+          pattern: "^(?=[\\s\\S]*AddDotnetProject\\(\\s*\"api\")(?=[\\s\\S]*Aspire\\.Hosting\\.Dotnet\\b)(?=[\\s\\S]*\\.WithHttpsDeveloperCertificate\\()(?=[\\s\\S]*ASPIRECERTIFICATES001)"
+      - type: output-not-contains
+        name: dotnet-17-avoids-obsolete-add-csharp-app
+        config:
+          substring: builder.AddCSharpApp(
+      - type: skill-invocation
+        name: invokes-aspireify-dotnet-project-17
         config:
           required:
             - aspireify

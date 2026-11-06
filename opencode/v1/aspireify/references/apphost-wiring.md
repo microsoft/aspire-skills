@@ -85,7 +85,7 @@ package use the same release family. Do not mix incompatible package versions.
 | File upload / progress | File inputs are stable; progress dialogs remain experimental under `ASPIREINTERACTION001`. |
 | Interactive terminal | Invoke `aspire-terminals` for `WithTerminal`, auxiliary dock/dialog/headless processes, terminal prompts, REPLs and automation. |
 | AI integration | Migrate deprecated `Aspire.Hosting.GitHub.Models` usage to Azure AI Foundry. |
-| Existing .NET project by path | `AddDotnetProject` moved to experimental `Aspire.Hosting.Dotnet` (`ASPIREDOTNETPROJECT001`). |
+| Existing .NET project by path | `AddDotnetProject` lives in `Aspire.Hosting.Dotnet`: experimental on 13.5 (`ASPIREDOTNETPROJECT001`), a preview package on 13.6 and stable from 17.0. See [Experimental C# APIs](#experimental-c-apis-used-in-these-examples) for 17.0 wiring. |
 | Dev tunnel region | Use normalized names such as `DevTunnelRegion.UKSouth` and `SoutheastAsia`. |
 
 For all 13.5 breaking changes and patch caveats, see
@@ -133,6 +133,52 @@ aspire add communitytoolkit-rust
 After adding, run `aspire restore` (TypeScript or Go) or `dotnet restore` (C#) to update available APIs, then check what methods are now available.
 
 **Always prefer a typed integration over raw `AddExecutable`/`AddContainer`.** Typed integrations handle working directories, port injection, health checks, and dashboard integration automatically.
+
+### Experimental C# APIs used in these examples
+
+In Aspire 13.6, two C# APIs used below are experimental. A C# AppHost that calls them
+fails to build with an `error` until the diagnostic is suppressed:
+
+| API | Diagnostic |
+|-----|------------|
+| `AddCSharpApp(...)` | `ASPIRECSHARPAPPS001` |
+| `WithHttpsDeveloperCertificate()` | `ASPIRECERTIFICATES001` |
+
+Suppress only the IDs the AppHost actually uses. In a file-based `apphost.cs`, put the
+pragma after the `#:` directives:
+
+```csharp
+#pragma warning disable ASPIRECSHARPAPPS001, ASPIRECERTIFICATES001
+```
+
+In a project-based AppHost, add the IDs to the AppHost `.csproj` instead:
+
+```xml
+<NoWarn>$(NoWarn);ASPIRECSHARPAPPS001;ASPIRECERTIFICATES001</NoWarn>
+```
+
+If the AppHost project already sets `<NoWarn>`, append the IDs to that value. Keep
+`$(NoWarn)` and the existing IDs, because dropping them brings back the diagnostics they
+suppressed.
+
+TypeScript AppHosts need neither. If a build reports a different `ASPIRE...` diagnostic,
+confirm it with `aspire docs api get` before suppressing it.
+
+**Aspire 17.0.** Check the AppHost's SDK version before wiring a .NET service:
+
+- `AddCSharpApp` is obsolete in 17.0 rather than experimental. Calls report the CS0618
+  warning, so `ASPIRECSHARPAPPS001` no longer applies.
+- For a new .NET service in a 17.0 AppHost, run `aspire add Aspire.Hosting.Dotnet` and use
+  `builder.AddDotnetProject("api", "../src/Api")`. The path can be a project file, a
+  directory with exactly one project, or a file-based `.cs` app. The 17.0 SDK doesn't
+  reference `Aspire.Hosting.Dotnet` implicitly. If you can't run `aspire add`, show the
+  reference: `#:package Aspire.Hosting.Dotnet@<AppHost SDK version>` after the `#:sdk`
+  directive in a file-based `apphost.cs`, or a `PackageReference` in a project-based
+  AppHost. The other examples here use `AddCSharpApp` because it is the 13.6 API.
+- Don't migrate existing `AddCSharpApp` or `AddProject` calls unless the user asks. For a
+  requested migration, use the `aspire-project-v2-migration` skill.
+- `WithHttpsDeveloperCertificate()` is still experimental in 17.0, so keep the
+  `ASPIRECERTIFICATES001` suppression.
 
 ## Service communication: `WithReference` vs `WithEnvironment`
 
@@ -207,7 +253,7 @@ var nodeApi = builder.AddJavaScriptApp("api", "../api", "start")
     .WithHttpsEndpoint(env: "PORT");  // Aspire injects PORT=<assigned-port>
 ```
 
-**`WithHttpsDeveloperCertificate()`** — required for JavaScript and Python apps to serve HTTPS. Configures the ASP.NET Core dev cert. .NET apps handle this automatically.
+**`WithHttpsDeveloperCertificate()`** — required for JavaScript and Python apps to serve HTTPS. Configures the ASP.NET Core dev cert. .NET apps handle this automatically. In C#, this API is experimental (`ASPIRECERTIFICATES001`; see [Experimental C# APIs](#experimental-c-apis-used-in-these-examples)).
 
 ```csharp
 var frontend = builder.AddViteApp("frontend", "../frontend")
