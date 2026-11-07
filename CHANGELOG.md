@@ -48,6 +48,12 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   authoring reference with Aspire's subnet-based `subnet.AddPrivateEndpoint(target)` API,
   including the `Aspire.Hosting.Azure.Network` package reference and `ASPIREAZURE003` opt-in.
   Aspireify's authoring rules now route private endpoint requests to that API instead of raw Bicep.
+- Fixed the TypeScript deploy workflow reference and CI/CD setup snippet to install the
+  Aspire CLI and run `aspire restore` before `npm run build`. The generated
+  `.aspire/modules/` folder is gitignored, so on a clean checkout the build failed with
+  `TS2307: Cannot find module './.aspire/modules/aspire.mjs'`. In the shared Node setup
+  snippet, the restore runs only when `apphost.mts` exists, so C# and Go AppHosts with
+  JavaScript resources are unaffected.
 - Corrected Aspireify's TypeScript AppHost `package.json` guidance to match `aspire init`.
   With an existing root `package.json`, the AppHost goes in `aspire-apphost/` and the
   root only gains `aspire:start`/`aspire:build`/`aspire:dev` delegates; the merge rules
