@@ -99,6 +99,47 @@ test("file-based AppHost checks calls split across lines on the API name's line"
   assert.deepEqual(grade(unsuppressed, "file"), []);
 });
 
+test("file-based AppHost ignores #pragma directives inside #if blocks", t => {
+  for (const [label, pragma] of Object.entries({
+    "#if false": `#if false\n${both}#endif\n`,
+    "#else branch": `#if DEBUG\n#else\n${both}#endif\n`,
+  })) {
+    const root = workspace(t, "file");
+    edit(root, "apphost.cs", wireApi("./api", pragma));
+    const problems = grade(root, "file").join("\n");
+    for (const id of ["ASPIRECSHARPAPPS001", "ASPIRECERTIFICATES001"]) {
+      assert.match(problems, new RegExp(`disables ${id} with a #pragma inside an #if`), label);
+      assert.match(problems, new RegExp(`is not covered by #pragma warning disable ${id}`), label);
+    }
+  }
+});
+
+test("file-based AppHost requires the certificate call on the api resource for ./api", t => {
+  const unrelated = workspace(t, "file");
+  edit(unrelated, "apphost.cs", source => source.replace("builder.Build().Run();", `${both}` +
+    'builder.AddCSharpApp("other", "./not-api");\n' +
+    'builder.AddContainer("api", "nginx").WithHttpsDeveloperCertificate();\n\nbuilder.Build().Run();'));
+  assert.deepEqual(grade(unrelated, "file"), ['apphost.cs does not add the api resource with AddCSharpApp("api", "./api")']);
+
+  const elsewhere = workspace(t, "file");
+  edit(elsewhere, "apphost.cs", source => source.replace("builder.Build().Run();", `${both}` +
+    'var api = builder.AddCSharpApp("api", "./api");\n' +
+    'builder.AddContainer("web", "nginx").WithHttpsDeveloperCertificate();\n\nbuilder.Build().Run();'));
+  assert.deepEqual(grade(elsewhere, "file"), ["apphost.cs does not chain WithHttpsDeveloperCertificate() from the api resource"]);
+
+  const inactive = workspace(t, "file");
+  edit(inactive, "apphost.cs", wireApi("./api", both));
+  edit(inactive, "apphost.cs", source => source.replace('var api = builder.AddCSharpApp("api", "./api")\n    .WithHttpsDeveloperCertificate();\n',
+    'builder.AddCSharpApp("other", "./not-api").WithHttpsDeveloperCertificate();\n#if false\n' +
+    'builder.AddCSharpApp("api", "./api").WithHttpsDeveloperCertificate();\n#endif\n'));
+  assert.deepEqual(grade(inactive, "file"), ['apphost.cs does not add the api resource with AddCSharpApp("api", "./api")']);
+
+  const variable = workspace(t, "file");
+  edit(variable, "apphost.cs", source => source.replace("builder.Build().Run();", `${both}` +
+    'var api = builder.AddCSharpApp("api", "./api/Api.csproj");\napi.WithHttpsDeveloperCertificate();\n\nbuilder.Build().Run();'));
+  assert.deepEqual(grade(variable, "file"), []);
+});
+
 test("file-based AppHost ignores a commented-out #:property NoWarn", t => {
   const root = workspace(t, "file");
   edit(root, "apphost.cs", wireApi("./api"));
@@ -155,6 +196,12 @@ test("project-based AppHost rejects conditional and commented-out NoWarn suppres
     assert.match(problems, /WithHttpsDeveloperCertificate in AppHost\/AppHost\.cs is not covered/, label);
     if (label !== "an XML comment") assert.match(problems, /sets NoWarn conditionally/, label);
   }
+});
+
+test("project-based AppHost requires the api resource to point at ../Api", t => {
+  const root = workspace(t, "project");
+  edit(root, "AppHost/AppHost.cs", wireApi("../Web", both));
+  assert.deepEqual(grade(root, "project"), ['AppHost/AppHost.cs does not add the api resource with AddCSharpApp("api", "../Api")']);
 });
 
 test("project-based AppHost fails without a suppression", t => {

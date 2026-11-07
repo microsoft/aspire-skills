@@ -1,7 +1,10 @@
 // Program grader for the Aspireify experimental-diagnostics stimuli.
-// Inspects the AppHost the agent wrote under <workspace>/app and fails unless every call to an
-// Aspire 13.6 experimental API is covered by a #pragma or NoWarn suppression, and the project's
-// existing NoWarn values survive. Self-contained: the eval copies only this file into .grader/.
+// For the file and project cases it inspects the AppHost the agent wrote under <workspace>/app and
+// fails unless the api resource is added for the supplied project with the certificate call chained
+// from it, every call to an Aspire 13.6 experimental API is covered by an unconditional #pragma or
+// NoWarn suppression, and the project's existing NoWarn values survive. The dotnet17 case grades
+// the code blocks returned in the response for the read-only 17.0 stimulus. Self-contained: the
+// eval copies only this file into .grader/.
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,11 +14,13 @@ export const experimentalApis = [
   { name: "WithHttpsDeveloperCertificate", call: /\.\s*WithHttpsDeveloperCertificate\s*\(/, id: "ASPIRECERTIFICATES001" },
 ];
 
+// apiPaths are the accepted project paths for the api resource, relative to the AppHost directory.
 export const cases = {
-  file: { source: "apphost.cs" },
+  file: { source: "apphost.cs", apiPaths: ["./api", "./api/Api.csproj"] },
   project: {
     source: "AppHost/AppHost.cs",
     project: "AppHost/AppHost.csproj",
+    apiPaths: ["../Api", "../Api/Api.csproj"],
     // The fixture already suppresses ASPIREPROBES001 for its WithHttpProbe call.
     preserved: [{ name: "WithHttpProbe", call: /\.\s*WithHttpProbe\s*\(/, id: "ASPIREPROBES001" }],
   },
@@ -23,9 +28,32 @@ export const cases = {
 
 const read = path => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
 
+// Blanks comments (keeping line breaks) without touching comment-like text inside string literals.
 function stripComments(code) {
-  return code.replace(/\/\*[\s\S]*?\*\//g, match => match.replace(/[^\n]/g, " ")).replace(/\/\/.*$/gm, "");
+  return code.replace(/"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])'|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
+    token => token.startsWith("/") ? token.replace(/[^\n]/g, " ") : token);
 }
+
+const conditionalDirective = /^\s*#\s*(if|elif|else|endif)\b/;
+
+// Marks each line that is a conditional-compilation directive or sits inside an #if block. Code
+// there compiles only when its branch is active, so it cannot supply a required suppression or
+// the requested wiring.
+function conditionalLines(code) {
+  let depth = 0;
+  return code.split("\n").map(line => {
+    const directive = line.match(conditionalDirective);
+    if (!directive) return depth > 0;
+    if (directive[1] === "if") depth++;
+    else if (directive[1] === "endif") depth = Math.max(0, depth - 1);
+    return true;
+  });
+}
+
+const unconditional = code => {
+  const conditional = conditionalLines(code);
+  return code.split("\n").map((line, index) => conditional[index] ? "" : line).join("\n");
+};
 
 const ids = list => list.split(/[;,\s]+/).map(id => id.trim().toUpperCase()).filter(Boolean);
 
@@ -69,9 +97,11 @@ const directiveNoWarn = source => [...stripComments(source).matchAll(/^#:propert
 
 const lineAt = (text, index) => text.slice(0, index).split("\n").length - 1;
 
-// Returns the IDs of APIs with a call outside an active #pragma warning disable for that ID. Calls
-// are matched across line breaks and checked on the line of the API name, where the compiler reports
-// the diagnostic. As in C#, the most recent directive naming an ID, or blanket directive, wins.
+// Returns the IDs of APIs with a call outside an active #pragma warning disable for that ID, and
+// the IDs named by #pragma directives inside #if/#elif/#else blocks, which are ignored. Calls
+// (in any branch) are matched across line breaks and checked on the line of the API name, where
+// the compiler reports the diagnostic. As in C#, the most recent directive naming an ID, or
+// blanket directive, wins.
 function pragmaCoverage(code, apis) {
   const stripped = stripComments(code);
   const callsByLine = new Map();
@@ -85,10 +115,16 @@ function pragmaCoverage(code, apis) {
   let all = false;
   const overrides = new Map();
   const uncovered = new Set();
+  const conditional = new Set();
+  const inConditional = conditionalLines(stripped);
   stripped.split("\n").forEach((line, index) => {
     const pragma = line.match(/^\s*#pragma\s+warning\s+(disable|restore)\b(.*)$/);
     if (pragma) {
       const listed = ids(pragma[2]);
+      if (inConditional[index]) {
+        for (const api of apis) if (listed.length === 0 || listed.includes(api.id)) conditional.add(api.id);
+        return;
+      }
       const disable = pragma[1] === "disable";
       if (listed.length === 0) { all = disable; overrides.clear(); }
       listed.forEach(id => overrides.set(id, disable));
@@ -98,8 +134,68 @@ function pragmaCoverage(code, apis) {
       if (!(overrides.has(api.id) ? overrides.get(api.id) : all)) uncovered.add(api.id);
     }
   });
-  return uncovered;
+  return { uncovered, conditional };
 }
+
+// Returns the index just past the parenthesized group that opens at code[open].
+function closeParen(code, open) {
+  let depth = 0;
+  for (let i = open; i < code.length; i++) {
+    if (code[i] === '"') {
+      for (i++; i < code.length && code[i] !== '"'; i++) if (code[i] === "\\") i++;
+    } else if (code[i] === "(") {
+      depth++;
+    } else if (code[i] === ")" && --depth === 0) {
+      return i + 1;
+    }
+  }
+  return -1;
+}
+
+// Returns the names of the methods chained (.Name(...)) starting at index from.
+function chainedCalls(code, from) {
+  const member = /\s*\.\s*([A-Za-z_]\w*)\s*(?:<[^<>();]*>\s*)?\(/y;
+  const names = [];
+  for (let at = from; at >= 0;) {
+    member.lastIndex = at;
+    const match = member.exec(code);
+    if (!match) break;
+    names.push(match[1]);
+    at = closeParen(code, member.lastIndex - 1);
+  }
+  return names;
+}
+
+const normalizePath = path => path.replace(/\\/g, "/").replace(/\/+$/, "").replace(/^(?!\.{1,2}\/)/, "./");
+
+// Finds a `method("api", "<path>")` call for one of the accepted project paths and reports whether
+// WithHttpsDeveloperCertificate() is chained from it, directly or through the variable it is
+// assigned to. Only unconditional code counts.
+export function apiResource(source, method, paths) {
+  const code = unconditional(stripComments(source));
+  const accepted = new Set(paths.map(normalizePath));
+  const result = { added: false, certificate: false };
+  for (const match of code.matchAll(new RegExp(`\\b${method}\\s*\\(`, "g"))) {
+    const open = match.index + match[0].length - 1;
+    const end = closeParen(code, open);
+    if (end < 0) continue;
+    const args = code.slice(open + 1, end - 1).match(/^\s*(?:name\s*:\s*)?"([^"]*)"\s*,\s*(?:\w+\s*:\s*)?@?"([^"]*)"\s*$/);
+    if (!args || args[1] !== "api" || !accepted.has(normalizePath(args[2]))) continue;
+    result.added = true;
+    const calls = chainedCalls(code, end);
+    const variable = code.slice(0, match.index).match(/\b([A-Za-z_]\w*)\s*(?<![=!<>])=(?!=)\s*[A-Za-z_][\w.]*?\s*\.\s*$/)?.[1];
+    if (variable) {
+      for (const use of code.slice(end).matchAll(new RegExp(`(?<![\\w.])${variable}\\b(?=\\s*\\.)`, "g"))) {
+        calls.push(...chainedCalls(code, end + use.index + use[0].length));
+      }
+    }
+    if (calls.includes("WithHttpsDeveloperCertificate")) result.certificate = true;
+  }
+  return result;
+}
+
+const conditionalProblem = (where, id) =>
+  `${where} disables ${id} with a #pragma inside an #if/#elif/#else block; it applies only when that branch compiles, so it is not counted`;
 
 export function gradeAppHost(appDir, caseName) {
   const spec = cases[caseName];
@@ -113,6 +209,14 @@ export function gradeAppHost(appDir, caseName) {
   const used = experimentalApis.filter(api => api.call.test(code));
   for (const api of experimentalApis) {
     if (!used.includes(api)) problems.push(`${spec.source} does not call ${api.name}`);
+  }
+  if (used.length === experimentalApis.length) {
+    const resource = apiResource(source, "AddCSharpApp", spec.apiPaths);
+    if (!resource.added) {
+      problems.push(`${spec.source} does not add the api resource with AddCSharpApp("api", "${spec.apiPaths[0]}")`);
+    } else if (!resource.certificate) {
+      problems.push(`${spec.source} does not chain WithHttpsDeveloperCertificate() from the api resource`);
+    }
   }
 
   let noWarn = new Set();
@@ -129,20 +233,64 @@ export function gradeAppHost(appDir, caseName) {
     else if (!noWarn.has(api.id)) problems.push(`${spec.project ?? spec.source} dropped the existing ${api.id} suppression`);
   }
 
-  const uncovered = pragmaCoverage(source, used);
+  const { uncovered, conditional } = pragmaCoverage(source, used);
   for (const api of used) {
     if (uncovered.has(api.id) && !noWarn.has(api.id)) {
+      if (conditional.has(api.id)) problems.push(conditionalProblem(spec.source, api.id));
       problems.push(`${api.name} in ${spec.source} is not covered by #pragma warning disable ${api.id} or NoWarn; Aspire 13.6 fails the build with error ${api.id}`);
     }
   }
   return problems;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+const certificateApi = experimentalApis.find(api => api.name === "WithHttpsDeveloperCertificate");
+
+// Returns the contents of the fenced code blocks in a Markdown response.
+const codeBlocks = output => [...output.replace(/\r\n/g, "\n")
+  .matchAll(/^[ \t]*(`{3,}|~{3,})[^\n]*\n([\s\S]*?)^[ \t]*\1[ \t]*$/gm)].map(match => match[2]);
+
+// Grades the read-only Aspire 17.0 stimulus from the code the response returns, not its prose: the
+// api resource added with AddDotnetProject and the certificate call chained from it, an
+// Aspire.Hosting.Dotnet reference (not implicit in the 17.0 SDK) and an effective
+// ASPIRECERTIFICATES001 suppression.
+export function gradeDotnet17Response(output) {
+  const blocks = codeBlocks(typeof output === "string" ? output : "");
+  if (blocks.length === 0) return ["The response contains no fenced code block with the AppHost code"];
+  const source = blocks.join("\n");
+  const code = unconditional(stripComments(source));
+  const problems = [];
+
+  const resource = apiResource(source, "AddDotnetProject", ["./api", "./api/Api.csproj"]);
+  if (!resource.added) problems.push('The returned code does not add the api resource with AddDotnetProject("api", "./api")');
+  else if (!resource.certificate) problems.push("The returned code does not chain WithHttpsDeveloperCertificate() from the api resource");
+
+  if (!/^\s*#:package\s+Aspire\.Hosting\.Dotnet@/m.test(code) && !/^\s*(?:\$\s*)?aspire\s+add\s+Aspire\.Hosting\.Dotnet\b/im.test(code)) {
+    problems.push("The returned code does not reference Aspire.Hosting.Dotnet with #:package or aspire add; the 17.0 SDK does not include it");
+  }
+
+  if (certificateApi.call.test(code)) {
+    const noWarn = effectiveNoWarn(directiveNoWarn(code), problems, "#:property");
+    const { uncovered, conditional } = pragmaCoverage(source, [certificateApi]);
+    if (uncovered.has(certificateApi.id) && !noWarn.has(certificateApi.id)) {
+      if (conditional.has(certificateApi.id)) problems.push(conditionalProblem("The returned code", certificateApi.id));
+      problems.push(`WithHttpsDeveloperCertificate in the returned code is not covered by #pragma warning disable ${certificateApi.id} or NoWarn`);
+    }
+  }
+  return problems;
+}
+
+function runCli(caseName) {
+  if (caseName === "dotnet17") {
+    if (!process.env.EVALUATE_GRADER_INPUT) return ["EVALUATE_GRADER_INPUT is not set"];
+    const input = JSON.parse(readFileSync(process.env.EVALUATE_GRADER_INPUT, "utf8"));
+    return gradeDotnet17Response(input.trajectory?.output);
+  }
   const workspace = process.env.EVALUATE_WORKSPACE;
-  const problems = workspace
-    ? gradeAppHost(join(workspace, "app"), process.argv[2])
-    : ["EVALUATE_WORKSPACE is not set"];
+  return workspace ? gradeAppHost(join(workspace, "app"), caseName) : ["EVALUATE_WORKSPACE is not set"];
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const problems = runCli(process.argv[2]);
   for (const problem of problems) console.error(problem);
   process.exitCode = problems.length ? 1 : 0;
 }

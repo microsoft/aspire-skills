@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
+import { gradeDotnet17Response } from "../../evals/aspireify-experimental-diagnostics/grade-suppressions.mjs";
 
 const root = new URL("../../skills/aspireify/", import.meta.url);
 
@@ -61,8 +62,9 @@ test("Aspireify experimental C# API guidance is version-aware for Aspire 17.0", 
 // Vally 0.16 has only an eval-wide scoring threshold, so this stimulus must be weighted so that
 // omitting anything the requested 17.0 AppHost needs fails it outright: the
 // Aspire.Hosting.Dotnet reference (not implicit in the 17.0 SDK), the requested
-// WithHttpsDeveloperCertificate() call and its ASPIRECERTIFICATES001 suppression.
-test("Aspireify 17.0 AddDotnetProject eval fails a response that omits the package, certificate call or suppression", async () => {
+// WithHttpsDeveloperCertificate() call and its ASPIRECERTIFICATES001 suppression. Only the
+// returned code blocks count, so naming them in prose does not pass.
+test("Aspireify 17.0 AddDotnetProject eval fails a response that omits the package, certificate call or suppression from its code", async () => {
   const { parse } = await import("yaml");
   const spec = parse(readFileSync(new URL("evals/eval.yaml", root), "utf8"));
   const stimulus = spec.stimuli.find(s => s.name === "aspireify-csharp-dotnet-project-17-001");
@@ -78,6 +80,9 @@ test("Aspireify 17.0 AddDotnetProject eval fails a response that omits the packa
         case "output-matches": return new RegExp(config.pattern).test(output);
         case "output-contains": return has(config.value ?? config.substring);
         case "output-not-contains": return !has(config.value ?? config.substring);
+        case "program":
+          assert.deepEqual(config.args, [".grader/grade-suppressions.mjs", "dotnet17"]);
+          return gradeDotnet17Response(output).length === 0;
         case "skill-invocation": return true;
         default: assert.fail(`Unexpected grader type ${type}`);
       }
@@ -86,6 +91,7 @@ test("Aspireify 17.0 AddDotnetProject eval fails a response that omits the packa
   };
 
   const lines = [
+    "```csharp",
     "#:sdk Aspire.AppHost.Sdk@17.0.0",
     "#:package Aspire.Hosting.Dotnet@17.0.0",
     "",
@@ -93,6 +99,7 @@ test("Aspireify 17.0 AddDotnetProject eval fails a response that omits the packa
     "",
     'var api = builder.AddDotnetProject("api", "./api")',
     "    .WithHttpsDeveloperCertificate();",
+    "```",
   ];
   const suppressed = lines.join("\n");
   const without = text => lines.filter(line => !line.includes(text)).join("\n");
@@ -101,10 +108,17 @@ test("Aspireify 17.0 AddDotnetProject eval fails a response that omits the packa
     "the requested WithHttpsDeveloperCertificate() call": without("WithHttpsDeveloperCertificate"),
     "the Aspire.Hosting.Dotnet package reference": without("Aspire.Hosting.Dotnet"),
     "AddDotnetProject (uses the obsolete AddCSharpApp)": suppressed.replace("AddDotnetProject", "AddCSharpApp"),
+    "returned code (prose only)": 'Use AddDotnetProject("api") and reference Aspire.Hosting.Dotnet. ' +
+      "Call .WithHttpsDeveloperCertificate() and suppress ASPIRECERTIFICATES001.",
+    "returned code (the APIs are named in prose around unrelated code)": 'Use AddDotnetProject("api", "./api") with ' +
+      "Aspire.Hosting.Dotnet, then .WithHttpsDeveloperCertificate() and suppress ASPIRECERTIFICATES001.\n\n" +
+      "```csharp\nvar builder = DistributedApplication.CreateBuilder(args);\nbuilder.Build().Run();\n```",
+    "an unconditional suppression (pragma inside #if false)": suppressed.replace(
+      "#pragma warning disable ASPIRECERTIFICATES001", "#if false\n#pragma warning disable ASPIRECERTIFICATES001\n#endif"),
   };
 
   assert.ok(score(suppressed) >= threshold, `A correct response scores ${score(suppressed)} < ${threshold}`);
-  assert.ok(score(suppressed.replace("#:package Aspire.Hosting.Dotnet@17.0.0", "aspire add Aspire.Hosting.Dotnet")) >= threshold,
+  assert.ok(score("```bash\naspire add Aspire.Hosting.Dotnet\n```\n\n" + without("#:package")) >= threshold,
     "A response that adds the package with `aspire add Aspire.Hosting.Dotnet` must pass");
   for (const [omitted, output] of Object.entries(failing)) {
     assert.ok(score(output) < threshold, `A response without ${omitted} still passes at ${score(output)} >= ${threshold}`);
