@@ -55,6 +55,12 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   .NET services use `AddDotnetProject` with an explicit `Aspire.Hosting.Dotnet` package
   reference (the 17.0 SDK doesn't add it), existing apps are not migrated unprompted, and
   `WithHttpsDeveloperCertificate` keeps its `ASPIRECERTIFICATES001` suppression.
+- Fixed the TypeScript deploy workflow reference and CI/CD setup snippet to install the
+  Aspire CLI and run `aspire restore` before `npm run build`. The generated
+  `.aspire/modules/` folder is gitignored, so on a clean checkout the build failed with
+  `TS2307: Cannot find module './.aspire/modules/aspire.mjs'`. In the shared Node setup
+  snippet, the restore runs only when `apphost.mts` exists, so C# and Go AppHosts with
+  JavaScript resources are unaffected.
 - Corrected Aspireify's TypeScript AppHost `package.json` guidance to match `aspire init`.
   With an existing root `package.json`, the AppHost goes in `aspire-apphost/` and the
   root only gains `aspire:start`/`aspire:build`/`aspire:dev` delegates; the merge rules
