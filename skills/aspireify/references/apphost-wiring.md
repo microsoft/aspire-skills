@@ -171,10 +171,12 @@ confirm it with `aspire docs api get` before suppressing it.
 - For a new .NET service in a 17.0 AppHost, run `aspire add Aspire.Hosting.Dotnet` and use
   `builder.AddDotnetProject("api", "../src/Api")`. The path can be a project file, a
   directory with exactly one project, or a file-based `.cs` app. The 17.0 SDK doesn't
-  reference `Aspire.Hosting.Dotnet` implicitly. If you can't run `aspire add`, show the
-  reference: `#:package Aspire.Hosting.Dotnet@<AppHost SDK version>` after the `#:sdk`
-  directive in a file-based `apphost.cs`, or a `PackageReference` in a project-based
-  AppHost. The other examples here use `AddCSharpApp` because it is the 13.6 API.
+  reference `Aspire.Hosting.Dotnet` implicitly. If you can't run `aspire add`, for example
+  when asked not to run commands, put the reference in the AppHost code you show (a command
+  alone adds nothing): `#:package Aspire.Hosting.Dotnet@<AppHost SDK version>` after the
+  `#:sdk` directive in a file-based `apphost.cs`, with the actual version, or a
+  `PackageReference` in a project-based AppHost. The other examples here use `AddCSharpApp`
+  because it is the 13.6 API.
 - Don't migrate existing `AddCSharpApp` or `AddProject` calls unless the user asks. For a
   requested migration, use the `aspire-project-v2-migration` skill.
 - `WithHttpsDeveloperCertificate()` is still experimental in 17.0, so keep the

@@ -2,7 +2,8 @@
 // For the file and project cases it inspects the AppHost the agent wrote under <workspace>/app and
 // fails unless the api resource is added for the supplied project with the certificate call chained
 // from it, every call to an Aspire 13.6 experimental API is covered by an unconditional #pragma or
-// NoWarn suppression, and the project's existing NoWarn values survive. The dotnet17 case grades
+// NoWarn suppression that no conditional #pragma restore can undo, and the project's existing NoWarn
+// values survive. The dotnet17 case grades
 // the code blocks returned in the response for the read-only 17.0 stimulus. Self-contained: the
 // eval copies only this file into .grader/.
 import { existsSync, readFileSync } from "node:fs";
@@ -97,11 +98,13 @@ const directiveNoWarn = source => [...stripComments(source).matchAll(/^#:propert
 
 const lineAt = (text, index) => text.slice(0, index).split("\n").length - 1;
 
-// Returns the IDs of APIs with a call outside an active #pragma warning disable for that ID, and
-// the IDs named by #pragma directives inside #if/#elif/#else blocks, which are ignored. Calls
-// (in any branch) are matched across line breaks and checked on the line of the API name, where
-// the compiler reports the diagnostic. As in C#, the most recent directive naming an ID, or
-// blanket directive, wins.
+// Returns the IDs of APIs with a call outside an active #pragma warning disable for that ID. A
+// #pragma inside an #if/#elif/#else block applies only in some configurations, so it is judged
+// conservatively: a conditional disable is ignored (returned in `conditional`) and a conditional
+// restore is applied (returned in `conditionalRestores`), since either may compile in the evaluated
+// configuration. Calls (in any branch) are matched across line breaks and checked on the line of
+// the API name, where the compiler reports the diagnostic. As in C#, the most recent directive
+// naming an ID, or blanket directive, wins.
 function pragmaCoverage(code, apis) {
   const stripped = stripComments(code);
   const callsByLine = new Map();
@@ -116,16 +119,18 @@ function pragmaCoverage(code, apis) {
   const overrides = new Map();
   const uncovered = new Set();
   const conditional = new Set();
+  const conditionalRestores = new Set();
   const inConditional = conditionalLines(stripped);
   stripped.split("\n").forEach((line, index) => {
     const pragma = line.match(/^\s*#pragma\s+warning\s+(disable|restore)\b(.*)$/);
     if (pragma) {
       const listed = ids(pragma[2]);
-      if (inConditional[index]) {
-        for (const api of apis) if (listed.length === 0 || listed.includes(api.id)) conditional.add(api.id);
-        return;
-      }
       const disable = pragma[1] === "disable";
+      if (inConditional[index]) {
+        const named = apis.filter(api => listed.length === 0 || listed.includes(api.id)).map(api => api.id);
+        named.forEach(id => (disable ? conditional : conditionalRestores).add(id));
+        if (disable) return;
+      }
       if (listed.length === 0) { all = disable; overrides.clear(); }
       listed.forEach(id => overrides.set(id, disable));
       return;
@@ -134,7 +139,7 @@ function pragmaCoverage(code, apis) {
       if (!(overrides.has(api.id) ? overrides.get(api.id) : all)) uncovered.add(api.id);
     }
   });
-  return { uncovered, conditional };
+  return { uncovered, conditional, conditionalRestores };
 }
 
 // Returns the index just past the parenthesized group that opens at code[open].
@@ -197,6 +202,17 @@ export function apiResource(source, method, paths) {
 const conditionalProblem = (where, id) =>
   `${where} disables ${id} with a #pragma inside an #if/#elif/#else block; it applies only when that branch compiles, so it is not counted`;
 
+const conditionalRestoreProblem = (where, id) =>
+  `${where} restores ${id} with a #pragma inside an #if/#elif/#else block; that branch may compile, so the diagnostic is treated as restored`;
+
+// Explains why a call is uncovered when conditional #pragma directives are involved.
+function coverageProblems(where, id, { conditional, conditionalRestores }) {
+  return [
+    ...conditional.has(id) ? [conditionalProblem(where, id)] : [],
+    ...conditionalRestores.has(id) ? [conditionalRestoreProblem(where, id)] : [],
+  ];
+}
+
 export function gradeAppHost(appDir, caseName) {
   const spec = cases[caseName];
   if (!spec) return [`Unknown case "${caseName}"; expected one of ${Object.keys(cases).join(", ")}`];
@@ -233,10 +249,10 @@ export function gradeAppHost(appDir, caseName) {
     else if (!noWarn.has(api.id)) problems.push(`${spec.project ?? spec.source} dropped the existing ${api.id} suppression`);
   }
 
-  const { uncovered, conditional } = pragmaCoverage(source, used);
+  const coverage = pragmaCoverage(source, used);
   for (const api of used) {
-    if (uncovered.has(api.id) && !noWarn.has(api.id)) {
-      if (conditional.has(api.id)) problems.push(conditionalProblem(spec.source, api.id));
+    if (coverage.uncovered.has(api.id) && !noWarn.has(api.id)) {
+      problems.push(...coverageProblems(spec.source, api.id, coverage));
       problems.push(`${api.name} in ${spec.source} is not covered by #pragma warning disable ${api.id} or NoWarn; Aspire 13.6 fails the build with error ${api.id}`);
     }
   }
@@ -250,8 +266,9 @@ const codeBlocks = output => [...output.replace(/\r\n/g, "\n")
   .matchAll(/^[ \t]*(`{3,}|~{3,})[^\n]*\n([\s\S]*?)^[ \t]*\1[ \t]*$/gm)].map(match => match[2]);
 
 // Grades the read-only Aspire 17.0 stimulus from the code the response returns, not its prose: the
-// api resource added with AddDotnetProject and the certificate call chained from it, an
-// Aspire.Hosting.Dotnet reference (not implicit in the 17.0 SDK) and an effective
+// api resource added with AddDotnetProject and the certificate call chained from it, a versioned
+// `#:package Aspire.Hosting.Dotnet@...` directive (the 17.0 SDK does not include the package, and an
+// `aspire add` command shown in a read-only reply is never run) and an effective
 // ASPIRECERTIFICATES001 suppression.
 export function gradeDotnet17Response(output) {
   const blocks = codeBlocks(typeof output === "string" ? output : "");
@@ -264,15 +281,16 @@ export function gradeDotnet17Response(output) {
   if (!resource.added) problems.push('The returned code does not add the api resource with AddDotnetProject("api", "./api")');
   else if (!resource.certificate) problems.push("The returned code does not chain WithHttpsDeveloperCertificate() from the api resource");
 
-  if (!/^\s*#:package\s+Aspire\.Hosting\.Dotnet@/m.test(code) && !/^\s*(?:\$\s*)?aspire\s+add\s+Aspire\.Hosting\.Dotnet\b/im.test(code)) {
-    problems.push("The returned code does not reference Aspire.Hosting.Dotnet with #:package or aspire add; the 17.0 SDK does not include it");
+  if (!/^[ \t]*#:package[ \t]+Aspire\.Hosting\.Dotnet@[^\s<>]+[ \t]*$/m.test(code)) {
+    problems.push("The returned AppHost does not reference Aspire.Hosting.Dotnet with a versioned #:package directive; " +
+      "the 17.0 SDK does not include it, and an aspire add command in a read-only reply is not run");
   }
 
   if (certificateApi.call.test(code)) {
     const noWarn = effectiveNoWarn(directiveNoWarn(code), problems, "#:property");
-    const { uncovered, conditional } = pragmaCoverage(source, [certificateApi]);
-    if (uncovered.has(certificateApi.id) && !noWarn.has(certificateApi.id)) {
-      if (conditional.has(certificateApi.id)) problems.push(conditionalProblem("The returned code", certificateApi.id));
+    const coverage = pragmaCoverage(source, [certificateApi]);
+    if (coverage.uncovered.has(certificateApi.id) && !noWarn.has(certificateApi.id)) {
+      problems.push(...coverageProblems("The returned code", certificateApi.id, coverage));
       problems.push(`WithHttpsDeveloperCertificate in the returned code is not covered by #pragma warning disable ${certificateApi.id} or NoWarn`);
     }
   }

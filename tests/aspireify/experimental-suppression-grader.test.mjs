@@ -114,6 +114,26 @@ test("file-based AppHost ignores #pragma directives inside #if blocks", t => {
   }
 });
 
+test("file-based AppHost treats a conditional #pragma restore after an unconditional disable as restored", t => {
+  for (const [label, restore] of Object.entries({
+    "#if DEBUG restore of the ID": "#if DEBUG\n#pragma warning restore ASPIRECERTIFICATES001\n#endif\n",
+    "#else branch restore of the ID": "#if RELEASE\n#else\n#pragma warning restore ASPIRECERTIFICATES001\n#endif\n",
+    "#if DEBUG blanket restore": "#if DEBUG\n#pragma warning restore\n#endif\n",
+  })) {
+    const root = workspace(t, "file");
+    edit(root, "apphost.cs", wireApi("./api", `${both}${restore}`));
+    const problems = grade(root, "file").join("\n");
+    assert.match(problems, /restores ASPIRECERTIFICATES001 with a #pragma inside an #if/, label);
+    assert.match(problems, /WithHttpsDeveloperCertificate in apphost\.cs is not covered/, label);
+    assert.equal(/AddCSharpApp in apphost\.cs is not covered/.test(problems), label.includes("blanket"), label);
+  }
+
+  const redisabled = workspace(t, "file");
+  edit(redisabled, "apphost.cs", wireApi("./api",
+    `${both}#if DEBUG\n#pragma warning restore ASPIRECERTIFICATES001\n#endif\n#pragma warning disable ASPIRECERTIFICATES001\n`));
+  assert.deepEqual(grade(redisabled, "file"), []);
+});
+
 test("file-based AppHost requires the certificate call on the api resource for ./api", t => {
   const unrelated = workspace(t, "file");
   edit(unrelated, "apphost.cs", source => source.replace("builder.Build().Run();", `${both}` +

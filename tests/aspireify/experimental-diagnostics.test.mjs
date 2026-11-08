@@ -63,7 +63,8 @@ test("Aspireify experimental C# API guidance is version-aware for Aspire 17.0", 
 // omitting anything the requested 17.0 AppHost needs fails it outright: the
 // Aspire.Hosting.Dotnet reference (not implicit in the 17.0 SDK), the requested
 // WithHttpsDeveloperCertificate() call and its ASPIRECERTIFICATES001 suppression. Only the
-// returned code blocks count, so naming them in prose does not pass.
+// returned code blocks count, so naming them in prose does not pass, and the package must be a
+// versioned #:package directive: an `aspire add` command in a read-only reply is never run.
 test("Aspireify 17.0 AddDotnetProject eval fails a response that omits the package, certificate call or suppression from its code", async () => {
   const { parse } = await import("yaml");
   const spec = parse(readFileSync(new URL("evals/eval.yaml", root), "utf8"));
@@ -115,11 +116,15 @@ test("Aspireify 17.0 AddDotnetProject eval fails a response that omits the packa
       "```csharp\nvar builder = DistributedApplication.CreateBuilder(args);\nbuilder.Build().Run();\n```",
     "an unconditional suppression (pragma inside #if false)": suppressed.replace(
       "#pragma warning disable ASPIRECERTIFICATES001", "#if false\n#pragma warning disable ASPIRECERTIFICATES001\n#endif"),
+    "a suppression that survives every configuration (conditional restore)": suppressed.replace(
+      "#pragma warning disable ASPIRECERTIFICATES001", "#pragma warning disable ASPIRECERTIFICATES001\n#if DEBUG\n#pragma warning restore ASPIRECERTIFICATES001\n#endif"),
+    "the #:package directive (an aspire add command is not run in a read-only reply)":
+      "```bash\naspire add Aspire.Hosting.Dotnet\n```\n\n" + without("#:package"),
+    "a versioned #:package directive (placeholder version)":
+      suppressed.replace("Aspire.Hosting.Dotnet@17.0.0", "Aspire.Hosting.Dotnet@<AppHost SDK version>"),
   };
 
   assert.ok(score(suppressed) >= threshold, `A correct response scores ${score(suppressed)} < ${threshold}`);
-  assert.ok(score("```bash\naspire add Aspire.Hosting.Dotnet\n```\n\n" + without("#:package")) >= threshold,
-    "A response that adds the package with `aspire add Aspire.Hosting.Dotnet` must pass");
   for (const [omitted, output] of Object.entries(failing)) {
     assert.ok(score(output) < threshold, `A response without ${omitted} still passes at ${score(output)} >= ${threshold}`);
   }
