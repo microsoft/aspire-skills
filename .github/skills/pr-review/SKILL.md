@@ -203,7 +203,7 @@ Only flag concrete, high-confidence problems. Categories:
    changelog entries, backflow that loses current dev notes or main's approved
    history, release source changes outside the selected snapshot, unfinished
    release notes, or inconsistent canonical versions. Check documentation
-   readiness and maintainer publication/dev-backflow steps in the Release Checklist.
+   readiness and maintainer publication/patch-backport steps in the Release Checklist.
 8. **13.5 staleness** — treating legacy `apphost.ts` as current, inspecting resources
    through `aspire ps`, using obsolete `.ServiceProvider` / `PublishAsConnectionString`,
    mixing 13.4/13.5 package families, or omitting experimental qualifications.

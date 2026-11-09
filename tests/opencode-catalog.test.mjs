@@ -18,7 +18,10 @@ test("catalog parity runs on every PR, supported pushes, and merge groups withou
   const job = workflow.jobs["catalog-check"];
   assert.equal(job.name, "OpenCode catalog check");
   assert.equal(job.if, undefined);
-  assert.ok(job.steps.every(step => step.if === undefined && step["continue-on-error"] === undefined));
+  const parity = job.steps.find(step => step.name === "Reject catalog drift");
+  assert.equal(parity.if, undefined);
+  assert.equal(parity.run, "npm run catalog:check");
+  assert.ok(job.steps.every(step => step["continue-on-error"] === undefined));
 });
 
 function fixture(t) {
