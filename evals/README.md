@@ -170,7 +170,7 @@ The `with-skills` − `no-skills` pass-rate delta is the measured lift. The expe
 
 | Goal | Command |
 |------|---------|
-| Reproduce the PR gate for one changed skill, including nested specs | `vally eval --tag "skill=<skill>" --tag priority=p0,p1 --runs 1 --max-retries 2 --require-pass` |
+| Run p0 + p1 tests tagged for one skill | `vally eval --tag "skill=<skill>" --tag priority=p0,p1 --runs 1 --max-retries 2 --require-pass` |
 | Run p0 + p1 across all skills | `vally eval --suite ci-gate` |
 | Run full nightly suite | `vally eval --suite nightly` |
 | Run one skill | `vally eval --eval-spec skills/aspire-deployment/evals/eval.yaml` |
@@ -185,6 +185,11 @@ The `with-skills` − `no-skills` pass-rate delta is the measured lift. The expe
 | Validate one eval spec | `vally lint --eval-spec skills/<skill>/evals/eval.yaml` |
 | Execute agents without grading (not a dry run) | `vally eval --eval-spec skills/<skill>/evals/eval.yaml --skip-grade` |
 | Validate actual Project v2 source edits | See the [migration fixture guide](./project-v2-migration/README.md#source-and-approval-gates) |
+
+The skill-tag command selects tests by `tags.skill`. The PR workflow instead
+selects all root and nested eval specs in the changed skill's directory and sets
+`--workers 1` and a per-skill `--output-dir`, so this command is not an exact
+reproduction of the PR gate.
 
 ## Key flags
 
