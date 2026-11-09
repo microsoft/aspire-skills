@@ -1496,7 +1496,7 @@ async function applyEntryInput(entry, input, workingDirectory) {
         entry.includeHidden = input.includeHidden;
     }
 
-    if (!changed) {
+    if (!changed && !entry.discoveryStale) {
         return;
     }
     entry.generation.invalidate();
@@ -1508,7 +1508,10 @@ async function applyEntryInput(entry, input, workingDirectory) {
         refreshing: true,
         error: null,
     });
-    await requestRefresh(entry, { force: true });
+    const state = await requestRefresh(entry, { force: true });
+    if (entry.discoveryStale) {
+        throw new Error(state.error || "Unable to refresh AppHosts.");
+    }
 }
 
 async function applyReopenInput(entry, ctx) {

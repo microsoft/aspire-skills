@@ -57,6 +57,7 @@ const scanTimers = new Map();
 const confirmationRequests = new Map();
 const snapshotLoads = new Map();
 const domainOperations = new Map();
+const bindingOperations = new Map();
 let sessionRef;
 let ownExtensionId = "";
 let snapshotStore;
@@ -200,17 +201,26 @@ function rehydrateSnapshot(persisted, appHostPath) {
     return snapshot;
 }
 
-function runDomainOperation(domainId, operation) {
-    const previous = domainOperations.get(domainId) ?? Promise.resolve();
+function runQueuedOperation(operations, key, operation) {
+    const previous = operations.get(key) ?? Promise.resolve();
     const current = previous.catch(() => {}).then(operation);
-    domainOperations.set(domainId, current);
+    operations.set(key, current);
     const release = () => {
-        if (domainOperations.get(domainId) === current) {
-            domainOperations.delete(domainId);
+        if (operations.get(key) === current) {
+            operations.delete(key);
         }
     };
     void current.then(release, release);
     return current;
+}
+
+function runDomainOperation(domainId, operation) {
+    return runQueuedOperation(domainOperations, domainId, operation);
+}
+
+// Canvas actions acquire this after the domain queue; host prompts never hold it.
+function runBindingOperation(instanceId, operation) {
+    return runQueuedOperation(bindingOperations, instanceId, operation);
 }
 
 async function waitForDomainOperation(domainId) {
@@ -2446,10 +2456,9 @@ const aspireifyCanvas = createCanvas({
             handler: async (context) => {
                 const identity = await domainIdentityForContext(context);
                 const domainId = identity.domainId;
-                return await runDomainOperation(domainId, async () => {
+                return await runDomainOperation(domainId, () => runBindingOperation(context.instanceId, async () => {
                 assertTargetBinding(context, identity);
                 const current = await ensureSnapshot(identity);
-                assertTargetBinding(context, identity);
                 const startNewRun = context.input.startNewRun === true;
                 if (
                     confirmationRequests.has(domainId) ||
@@ -2613,14 +2622,13 @@ const aspireifyCanvas = createCanvas({
                         state.proposalStale || state.proposal.resources.length > 0;
                     clearHistory(domainId);
                 });
-                assertTargetBinding(context, identity);
                 clearScanTimer(domainId);
                 return {
                     ok: true,
                     serviceCount: snapshot.services.length,
                     proposalGeneration: snapshot.proposalGeneration,
                 };
-                });
+                }));
             },
         },
         {
@@ -2752,10 +2760,9 @@ const aspireifyCanvas = createCanvas({
             handler: async (context) => {
                 const identity = await domainIdentityForContext(context);
                 const domainId = identity.domainId;
-                return await runDomainOperation(domainId, async () => {
+                return await runDomainOperation(domainId, () => runBindingOperation(context.instanceId, async () => {
                 assertTargetBinding(context, identity);
                 const current = await ensureSnapshot(identity);
-                assertTargetBinding(context, identity);
                 if (isConfirmed(current) || confirmationRequests.has(domainId)) {
                     throw new Error("The confirmed resource plan is read-only.");
                 }
@@ -2997,14 +3004,13 @@ const aspireifyCanvas = createCanvas({
                     state.confirmed = false;
                     clearHistory(domainId);
                 });
-                assertTargetBinding(context, identity);
                 return {
                     ok: true,
                     resourceCount: snapshot.proposal.resources.length,
                     edgeCount: snapshot.proposal.edges.length,
                     edgeCounts: countEdgesByKind(snapshot.proposal.edges),
                 };
-                });
+                }));
             },
         },
         {
@@ -3018,10 +3024,9 @@ const aspireifyCanvas = createCanvas({
             },
             handler: async (context) => {
                 const identity = await domainIdentityForContext(context);
-                return await runDomainOperation(identity.domainId, async () => {
+                return await runDomainOperation(identity.domainId, () => runBindingOperation(context.instanceId, async () => {
                     assertTargetBinding(context, identity);
                     const snapshot = await ensureSnapshot(identity);
-                    assertTargetBinding(context, identity);
                     const confirmation = confirmedSnapshotForReadback(snapshot);
                     if (!confirmation) {
                         throw new CanvasError(
@@ -3045,7 +3050,7 @@ const aspireifyCanvas = createCanvas({
                         );
                     }
                     return confirmation;
-                });
+                }));
             },
         },
     ],
@@ -3055,34 +3060,39 @@ const aspireifyCanvas = createCanvas({
         const domainId = identity.domainId;
         await waitForDomainOperation(domainId);
         await ensureSnapshot(identity);
-        let entry = instances.get(context.instanceId);
-        if (!entry) {
-            entry = await startServer(context.instanceId, identity);
-        } else if (entry.domainId !== domainId) {
-            entry.bindingRevision = (entry.bindingRevision ?? 0) + 1;
-            entry.domainId = domainId;
-            entry.appHostPath = identity.appHostPath;
-            broadcast(domainId);
-        }
-        const snapshot = getSnapshot(domainId);
-        return {
-            title: snapshot.repoName ? `Aspireify - ${snapshot.repoName}` : "Aspireify",
-            status: isConfirmed(snapshot)
-                ? snapshot.confirmationDelivered
-                    ? "Confirmed"
-                    : "Confirmed - chat handoff pending"
-                : snapshot.proposalLoaded && !snapshot.proposalStale
-                  ? `Proposal generation ${snapshot.proposalGeneration} awaiting confirmation`
-                  : "Receiving proposal snapshot",
-            url: entry.url,
-        };
+        return runBindingOperation(context.instanceId, async () => {
+            let entry = instances.get(context.instanceId);
+            if (!entry) {
+                entry = await startServer(context.instanceId, identity);
+            } else if (entry.domainId !== domainId) {
+                entry.bindingRevision = (entry.bindingRevision ?? 0) + 1;
+                entry.domainId = domainId;
+                entry.appHostPath = identity.appHostPath;
+                broadcast(domainId);
+            }
+            const snapshot = getSnapshot(domainId);
+            return {
+                title: snapshot.repoName ? `Aspireify - ${snapshot.repoName}` : "Aspireify",
+                status: isConfirmed(snapshot)
+                    ? snapshot.confirmationDelivered
+                        ? "Confirmed"
+                        : "Confirmed - chat handoff pending"
+                    : snapshot.proposalLoaded && !snapshot.proposalStale
+                      ? `Proposal generation ${snapshot.proposalGeneration} awaiting confirmation`
+                      : "Receiving proposal snapshot",
+                url: entry.url,
+            };
+        });
     },
     onClose: async (context) => {
-        const entry = instances.get(context.instanceId);
+        const entry = await runBindingOperation(context.instanceId, () => {
+            const current = instances.get(context.instanceId);
+            instances.delete(context.instanceId);
+            return current;
+        });
         if (!entry) {
             return;
         }
-        instances.delete(context.instanceId);
         for (const client of entry.clients) {
             client.end();
         }

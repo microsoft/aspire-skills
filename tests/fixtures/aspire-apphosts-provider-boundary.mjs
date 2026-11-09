@@ -63,6 +63,47 @@ test("generic reopen rejects invalid retargets while retaining the existing pane
     assert.equal(h.servers.length, 1, "failed retargeting must not replace the listener");
 });
 
+test("generic reopen rejects failed retarget refreshes while preserving the stale board", async (t) => {
+    const workspace = await mkdtemp(join(tmpdir(), "aspire-retarget-"));
+    t.after(() => rm(workspace, { recursive: true, force: true }));
+    const targets = ["A", "B"].map((name) => join(workspace, name, "AppHost.cs"));
+    for (const target of targets) {
+        await mkdir(resolve(target, ".."), { recursive: true });
+        await writeFile(target, "// Synthetic AppHost fixture.\n");
+    }
+    const h = await harness(t, {
+        workingDirectory: workspace,
+        cliOverride: (args) => args[0] === "ps"
+            ? h.controls.failPs
+                ? fail("ps unavailable")
+                : ok(targets.map((appHostPath) => ({ appHostPath, status: "running" })))
+            : undefined,
+    });
+    const opened = await h.open("test", { viewMode: "workspace", appHostPath: targets[0] });
+    const before = (await h.request(opened, "/api/state")).state;
+    h.controls.failPs = true;
+    await assert.rejects(
+        h.open("test", { appHostPath: targets[1] }),
+        /ps unavailable/,
+    );
+    await assert.rejects(
+        h.open("test", { appHostPath: targets[1] }),
+        /ps unavailable/,
+        "retrying the same target must not report success while discovery is still failing",
+    );
+    const failed = (await h.request(opened, "/api/state")).state;
+    assert.equal(failed.status, "stale");
+    assert.equal(failed.stale, true);
+    assert.deepEqual(failed.roots, before.roots);
+    assert.equal(h.servers.length, 1);
+    assert.equal((await h.action("refresh_model")).stale, true, "ordinary refreshes retain their stale-state contract");
+    h.controls.failPs = false;
+    await h.open("test", { appHostPath: targets[1] });
+    const recovered = (await h.request(opened, "/api/state")).state;
+    assert.equal(recovered.status, "ready");
+    assert.notDeepEqual(recovered.roots, before.roots);
+});
+
 test("Global mode rejects discovered network targets without disabling local hosts or hidden visibility", async (t) => {
     const network = "\\\\server\\share\\AppHost.cs";
     const h = await harness(t, {
