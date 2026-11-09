@@ -2588,9 +2588,6 @@ const aspireifyCanvas = createCanvas({
                             delete resource.externalDependencyId;
                         }
                     }
-                    state.removedGeneratedResources = state.removedGeneratedResources.filter(
-                        (resource) => !resource.externalDependencyId || externalDependencyIds.has(resource.externalDependencyId),
-                    );
                     state.proposal.externalDependencyTreatments = (state.proposal.externalDependencyTreatments ?? []).filter(
                         (treatment) => externalDependencyIds.has(treatment.externalDependencyId),
                     );

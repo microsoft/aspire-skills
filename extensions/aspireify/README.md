@@ -91,8 +91,10 @@ Regenerating a proposal honors removals even when a generated resource mapped to
 a user-added resource with a different ID. Replacing the resource list withdraws
 generated mappings no longer supplied, while preserving user-added resources and
 connections. Omitting the list preserves mappings. Replacing discovery detaches
-mappings for removed dependency IDs and clears their treatments and removal
-records.
+mappings for missing dependency IDs and clears their treatments. Removal records
+survive inventory gaps and reloads, so rediscovered dependencies do not restore
+deleted resources. Starting a new run with `startNewRun: true` clears that removal
+history.
 
 ## Shared canvas UI
 
