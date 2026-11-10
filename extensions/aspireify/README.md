@@ -74,9 +74,13 @@ generation, implementation, startup, and validation remain in the Aspireify skil
 and chat.
 
 Extension hooks advertise the canvas at session start, reinforce the Step 3
-handoff for Aspireify-intent prompts and skill activation, guide the agent after
+handoff for full-graph Aspireify prompts and skill activation, guide the agent after
 opening and populating the canvas, and treat `[aspireify canvas: ...]` callbacks
-as explicit user requests.
+as explicit user requests. The hooks follow the aspireify skill's Detection rule:
+the canvas is for the Propose phase of the full workflow only, meaning an unwired
+AppHost or an explicit request to aspireify, re-scan, or re-propose the whole
+resource graph. Targeted edits to a wired AppHost, single integrations or APIs,
+and TypeScript toolchain repair stay in chat.
 
 It intentionally has no repository detector, scanner, proposal generator,
 AppHost editor, deployment controls, initialization flow, or validation workflow.

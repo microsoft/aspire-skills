@@ -13,6 +13,11 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   from Aspire 17.0.
 
 ### Changed
+- The Aspireify proposal canvas no longer opens when you ask to edit an AppHost
+  that already declares resources. Connecting or wiring a resource, adding a single
+  integration or API, running a one-off `aspire add`, and repairing the TypeScript
+  toolchain now stay in chat. The canvas still opens to wire an unwired AppHost, or
+  when you ask to aspireify, re-scan, or re-propose the whole resource graph.
 - AppHosts now reports an error when it cannot switch to the requested AppHost.
 - Aspireify now prompts you in Copilot to approve the AppHost plan you reviewed.
   Starting over requires separate approval and preserves the previous review.

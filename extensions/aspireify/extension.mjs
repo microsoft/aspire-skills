@@ -3172,7 +3172,7 @@ async function resolveOwnExtensionId() {
 const openAspireifyTool = {
     name: "open_aspireify",
     description:
-        "Open or focus the Aspireify Step 3 findings and confirmation canvas.",
+        "Open or focus the Aspireify Step 3 findings and confirmation canvas for the Propose phase of the full aspireify workflow: wiring an unwired AppHost, or an explicit request to aspireify, re-scan, or re-propose the whole resource graph. Do not use it for targeted edits to a wired AppHost, single integrations or APIs, or TypeScript toolchain repair.",
     parameters: {
         type: "object",
         additionalProperties: false,
@@ -3214,13 +3214,20 @@ const openAspireifyTool = {
     },
 };
 
+const CANVAS_SCOPE_GUIDANCE =
+    "Use the canvas only for the Propose phase of the full aspireify scan-and-propose workflow. That workflow runs when the aspireify skill's Detection rule applies: the AppHost is unwired (it declares no resources beyond the stub, for example right after aspire init, or it references none of the repository's services) and the user wants it wired; or the user explicitly asks to aspireify, re-scan the repository, or re-propose the whole resource graph. " +
+    "Do not call open_aspireify for any other aspireify work: targeted edits to an AppHost that already declares resources (adding, removing, or changing a resource, integration, reference, endpoint, environment variable, parameter, or command); single-API authoring such as WithBrowserLogs, Interaction Service, command arguments, withEnvironment, or config and secrets; one-off aspire add; TypeScript dependency, package-manager, or toolchain repair; or .aspire/modules questions. Handle those directly and keep any questions in chat.";
+
 const SESSION_GUIDANCE =
-    "An Aspireify Step 3 confirmation canvas is available. Use it only while running the aspireify workflow, after repository scanning and chat-based clarification have produced a proposal. " +
-    "The aspireify skill owns scanning, clarification, proposal generation, AppHost edits, startup, and validation; the canvas only presents and confirms one generated proposal snapshot. " +
-    "Do not open it for ordinary Aspire lifecycle, monitoring, deployment, or AppHost editing requests.";
+    "An Aspireify Step 3 confirmation canvas is available. " +
+    "The aspireify skill owns scanning, clarification, proposal generation, AppHost edits, startup, and validation; the canvas only presents and confirms one generated proposal snapshot, after repository scanning and chat-based clarification have produced it. " +
+    "Do not open it for Aspire lifecycle, monitoring, or deployment requests. " +
+    CANVAS_SCOPE_GUIDANCE;
 
 const ASPIREFY_WORKFLOW_GUIDANCE =
-    "This request is part of the aspireify workflow. Keep discovery questions and implementation tradeoffs in chat. " +
+    "Aspireify guidance is active. " +
+    CANVAS_SCOPE_GUIDANCE +
+    " Only when running the full workflow: keep discovery questions and implementation tradeoffs in chat. " +
     "When the proposal is ready, call open_aspireify, then load_discovery with the AppHost style and every runnable service's stable unique id, name, type, framework, exposesHttp, and path. " +
     "If the same AppHost already has a confirmed snapshot, the user must authorize a new review through the canvas and Copilot's trusted confirmation prompt for the current target and revision before passing startNewRun=true to load_discovery. That flag alone is not approval; the previous confirmation and history are archived. " +
     "Pass the proposalGeneration returned by load_discovery to set_proposal with the complete resource graph. For each runnable service the workflow deliberately left out of the graph or deferred, pass a serviceTreatments entry with its reason (and, when deferred, what remains unresolved); omit services that were not assessed. Do not invent or add fields that the Aspireify skill did not discover or propose. Preserve exact proposal type labels when supplied. " +
@@ -3241,8 +3248,8 @@ const AFTER_PROPOSAL_GUIDANCE =
 
 const ASPIREFY_INTENT_PATTERNS = [
     /\baspireify\b/i,
-    /\b(?:wire|scaffold|model|connect)\b.{0,40}\bapphost\b/i,
-    /\bapphost\b.{0,40}\b(?:wire|scaffold|resource (?:graph|plan))\b/i,
+    /\bscaffold\b.{0,40}\bapphost\b/i,
+    /\bapphost\b.{0,40}\b(?:scaffold|resource (?:graph|plan))\b/i,
     /\b(?:after|next)\b.{0,30}\baspire init\b/i,
     /\badd aspire\b.{0,40}\b(?:existing|repo|repository|project|app)\b/i,
 ];
