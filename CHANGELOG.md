@@ -13,11 +13,11 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   from Aspire 17.0.
 
 ### Changed
-- Aspireify now opens its proposal canvas only when the skill runs its full
-  Scan → Propose workflow: an unwired AppHost, or an explicit request to aspireify,
-  re-scan, or re-propose the whole resource graph. Targeted edits to a wired
-  AppHost, single integrations or APIs, one-off `aspire add`, and TypeScript
-  toolchain repair stay in chat.
+- The Aspireify proposal canvas no longer opens when you ask to edit an AppHost
+  that already declares resources. Connecting or wiring a resource, adding a single
+  integration or API, running a one-off `aspire add`, and repairing the TypeScript
+  toolchain now stay in chat. The canvas still opens to wire an unwired AppHost, or
+  when you ask to aspireify, re-scan, or re-propose the whole resource graph.
 - Corrected the Aspireify TypeScript data-volume example to the generated AppHost SDK:
   `withDataVolume({ name: "pg-data" })` instead of a positional name. The previous form
   failed type checking, so `aspire start` exited before starting any resource. A new
