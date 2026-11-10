@@ -139,15 +139,24 @@ declared beyond the stub):
 If the AppHost already has wired resources and the user wants to **start/stop**
 the app → `aspire-orchestration`. If the user wants to **deploy** → `aspire-deployment`.
 
-### Targeted edits to a wired AppHost
+### Requests outside the full workflow
 
-When the AppHost already declares resources and the user asks for a specific change
-(add, remove, or change a resource, integration, reference, endpoint, environment
-variable, parameter, or command), skip the full scan and the Step 3 proposal. Do
-**not** open the Aspireify canvas. Look up the API, keep any tradeoff questions in
-chat, make the edit, and validate with `aspire start` and `aspire wait`. Run the full
-workflow only when the user asks to aspireify, re-scan the repo, or re-propose the
-whole resource graph.
+Run the full Scan → Propose workflow only when the Detection rule above applies, or
+when the user explicitly asks to aspireify, re-scan the repo, or re-propose the whole
+resource graph. Everything else this skill covers skips the scan and the Step 2
+proposal, and does **not** open the Aspireify canvas:
+
+- Targeted edits to an AppHost that already declares resources: add, remove, or
+  change a resource, integration, reference, endpoint, environment variable,
+  parameter, or command.
+- Single-API authoring such as `WithBrowserLogs`, Interaction Service, command
+  arguments, `withEnvironment`, or config and secrets.
+- One-off `aspire add PACKAGE`.
+- TypeScript dependency, package-manager, or toolchain repair, and `.aspire/modules`
+  questions.
+
+For these, look up the API, keep any tradeoff questions in chat, make the change,
+and validate AppHost edits with `aspire start` and `aspire wait`.
 
 ## Language Support
 

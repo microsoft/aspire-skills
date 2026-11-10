@@ -65,9 +65,11 @@ and chat.
 Extension hooks advertise the canvas at session start, reinforce the Step 3
 handoff for full-graph Aspireify prompts and skill activation, guide the agent after
 opening and populating the canvas, and treat `[aspireify canvas: ...]` callbacks
-as explicit user requests. The hooks tell the agent not to open the canvas for
-targeted edits to an AppHost that already declares resources; those changes stay
-in chat.
+as explicit user requests. The hooks follow the aspireify skill's Detection rule:
+the canvas is for the Propose phase of the full workflow only, meaning an unwired
+AppHost or an explicit request to aspireify, re-scan, or re-propose the whole
+resource graph. Targeted edits to a wired AppHost, single integrations or APIs,
+and TypeScript toolchain repair stay in chat.
 
 It intentionally has no repository detector, scanner, proposal generator,
 AppHost editor, deployment controls, initialization flow, or validation workflow.
