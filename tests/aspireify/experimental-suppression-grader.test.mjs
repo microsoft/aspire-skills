@@ -64,6 +64,33 @@ test("file-based AppHost fails when only one diagnostic is suppressed", t => {
   assert.deepEqual(grade(root, "file").map(p => p.split(" ")[0]), ["WithHttpsDeveloperCertificate"]);
 });
 
+test("file-based AppHost fails when the pragma names the IDs in lowercase", t => {
+  const root = workspace(t, "file");
+  edit(root, "apphost.cs", wireApi("./api", both.toLowerCase()));
+  const problems = grade(root, "file").join("\n");
+  assert.match(problems, /AddCSharpApp in apphost\.cs is not covered/);
+  assert.match(problems, /WithHttpsDeveloperCertificate in apphost\.cs is not covered/);
+});
+
+test("file-based AppHost requires the api resource on a builder that is created and run", t => {
+  const notRun = workspace(t, "file");
+  edit(notRun, "apphost.cs", wireApi("./api", both));
+  edit(notRun, "apphost.cs", source => source.replace("builder.Build().Run();\n", ""));
+  assert.deepEqual(grade(notRun, "file"), ["apphost.cs does not run the AppHost with builder.Build().Run() after adding the api resource"]);
+
+  const undefinedBuilder = workspace(t, "file");
+  edit(undefinedBuilder, "apphost.cs", wireApi("./api", both));
+  edit(undefinedBuilder, "apphost.cs", source => source.replace("var builder = DistributedApplication.CreateBuilder(args);\n", ""));
+  assert.deepEqual(grade(undefinedBuilder, "file"),
+    ["apphost.cs does not create the builder with var builder = DistributedApplication.CreateBuilder(args) before adding the api resource"]);
+
+  const otherReceiver = workspace(t, "file");
+  edit(otherReceiver, "apphost.cs", wireApi("./api", both));
+  edit(otherReceiver, "apphost.cs", source => source.replace("builder.AddCSharpApp", "other.AddCSharpApp"));
+  assert.deepEqual(grade(otherReceiver, "file"),
+    ["apphost.cs adds the api resource on other instead of the builder created by DistributedApplication.CreateBuilder(args)"]);
+});
+
 test("file-based AppHost fails when the pragma comes after the call or is restored before it", t => {
   const late = workspace(t, "file");
   edit(late, "apphost.cs", wireApi("./api"));
@@ -222,6 +249,42 @@ test("project-based AppHost requires the api resource to point at ../Api", t => 
   const root = workspace(t, "project");
   edit(root, "AppHost/AppHost.cs", wireApi("../Web", both));
   assert.deepEqual(grade(root, "project"), ['AppHost/AppHost.cs does not add the api resource with AddCSharpApp("api", "../Api")']);
+});
+
+test("project-based AppHost fails when the existing echo container or its wiring is removed", t => {
+  const wired = root => {
+    edit(root, "AppHost/AppHost.cs", wireApi("../Api", both));
+  };
+  const variants = {
+    "echo removed and its probe moved to api": [source => source
+      .replace(/builder\.AddContainer\("echo"[\s\S]*?;\n/, "")
+      .replace(".WithHttpsDeveloperCertificate();", ".WithHttpsDeveloperCertificate()\n    .WithHttpProbe(ProbeType.Liveness, \"/\");"),
+      /no longer adds the existing echo resource/],
+    "probe moved from echo to api": [source => source
+      .replace('\n    .WithHttpProbe(ProbeType.Liveness, "/");', ";")
+      .replace(".WithHttpsDeveloperCertificate();", ".WithHttpsDeveloperCertificate()\n    .WithHttpProbe(ProbeType.Liveness, \"/\");"),
+      /no longer chains WithHttpProbe\(ProbeType\.Liveness, "\/"\) from the existing echo resource/],
+    "endpoint dropped": [source => source.replace("\n    .WithHttpEndpoint(targetPort: 5678)", ""),
+      /no longer chains WithHttpEndpoint\(targetPort: 5678\) from the existing echo resource/],
+    "endpoint port changed": [source => source.replace("targetPort: 5678", "targetPort: 8080"),
+      /no longer chains WithHttpEndpoint\(targetPort: 5678\)/],
+    "echo image changed": [source => source.replace('"hashicorp/http-echo"', '"nginx"'),
+      /no longer adds the existing echo resource/],
+  };
+  for (const [label, [change, expected]] of Object.entries(variants)) {
+    const root = workspace(t, "project");
+    wired(root);
+    edit(root, "AppHost/AppHost.cs", change);
+    const problems = grade(root, "project");
+    assert.equal(problems.length, 1, `${label}: ${problems.join("\n")}`);
+    assert.match(problems[0], expected, label);
+  }
+
+  const viaVariable = workspace(t, "project");
+  wired(viaVariable);
+  edit(viaVariable, "AppHost/AppHost.cs", source => source.replace('builder.AddContainer("echo", "hashicorp/http-echo")\n    .WithHttpEndpoint(targetPort: 5678)\n',
+    'var echo = builder.AddContainer("echo", "hashicorp/http-echo")\n    .WithHttpEndpoint(targetPort: 5678);\necho\n'));
+  assert.deepEqual(grade(viaVariable, "project"), []);
 });
 
 test("project-based AppHost fails without a suppression", t => {

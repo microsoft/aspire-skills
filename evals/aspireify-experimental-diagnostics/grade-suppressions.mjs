@@ -1,11 +1,11 @@
 // Program grader for the Aspireify experimental-diagnostics stimuli.
 // For the file and project cases it inspects the AppHost the agent wrote under <workspace>/app and
-// fails unless the api resource is added for the supplied project with the certificate call chained
-// from it, every call to an Aspire 13.6 experimental API is covered by an unconditional #pragma or
-// NoWarn suppression that no conditional #pragma restore can undo, and the project's existing NoWarn
-// values survive. The dotnet17 case grades
-// the code blocks returned in the response for the read-only 17.0 stimulus. Self-contained: the
-// eval copies only this file into .grader/.
+// fails unless the api resource is added to the AppHost's builder for the supplied project with the
+// certificate call chained from it, the AppHost still creates and runs that builder, the existing
+// echo container keeps its endpoint and probe wiring, every call to an Aspire 13.6 experimental API
+// is covered by an unconditional, case-sensitive #pragma or NoWarn suppression that no conditional
+// #pragma restore can undo, and the project's existing NoWarn values survive. The dotnet17 case grades each fenced code block returned in the response for the
+// read-only 17.0 stimulus on its own. Self-contained: the eval copies only this file into .grader/.
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,6 +24,18 @@ export const cases = {
     apiPaths: ["../Api", "../Api/Api.csproj"],
     // The fixture already suppresses ASPIREPROBES001 for its WithHttpProbe call.
     preserved: [{ name: "WithHttpProbe", call: /\.\s*WithHttpProbe\s*\(/, id: "ASPIREPROBES001" }],
+    // The prompt asks to keep the fixture's echo container with its endpoint and probe. Arguments
+    // are compared with whitespace removed.
+    kept: {
+      method: "AddContainer",
+      name: "echo",
+      image: /^hashicorp\/http-echo$/,
+      display: 'AddContainer("echo", "hashicorp/http-echo")',
+      calls: [
+        { name: "WithHttpEndpoint", args: /(?:^|,)targetPort:5678(?:,|$)/, display: "WithHttpEndpoint(targetPort: 5678)" },
+        { name: "WithHttpProbe", args: /^(?:type:)?ProbeType\.Liveness,(?:path:)?"\/"(?:,|$)/, display: 'WithHttpProbe(ProbeType.Liveness, "/")' },
+      ],
+    },
   },
 };
 
@@ -56,7 +68,10 @@ const unconditional = code => {
   return code.split("\n").map((line, index) => conditional[index] ? "" : line).join("\n");
 };
 
-const ids = list => list.split(/[;,\s]+/).map(id => id.trim().toUpperCase()).filter(Boolean);
+const splitIds = list => list.split(/[;,\s]+/).map(id => id.trim()).filter(Boolean);
+// NoWarn values are compared case-insensitively. #pragma warning IDs are not: C# ignores a
+// lowercase `#pragma warning disable aspirecertificates001` for ASPIRECERTIFICATES001.
+const ids = list => splitIds(list).map(id => id.toUpperCase());
 
 // Applies NoWarn assignments in order, expanding $(NoWarn) to the previous value.
 function effectiveNoWarn(values, problems, where) {
@@ -124,7 +139,7 @@ function pragmaCoverage(code, apis) {
   stripped.split("\n").forEach((line, index) => {
     const pragma = line.match(/^\s*#pragma\s+warning\s+(disable|restore)\b(.*)$/);
     if (pragma) {
-      const listed = ids(pragma[2]);
+      const listed = splitIds(pragma[2]);
       const disable = pragma[1] === "disable";
       if (inConditional[index]) {
         const named = apis.filter(api => listed.length === 0 || listed.includes(api.id)).map(api => api.id);
@@ -157,21 +172,47 @@ function closeParen(code, open) {
   return -1;
 }
 
-// Returns the names of the methods chained (.Name(...)) starting at index from.
+// Returns the methods chained (.Name(...)) starting at index from, with their arguments.
 function chainedCalls(code, from) {
   const member = /\s*\.\s*([A-Za-z_]\w*)\s*(?:<[^<>();]*>\s*)?\(/y;
-  const names = [];
+  const calls = [];
   for (let at = from; at >= 0;) {
     member.lastIndex = at;
     const match = member.exec(code);
     if (!match) break;
-    names.push(match[1]);
     at = closeParen(code, member.lastIndex - 1);
+    calls.push({ name: match[1], args: at < 0 ? "" : code.slice(member.lastIndex, at - 1) });
   }
-  return names;
+  return calls;
 }
 
 const normalizePath = path => path.replace(/\\/g, "/").replace(/\/+$/, "").replace(/^(?!\.{1,2}\/)/, "./");
+
+const twoStringArgs = /^\s*(?:name\s*:\s*)?"([^"]*)"\s*,\s*(?:\w+\s*:\s*)?@?"([^"]*)"\s*$/;
+
+// Finds `method("<name>", "<value>")` calls in unconditional code whose name is `name` and whose
+// value passes accept. For each it returns the call's position, the receiver it is called on and
+// the methods chained from it, directly or through the variable it is assigned to.
+function resourceCalls(code, method, name, accept) {
+  const found = [];
+  for (const match of code.matchAll(new RegExp(`\\b${method}\\s*\\(`, "g"))) {
+    const open = match.index + match[0].length - 1;
+    const end = closeParen(code, open);
+    if (end < 0) continue;
+    const args = code.slice(open + 1, end - 1).match(twoStringArgs);
+    if (!args || args[1] !== name || !accept(args[2])) continue;
+    const before = code.slice(0, match.index);
+    const calls = chainedCalls(code, end);
+    const variable = before.match(/\b([A-Za-z_]\w*)\s*(?<![=!<>])=(?!=)\s*[A-Za-z_][\w.]*?\s*\.\s*$/)?.[1];
+    if (variable) {
+      for (const use of code.slice(end).matchAll(new RegExp(`(?<![\\w.])${variable}\\b(?=\\s*\\.)`, "g"))) {
+        calls.push(...chainedCalls(code, end + use.index + use[0].length));
+      }
+    }
+    found.push({ index: match.index, end, receiver: before.match(/([A-Za-z_]\w*)\s*\.\s*$/)?.[1], calls });
+  }
+  return found;
+}
 
 // Finds a `method("api", "<path>")` call for one of the accepted project paths and reports whether
 // WithHttpsDeveloperCertificate() is chained from it, directly or through the variable it is
@@ -179,24 +220,45 @@ const normalizePath = path => path.replace(/\\/g, "/").replace(/\/+$/, "").repla
 export function apiResource(source, method, paths) {
   const code = unconditional(stripComments(source));
   const accepted = new Set(paths.map(normalizePath));
-  const result = { added: false, certificate: false };
-  for (const match of code.matchAll(new RegExp(`\\b${method}\\s*\\(`, "g"))) {
-    const open = match.index + match[0].length - 1;
-    const end = closeParen(code, open);
-    if (end < 0) continue;
-    const args = code.slice(open + 1, end - 1).match(/^\s*(?:name\s*:\s*)?"([^"]*)"\s*,\s*(?:\w+\s*:\s*)?@?"([^"]*)"\s*$/);
-    if (!args || args[1] !== "api" || !accepted.has(normalizePath(args[2]))) continue;
-    result.added = true;
-    const calls = chainedCalls(code, end);
-    const variable = code.slice(0, match.index).match(/\b([A-Za-z_]\w*)\s*(?<![=!<>])=(?!=)\s*[A-Za-z_][\w.]*?\s*\.\s*$/)?.[1];
-    if (variable) {
-      for (const use of code.slice(end).matchAll(new RegExp(`(?<![\\w.])${variable}\\b(?=\\s*\\.)`, "g"))) {
-        calls.push(...chainedCalls(code, end + use.index + use[0].length));
-      }
-    }
-    if (calls.includes("WithHttpsDeveloperCertificate")) result.certificate = true;
+  const found = resourceCalls(code, method, "api", path => accepted.has(normalizePath(path)));
+  const call = found.find(c => c.calls.some(chained => chained.name === "WithHttpsDeveloperCertificate")) ?? found[0];
+  const certificate = Boolean(call?.calls.some(c => c.name === "WithHttpsDeveloperCertificate"));
+  return { added: Boolean(call), certificate, call, code };
+}
+
+// Returns problems unless the code is a complete AppHost around the api resource call: a builder
+// created with DistributedApplication.CreateBuilder(args) before it, the call made on that builder
+// and builder.Build().Run() after it. A fragment that uses an undefined builder cannot compile.
+function appHostProblems(code, where, call) {
+  const created = [...code.matchAll(
+    /\b(?:var|I?DistributedApplicationBuilder)\s+([A-Za-z_]\w*)\s*=\s*DistributedApplication\s*\.\s*CreateBuilder\s*\(\s*args\s*\)\s*;/g)]
+    .filter(match => match.index < call.index);
+  const builder = created.at(-1)?.[1];
+  if (!builder) {
+    return [`${where} does not create the builder with var builder = DistributedApplication.CreateBuilder(args) before adding the api resource`];
   }
-  return result;
+  const problems = [];
+  if (call.receiver !== builder) {
+    problems.push(`${where} adds the api resource on ${call.receiver ?? "an expression"} instead of the ${builder} created by DistributedApplication.CreateBuilder(args)`);
+  }
+  const run = new RegExp(`(?<![\\w.])${builder}\\s*\\.\\s*Build\\s*\\(\\s*\\)\\s*\\.\\s*Run(?:Async)?\\s*\\(\\s*\\)`, "g");
+  if (![...code.slice(call.end).matchAll(run)].length) {
+    problems.push(`${where} does not run the AppHost with ${builder}.Build().Run() after adding the api resource`);
+  }
+  return problems;
+}
+
+const compact = args => args.replace(/\s+/g, "");
+
+// Returns problems unless the resource the prompt asks to keep is still added with its chained
+// calls and their original arguments.
+function keptResourceProblems(source, where, kept) {
+  const code = unconditional(stripComments(source));
+  const found = resourceCalls(code, kept.method, kept.name, image => kept.image.test(image));
+  if (!found.length) return [`${where} no longer adds the existing ${kept.name} resource with ${kept.display}`];
+  const missing = kept.calls.filter(required =>
+    !found.some(call => call.calls.some(c => c.name === required.name && required.args.test(compact(c.args)))));
+  return missing.map(required => `${where} no longer chains ${required.display} from the existing ${kept.name} resource`);
 }
 
 const conditionalProblem = (where, id) =>
@@ -230,10 +292,12 @@ export function gradeAppHost(appDir, caseName) {
     const resource = apiResource(source, "AddCSharpApp", spec.apiPaths);
     if (!resource.added) {
       problems.push(`${spec.source} does not add the api resource with AddCSharpApp("api", "${spec.apiPaths[0]}")`);
-    } else if (!resource.certificate) {
-      problems.push(`${spec.source} does not chain WithHttpsDeveloperCertificate() from the api resource`);
+    } else {
+      if (!resource.certificate) problems.push(`${spec.source} does not chain WithHttpsDeveloperCertificate() from the api resource`);
+      problems.push(...appHostProblems(resource.code, spec.source, resource.call));
     }
   }
+  if (spec.kept) problems.push(...keptResourceProblems(source, spec.source, spec.kept));
 
   let noWarn = new Set();
   if (spec.project) {
@@ -265,25 +329,34 @@ const certificateApi = experimentalApis.find(api => api.name === "WithHttpsDevel
 const codeBlocks = output => [...output.replace(/\r\n/g, "\n")
   .matchAll(/^[ \t]*(`{3,}|~{3,})[^\n]*\n([\s\S]*?)^[ \t]*\1[ \t]*$/gm)].map(match => match[2]);
 
-// Grades the read-only Aspire 17.0 stimulus from the code the response returns, not its prose: the
-// api resource added with AddDotnetProject and the certificate call chained from it, a versioned
-// `#:package Aspire.Hosting.Dotnet@...` directive (the 17.0 SDK does not include the package, and an
-// `aspire add` command shown in a read-only reply is never run) and an effective
-// ASPIRECERTIFICATES001 suppression.
-export function gradeDotnet17Response(output) {
-  const blocks = codeBlocks(typeof output === "string" ? output : "");
-  if (blocks.length === 0) return ["The response contains no fenced code block with the AppHost code"];
-  const source = blocks.join("\n");
+// A NuGet version Aspire 17 resolves: 17.minor.patch with an optional prerelease label.
+const aspire17Version = /^17\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+
+// Grades one fenced code block as the requested Aspire 17.0 AppHost: a complete AppHost that adds
+// the api resource with AddDotnetProject on its builder with the certificate call chained from it,
+// a `#:package Aspire.Hosting.Dotnet@17.x.y` directive (the 17.0 SDK does not include the package,
+// and an `aspire add` command shown in a read-only reply is never run) matching any #:sdk version,
+// and an effective ASPIRECERTIFICATES001 suppression.
+function gradeDotnet17Block(source) {
   const code = unconditional(stripComments(source));
   const problems = [];
 
   const resource = apiResource(source, "AddDotnetProject", ["./api", "./api/Api.csproj"]);
   if (!resource.added) problems.push('The returned code does not add the api resource with AddDotnetProject("api", "./api")');
-  else if (!resource.certificate) problems.push("The returned code does not chain WithHttpsDeveloperCertificate() from the api resource");
+  else {
+    if (!resource.certificate) problems.push("The returned code does not chain WithHttpsDeveloperCertificate() from the api resource");
+    problems.push(...appHostProblems(resource.code, "The returned AppHost", resource.call));
+  }
 
-  if (!/^[ \t]*#:package[ \t]+Aspire\.Hosting\.Dotnet@[^\s<>]+[ \t]*$/m.test(code)) {
+  const packageVersion = code.match(/^[ \t]*#:package[ \t]+Aspire\.Hosting\.Dotnet@(\S+)[ \t]*$/m)?.[1];
+  const sdkVersion = code.match(/^[ \t]*#:sdk[ \t]+Aspire\.AppHost\.Sdk@(\S+)[ \t]*$/m)?.[1];
+  if (!packageVersion) {
     problems.push("The returned AppHost does not reference Aspire.Hosting.Dotnet with a versioned #:package directive; " +
       "the 17.0 SDK does not include it, and an aspire add command in a read-only reply is not run");
+  } else if (!aspire17Version.test(packageVersion)) {
+    problems.push(`The returned AppHost references Aspire.Hosting.Dotnet@${packageVersion}, which is not an Aspire 17 NuGet version (17.x.y)`);
+  } else if (sdkVersion && sdkVersion !== packageVersion) {
+    problems.push(`The returned AppHost references Aspire.Hosting.Dotnet@${packageVersion} but Aspire.AppHost.Sdk@${sdkVersion}; the versions must match`);
   }
 
   if (certificateApi.call.test(code)) {
@@ -294,7 +367,23 @@ export function gradeDotnet17Response(output) {
       problems.push(`WithHttpsDeveloperCertificate in the returned code is not covered by #pragma warning disable ${certificateApi.id} or NoWarn`);
     }
   }
-  return problems;
+  return { added: resource.added, problems };
+}
+
+// Grades the read-only Aspire 17.0 stimulus from the code the response returns, not its prose. Each
+// fenced block is graded on its own, so a directive in one block cannot cover code in another; the
+// response passes when one block is a complete, correct AppHost.
+export function gradeDotnet17Response(output) {
+  const blocks = codeBlocks(typeof output === "string" ? output : "");
+  if (blocks.length === 0) return ["The response contains no fenced code block with the AppHost code"];
+  const graded = blocks.map(gradeDotnet17Block);
+  if (graded.some(block => block.problems.length === 0)) return [];
+  // Report the closest block, preferring one that adds the api resource.
+  const closest = graded.reduce((best, block) =>
+    (block.added && !best.added) || (block.added === best.added && block.problems.length < best.problems.length) ? block : best);
+  return blocks.length > 1
+    ? ["No single fenced code block is a complete, correct AppHost; each block is graded on its own", ...closest.problems]
+    : closest.problems;
 }
 
 function runCli(caseName) {

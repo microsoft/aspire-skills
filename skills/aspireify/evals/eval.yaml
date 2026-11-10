@@ -1651,7 +1651,7 @@ stimuli:
       Use the aspireify skill. My file-based AppHost app/apphost.cs is on Aspire 17.0.
       Add the ASP.NET Core API in app/api as a resource named api and serve it over HTTPS
       with WithHttpsDeveloperCertificate(). Do not edit files or restore, build or run
-      anything; show the AppHost code in your reply.
+      anything; show the complete updated app/apphost.cs in your reply.
     tags:
       priority: p1
       scenario: non-executing-guidance
@@ -1667,13 +1667,15 @@ stimuli:
         - src: ../../../evals/aspireify-experimental-diagnostics/file-based/api
           dest: app/api
     graders:
-      # One grader checks everything the requested 17.0 AppHost needs in the code blocks the
-      # response returns (prose naming the APIs does not count): the api resource added with
-      # AddDotnetProject for ./api, a versioned #:package Aspire.Hosting.Dotnet directive (not
-      # implicit in the 17.0 SDK; an aspire add command in this read-only reply is never run),
-      # WithHttpsDeveloperCertificate() chained from that resource and an effective
-      # ASPIRECERTIFICATES001 suppression. With only an eval-wide 0.7 threshold, separate graders
-      # would let an answer that misses one of them still pass.
+      # One grader checks everything the requested 17.0 AppHost needs in a single code block the
+      # response returns (prose naming the APIs, or a directive in another block, does not count):
+      # a complete AppHost that creates the builder with CreateBuilder(args), adds the api resource
+      # on it with AddDotnetProject for ./api and runs it with Build().Run(); a
+      # #:package Aspire.Hosting.Dotnet@17.x.y directive matching any #:sdk version (not implicit
+      # in the 17.0 SDK; an aspire add command in this read-only reply is never run);
+      # WithHttpsDeveloperCertificate() chained from that resource; and an effective,
+      # case-sensitive ASPIRECERTIFICATES001 suppression. With only an eval-wide 0.7 threshold,
+      # separate graders would let an answer that misses one of them still pass.
       - type: program
         name: dotnet-17-adds-project-with-package-and-certificate
         config: { program: node, args: [.grader/grade-suppressions.mjs, dotnet17] }

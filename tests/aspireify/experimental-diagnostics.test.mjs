@@ -98,8 +98,12 @@ test("Aspireify 17.0 AddDotnetProject eval fails a response that omits the packa
     "",
     "#pragma warning disable ASPIRECERTIFICATES001",
     "",
+    "var builder = DistributedApplication.CreateBuilder(args);",
+    "",
     'var api = builder.AddDotnetProject("api", "./api")',
     "    .WithHttpsDeveloperCertificate();",
+    "",
+    "builder.Build().Run();",
     "```",
   ];
   const suppressed = lines.join("\n");
@@ -122,9 +126,23 @@ test("Aspireify 17.0 AddDotnetProject eval fails a response that omits the packa
       "```bash\naspire add Aspire.Hosting.Dotnet\n```\n\n" + without("#:package"),
     "a versioned #:package directive (placeholder version)":
       suppressed.replace("Aspire.Hosting.Dotnet@17.0.0", "Aspire.Hosting.Dotnet@<AppHost SDK version>"),
+    "a complete AppHost (fragment with an undefined builder)": without("CreateBuilder").replace("\nbuilder.Build().Run();", ""),
+    "a complete AppHost (builder is never created)": without("CreateBuilder"),
+    "a complete AppHost (builder is never run)": without("Build().Run()"),
+    "an Aspire 17 package version (not-a-version)": suppressed.replace("Dotnet@17.0.0", "Dotnet@not-a-version"),
+    "an Aspire 17 package version (13.6.4)": suppressed.replace("Dotnet@17.0.0", "Dotnet@13.6.4"),
+    "an Aspire 17 package version (17.0)": suppressed.replace("Dotnet@17.0.0", "Dotnet@17.0"),
+    "a package version matching the AppHost SDK": suppressed.replace("Dotnet@17.0.0", "Dotnet@17.1.0"),
+    "the suppression in the AppHost's own block (pragma in a separate block)":
+      "```csharp\n#pragma warning disable ASPIRECERTIFICATES001\n```\n\n" + without("ASPIRECERTIFICATES001"),
+    "a case-sensitive suppression ID (lowercase pragma)":
+      suppressed.replace("disable ASPIRECERTIFICATES001", "disable aspirecertificates001"),
   };
 
   assert.ok(score(suppressed) >= threshold, `A correct response scores ${score(suppressed)} < ${threshold}`);
+  assert.deepEqual(gradeDotnet17Response(suppressed.replace(/17\.0\.0/g, "17.0.1-preview.1.25611.2")), []);
+  assert.deepEqual(gradeDotnet17Response(
+    "```bash\naspire add Aspire.Hosting.Dotnet\n```\n\n" + suppressed.replace("#:sdk Aspire.AppHost.Sdk@17.0.0\n", "")), []);
   for (const [omitted, output] of Object.entries(failing)) {
     assert.ok(score(output) < threshold, `A response without ${omitted} still passes at ${score(output)} >= ${threshold}`);
   }
