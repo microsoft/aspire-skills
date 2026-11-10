@@ -1,0 +1,7 @@
+Restoring SDK code...
+Lockfile is up to date, resolution step is skipped
+Already up to date
+[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: esbuild@0.28.2
+Run "pnpm approve-builds" to pick which dependencies should be allowed to run scripts.
+SDK code restored successfully for apphost.mts.
+Exit code: 0

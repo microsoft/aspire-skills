@@ -1,0 +1,10 @@
+Aspire CLI 13.6.4; pnpm 11.25.0
+Installing TypeScript (Node.js) dependencies...
+[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: esbuild@0.28.2
+The app could not be created.
+Exit code: 4
+
+Generated: aspire-apphost/apphost.mts, package.json, pnpm-lock.yaml,
+apphost.run.json, tsconfig.apphost.json, and .aspire/modules/.
+No root aspire.config.json was written before the failure.
+The root pnpm-workspace.yaml was unchanged.

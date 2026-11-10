@@ -5,6 +5,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [0.0.6](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.6)
 
 ### Added
+- Added `aspire-init` and `aspireify` guidance for recovering when pnpm blocks a
+  dependency build script during TypeScript AppHost setup. Agents keep the generated
+  files, ask before approving only the required package for the AppHost, and treat
+  remaining ignored-build errors as failures even when Aspire reports success.
 - Added Go AppHost guidance (Aspire 17.0+) to the `aspire`,
   `aspire-orchestration`, `aspire-init`, `aspire-deployment` and `aspireify`
   skills, covering detection, authoring, `aspire init --language go`, `AddGoApp`

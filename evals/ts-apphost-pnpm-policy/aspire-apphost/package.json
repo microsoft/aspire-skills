@@ -1,0 +1,9 @@
+{
+  "name": "aspire-apphost",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
+  }
+}
