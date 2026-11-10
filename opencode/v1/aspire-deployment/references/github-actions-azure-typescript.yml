@@ -26,15 +26,16 @@ jobs:
         with:
           node-version: 22.x
 
-      - name: Install and build workspace
-        run: |
-          npm ci
-          npm run build --if-present
-
       - name: Install Aspire CLI
         run: |
           curl -sSL https://aspire.dev/install.sh | bash
           echo "$HOME/.aspire/bin" >> "$GITHUB_PATH"
+
+      - name: Install and build workspace
+        run: |
+          npm ci
+          aspire restore --apphost ./apphost.mts --non-interactive
+          npm run build --if-present
 
       - name: Azure Login
         # azure/login@v2

@@ -72,7 +72,9 @@ const services = [
 
 async function provider(t, existingWorkspace) {
     const workspacePath = existingWorkspace ?? await mkdtemp(join(tmpdir(), "aspireify-external-"));
-    const session = (globalThis.__aspireifyTestSession = { workspacePath, messages: [] });
+    const session = (globalThis.__aspireifyTestSession = {
+        workspacePath, messages: [], confirm: async () => true,
+    });
     await import(`../../extensions/aspireify/extension.mjs?external=${++providerSequence}`);
     const canvas = session.canvas;
     const appHostPath = join(workspacePath, "repo", "apphost.mts");
@@ -363,6 +365,7 @@ test("omitted external inventory and decisions survive legacy refreshes; explici
     });
     assert.deepEqual((await view.snapshot()).externalDependencies, []);
     assert.equal((await view.post("/api/confirm")).status, 200);
+    assert.equal((await view.post("/api/approve-restart")).status, 200);
     await p.action("load_discovery", { apphostStyle: "typescript", services, startNewRun: true });
     assert.deepEqual((await view.snapshot()).externalDependencies, []);
 });
@@ -464,6 +467,7 @@ test("removed coalesced mappings survive inventory gaps, reload, regeneration an
     assert.deepEqual(confirmed.externalDependencies[0], removed);
     assert.deepEqual(confirmed.proposal.resources.map(({ id }) => id), [api.id, endpoint.id]);
 
+    assert.equal((await restored.post("/api/approve-restart")).status, 200);
     ({ proposalGeneration } = await reloaded.load({ startNewRun: true }));
     await reloaded.propose(proposalGeneration, { resources, edges: [] });
     assert.deepEqual((await restored.snapshot()).proposal.resources.map(({ id }) => id),

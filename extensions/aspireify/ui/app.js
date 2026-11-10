@@ -89,6 +89,12 @@ const elements = {
     footerNote: document.getElementById("footer-note"),
     historyAnnouncement: document.getElementById("history-announcement"),
     confirm: document.getElementById("confirm"),
+    restartReview: document.getElementById("restart-review"),
+    restartDialog: document.getElementById("restart-review-dialog"),
+    restartForm: document.getElementById("restart-review-form"),
+    restartTarget: document.getElementById("restart-review-target"),
+    restartError: document.getElementById("restart-review-error"),
+    approveRestart: document.getElementById("approve-restart"),
     error: document.getElementById("error"),
     errorMessage: document.getElementById("error-message"),
     retry: document.getElementById("retry"),
@@ -131,6 +137,7 @@ let confirmationError = "";
 let handoffError = "";
 let connectionRowSequence = 0;
 let pendingRemoval;
+let restartSnapshot;
 let eventsConnected = false;
 let activeViewTransition;
 let selectedResourceId = "";
@@ -152,6 +159,25 @@ const detailResizeObserver =
 document.addEventListener("DOMContentLoaded", () => {
     elements.retry.addEventListener("click", () => void retryProposalOrSnapshot());
     elements.confirm.addEventListener("click", () => void confirmSnapshot());
+    elements.restartReview.addEventListener("click", () => {
+        restartSnapshot = structuredClone(snapshot);
+        elements.restartTarget.textContent = `AppHost: ${snapshot.appHostPath}. Revision: ${snapshot.revision}.`;
+        elements.restartError.textContent = "";
+        elements.restartDialog.showModal();
+    });
+    elements.restartForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        await runBusy(elements.approveRestart, async () => {
+            const result = await post("/api/approve-restart", {}, restartSnapshot);
+            restartSnapshot = structuredClone(snapshot);
+            if (!result.delivered) {
+                throw new Error(result.error || "New review authorized, but chat could not be notified. Retry the notification.");
+            }
+            elements.restartDialog.close();
+        }, (error) => {
+            elements.restartError.textContent = error.message;
+        });
+    });
     elements.undo.addEventListener("click", () => void applyHistoryChange("undo", elements.undo));
     elements.redo.addEventListener("click", () => void applyHistoryChange("redo", elements.redo));
     elements.compactAddResource.addEventListener("click", () => openAddResourceDialog("all"));
@@ -279,8 +305,7 @@ function connectEvents() {
     };
 }
 
-async function post(path, body) {
-    const requestSnapshot = snapshot;
+async function post(path, body, requestSnapshot = snapshot) {
     const previousRevision = requestSnapshot?.revision ?? -1;
     const requestBody = {
         ...body,
@@ -513,6 +538,7 @@ function render(nextSnapshot) {
                 elements.addResourceDialog,
                 elements.connectionDialog,
                 elements.removeDialog,
+                elements.restartDialog,
             ]) {
                 if (dialog.open) {
                     dialog.close();
@@ -676,8 +702,8 @@ function renderNotProposedItems() {
     section.querySelector(":scope > p").textContent = items.some(
         ({ entry }) => entry.treatment === "not-assessed",
     )
-        ? "Discovered items or resource mappings outside this plan. Not assessed means no decision was supplied."
-        : "Discovered items outside this plan, with their chat decisions or excluded or removed resource mappings.";
+        ? "Agent-supplied discovery, exclusion or deferral reasons, and excluded or removed resource mappings. Not assessed means the agent supplied no treatment."
+        : "Agent-supplied discovery, exclusion or deferral reasons, and excluded or removed resource mappings. These reasons do not establish that a decision occurred in chat.";
     const list = section.querySelector(".not-proposed-list");
     list.replaceChildren(
         ...items.map(({ entry, external }) => {
@@ -703,14 +729,14 @@ function renderNotProposedItems() {
             }
             if (entry.reason) {
                 identity.append(
-                    createElement("span", { className: "not-proposed-reason", text: entry.reason }),
+                    createElement("span", { className: "not-proposed-reason", text: `Agent-supplied reason: ${entry.reason}` }),
                 );
             }
             if (entry.unresolved) {
                 identity.append(
                     createElement("span", {
                         className: "not-proposed-unresolved",
-                        text: `Unresolved: ${entry.unresolved}`,
+                        text: `Agent-supplied unresolved issue: ${entry.unresolved}`,
                     }),
                 );
             }
@@ -1947,6 +1973,13 @@ function renderProposalIdentity() {
     );
     elements.proposalHash.textContent = shortHash(snapshot.proposalHash);
     elements.proposalHash.title = snapshot.proposalHash || "";
+    elements.restartReview.hidden = !snapshot.confirmed;
+    elements.restartReview.disabled = Boolean(snapshot.restartApproved) && !snapshot.restartNotificationPending;
+    elements.restartReview.textContent = snapshot.restartNotificationPending
+        ? "Retry new review notification"
+        : snapshot.restartApproved
+        ? "New review authorized"
+        : "Start new review";
 }
 
 function shortHash(hash) {

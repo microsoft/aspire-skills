@@ -100,6 +100,7 @@
                         <section class="proposal-state" id="proposal-state">
                             <div class="proposal-state-main">
                                 <strong id="proposal-state-copy">Proposal ready for review</strong>
+                                <button id="restart-review" class="btn btn-outline btn-sm" type="button" hidden>Start new review</button>
                             </div>
                             <details class="proposal-diagnostics">
                                 <summary>Snapshot details</summary>
@@ -115,11 +116,14 @@
                                 <div>
                                     <h1>Proposed AppHost</h1>
                                     <p class="muted">
-                                        Discovered services and external dependencies mapped to the
-                                        exact Aspire resources in this snapshot.
+                                        Agent-supplied discovery facts for services and external
+                                        dependencies, generated plan choices, and exclusion or
+                                        deferral reasons, with your saved edits. Confirmation
+                                        approves this displayed snapshot, not claims about prior
+                                        conversations.
                                     </p>
                                     <p class="editing-guidance muted">
-                                        Generated values are editable. Changes are marked
+                                        Agent-generated values are editable. Changes are marked
                                         <strong>Edited</strong>; Reset restores generated values,
                                         and Undo or Redo steps through saved changes.
                                     </p>
@@ -210,6 +214,17 @@
                 </button>
             </div>
         </footer>
+
+        <dialog id="restart-review-dialog" aria-labelledby="restart-review-title">
+            <form method="dialog" id="restart-review-form">
+                <h2 id="restart-review-title">Authorize a new review?</h2>
+                <p id="restart-review-target"></p>
+                <p>Continue to confirm in Copilot. The current confirmation and edit history will be archived when the agent loads the new review. The new proposal needs a separate confirmation.</p>
+                <p id="restart-review-error" role="alert"></p>
+                <button class="btn btn-outline" type="button" data-close-dialog>Cancel</button>
+                <button id="approve-restart" class="btn btn-primary" type="submit">Continue</button>
+            </form>
+        </dialog>
 
         <dialog id="add-resource-dialog" aria-labelledby="add-resource-dialog-title">
             <form method="dialog" id="add-resource-form" novalidate>
