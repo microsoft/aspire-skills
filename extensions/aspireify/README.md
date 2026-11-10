@@ -63,9 +63,11 @@ generation, implementation, startup, and validation remain in the Aspireify skil
 and chat.
 
 Extension hooks advertise the canvas at session start, reinforce the Step 3
-handoff for Aspireify-intent prompts and skill activation, guide the agent after
+handoff for full-graph Aspireify prompts and skill activation, guide the agent after
 opening and populating the canvas, and treat `[aspireify canvas: ...]` callbacks
-as explicit user requests.
+as explicit user requests. The hooks tell the agent not to open the canvas for
+targeted edits to an AppHost that already declares resources; those changes stay
+in chat.
 
 It intentionally has no repository detector, scanner, proposal generator,
 AppHost editor, deployment controls, initialization flow, or validation workflow.

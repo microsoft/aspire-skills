@@ -13,6 +13,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   from Aspire 17.0.
 
 ### Changed
+- Aspireify no longer opens its proposal canvas for targeted edits to an AppHost
+  that already declares resources, such as adding an integration or changing a
+  reference. The canvas now appears only for full-graph wiring: an unwired AppHost,
+  or an explicit request to aspireify or re-propose the whole resource graph.
 - Corrected the Aspireify TypeScript data-volume example to the generated AppHost SDK:
   `withDataVolume({ name: "pg-data" })` instead of a positional name. The previous form
   failed type checking, so `aspire start` exited before starting any resource. A new

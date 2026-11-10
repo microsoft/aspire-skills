@@ -139,6 +139,16 @@ declared beyond the stub):
 If the AppHost already has wired resources and the user wants to **start/stop**
 the app → `aspire-orchestration`. If the user wants to **deploy** → `aspire-deployment`.
 
+### Targeted edits to a wired AppHost
+
+When the AppHost already declares resources and the user asks for a specific change
+(add, remove, or change a resource, integration, reference, endpoint, environment
+variable, parameter, or command), skip the full scan and the Step 3 proposal. Do
+**not** open the Aspireify canvas. Look up the API, keep any tradeoff questions in
+chat, make the edit, and validate with `aspire start` and `aspire wait`. Run the full
+workflow only when the user asks to aspireify, re-scan the repo, or re-propose the
+whole resource graph.
+
 ## Language Support
 
 | AppHost Style | Detection | Edit Target |

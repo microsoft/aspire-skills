@@ -3014,7 +3014,7 @@ async function resolveOwnExtensionId() {
 const openAspireifyTool = {
     name: "open_aspireify",
     description:
-        "Open or focus the Aspireify Step 3 findings and confirmation canvas.",
+        "Open or focus the Aspireify Step 3 findings and confirmation canvas for a full-graph AppHost wiring proposal. Do not use it for targeted edits to an AppHost that already declares resources.",
     parameters: {
         type: "object",
         additionalProperties: false,
@@ -3056,13 +3056,20 @@ const openAspireifyTool = {
     },
 };
 
+const TARGETED_EDIT_GUIDANCE =
+    "Use the canvas only for full-graph wiring: the AppHost is an unwired stub, or the user explicitly asks to aspireify, scan the repository, or re-propose the whole resource graph. " +
+    "Do not call open_aspireify for targeted changes to an AppHost that already declares resources, such as adding, removing, or changing a resource, integration, reference, endpoint, environment variable, parameter, or command; make those edits directly and keep any questions in chat.";
+
 const SESSION_GUIDANCE =
-    "An Aspireify Step 3 confirmation canvas is available. Use it only while running the aspireify workflow, after repository scanning and chat-based clarification have produced a proposal. " +
+    "An Aspireify Step 3 confirmation canvas is available. Use it only while running the full aspireify workflow, after repository scanning and chat-based clarification have produced a proposal. " +
     "The aspireify skill owns scanning, clarification, proposal generation, AppHost edits, startup, and validation; the canvas only presents and confirms one generated proposal snapshot. " +
-    "Do not open it for ordinary Aspire lifecycle, monitoring, deployment, or AppHost editing requests.";
+    "Do not open it for ordinary Aspire lifecycle, monitoring, deployment, or AppHost editing requests. " +
+    TARGETED_EDIT_GUIDANCE;
 
 const ASPIREFY_WORKFLOW_GUIDANCE =
-    "This request is part of the aspireify workflow. Keep discovery questions and implementation tradeoffs in chat. " +
+    "Aspireify guidance is active. " +
+    TARGETED_EDIT_GUIDANCE +
+    " For full-graph wiring, keep discovery questions and implementation tradeoffs in chat. " +
     "When the proposal is ready, call open_aspireify, then load_discovery with the AppHost style and every runnable service's stable unique id, name, type, framework, exposesHttp, and path. " +
     "If the same AppHost already has a confirmed snapshot and the user starts a new Aspireify run, pass startNewRun=true to load_discovery. " +
     "Pass the proposalGeneration returned by load_discovery to set_proposal with the complete resource graph. For each runnable service the workflow deliberately left out of the graph or deferred, pass a serviceTreatments entry with its reason (and, when deferred, what remains unresolved); omit services that were not assessed. Do not invent or add fields that the Aspireify skill did not discover or propose. Preserve exact proposal type labels when supplied. " +
@@ -3083,8 +3090,8 @@ const AFTER_PROPOSAL_GUIDANCE =
 
 const ASPIREFY_INTENT_PATTERNS = [
     /\baspireify\b/i,
-    /\b(?:wire|scaffold|model|connect)\b.{0,40}\bapphost\b/i,
-    /\bapphost\b.{0,40}\b(?:wire|scaffold|resource (?:graph|plan))\b/i,
+    /\bscaffold\b.{0,40}\bapphost\b/i,
+    /\bapphost\b.{0,40}\b(?:scaffold|resource (?:graph|plan))\b/i,
     /\b(?:after|next)\b.{0,30}\baspire init\b/i,
     /\badd aspire\b.{0,40}\b(?:existing|repo|repository|project|app)\b/i,
 ];
