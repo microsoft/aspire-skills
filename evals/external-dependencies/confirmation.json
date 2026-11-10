@@ -1,0 +1,62 @@
+{
+  "apphostStyle": "csharp-sdk",
+  "included": [
+    { "name": "api", "resourceName": "api" },
+    { "name": "worker", "resourceName": "worker" }
+  ],
+  "excluded": [],
+  "notProposed": [],
+  "externalDependencies": [
+    {
+      "id": "weather-api",
+      "name": "Weather API",
+      "type": "HTTPS API",
+      "purpose": "Forecast lookups for the api service",
+      "configurationKeys": ["Weather:BaseUrl"],
+      "source": "api/Program.cs named HttpClient \"weather\"; api/appsettings.json",
+      "lifecycleOwner": "Third-party provider",
+      "endpointSelection": "Explicit configuration",
+      "resourceMappings": [
+        { "id": "weather", "name": "weather", "type": "External service", "include": true }
+      ],
+      "treatment": "mapped"
+    },
+    {
+      "id": "stripe",
+      "name": "Stripe",
+      "type": "SDK-selected endpoint",
+      "purpose": "Payment intents for checkout",
+      "configurationKeys": ["Stripe:ApiKey"],
+      "source": "api/Program.cs StripeClient; Stripe.net package",
+      "lifecycleOwner": "Stripe SDK",
+      "endpointSelection": "SDK discovery",
+      "resourceMappings": [],
+      "treatment": "not-modeled",
+      "reason": "The Stripe SDK keeps owning its endpoint and the API key stays in the api project's user secrets."
+    },
+    {
+      "id": "quote-stream",
+      "name": "Quote stream",
+      "type": "WebSocket",
+      "purpose": "Live quotes consumed by the worker",
+      "configurationKeys": ["Quotes:StreamUrl"],
+      "source": "worker/Program.cs ClientWebSocket; worker/appsettings.json",
+      "lifecycleOwner": "Third-party provider",
+      "endpointSelection": "Explicit configuration",
+      "resourceMappings": [],
+      "treatment": "deferred",
+      "reason": "The provider's authentication handshake is not yet decided.",
+      "unresolved": "Whether the stream needs a per-environment token before it can be modeled."
+    }
+  ],
+  "proposal": {
+    "resources": [
+      { "id": "api", "name": "api", "type": "Project", "serviceId": "api", "include": true },
+      { "id": "worker", "name": "worker", "type": "Project", "serviceId": "worker", "include": true },
+      { "id": "weather", "name": "weather", "type": "External service", "externalDependencyId": "weather-api", "include": true }
+    ],
+    "edges": [
+      { "from": "api", "to": "weather", "kind": "reference" }
+    ]
+  }
+}
