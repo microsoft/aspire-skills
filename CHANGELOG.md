@@ -18,6 +18,13 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   integration or API, running a one-off `aspire add`, and repairing the TypeScript
   toolchain now stay in chat. The canvas still opens to wire an unwired AppHost, or
   when you ask to aspireify, re-scan, or re-propose the whole resource graph.
+- AppHosts now reports an error when it cannot switch to the requested AppHost.
+- Aspireify now prompts you in Copilot to approve the AppHost plan you reviewed.
+  Starting over requires separate approval and preserves the previous review.
+- Aspireify marks the agent's findings and recommendations as unverified.
+  Review them before approving a plan.
+- Use a local checkout with AppHosts and Aspireify. UNC paths such as
+  `\\server\share\AppHost` are no longer supported.
 - Corrected the Aspireify TypeScript data-volume example to the generated AppHost SDK:
   `withDataVolume({ name: "pg-data" })` instead of a positional name. The previous form
   failed type checking, so `aspire start` exited before starting any resource. A new
