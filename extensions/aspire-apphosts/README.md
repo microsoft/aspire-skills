@@ -44,6 +44,9 @@ Executable lookup is included in each CLI operation's timeout.
 
 ## Security boundary
 
+Explicit UNC/network paths are rejected before filesystem access. Mapped drives,
+mounted shares, and local aliases to remote storage are not detected.
+
 The provider projects an explicit allow-list of resource fields. It never sends
 environment values, arbitrary resource properties, connection strings, volumes,
 source paths, parameter values, or the token-bearing dashboard URL to the
