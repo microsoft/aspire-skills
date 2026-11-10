@@ -2,7 +2,7 @@
   "skills": [
     {
       "name": "aspire",
-      "version": "sha512-bebf0b6369fb14bd6aa69808dcf5796465358a207021c551fd4ade31a87f944aa1e1c61767052593fe056268cc06aee271fb0ef8f8034dbfadbc4efe83ac1755",
+      "version": "sha512-66f8b8f6bbef0c0a51f8c7eb17f8f24d1cde547fd17dda42db1b33aaa59c129ba3f96c14e448cfb6e8fc816947a9d84b3545ad1eaa2db8165f536d15977d08b3",
       "files": [
         "aspire.md",
         "references/aspire-13-3-breaking-changes.md",
@@ -11,7 +11,7 @@
     },
     {
       "name": "aspire-deployment",
-      "version": "sha512-e615718c9982da541a6a16b853748673cce210b81a17fdff6603c32fcce327fd25a1ed43ee204600c41a76ce4f20fc11be32da5ffc0623859a67a140454853a8",
+      "version": "sha512-3c99432de4e8b9be178dae48ce06e398c7de716e43d27278264e1f0469fb26d9d8d1a0bcfd5dc5f4e89f94137b9d6e0a5c6c5c1b54dd83a7a2c68daf176e7423",
       "files": [
         "aspire-deployment.md",
         "references/aws.md",
@@ -27,7 +27,7 @@
     },
     {
       "name": "aspire-init",
-      "version": "sha512-5282e8b5c2857b2503315f4652ca56230712ac564fdca048fb8f102d2cabef4097779109d7f9f8d751ad8e241fe9f9a312fc8b11cf3dc00f9e308051b13fa0c4",
+      "version": "sha512-0190c9c1f6c41f1e3e622570aa759e314e927d9dcb47ce5f52f7e88e52d353289dd6829a8719a0163db7e19206e49e3fd13b0da6eac7da4aa53d3bb6b22c94a5",
       "files": [
         "aspire-init.md",
         "references/init-workflow.md",
@@ -36,7 +36,7 @@
     },
     {
       "name": "aspire-monitoring",
-      "version": "sha512-eedd983512cf2ff46a0aafe9df570f8422cefbb1fc2395afb605cd663a65585d71e3d3b1a9f520a99323f0654abf4be43f697032f4849599d8854a94c93ac270",
+      "version": "sha512-761a6e0ae1ca96ac1a2303e543cf2988013e7fbbc19e5e37a37a90abe0581a48debb47f0f6f893767ecf5cb30c04fb51ed6a23e471e9cd4c05db6a88b687f2ec",
       "files": [
         "aspire-monitoring.md",
         "references/diagnostics-bridge.md",
@@ -46,7 +46,7 @@
     },
     {
       "name": "aspire-orchestration",
-      "version": "sha512-c44ba8f0a18c714803b4e04aaa3de03de0b679ff4b1dcef9c73dc55173e6df20ea73d77672fa0c48c7aecdc88bd3a0a9445bec3ac2389b9252c2af35212f1a39",
+      "version": "sha512-1c80992862bfb4bb175960009199f47254eb489061a6bc8542da0131ce316a47dde479ac8ff0f8040528f9cb9878c4e45e653954c097231659eb5a989258d5a3",
       "files": [
         "aspire-orchestration.md",
         "references/agent-workflows.md",
@@ -58,7 +58,7 @@
     },
     {
       "name": "aspire-project-v2-migration",
-      "version": "sha512-6bd9cb22eca8eee31deb4d5f366c097a413e97903f2a626f273945fdd240ab1bc70d32ebfac5ff7f8da7aeae23872ccd1201f29f1550ac44074b4edcdd3b0d9e",
+      "version": "sha512-3cb16fdda017dc3d46ebfbbba4d7313a34c39c61131fb2ffc50f5b4dbea4154f2b0556ba924f179b23c19b44040c31d565380f7f11b85e9c21b32b1518869f2c",
       "files": [
         "aspire-project-v2-migration.md",
         "references/compatibility-and-validation.md",
@@ -67,7 +67,7 @@
     },
     {
       "name": "aspire-terminals",
-      "version": "sha512-92705ce60632e0954fa27ba9e0316fc8e807eefd78488a071da45e6956f59079dd56c20458fab2dfc7153c072e2c8e519456235e6a647105991b995f9681a50d",
+      "version": "sha512-b08925023676801d9ada0c8b61f84666d5af6602bfad23e82d7ebbade56069d273afb87a20ce0df937d362b16f8d742a6deb15c4e092b37aab68aa637fcfee4e",
       "files": [
         "aspire-terminals.md",
         "references/apphost-terminals.md",
@@ -78,13 +78,14 @@
     },
     {
       "name": "aspireify",
-      "version": "sha512-37e1fd1c77aa55aa536dd1e4be3a7a728e201b6fb25a545ff4f98b29c5575bb3aa77394eae2fd5d264c52cb1c5c0c608c3b430c077e4d96a9e250d2af91212bb",
+      "version": "sha512-c66161ab40d41ab477dc0a10b3e3d487d8a53ee93c2bc21481288680365fe9453c30930bd9516841559fb6a7425e32c7700f4cb50fbb40aceeda55078129c928",
       "files": [
         "aspireify.md",
         "references/apphost-wiring.md",
         "references/csharp-authoring.md",
         "references/docker-compose.md",
         "references/full-solution-apphosts.md",
+        "references/go-authoring.md",
         "references/javascript-apps.md",
         "references/opentelemetry.md",
         "references/scan-and-propose.md",

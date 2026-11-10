@@ -2,13 +2,161 @@
 
 All notable changes to the aspire-skills plugin will be documented in this file.
 
-## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
+## [0.0.6](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.6)
 
 ### Added
-- Documented scoped pnpm build-policy recovery after partial TypeScript AppHost
-  initialization, preserving root approvals and generated files. Added regression
-  coverage for missing root config and CLI success output that still reports
-  ignored dependency builds.
+- Added `aspire-init` and `aspireify` guidance for recovering when pnpm blocks a
+  dependency build script during TypeScript AppHost setup. Agents keep the generated
+  files, ask before approving only the required package for the AppHost, and treat
+  remaining ignored-build errors as failures even when Aspire reports success.
+- Added Go AppHost guidance (Aspire 17.0+) to the `aspire`,
+  `aspire-orchestration`, `aspire-init`, `aspire-deployment` and `aspireify`
+  skills, covering detection, authoring, `aspire init --language go`, `AddGoApp`
+  wiring and deployment CI. Guidance for the first-party `Aspire.Hosting.Go`
+  integration distinguishes preview packages from Aspire 13.4 and stable packages
+  from Aspire 17.0.
+
+### Changed
+- AppHosts now reports an error when it cannot switch to the requested AppHost.
+- Aspireify now prompts you in Copilot to approve the AppHost plan you reviewed.
+  Starting over requires separate approval and preserves the previous review.
+- Aspireify marks the agent's findings and recommendations as unverified.
+  Review them before approving a plan.
+- Use a local checkout with AppHosts and Aspireify. UNC paths such as
+  `\\server\share\AppHost` are no longer supported.
+- Corrected the Aspireify TypeScript data-volume example to the generated AppHost SDK:
+  `withDataVolume({ name: "pg-data" })` instead of a positional name. The previous form
+  failed type checking, so `aspire start` exited before starting any resource. A new
+  `aspireify-ts-named-volume-001` eval checks that TypeScript named-volume guidance uses
+  the options object.
+- Corrected the Aspireify TypeScript YARP example to add routes inside
+  `withConfiguration(async (yarp) => ...)`. The generated AppHost SDK has no
+  `addRoute` or `addCatchAllRoute` on the YARP resource, so the previous example
+  failed type checking and `aspire start` exited before starting any resource.
+- Corrected endpoint-discovery guidance so agents use reachable service URLs
+  instead of `null`.
+- Corrected Aspireify's TypeScript cache-wiring guidance so generated AppHosts
+  build and start.
+- Corrected Aspireify's C# AppHost samples so they build against Aspire 13.6.
+- Corrected Aspireify's Node.js OpenTelemetry setup so it builds against current
+  `@opentelemetry/sdk-node` and exports telemetry.
+- Pointed Aspireify's "check what integrations auto-manage" lookups at the current
+  `connect-to-postgresql` and `connect-to-sql-server` docs pages. The retired
+  `postgresql-hosting-integration` and `sql-server-integration` slugs fail with
+  "Documentation page ... not found" in `aspire docs get`. The package-discovery examples
+  now use `set-up-redis-in-the-apphost` and `set-up-go-apps-in-the-apphost` instead of the
+  retired `redis-integration` and `go-integration` slugs.
+- Corrected the Aspireify integration example to `aspire add javascript`. `aspire add nodejs`
+  no longer resolves after the package was renamed to `Aspire.Hosting.JavaScript`, and
+  non-interactive mode fails because it requires an exact friendly name.
+- Fixed two Aspireify C# examples that did not compile against Aspire: lifecycle hooks now
+  subscribe through `builder.Eventing.Subscribe<BeforeStartEvent>` and
+  `Subscribe<AfterResourcesCreatedEvent>` instead of the TypeScript-only
+  `SubscribeBeforeStart` and `SubscribeAfterResourcesCreated`, and the gRPC endpoint example
+  sets `UriScheme` and `Transport` instead of assigning `"grpc"` to the `ProtocolType`
+  `Protocol` property.
+- Replaced the nonexistent `resource.WithPrivateEndpoint()` in Aspireify's C#
+  authoring reference with Aspire's subnet-based `subnet.AddPrivateEndpoint(target)` API,
+  including the `Aspire.Hosting.Azure.Network` package reference and `ASPIREAZURE003` opt-in.
+  Aspireify's authoring rules now route private endpoint requests to that API instead of raw Bicep.
+- Fixed the TypeScript deploy workflow reference and CI/CD setup snippet to install the
+  Aspire CLI and run `aspire restore` before `npm run build`. The generated
+  `.aspire/modules/` folder is gitignored, so on a clean checkout the build failed with
+  `TS2307: Cannot find module './.aspire/modules/aspire.mjs'`. In the shared Node setup
+  snippet, the restore runs only when `apphost.mts` exists, so C# and Go AppHosts with
+  JavaScript resources are unaffected.
+- Corrected Aspireify's TypeScript AppHost `package.json` guidance to match `aspire init`.
+  With an existing root `package.json`, the AppHost goes in `aspire-apphost/` and the
+  root only gains `aspire:start`/`aspire:build`/`aspire:dev` delegates; the merge rules
+  (kept scripts and module type, replaced `engines.node`) apply to the AppHost package.
+  `aspire restore` is no longer described as creating or merging `package.json` or
+  `tsconfig.apphost.json`, and the fresh-package scripts are labeled 13.6+ alongside the
+  13.5 alias layout. The `aspire:*` scripts compile with `tsc -p tsconfig.apphost.json`
+  instead of bare `tsc`.
+
+## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
+
+### Changed
+- Documented `aspire new --localhost-tld` in the Aspire init templates reference. The
+  `*.dev.localhost` prompt previously listed no flag, so non-interactive runs could
+  only take the default plain `localhost` profile.
+- Unified canvas styling and icons with shared assets that respect host themes.
+- Served shared canvas CSS and icons directly from the plugin root so Windows
+  checkouts do not need working UI symlinks. Standalone extensions retain a
+  fallback to their local UI assets.
+- Distinguished ordinary `aspire stop`, `aspire stop --force` (which preserves
+  persistent volumes), and explicitly approved AppHost-wide `--volumes` cleanup, including
+  its ownership and compatibility limits. Stale-password recovery now prefers restoring
+  the password or a targeted reset and treats `--volumes` as a broader, approved option.
+- Gave discovered services whose names contain no ASCII letters or digits distinct
+  default resource names in the Aspireify canvas. Previously they all defaulted to
+  `service`, so their names collided and proposal retries were rejected.
+- Kept running AppHost resources in a warning state while their health checks are
+  still pending, instead of reporting them as errors before the first check returns.
+- Stopped Aspire AppHosts error redaction from mangling URLs and words that only
+  contain a private root name, such as `https://aspire.dev/data/connect` or
+  `.../aspire/app-host/overview`; whole POSIX paths under those roots are still withheld.
+- Stopped the Aspireify canvas from classifying Node.js, TypeScript, Python, and
+  container services as .NET when their type label also mentions gRPC or a worker
+  service. These services no longer default to .NET Service Defaults, and they keep
+  their runtime-compatible resource types.
+- Fixed Aspire Doctor treating workspace files under child directories whose names
+  begin with `..` (for example `..config`) as outside the workspace, which revealed
+  them in the OS file manager instead of opening them in the editor canvas.
+- Fixed Aspire Doctor resolving and containing editor paths against session-state
+  storage instead of the session's working directory, which sent repository files to the
+  OS file manager and could hand the editor a path outside the repository.
+- Corrected POSIX path handling in the Aspireify canvas to keep proposal
+  snapshots separate for AppHost paths containing literal backslashes.
+- Removed the nonexistent `-v` alias from the `aspire new` options table in the
+  Aspire init templates reference. `aspire new ... -v <version>` fails with
+  "Unrecognized command or argument '-v'"; use `--version`.
+- Kept discovered services without a proposal mapping visible in the Aspireify
+  canvas as **Not assessed** in a "Not in the proposed graph" section, and
+  preserved them as `notProposed` in the confirmation and chat handoff.
+- Let the aspireify workflow mark unmapped discovered services as **Not modeled**
+  or **Deferred** through `set_proposal`'s optional `serviceTreatments`. The
+  canvas, confirmation, and chat handoff show the reason from chat and, for
+  deferred services, what remains unresolved. Unknown or already-mapped services
+  and treatments without a reason are rejected.
+- Restored AppHost visibility and source-file navigation in the Aspire AppHosts
+  canvas for workspace child directories whose names begin with `..`, preserving
+  checks that block paths outside the workspace.
+- Preserved non-ASCII check messages, paths, and error diagnostics in the
+  Aspire Doctor canvas by decoding UTF-8 characters across subprocess output
+  chunk boundaries.
+- Aligned non-secret command defaults and submissions in the Aspire AppHosts
+  canvas with Aspire Hosting's whitespace trimming. Replaced silent truncation
+  of overlength values with validation errors.
+- Prevented command-editing stalls in the Aspire AppHosts canvas by scanning only
+  leading and trailing whitespace when normalizing values with long runs of
+  interior whitespace.
+- Kept numeric command defaults visible in the Aspire AppHosts canvas instead of
+  allowing native number controls to hide values that would still be submitted.
+- Fixed the Aspire AppHosts canvas missing mixed-case AppHost files in the
+  workspace root when `aspire ls` is unavailable.
+- Corrected Aspireify's TypeScript Foundry example to use the exported
+  `addFoundry(...).addDeployment(...)` APIs instead of nonexistent
+  `addAzureFoundry(...).addModel(...)`.
+- Added the missing `using Aspire.Hosting.AWS.Deployment;` to the AWS deployment
+  `AddAWSCDKEnvironment` example. Without it, `CDKDefaultsProviderFactory` does not
+  resolve and the AppHost fails to build with CS0103.
+- Fixed service-defaults detection to match template-generated `<App>.ServiceDefaults`
+  projects (`IsAspireSharedProject` and `*.ServiceDefaults.csproj` references) instead
+  of a nonexistent `Aspire.ServiceDefaults` package that matched nothing.
+- Fixed the Skill Eval PR gate failing on large PRs: changed files now come from the
+  paginated PR files API instead of `gh pr diff`, which returns HTTP 406 once a diff
+  exceeds 20,000 lines (as on the v0.0.5 release PR).
+- Corrected Aspireify's TypeScript examples to match the generated AppHost SDK:
+  `addNodeApp` now takes its app directory, endpoint flags use `withEndpointCallback`,
+  `addDockerfileBuilder` takes a context path and async callback, ACA custom domains use
+  `publishAsAzureContainerApp(...).configureCustomDomain(...)`, and `withLifetime` takes
+  `ContainerLifetime.Persistent`.
+- Fixed Aspireify ServiceDefaults guidance to install `Aspire.ProjectTemplates` before
+  `dotnet new aspire-servicedefaults` when the template is missing, as it is after a
+  TypeScript `aspire init`.
+
+### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
   reference files and SHA-512 content versions.
 - Added the default-selected `aspire-terminals` skill for resource PTYs, persistent
@@ -16,6 +164,12 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   Includes Aspire-specific VHS tape syntax/examples and stdout, `.txt` and
   `.ascii` output contracts, capability gates, routing and lifetime evaluations.
   Aspire CLI delivery requires refreshing its embedded skill bundle and metadata.
+
+### Removed
+- Removed embedded `.tgz` bundle generation and uploads. Releases now publish
+  reviewed source and approved changelog notes without generated archives.
+- Moved `track-telemetry.sh` and `track-telemetry.ps1` from this repository to
+  `microsoft/aspire`.
 
 ## [0.0.4](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.4)
 

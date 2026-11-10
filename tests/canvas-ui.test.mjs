@@ -1,0 +1,102 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { lstat, readFile, readlink } from "node:fs/promises";
+import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+
+const repoRoot = new URL("../", import.meta.url);
+const gitOptions = { cwd: fileURLToPath(repoRoot), encoding: "utf8", windowsHide: true };
+const extensions = ["aspire-apphosts", "aspire-doctor", "aspireify"];
+const theme = await readFile(new URL("assets/canvas/theme.css", repoRoot), "utf8");
+const icons = await readFile(new URL("assets/canvas/icons.svg", repoRoot), "utf8");
+const symbols = [...icons.matchAll(/<symbol\b[^>]*\bid="([^"]+)"/g)];
+const symbolIds = new Set(symbols.map(([, id]) => id));
+
+test("canvas providers serve canonical and standalone shared assets", { timeout: 60_000 }, () => {
+  const fixture = fileURLToPath(new URL("./fixtures/canvas-asset-provider-boundary.mjs", import.meta.url));
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  const result = spawnSync(process.execPath, ["--experimental-vm-modules", "--test", fixture], {
+    env,
+    encoding: "utf8",
+    timeout: 50_000,
+    windowsHide: true,
+    maxBuffer: 1024 * 1024,
+  });
+  assert.equal(result.error, undefined, `${result.error?.message}\n${result.stdout}\n${result.stderr}`);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+});
+
+for (const extension of extensions) {
+  test(`${extension} retains legacy UI links to the canonical shared canvas assets`, async () => {
+    for (const asset of ["theme.css", "icons.svg"]) {
+      const link = new URL(`extensions/${extension}/ui/canvas-${asset}`, repoRoot);
+      const target = (await lstat(link)).isSymbolicLink()
+        ? await readlink(link) : await readFile(link, "utf8");
+      assert.equal(target.replaceAll("\\", "/"), `../../../assets/canvas/${asset}`);
+      const index = spawnSync("git", ["ls-files", "-s", "--", fileURLToPath(link)], gitOptions);
+      assert.equal(index.error, undefined, index.error?.message);
+      assert.equal(index.status, 0, index.stderr);
+      assert.match(index.stdout, /^120000 [a-f0-9]+ 0\t/, "shared UI assets must remain Git symlinks");
+      const blob = spawnSync("git", ["cat-file", "blob", index.stdout.split(" ")[1]], gitOptions);
+      assert.equal(blob.error, undefined, blob.error?.message);
+      assert.equal(blob.status, 0, blob.stderr);
+      assert.equal(blob.stdout, `../../../assets/canvas/${asset}`);
+    }
+  });
+
+  test(`${extension} has no unknown static sprite references`, async () => {
+    const html = await readFile(new URL(`extensions/${extension}/ui/index.html`, repoRoot), "utf8");
+    for (const [, id] of html.matchAll(/\bhref=["']\/canvas-icons\.svg#([^"']+)["']/g)) {
+      assert.ok(symbolIds.has(id), `${extension} references unknown icon ${id}`);
+    }
+  });
+}
+
+test("shared styles do not overwrite host-owned tokens", () => {
+  assert.doesNotMatch(theme, /--(?:background-color-default|text-color-default|text-color-muted|true-color-\w+|font-sans|font-mono|color-focus-outline)\s*:/);
+});
+
+test("fallback text, status, and filled-action colors meet WCAG AA in both themes", () => {
+  const surfaces = fallbackColors("surface");
+  for (const name of ["text", "muted", "accent", "brand", "healthy", "warning", "failure"]) {
+    const colors = fallbackColors(name);
+    for (const mode of [0, 1]) {
+      assert.ok(
+        contrast(colors[mode], surfaces[mode]) >= 4.5,
+        `${name} must have 4.5:1 text contrast in ${mode === 0 ? "light" : "dark"} mode`
+      );
+    }
+  }
+  for (const [background, foreground] of [
+    ["accent", "accent-fg"], ["failure", "danger-fg"], ["brand", "brand-fg"]
+  ]) {
+    for (const mode of [0, 1]) {
+      assert.ok(
+        contrast(fallbackColors(background)[mode], fallbackColors(foreground)[mode]) >= 4.5,
+        `${background} actions must have 4.5:1 label contrast in theme ${mode}`
+      );
+    }
+  }
+});
+
+test("shared sprite identifiers are nonempty and unique", () => {
+  assert.ok(symbolIds.size > 0);
+  assert.equal(symbolIds.size, symbols.length);
+});
+
+function fallbackColors(name) {
+  const declaration = theme.match(new RegExp(`--${name}: [^\\n]*light-dark\\((#[\\da-f]{6}), (#[\\da-f]{6})\\)`, "i"));
+  assert.ok(declaration, `${name} must define light and dark fallback colors`);
+  return declaration.slice(1);
+}
+
+function contrast(first, second) {
+  const luminance = hex => {
+    const channels = hex.slice(1).match(/../g).map(channel => parseInt(channel, 16) / 255)
+      .map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+    return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+  };
+  const values = [luminance(first), luminance(second)].sort((a, b) => b - a);
+  return (values[0] + 0.05) / (values[1] + 0.05);
+}

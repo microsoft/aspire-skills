@@ -88,6 +88,12 @@ const elements = {
     footerNote: document.getElementById("footer-note"),
     historyAnnouncement: document.getElementById("history-announcement"),
     confirm: document.getElementById("confirm"),
+    restartReview: document.getElementById("restart-review"),
+    restartDialog: document.getElementById("restart-review-dialog"),
+    restartForm: document.getElementById("restart-review-form"),
+    restartTarget: document.getElementById("restart-review-target"),
+    restartError: document.getElementById("restart-review-error"),
+    approveRestart: document.getElementById("approve-restart"),
     error: document.getElementById("error"),
     errorMessage: document.getElementById("error-message"),
     retry: document.getElementById("retry"),
@@ -130,6 +136,7 @@ let confirmationError = "";
 let handoffError = "";
 let connectionRowSequence = 0;
 let pendingRemoval;
+let restartSnapshot;
 let eventsConnected = false;
 let activeViewTransition;
 let selectedResourceId = "";
@@ -151,6 +158,25 @@ const detailResizeObserver =
 document.addEventListener("DOMContentLoaded", () => {
     elements.retry.addEventListener("click", () => void retryProposalOrSnapshot());
     elements.confirm.addEventListener("click", () => void confirmSnapshot());
+    elements.restartReview.addEventListener("click", () => {
+        restartSnapshot = structuredClone(snapshot);
+        elements.restartTarget.textContent = `AppHost: ${snapshot.appHostPath}. Revision: ${snapshot.revision}.`;
+        elements.restartError.textContent = "";
+        elements.restartDialog.showModal();
+    });
+    elements.restartForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        await runBusy(elements.approveRestart, async () => {
+            const result = await post("/api/approve-restart", {}, restartSnapshot);
+            restartSnapshot = structuredClone(snapshot);
+            if (!result.delivered) {
+                throw new Error(result.error || "New review authorized, but chat could not be notified. Retry the notification.");
+            }
+            elements.restartDialog.close();
+        }, (error) => {
+            elements.restartError.textContent = error.message;
+        });
+    });
     elements.undo.addEventListener("click", () => void applyHistoryChange("undo", elements.undo));
     elements.redo.addEventListener("click", () => void applyHistoryChange("redo", elements.redo));
     elements.compactAddResource.addEventListener("click", () => openAddResourceDialog("all"));
@@ -278,8 +304,7 @@ function connectEvents() {
     };
 }
 
-async function post(path, body) {
-    const requestSnapshot = snapshot;
+async function post(path, body, requestSnapshot = snapshot) {
     const previousRevision = requestSnapshot?.revision ?? -1;
     const requestBody = {
         ...body,
@@ -508,6 +533,7 @@ function render(nextSnapshot) {
                 elements.addResourceDialog,
                 elements.connectionDialog,
                 elements.removeDialog,
+                elements.restartDialog,
             ]) {
                 if (dialog.open) {
                     dialog.close();
@@ -540,6 +566,7 @@ function render(nextSnapshot) {
         elements.planContent.hidden = false;
         renderProposalIdentity();
         renderResourcePlan();
+        renderNotProposedServices();
         renderStatus();
         renderConfirmation();
         restoreFocusToken(focusToken);
@@ -632,6 +659,73 @@ function renderResourcePlan() {
         resourceIssues,
     );
     renderRelationshipList(edges, false);
+}
+
+const NOT_PROPOSED_TREATMENT_LABELS = {
+    "not-modeled": "Not modeled",
+    deferred: "Deferred",
+    "not-assessed": "Not assessed",
+};
+
+function renderNotProposedServices() {
+    const services = Array.isArray(snapshot.notProposed) ? snapshot.notProposed : [];
+    let section = document.getElementById("not-proposed-services");
+    if (!section) {
+        section = createElement("section", {
+            className: "not-proposed",
+            attrs: { id: "not-proposed-services", "aria-labelledby": "not-proposed-title" },
+        });
+        section.append(
+            createElement("h2", { text: "Not in the proposed graph", attrs: { id: "not-proposed-title" } }),
+            createElement("p", { className: "muted" }),
+            createElement("ul", { className: "not-proposed-list" }),
+        );
+        elements.resourcePlanPanel.append(section);
+    }
+    section.hidden = services.length === 0;
+    section.querySelector(":scope > p").textContent = services.some(
+        (service) => service.treatment === "not-assessed",
+    )
+        ? "Agent-supplied discovery and exclusion or deferral reasons. Not assessed means the agent supplied no treatment."
+        : "Agent-supplied discovery and exclusion or deferral reasons. These reasons do not establish that a decision occurred in chat.";
+    const list = section.querySelector(".not-proposed-list");
+    list.replaceChildren(
+        ...services.map((service) => {
+            const treatment = NOT_PROPOSED_TREATMENT_LABELS[service.treatment]
+                ? service.treatment
+                : "not-assessed";
+            const item = createElement("li", {
+                className: "not-proposed-item",
+                attrs: { "data-treatment": treatment },
+            });
+            const identity = createElement("div", { className: "not-proposed-identity" });
+            identity.append(createElement("strong", { text: service.name }));
+            if (service.path) {
+                identity.append(createElement("code", { text: service.path }));
+            }
+            if (service.reason) {
+                identity.append(
+                    createElement("span", { className: "not-proposed-reason", text: `Agent-supplied reason: ${service.reason}` }),
+                );
+            }
+            if (service.unresolved) {
+                identity.append(
+                    createElement("span", {
+                        className: "not-proposed-unresolved",
+                        text: `Agent-supplied unresolved issue: ${service.unresolved}`,
+                    }),
+                );
+            }
+            item.append(
+                identity,
+                createElement("span", {
+                    className: "not-proposed-status",
+                    text: NOT_PROPOSED_TREATMENT_LABELS[treatment],
+                }),
+            );
+            return item;
+        }),
+    );
 }
 
 function resourcesInOverviewOrder(resources) {
@@ -1128,12 +1222,10 @@ function createResourceTitleLine(resource) {
 
 function renderResourceValidation(issues) {
     const validation = createElement("div", { className: "resource-validation" });
+    const marker = createIcon("error", 14);
+    marker.classList.add("resource-validation-icon");
     validation.append(
-        createElement("span", {
-            className: "resource-validation-icon",
-            text: "!",
-            attrs: { "aria-hidden": "true" },
-        }),
+        marker,
         createElement("span", { text: issues.join(" ") }),
     );
     return validation;
@@ -1684,6 +1776,9 @@ function createConnectionHeading(resource, labeled = false) {
         },
     });
     add.hidden = snapshot.confirmed;
+    if (!labeled) {
+        add.append(createIcon("add"));
+    }
     add.disabled =
         snapshot.proposal.resources.filter((candidate) => candidate.include).length < 2;
     add.addEventListener("click", () => openConnectionDialog("", resource.name));
@@ -1789,6 +1884,13 @@ function renderProposalIdentity() {
     );
     elements.proposalHash.textContent = shortHash(snapshot.proposalHash);
     elements.proposalHash.title = snapshot.proposalHash || "";
+    elements.restartReview.hidden = !snapshot.confirmed;
+    elements.restartReview.disabled = Boolean(snapshot.restartApproved) && !snapshot.restartNotificationPending;
+    elements.restartReview.textContent = snapshot.restartNotificationPending
+        ? "Retry new review notification"
+        : snapshot.restartApproved
+        ? "New review authorized"
+        : "Start new review";
 }
 
 function shortHash(hash) {
@@ -2138,10 +2240,10 @@ function addResourceConnectionRow() {
     fillResourceSelect(target, resources);
     const remove = createElement("button", {
         className: "btn btn-quiet btn-icon add-connection-remove",
-        text: "×",
         title: "Remove connection",
         attrs: { type: "button", "aria-label": "Remove connection" },
     });
+    remove.append(createIcon("close"));
     remove.addEventListener("click", () => {
         row.remove();
         if (!elements.addResourceConnections.children.length) {
@@ -2418,6 +2520,21 @@ function showConfirmationError(error, failureChannel) {
 function clearDialogError(element) {
     element.textContent = "";
     element.hidden = true;
+}
+
+function createIcon(name, size = 16) {
+    const namespace = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(namespace, "svg");
+    svg.setAttribute("class", "canvas-icon");
+    svg.setAttribute("width", String(size));
+    svg.setAttribute("height", String(size));
+    svg.setAttribute("viewBox", "0 0 16 16");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    const use = document.createElementNS(namespace, "use");
+    use.setAttribute("href", `/canvas-icons.svg#${name}`);
+    svg.append(use);
+    return svg;
 }
 
 function createElement(tag, options = {}) {

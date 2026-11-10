@@ -2,7 +2,7 @@
 
 Use this reference when writing Step 5 (Wire up the AppHost) or when you need to look up Aspire APIs, integration packages, or wiring patterns.
 
-> **⚠️ Always look up APIs before writing code.** Do not guess builder method names or parameter shapes. Use `aspire docs search "<topic>"` and `aspire docs get "<slug>"` for documented patterns, then `aspire docs api search "<query>" --language csharp|typescript` and `aspire docs api get "<id>"` to confirm the exact reference entry for the API you are about to call.
+> **⚠️ Always look up APIs before writing code.** Do not guess builder method names or parameter shapes. Use `aspire docs search "<topic>"` and `aspire docs get "<slug>"` for documented patterns, then `aspire docs api search "<query>" --language csharp|typescript|go` (`go` needs the 17.0 CLI) and `aspire docs api get "<id>"` to confirm the exact reference entry for the API you are about to call.
 
 ## Looking up APIs and integrations
 
@@ -18,6 +18,7 @@ Packages named `Aspire.Hosting.*` — maintained by the Aspire team and ship wit
 |---------|---------|
 | `Aspire.Hosting.Python` | `AddPythonApp()`, `AddUvicornApp()` |
 | `Aspire.Hosting.JavaScript` | `AddJavaScriptApp()`, `AddNodeApp()`, `AddViteApp()`, `.WithYarn()`, `.WithPnpm()` |
+| `Aspire.Hosting.Go` | `AddGoApp()`, `.WithModTidy()` |
 | `Aspire.Hosting.PostgreSQL` | `AddPostgres()`, `AddDatabase()` |
 | `Aspire.Hosting.Redis` | `AddRedis()` |
 
@@ -33,6 +34,13 @@ Packages named `CommunityToolkit.Aspire.Hosting.*` — maintained by the communi
 
 These provide typed APIs with proper endpoint handling, health checks, and dashboard integration — significantly better than raw executables.
 
+**Go apps:** prefer first-party `Aspire.Hosting.Go` (`AddGoApp`, Tier 1). It was introduced
+as preview in 13.4; its first stable package ships with 17.0. On 13.x, discover a compatible
+preview and get approval before `aspire add go --version <compatible-preview-version>`;
+do not imply that `Aspire.Hosting.Go` has a stable 13.x version. Keep the Toolkit on Aspire
+older than 13.4 or when the user deliberately uses it, and never migrate an existing
+Toolkit-based AppHost unprompted.
+
 #### Tier 3: Raw fallbacks (last resort)
 
 `AddExecutable()`, `AddDockerfile()`, `AddContainer()` — use only when no Tier 1 or Tier 2 package exists for the technology, or when the user's setup is too custom for a typed integration.
@@ -46,8 +54,8 @@ aspire docs search "golang"
 aspire docs search "python uvicorn"
 
 # Get a specific doc page by slug (returned from search results)
-aspire docs get "redis-integration"
-aspire docs get "go-integration"
+aspire docs get "set-up-redis-in-the-apphost"
+aspire docs get "set-up-go-apps-in-the-apphost"
 
 # Find the exact C# / TypeScript API reference entry for a builder method
 aspire docs api search "AddRedis" --language csharp
@@ -61,7 +69,7 @@ aspire integration search postgres --format Json
 
 Use `aspire docs search` / `aspire docs get` to find the right builder methods, configuration options, and patterns. Use `aspire docs api search` / `aspire docs api get` when you need the exact reference entry (parameter shapes, return types, overloads) for the API you are about to call. Use `aspire integration list` and `aspire integration search <query>` to discover packages you might not have known about.
 
-**Don't invent APIs** — if docs search and integration list don't return it, it doesn't exist. Fall back to Tier 3 and note the limitation to the user. **API shapes differ between C# and TypeScript** — always check the correct language docs.
+**Don't invent APIs** — if docs search and integration list don't return it, it doesn't exist. Fall back to Tier 3 and note the limitation to the user. **API shapes differ between C#, TypeScript, and Go** — always check the correct language docs. For Go, if the API search finds nothing, check the generated SDK (see `go-authoring.md`) before concluding an API is missing.
 
 ## Package compatibility and interaction rules
 
@@ -89,10 +97,10 @@ Before modeling environment variables, passwords, ports, or volumes for a typed 
 
 ```bash
 # Check what AddPostgres manages automatically
-aspire docs get "postgresql-hosting-integration" --section "Connection properties"
+aspire docs get "connect-to-postgresql" --section "Connection properties"
 
 # Check what AddSqlServer manages
-aspire docs get "sql-server-integration" --section "Hosting integration"
+aspire docs get "connect-to-sql-server" --section "Connection properties"
 ```
 
 Look for the **"Connection properties"** section — it lists what the integration injects into consuming services. If it lists `Password`, `Host`, `Port` — the integration manages those. Do not create `AddParameter()` for values the integration already handles.
@@ -114,14 +122,15 @@ To add an integration package (which unlocks typed builder methods):
 # First-party
 aspire add redis
 aspire add python
-aspire add nodejs
+aspire add javascript
+aspire add go
 
 # Community Toolkit
 aspire add communitytoolkit-golang
 aspire add communitytoolkit-rust
 ```
 
-After adding, run `aspire restore` (TypeScript) or `dotnet restore` (C#) to update available APIs, then check what methods are now available.
+After adding, run `aspire restore` (TypeScript or Go) or `dotnet restore` (C#) to update available APIs, then check what methods are now available.
 
 **Always prefer a typed integration over raw `AddExecutable`/`AddContainer`.** Typed integrations handle working directories, port injection, health checks, and dashboard integration automatically.
 
@@ -225,9 +234,13 @@ var grpcService = builder.AddCSharpApp("grpc", "../src/GrpcService")
     .WithEndpoint("grpc", endpoint =>
     {
         endpoint.Port = 5050;
-        endpoint.Protocol = "grpc";
+        endpoint.UriScheme = "http";  // gRPC runs over HTTP/2; use "https" for TLS
+        endpoint.Transport = "http2";
     });
 ```
+
+`EndpointAnnotation.Protocol` is the socket protocol (`ProtocolType.Tcp` or `Udp`), not an
+application protocol name; set the scheme and transport instead.
 
 **`WithExternalHttpEndpoints()`** — mark a resource's HTTP endpoints as externally visible. Use this for user-facing frontends so the URL appears prominently in the dashboard:
 
@@ -241,6 +254,7 @@ var frontend = builder.AddViteApp("frontend", "../frontend")
 **Port injection**: Many frameworks (Express, Vite, Flask) need to know which port to listen on. Use the `env:` parameter:
 - `withHttpsEndpoint({ env: "PORT" })` (TypeScript)
 - `.WithHttpsEndpoint(env: "PORT")` (C#)
+- `.WithHttpsEndpoint(&aspire.WithHttpsEndpointOptions{Env: aspire.StringPtr("PORT")})` (Go)
 
 Aspire assigns a port and injects it as the specified environment variable. The service should read it and listen on that port.
 
@@ -349,15 +363,47 @@ This prevents data loss when restarting the AppHost — the container stays runn
 **TypeScript equivalent:**
 
 ```typescript
+import { ContainerLifetime } from "./.aspire/modules/aspire.mjs";
+
 const db = await builder.addPostgres("pg")
-    .withLifetime("persistent");
+    .withLifetime(ContainerLifetime.Persistent);
 ```
 
 Recommend persistent lifetime for databases and caches during local development.
 
 **⚠️ Stale persistent volumes can cause auth failures.** Typed integrations like `AddSqlServer()`, `AddPostgres()`, `AddRedis()`, and `AddMySql()` auto-generate passwords on first run. Those passwords are stored inside the container's data volume. If the AppHost is recreated or its user-secrets are reset, Aspire generates a *new* password — but the persistent volume still has the *old* one. The symptom is repeated `Login failed` or `password authentication failed` errors in the container logs.
 
-To fix: stop the AppHost, remove the stale container and its volume (`docker rm -f <name>; docker volume rm <volume>`), then restart. Aspire will recreate both with a matching password. Mention this to the user if they see auth failures on persistent infrastructure containers after recreating the AppHost.
+To fix it, choose the least destructive option the user approves:
+
+1. **Keep the data.** If the previous password is still available (for example, the old
+   `Parameters:<resource>-password` user-secret value), restore it so the AppHost matches
+   the existing volume. No data is deleted.
+2. **Reset only the failing resource.** Stop the AppHost through `aspire-orchestration`
+   and identify its exact container and storage target.
+   - For a named or anonymous Docker volume, get explicit approval naming the container
+     and volume before removing only those targets (`docker rm -f <container>`, then
+     `docker volume rm <volume>`). This also covers named volumes outside Aspire's
+     ownership, including volumes created before the AppHost first mounted them.
+   - For a bind mount, `docker volume rm` does not reset the data because it lives at a
+     host path. Prefer restoring the previous password. Otherwise, verify that the
+     mounted host directory is dedicated to this one resource and get explicit approval
+     naming that exact path before removing the container and resetting only that
+     directory's data. Do not remove or clear a parent directory.
+3. **Reset all Aspire-owned volume data for the AppHost.**
+   `aspire stop --force --volumes --apphost <filesystem-path>` removes the AppHost's
+   persistent resources and every named volume Aspire created for it. In an AppHost with
+   several databases or caches, that deletes their data too, not just the failing one.
+   Offer it only as a broader alternative, and run it only after the user approves that
+   exact AppHost and AppHost-wide data scope. It requires Aspire CLI 13.6 or later. It
+   does not remove bind mounts, anonymous volumes, or pre-existing named volumes, and
+   older non-bundle AppHosts may not have the ownership records it needs; see `aspire-orchestration`'s destructive-cleanup guardrails.
+
+Then restart through `aspire-orchestration`; Aspire recreates removed containers and
+volumes with a matching password. `aspire stop --force` without `--volumes` does not fix
+this problem because it preserves the stale volume. Never recommend
+`docker volume prune`, `docker system prune`, or an unrequested reset of other resources.
+Mention these options if the user sees auth failures on persistent infrastructure
+containers after recreating the AppHost or resetting its secrets.
 
 ## Explicit start (manual start)
 
@@ -409,5 +455,5 @@ var db = builder.AddPostgres("pg")
 
 ```typescript
 const db = await builder.addPostgres("pg")
-    .withDataVolume("pg-data");
+    .withDataVolume({ name: "pg-data" });
 ```
