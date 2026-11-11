@@ -92,7 +92,8 @@ Unicode uppercase collisions rather than publishing a catalog Aspire might rejec
 The workflow runs after a PR merges into main, or manually with a source
 `pr_number`. A merged PR always publishes the current aspire-skills main commit,
 after confirming the PR merge commit is contained in it, so stale or out-of-order
-events cannot roll back newer skills or references. Publishing runs are serialized,
+events cannot roll back newer skills or references. Publishing runs are queued and
+run one at a time,
 and a run whose main snapshot is no longer current exits without changes. An
 unmerged PR's head can only be previewed with `dry_run`. Merge events from fork
 PRs are skipped, so use a manual run for them. All manual runs, including

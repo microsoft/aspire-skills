@@ -411,6 +411,8 @@ test("workflow retains activation and separates trusted scripts from read-only s
   assert.equal(group({}, { run_id: 7 }, format), "aspire-skills-to-aspire");
   assert.equal(group({ dry_run: true }, { run_id: 7 }, format), "aspire-skills-to-aspire-preview-7");
   assert.equal(workflow.jobs.sync.concurrency["cancel-in-progress"], false);
+  // The default single-slot queue would let a newer publishing job replace an already-pending one.
+  assert.equal(workflow.jobs.sync.concurrency.queue, "max");
   const accepts = new Function("github", `return (${workflow.jobs.sync.if});`);
   for (const [event, merged, repository, headRepo, expected, ref = "refs/heads/main"] of [
     ["pull_request", true, "microsoft/aspire-skills", 1, true, "refs/pull/1/merge"],
