@@ -36,17 +36,17 @@ jobs:
         run: vally lint skills
 
       - name: Validate eval specs
-        # Each skills/*/evals/eval.yaml uses the canonical vally schema.
+        # Root and nested eval.yaml files use the canonical vally schema.
         # `vally lint --eval-spec` checks shape, stimulus structure, grader
         # config, and resolves environment.files against the working dir.
         # Schema errors fail the check; existing warnings remain visible.
         shell: bash
         run: |
           set -euo pipefail
-          shopt -s nullglob
-          specs=(skills/*/evals/eval.yaml)
+          shopt -s globstar nullglob
+          specs=(skills/*/evals/**/eval.yaml)
           if [[ ${#specs[@]} -eq 0 ]]; then
-            echo "::error::No eval specs found under skills/*/evals/eval.yaml" >&2
+            echo "::error::No eval specs found under skills/*/evals/" >&2
             exit 1
           fi
           status=0

@@ -36,6 +36,12 @@ jobs:
       - name: Install test dependencies
         run: npm ci --ignore-scripts
 
+      - name: Setup Bash on macOS
+        if: runner.os == 'macOS'
+        run: |
+          brew install bash
+          echo "$(brew --prefix bash)/bin" >> "$GITHUB_PATH"
+
       - name: Setup pinned workflow compiler
         if: runner.os == 'Linux'
         uses: github/gh-aw-actions/setup-cli@866158eb5c6cbfd3c614104e3d3d6634e246d220

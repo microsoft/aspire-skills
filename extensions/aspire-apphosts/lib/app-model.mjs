@@ -46,6 +46,29 @@ function optionalText(value, max) {
     return text || undefined;
 }
 
+// Aspireify keeps this policy locally too because the extensions install independently.
+export function assertLocalAppHostPath(value) {
+    const raw = String(value ?? "").trim();
+    const separators = raw.replace(/\//g, "\\");
+    const path = separators.startsWith("\\\\")
+        ? `\\\\${separators.slice(2).replace(/\\+/g, "\\")}`
+        : separators.replace(/\\+/g, "\\");
+    const devicePrefix = ["\\\\?\\", "\\\\.\\", "\\??\\"].find((prefix) => path.startsWith(prefix));
+    const deviceTarget = (devicePrefix ? path.slice(devicePrefix.length) : path.replace(/^\\/, ""))
+        .replace(/^(?:(?:GLOBALROOT|GLOBAL\?\?|\?\?|DosDevices)\\)+/i, "");
+    if (
+        /^(?:smb|cifs|nfs):\/\//i.test(raw) ||
+        /^file:\/\/[^/\\]/i.test(raw) ||
+        (path.startsWith("\\\\") && !devicePrefix) ||
+        ((devicePrefix || /^\\(?:Device|GLOBALROOT|GLOBAL\?\?|DosDevices)\\/i.test(path)) &&
+            /^(?:UNC(?:\\|$)|Device\\(?:Mup|LanmanRedirector|WebDavRedirector)(?:\\|$))/i.test(deviceTarget))
+    ) {
+        const error = new Error("UNC and explicit network AppHost targets are not supported. Choose a local path.");
+        error.code = "network_apphost_target";
+        throw error;
+    }
+}
+
 function dashboardResourcePath(view, resourceName) {
     const encodedName = encodeURIComponent(resourceName);
     switch (view) {
@@ -1595,6 +1618,7 @@ export class KeyedTaskQueue {
 }
 
 async function pathExists(path) {
+    assertLocalAppHostPath(path);
     try {
         await stat(path);
         return true;
@@ -1604,6 +1628,7 @@ async function pathExists(path) {
 }
 
 async function configuredAppHostFrom(directory) {
+    assertLocalAppHostPath(directory);
     const configPath = join(directory, "aspire.config.json");
     try {
         const config = JSON.parse(await readFile(configPath, "utf8"));
@@ -1611,9 +1636,13 @@ async function configuredAppHostFrom(directory) {
         if (!configuredPath) {
             return undefined;
         }
+        assertLocalAppHostPath(configuredPath);
         const appHostPath = resolve(directory, configuredPath);
         return await pathExists(appHostPath) ? appHostPath : undefined;
-    } catch {
+    } catch (error) {
+        if (error.code === "network_apphost_target") {
+            throw error;
+        }
         return undefined;
     }
 }
@@ -1663,6 +1692,7 @@ async function scanImmediateAppHosts(directory) {
 }
 
 export async function discoverConfiguredAppHosts(workingDirectory) {
+    assertLocalAppHostPath(workingDirectory || process.cwd());
     const start = resolve(workingDirectory || process.cwd());
     let current = start;
     for (let depth = 0; depth < 10; depth++) {
@@ -2065,11 +2095,14 @@ async function appHostFileFromDirectory(directory) {
 }
 
 export async function resolveRequestedAppHostPath(value, workingDirectory) {
+    assertLocalAppHostPath(value);
+    assertLocalAppHostPath(workingDirectory);
     const text = optionalText(value, 4000);
     if (!text) {
         return undefined;
     }
     const requestedPath = normalize(isAbsolute(text) ? text : resolve(workingDirectory, text));
+    assertLocalAppHostPath(requestedPath);
     let info;
     try {
         info = await stat(requestedPath);

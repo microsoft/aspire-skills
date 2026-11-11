@@ -18,7 +18,7 @@ The canvas only:
    discovered service without a proposal mapping in a compact "Not in the
    proposed graph" section, without adding it to the graph. Services the skill
    passes in `set_proposal`'s optional `serviceTreatments` show as **Not
-   modeled** or **Deferred** with the reason from chat (and, when deferred, what
+   modeled** or **Deferred** with an agent-supplied reason (and, when deferred, what
    remains unresolved); every other unmapped service shows as **Not assessed**;
 5. uses a compact mapping-first review for one or two resources and a role-grouped
    overview with one focused inspector for larger plans;
@@ -33,12 +33,15 @@ The canvas only:
    violated naming rule, and prevents invalid edits from being saved;
 9. keeps unresolved implementation tradeoffs in chat rather than inventing new
    canvas data; and
-10. returns the confirmed service choices, unmapped discovered services with
-    their treatment and reason (`notProposed`), exact structured plan, generation, and stable proposal hash
-    through `get_confirmation`.
+10. returns the confirmed choices, unmapped services (`notProposed`), plan,
+    canonical `appHostPath` and `appHostIdentity`, `approvedRevision`, generation,
+    and hash through `get_confirmation`.
 
 After confirmation, the canvas becomes read-only and `get_confirmation` returns
 the immutable submitted snapshot even if a stale client attempts a later mutation.
+Match `appHostIdentity` to the intended AppHost before using the approval.
+`approvedRevision` is the displayed revision the user approved. All three actions
+reject conflicting `appHostPath` values.
 Before confirmation, `get_confirmation` fails without exposing an executable plan.
 Proposal and confirmation state are stored with the Copilot session so reconnecting
 or reloading the provider preserves the Step 3 decision.
@@ -48,10 +51,18 @@ distinct AppHosts do not share proposal state.
 The confirmed surface states that implementation continues in chat; it never
 becomes a startup, editing, validation, or execution tracker.
 
-To review a different proposal for the same AppHost after confirmation, begin a
-new Aspireify run and call `load_discovery` with `startNewRun: true`. This
-explicitly replaces the prior read-only snapshot; ordinary discovery or proposal
-updates remain rejected while the confirmed review is active.
+For another run, select **Start new review**, then **Continue** and approve
+Copilot's prompt before calling `load_discovery` with `startNewRun: true`.
+Proposal confirmation also requires a trusted host prompt; unsupported hosts
+cannot approve. Authorization applies only to the current target and revision.
+The prior confirmation and edit history are archived.
+
+Discovery, plan choices, and reasons are agent-supplied and unverified.
+Confirmation approves the snapshot, not their accuracy or claimed chat agreements.
+This residual review-integrity risk still requires human review.
+
+Explicit UNC/network paths are rejected before filesystem access. Mapped drives,
+mounted shares, and local aliases to remote storage are not detected.
 
 Connections are directed: `from` references, waits for, or is a child of `to`.
 Each selected resource shows both outgoing and incoming relationships, while an
@@ -63,9 +74,13 @@ generation, implementation, startup, and validation remain in the Aspireify skil
 and chat.
 
 Extension hooks advertise the canvas at session start, reinforce the Step 3
-handoff for Aspireify-intent prompts and skill activation, guide the agent after
+handoff for full-graph Aspireify prompts and skill activation, guide the agent after
 opening and populating the canvas, and treat `[aspireify canvas: ...]` callbacks
-as explicit user requests.
+as explicit user requests. The hooks follow the aspireify skill's Detection rule:
+the canvas is for the Propose phase of the full workflow only, meaning an unwired
+AppHost or an explicit request to aspireify, re-scan, or re-propose the whole
+resource graph. Targeted edits to a wired AppHost, single integrations or APIs,
+and TypeScript toolchain repair stay in chat.
 
 It intentionally has no repository detector, scanner, proposal generator,
 AppHost editor, deployment controls, initialization flow, or validation workflow.
@@ -95,10 +110,8 @@ ownership, relative symlinks, plugin mirrors, and visual review guidance.
   time it starts, so a bookmarked or reopened old tab stops matching it. Close
   the stale tab and reopen the canvas from the agent instead of reusing a
   saved URL.
-- **Edits fail with "The confirmed resource plan is read-only."** The proposal
-  was already confirmed, so the canvas is displaying the immutable submitted
-  snapshot. If more changes are needed, ask the agent for a new Aspireify run;
-  the agent must explicitly start it before loading fresh discovery.
+- **Edits fail with "The confirmed resource plan is read-only."** Select
+  **Start new review** to revise a confirmed proposal.
 - **`get_confirmation` says the proposal is not confirmed.** Review and confirm
   the proposal in the canvas first. The action intentionally withholds the plan
   until that confirmation boundary has been crossed.
