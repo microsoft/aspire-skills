@@ -133,6 +133,13 @@ test("Aspireify 17.0 AddDotnetProject eval fails a response that omits the packa
     "an Aspire 17 package version (13.6.4)": suppressed.replace("Dotnet@17.0.0", "Dotnet@13.6.4"),
     "an Aspire 17 package version (17.0)": suppressed.replace("Dotnet@17.0.0", "Dotnet@17.0"),
     "a package version matching the AppHost SDK": suppressed.replace("Dotnet@17.0.0", "Dotnet@17.1.0"),
+    "the complete file's #:sdk Aspire.AppHost.Sdk directive": without("#:sdk"),
+    "the complete file's #:sdk Aspire.AppHost.Sdk directive (aspire add block alongside)":
+      "```bash\naspire add Aspire.Hosting.Dotnet\n```\n\n" + without("#:sdk"),
+    "an Aspire 17 AppHost SDK (13.6.4)": suppressed.replace(/17\.0\.0/g, "13.6.4"),
+    "real directives (#:package and #pragma inside a verbatim string)": suppressed
+      .replace("#:package Aspire.Hosting.Dotnet@17.0.0\n\n#pragma warning disable ASPIRECERTIFICATES001\n",
+        'var note = @"\n#:package Aspire.Hosting.Dotnet@17.0.0\n#pragma warning disable ASPIRECERTIFICATES001\n";\n'),
     "the suppression in the AppHost's own block (pragma in a separate block)":
       "```csharp\n#pragma warning disable ASPIRECERTIFICATES001\n```\n\n" + without("ASPIRECERTIFICATES001"),
     "a case-sensitive suppression ID (lowercase pragma)":
@@ -141,8 +148,7 @@ test("Aspireify 17.0 AddDotnetProject eval fails a response that omits the packa
 
   assert.ok(score(suppressed) >= threshold, `A correct response scores ${score(suppressed)} < ${threshold}`);
   assert.deepEqual(gradeDotnet17Response(suppressed.replace(/17\.0\.0/g, "17.0.1-preview.1.25611.2")), []);
-  assert.deepEqual(gradeDotnet17Response(
-    "```bash\naspire add Aspire.Hosting.Dotnet\n```\n\n" + suppressed.replace("#:sdk Aspire.AppHost.Sdk@17.0.0\n", "")), []);
+  assert.deepEqual(gradeDotnet17Response("```bash\naspire add Aspire.Hosting.Dotnet\n```\n\n" + suppressed), []);
   for (const path of [String.raw`".\\api"`, String.raw`@".\api\"`]) {
     assert.deepEqual(gradeDotnet17Response(suppressed.replace('"./api"', path)), [], path);
   }

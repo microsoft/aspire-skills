@@ -72,6 +72,31 @@ test("file-based AppHost fails when the pragma names the IDs in lowercase", t =>
   assert.match(problems, /WithHttpsDeveloperCertificate in apphost\.cs is not covered/);
 });
 
+// Directive-like lines inside a multiline string are string content, not compiler directives.
+test("file-based AppHost ignores #pragma, #if and #:property lines inside multiline string literals", t => {
+  const strings = {
+    "verbatim string": text => `var note = @"\n${text}\n";\n`,
+    "raw string": text => `var note = """\n${text}\n""";\n`,
+    "interpolated raw string": text => `var note = $"""\n${text}\n""";\n`,
+  };
+  for (const [label, literal] of Object.entries(strings)) {
+    const pragma = workspace(t, "file");
+    edit(pragma, "apphost.cs", wireApi("./api", literal(both.trim())));
+    const problems = grade(pragma, "file").join("\n");
+    assert.match(problems, /AddCSharpApp in apphost\.cs is not covered/, `${label} #pragma`);
+    assert.match(problems, /WithHttpsDeveloperCertificate in apphost\.cs is not covered/, `${label} #pragma`);
+
+    const property = workspace(t, "file");
+    edit(property, "apphost.cs", wireApi("./api", literal("#:property NoWarn=$(NoWarn);ASPIRECSHARPAPPS001;ASPIRECERTIFICATES001")));
+    assert.match(grade(property, "file").join("\n"), /AddCSharpApp in apphost\.cs is not covered/, `${label} #:property`);
+
+    // An #if inside a string does not make the following pragma conditional.
+    const ifText = workspace(t, "file");
+    edit(ifText, "apphost.cs", wireApi("./api", literal("#if false") + both));
+    assert.deepEqual(grade(ifText, "file"), [], `${label} #if`);
+  }
+});
+
 test("file-based AppHost requires the api resource on a builder that is created and run", t => {
   const notRun = workspace(t, "file");
   edit(notRun, "apphost.cs", wireApi("./api", both));

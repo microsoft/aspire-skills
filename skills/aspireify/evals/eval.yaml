@@ -1670,9 +1670,10 @@ stimuli:
       # One grader checks everything the requested 17.0 AppHost needs in a single code block the
       # response returns (prose naming the APIs, or a directive in another block, does not count):
       # a complete AppHost that creates the builder with CreateBuilder(args), adds the api resource
-      # on it with AddDotnetProject for ./api and runs it with Build().Run(); a
-      # #:package Aspire.Hosting.Dotnet@17.x.y directive matching any #:sdk version (not implicit
-      # in the 17.0 SDK; an aspire add command in this read-only reply is never run);
+      # on it with AddDotnetProject for ./api and runs it with Build().Run(); the file's
+      # #:sdk Aspire.AppHost.Sdk@17.x.y directive and a #:package Aspire.Hosting.Dotnet directive
+      # with the same version (not implicit in the 17.0 SDK; an aspire add command in this
+      # read-only reply is never run); directives inside string literals do not count;
       # WithHttpsDeveloperCertificate() chained from that resource; and an effective,
       # case-sensitive ASPIRECERTIFICATES001 suppression. With only an eval-wide 0.7 threshold,
       # separate graders would let an answer that misses one of them still pass.

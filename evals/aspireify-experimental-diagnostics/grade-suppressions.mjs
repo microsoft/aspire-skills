@@ -4,8 +4,8 @@
 // compared by their decoded C# value, so "..\\Api" and @"..\Api" both mean ..\Api) with the
 // certificate call chained from it, the AppHost still creates and runs that builder, the existing
 // echo container keeps its endpoint and probe wiring, every call to an Aspire 13.6 experimental API
-// is covered by an unconditional, case-sensitive #pragma or NoWarn suppression that no conditional
-// #pragma restore can undo, and the project's existing NoWarn values survive. The dotnet17 case grades each fenced code block returned in the response for the
+// is covered by an unconditional, case-sensitive #pragma or NoWarn suppression (outside string
+// literals) that no conditional #pragma restore can undo, and the project's existing NoWarn values survive. The dotnet17 case grades each fenced code block returned in the response for the
 // read-only 17.0 stimulus on its own. Self-contained: the eval copies only this file into .grader/.
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -43,10 +43,11 @@ export const cases = {
 const read = path => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
 
 // C# string literals. In a verbatim string (@"...") backslashes are literal and "" is a quote; in a
-// regular string a backslash starts an escape sequence.
+// regular string a backslash starts an escape sequence; a raw string ("""...""") ends at its opening
+// run of quotes.
 const verbatimLiteral = String.raw`@"(?:[^"]|"")*"`;
 const regularLiteral = String.raw`"(?:\\.|[^"\\\n])*"`;
-const stringLiteral = String.raw`(?:\$@|@\$?)"(?:[^"]|"")*"|\$?${regularLiteral}`;
+const stringLiteral = String.raw`\$*(?<raw>"{3,})[\s\S]*?\k<raw>|(?:\$@|@\$?)"(?:[^"]|"")*"|\$?${regularLiteral}`;
 const charLiteral = String.raw`'(?:\\.|[^'\\\n])'`;
 const literalAt = new RegExp(`${stringLiteral}|${charLiteral}`, "y");
 
@@ -74,6 +75,10 @@ function stripComments(code) {
     token => token.startsWith("/") ? token.replace(/[^\n]/g, " ") : token);
 }
 
+// Blanks the contents of string and character literals (keeping line breaks), so directive-like
+// lines inside a multiline string are never read as #pragma, #if or #: directives.
+const blankLiterals = code => code.replace(new RegExp(`${stringLiteral}|${charLiteral}`, "g"), token => token.replace(/[^\n]/g, " "));
+
 const conditionalDirective = /^\s*#\s*(if|elif|else|endif)\b/;
 
 // Marks each line that is a conditional-compilation directive or sits inside an #if block. Code
@@ -81,7 +86,7 @@ const conditionalDirective = /^\s*#\s*(if|elif|else|endif)\b/;
 // the requested wiring.
 function conditionalLines(code) {
   let depth = 0;
-  return code.split("\n").map(line => {
+  return blankLiterals(code).split("\n").map(line => {
     const directive = line.match(conditionalDirective);
     if (!directive) return depth > 0;
     if (directive[1] === "if") depth++;
@@ -136,7 +141,7 @@ function projectNoWarn(text, problems, where) {
   return values;
 }
 
-const directiveNoWarn = source => [...stripComments(source).matchAll(/^#:property\s+NoWarn\s*=\s*(.*)$/gim)].map(match => match[1].trim());
+const directiveNoWarn = source => [...blankLiterals(stripComments(source)).matchAll(/^#:property\s+NoWarn\s*=\s*(.*)$/gim)].map(match => match[1].trim());
 
 const lineAt = (text, index) => text.slice(0, index).split("\n").length - 1;
 
@@ -163,7 +168,7 @@ function pragmaCoverage(code, apis) {
   const conditional = new Set();
   const conditionalRestores = new Set();
   const inConditional = conditionalLines(stripped);
-  stripped.split("\n").forEach((line, index) => {
+  blankLiterals(stripped).split("\n").forEach((line, index) => {
     const pragma = line.match(/^\s*#pragma\s+warning\s+(disable|restore)\b(.*)$/);
     if (pragma) {
       const listed = splitIds(pragma[2]);
@@ -370,11 +375,12 @@ const codeBlocks = output => [...output.replace(/\r\n/g, "\n")
 // A NuGet version Aspire 17 resolves: 17.minor.patch with an optional prerelease label.
 const aspire17Version = /^17\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
-// Grades one fenced code block as the requested Aspire 17.0 AppHost: a complete AppHost that adds
-// the api resource with AddDotnetProject on its builder with the certificate call chained from it,
-// a `#:package Aspire.Hosting.Dotnet@17.x.y` directive (the 17.0 SDK does not include the package,
-// and an `aspire add` command shown in a read-only reply is never run) matching any #:sdk version,
-// and an effective ASPIRECERTIFICATES001 suppression.
+// Grades one fenced code block as the requested complete Aspire 17.0 apphost.cs: the fixture's
+// `#:sdk Aspire.AppHost.Sdk@17.x.y` directive, a complete AppHost that adds the api resource with
+// AddDotnetProject on its builder with the certificate call chained from it, a
+// `#:package Aspire.Hosting.Dotnet@17.x.y` directive matching the SDK version (the 17.0 SDK does not
+// include the package, and an `aspire add` command shown in a read-only reply is never run), and an
+// effective ASPIRECERTIFICATES001 suppression. Directive-like text inside string literals is ignored.
 function gradeDotnet17Block(source) {
   const code = unconditional(stripComments(source));
   const problems = [];
@@ -386,8 +392,14 @@ function gradeDotnet17Block(source) {
     problems.push(...appHostProblems(resource.code, "The returned AppHost", resource.call));
   }
 
-  const packageVersion = code.match(/^[ \t]*#:package[ \t]+Aspire\.Hosting\.Dotnet@(\S+)[ \t]*$/m)?.[1];
-  const sdkVersion = code.match(/^[ \t]*#:sdk[ \t]+Aspire\.AppHost\.Sdk@(\S+)[ \t]*$/m)?.[1];
+  const directives = blankLiterals(code);
+  const packageVersion = directives.match(/^[ \t]*#:package[ \t]+Aspire\.Hosting\.Dotnet@(\S+)[ \t]*$/m)?.[1];
+  const sdkVersion = directives.match(/^[ \t]*#:sdk[ \t]+Aspire\.AppHost\.Sdk@(\S+)[ \t]*$/m)?.[1];
+  if (!sdkVersion) {
+    problems.push("The returned AppHost drops the file's #:sdk Aspire.AppHost.Sdk directive; the complete file must keep its Aspire 17 SDK");
+  } else if (!aspire17Version.test(sdkVersion)) {
+    problems.push(`The returned AppHost uses Aspire.AppHost.Sdk@${sdkVersion}, which is not an Aspire 17 NuGet version (17.x.y)`);
+  }
   if (!packageVersion) {
     problems.push("The returned AppHost does not reference Aspire.Hosting.Dotnet with a versioned #:package directive; " +
       "the 17.0 SDK does not include it, and an aspire add command in a read-only reply is not run");
