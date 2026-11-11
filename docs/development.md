@@ -93,8 +93,13 @@ The workflow runs after a PR merges into main, or manually with a source
 `pr_number`. A merged PR always publishes the current aspire-skills main commit,
 after confirming the PR merge commit is contained in it, so stale or out-of-order
 events cannot roll back newer skills or references. Publishing runs are queued and
-run one at a time,
-and a run whose main snapshot is no longer current exits without changes. An
+run one at a time. If aspire-skills main moves after a run resolves its source,
+for example through a fork merge or direct push that starts no run of its own, the
+run repeats the same source resolution, containment check, read-only checkout, and
+publication once against the newer main. If main moves again during that retry,
+the run publishes nothing and its summary recommends a manual dispatch. To recover
+after a direct push to main, dispatch the workflow from main with any merged
+`pr_number`; it publishes the current main snapshot. An
 unmerged PR's head can only be previewed with `dry_run`. Merge events from fork
 PRs are skipped, so use a manual run for them. All manual runs, including
 previews, must use the workflow from main. Previews run in their own concurrency group, so they cannot
@@ -105,7 +110,8 @@ A changed catalog creates or updates one draft PR on the automation-owned
 Each update rebuilds that branch from Aspire's current main and changes only the
 catalog file, so do not edit the generated branch by hand. When Aspire main
 already matches the generated catalog, any open bot proposal is closed with a
-comment and its branch is deleted. Manual `dry_run` previews the generated JSON
+comment and the branch is deleted, including an orphan branch left without an
+open proposal. Manual `dry_run` previews the generated JSON
 in the Actions summary without creating a write token or publishing changes.
 
 No agent, destination code execution, or content interpretation is needed.

@@ -72,6 +72,7 @@ jobs:
           permission-pull-requests: write
 
       - name: Synchronize telemetry catalog
+        id: sync
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         env:
           TELEMETRY_SOURCE: ${{ steps.source.outputs.source }}
@@ -79,12 +80,50 @@ jobs:
         with:
           github-token: ${{ steps.token.outputs.token || github.token }}
           script: |
-            const { syncTelemetryCatalog, telemetrySummary } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/update-aspire-telemetry.mjs`);
-            const result = await syncTelemetryCatalog({
-              github,
+            const { runTelemetrySync } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/update-aspire-telemetry.mjs`);
+            await runTelemetrySync({
+              github, core,
               sourceGithub: getOctokit(process.env.SOURCE_TOKEN),
               directory: `${process.env.GITHUB_WORKSPACE}/_source`,
-              source: JSON.parse(process.env.TELEMETRY_SOURCE)
+              source: JSON.parse(process.env.TELEMETRY_SOURCE),
+              final: false
             });
-            core.info(`Telemetry catalog: ${result.status}`);
-            await core.summary.addRaw(telemetrySummary(result), true).write();
+
+      # Main moved after resolution, possibly through a fork merge or direct push that starts no run.
+      # Re-run the same guarded resolution, checkout, and publication once against newer main.
+      - name: Resolve newer main source
+        id: retry-source
+        if: steps.sync.outputs.status == 'superseded'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        with:
+          script: |
+            const { resolveTelemetrySource } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/update-aspire-telemetry.mjs`);
+            const source = await resolveTelemetrySource({ github, context });
+            core.setOutput("commit", source.commit);
+            core.setOutput("source", JSON.stringify(source));
+
+      - name: Checkout newer source inventory
+        if: steps.sync.outputs.status == 'superseded'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ steps.retry-source.outputs.commit }}
+          path: _source-retry
+          persist-credentials: false
+
+      - name: Synchronize telemetry catalog from newer main
+        if: steps.sync.outputs.status == 'superseded'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          TELEMETRY_SOURCE: ${{ steps.retry-source.outputs.source }}
+          SOURCE_TOKEN: ${{ github.token }}
+        with:
+          github-token: ${{ steps.token.outputs.token || github.token }}
+          script: |
+            const { runTelemetrySync } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/update-aspire-telemetry.mjs`);
+            await runTelemetrySync({
+              github, core,
+              sourceGithub: getOctokit(process.env.SOURCE_TOKEN),
+              directory: `${process.env.GITHUB_WORKSPACE}/_source-retry`,
+              source: JSON.parse(process.env.TELEMETRY_SOURCE),
+              final: true
+            });

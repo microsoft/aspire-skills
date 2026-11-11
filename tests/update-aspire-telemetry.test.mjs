@@ -6,7 +6,8 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { parse } from "yaml";
 import {
-  generateTelemetryCatalog, resolveTelemetrySource, syncTelemetryCatalog, telemetrySummary, validateTelemetryCatalog
+  generateTelemetryCatalog, resolveTelemetrySource, runTelemetrySync, syncTelemetryCatalog, telemetrySummary,
+  validateTelemetryCatalog
 } from "../scripts/update-aspire-telemetry.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -140,12 +141,54 @@ test("dry-run previews exact two-field JSON with stable formatting and performs 
   assert.equal(f.calls[1].args.path, catalogPath);
 });
 
-test("an unchanged catalog without a proposal performs no mutations", async t => {
+test("an unchanged catalog without a proposal or branch performs no mutations", async t => {
   const directory = fixture(t);
   const f = publisher({ current: `${JSON.stringify(expected, null, 2)}\n` });
   const result = await syncTelemetryCatalog({ ...f, directory, source });
   assert.equal(result.status, "unchanged");
-  assert.deepEqual(f.calls.map(call => call.name), ["git.getRef", "repos.getContent", "pulls.list"]);
+  assert.deepEqual(f.calls.map(call => call.name), ["git.getRef", "repos.getContent", "pulls.list", "git.getRef"]);
+});
+
+test("an unchanged catalog deletes an orphan bot branch without an open proposal", async t => {
+  const directory = fixture(t);
+  for (const [status, branchMissing, outcome] of [
+    [undefined, false, "cleaned"], [404, true, "cleaned"], [422, true, "cleaned"], [422, false, /deletion failed/], [403, false, /deletion failed/]
+  ]) {
+    const f = publisher({ current: `${JSON.stringify(expected, null, 2)}\n`, existing: true });
+    f.github.rest.pulls.list = async () => ({ data: [] });
+    let deleted = false;
+    const getRef = f.github.rest.git.getRef;
+    f.github.rest.git.getRef = args => {
+      if (args.ref !== "heads/main" && deleted && branchMissing) {
+        throw Object.assign(new Error("Missing branch"), { status: 404 });
+      }
+      return getRef(args);
+    };
+    if (status) {
+      f.github.rest.git.deleteRef = () => {
+        deleted = true;
+        throw Object.assign(new Error("Branch deletion failed"), { status });
+      };
+    }
+    if (typeof outcome === "string") {
+      assert.equal((await syncTelemetryCatalog({ ...f, directory, source })).status, outcome);
+    } else {
+      await assert.rejects(syncTelemetryCatalog({ ...f, directory, source }), outcome);
+    }
+    if (!status) {
+      assert.deepEqual(f.calls.map(call => call.name).slice(2), ["git.getRef", "git.deleteRef"]);
+      assert.equal(f.calls.at(-1).args.ref, "heads/update-aspire-telemetry-catalog");
+    }
+    assert.equal(f.calls.some(call => /create|update|Comment/.test(call.name)), false);
+  }
+});
+
+test("dry runs never delete an orphan bot branch", async t => {
+  const directory = fixture(t);
+  const f = publisher({ current: `${JSON.stringify(expected, null, 2)}\n`, existing: true });
+  const result = await syncTelemetryCatalog({ ...f, directory, source: { ...source, dryRun: true } });
+  assert.equal(result.status, "unchanged");
+  assert.deepEqual(f.calls.map(call => call.name), ["git.getRef", "repos.getContent"]);
 });
 
 test("an unchanged catalog closes an obsolete bot proposal and deletes its branch", async t => {
@@ -186,6 +229,29 @@ test("a snapshot superseded by newer main performs no mutations", async t => {
     const f = publisher({ current, existing: true, main: newer });
     assert.equal((await syncTelemetryCatalog({ ...f, directory, source })).status, "superseded");
     assert.deepEqual(f.calls.map(call => call.name), ["git.getRef", "repos.getContent"]);
+  }
+});
+
+test("superseded first attempts defer reporting, and final attempts recommend a manual dispatch", async t => {
+  const directory = fixture(t);
+  for (const final of [false, true]) {
+    const f = publisher({ existing: true, main: newer });
+    const outputs = {};
+    const warnings = [];
+    const summaries = [];
+    const core = {
+      setOutput: (name, value) => { outputs[name] = value; },
+      info: () => {},
+      warning: message => warnings.push(message),
+      summary: { addRaw: value => ({ write: async () => summaries.push(value) }) }
+    };
+    const result = await runTelemetrySync({ ...f, core, directory, source, final });
+    assert.equal(result.status, "superseded");
+    assert.deepEqual(outputs, { status: "superseded" });
+    assert.deepEqual(f.calls.map(call => call.name), ["git.getRef", "repos.getContent"]);
+    assert.equal(summaries.length, final ? 1 : 0);
+    assert.equal(warnings.length, final ? 1 : 0);
+    if (final) assert.match(summaries[0], /dispatch this workflow from main with a merged pr_number/);
   }
 });
 
@@ -430,13 +496,28 @@ test("workflow retains activation and separates trusted scripts from read-only s
   const checkouts = workflow.jobs.sync.steps.filter(step => step.uses?.startsWith("actions/checkout@"));
   assert.deepEqual(checkouts.map(step => step.with), [
     { ref: "${{ github.workflow_sha }}", "persist-credentials": false },
-    { ref: "${{ steps.source.outputs.commit }}", path: "_source", "persist-credentials": false }
+    { ref: "${{ steps.source.outputs.commit }}", path: "_source", "persist-credentials": false },
+    { ref: "${{ steps.retry-source.outputs.commit }}", path: "_source-retry", "persist-credentials": false }
   ]);
   const token = workflow.jobs.sync.steps.find(step => step.uses?.startsWith("actions/create-github-app-token@"));
   assert.equal(token.if, "steps.source.outputs.dry-run != 'true'");
   assert.equal(token.with.repositories, "aspire");
   assert.equal(workflow.jobs.sync.steps.some(step => step.run), false);
-  const sync = workflow.jobs.sync.steps.at(-1);
-  assert.equal(sync.env.SOURCE_TOKEN, "${{ github.token }}");
-  assert.match(sync.with.script, /sourceGithub: getOctokit\(process\.env\.SOURCE_TOKEN\)/);
+  const scripts = workflow.jobs.sync.steps.filter(step => step.uses?.startsWith("actions/github-script@"));
+  const [resolve, sync, retryResolve, retrySync] = scripts;
+  assert.equal(scripts.length, 4);
+  for (const step of [sync, retrySync]) {
+    assert.equal(step.env.SOURCE_TOKEN, "${{ github.token }}");
+    assert.match(step.with.script, /sourceGithub: getOctokit\(process\.env\.SOURCE_TOKEN\)/);
+  }
+  // The single retry re-runs the same guarded resolution against newer main, never the mutable branch head.
+  assert.equal(resolve.with["github-token"], undefined);
+  assert.equal(retryResolve.with["github-token"], undefined);
+  assert.match(retryResolve.with.script, /resolveTelemetrySource\(\{ github, context \}\)/);
+  assert.match(sync.with.script, /_source`,[\s\S]*final: false/);
+  assert.match(retrySync.with.script, /_source-retry`,[\s\S]*final: true/);
+  assert.equal(retrySync.env.TELEMETRY_SOURCE, "${{ steps.retry-source.outputs.source }}");
+  const retrySteps = workflow.jobs.sync.steps.slice(workflow.jobs.sync.steps.indexOf(sync) + 1);
+  assert.equal(retrySteps.length, 3);
+  for (const step of retrySteps) assert.equal(step.if, "steps.sync.outputs.status == 'superseded'");
 });

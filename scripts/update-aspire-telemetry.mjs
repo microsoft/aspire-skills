@@ -140,7 +140,48 @@ const escapeHtml = value => String(value).replace(/[&<>"']/g, character => htmlE
 // Job summaries render HTML, and catalog content comes from source-controlled file names.
 export function telemetrySummary({ status, url, content }) {
   const link = url ? `<p><a href="${escapeHtml(url)}">Aspire pull request</a></p>\n` : "";
-  return `<h2>Telemetry catalog: ${escapeHtml(status)}</h2>\n${link}<pre lang="json"><code>${escapeHtml(content)}</code></pre>`;
+  const guidance = status === "superseded" ? `<p>${supersededGuidance}</p>\n` : "";
+  return `<h2>Telemetry catalog: ${escapeHtml(status)}</h2>\n${link}${guidance}<pre lang="json"><code>${escapeHtml(content)}</code></pre>`;
+}
+
+const supersededGuidance = "microsoft/aspire-skills main moved again during synchronization, so nothing was published. " +
+  "If no later run publishes the catalog, dispatch this workflow from main with a merged pr_number.";
+
+// Superseded results are retried once against newer main, so only the final attempt reports them.
+export async function runTelemetrySync({ github, sourceGithub, core, directory, source, final }) {
+  const result = await syncTelemetryCatalog({ github, sourceGithub, directory, source });
+  core.setOutput("status", result.status);
+  core.info(`Telemetry catalog: ${result.status}`);
+  if (result.status === "superseded" && !final) return result;
+  if (result.status === "superseded") core.warning(supersededGuidance);
+  await core.summary.addRaw(telemetrySummary(result), true).write();
+  return result;
+}
+
+async function deleteBranch(github) {
+  try {
+    await github.rest.git.deleteRef({ ...targetRepository, ref: `heads/${branch}` });
+  } catch (error) {
+    if (error.status === 422) {
+      try {
+        await github.rest.git.getRef({ ...targetRepository, ref: `heads/${branch}` });
+      } catch (lookupError) {
+        if (lookupError.status === 404) return;
+        throw lookupError;
+      }
+    }
+    if (error.status !== 404) throw error;
+  }
+}
+
+async function branchExists(github) {
+  try {
+    await github.rest.git.getRef({ ...targetRepository, ref: `heads/${branch}` });
+    return true;
+  } catch (error) {
+    if (error.status === 404) return false;
+    throw error;
+  }
 }
 
 export async function syncTelemetryCatalog({ github, sourceGithub, directory, source }) {
@@ -171,22 +212,13 @@ export async function syncTelemetryCatalog({ github, sourceGithub, directory, so
       await github.rest.pulls.update({ ...targetRepository, pull_number: proposal.number, state: "closed" });
     }
     if (proposals.length) {
-      try {
-        await github.rest.git.deleteRef({ ...targetRepository, ref: `heads/${branch}` });
-      } catch (error) {
-        if (error.status === 422) {
-          try {
-            await github.rest.git.getRef({ ...targetRepository, ref: `heads/${branch}` });
-          } catch (lookupError) {
-            if (lookupError.status === 404) {
-              return { status: "closed", content, url: proposals[0].html_url };
-            }
-            throw lookupError;
-          }
-        }
-        if (error.status !== 404) throw error;
-      }
+      await deleteBranch(github);
       return { status: "closed", content, url: proposals[0].html_url };
+    }
+    // An orphan branch can remain after a failed deletion or a manually closed proposal.
+    if (await branchExists(github)) {
+      await deleteBranch(github);
+      return { status: "cleaned", content };
     }
     return { status: "unchanged", content };
   }
