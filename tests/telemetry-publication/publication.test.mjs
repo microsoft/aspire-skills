@@ -29,7 +29,7 @@ assert.ok(gateIndex >= 0 && publisherIndex > gateIndex, "The compiled publicatio
 const gate = steps[gateIndex];
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const runGate = new AsyncFunction("require", "github", "core", "context", "exec", "io", "getOctokit", gate.with.script);
-const allowedPath = "src/Aspire.Cli/Agents/Hooks/telemetry-allowlist.json";
+const allowedPath = "src/Aspire.Cli/Agents/Hooks/telemetry-catalog.json";
 const readmePath = "src/Aspire.Cli/Agents/Hooks/README.md";
 const target = "https://github.com/microsoft/aspire.git";
 
@@ -338,7 +338,7 @@ test("the native policy protects READMEs without exemptions", async () => {
 });
 
 for (const additionalPath of [undefined, "tests/Aspire.Cli.Tests/Agents/AgentTelemetryCatalogTests.cs"]) {
-  test(`verification accepts the JSON allowlist ${additionalPath ? "with catalog tests" : "alone"}`, async t => {
+  test(`verification accepts the JSON catalog ${additionalPath ? "with catalog tests" : "alone"}`, async t => {
     const f = proposalFixture(t, { additionalPath });
     const result = await f.verify();
     assert.equal(result.tree, git(f.agent, "rev-parse", `${f.source.branch}^{tree}`));

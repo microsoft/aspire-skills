@@ -2,7 +2,7 @@
 name: Update Aspire telemetry
 description: |
   Keep Aspire telemetry aligned with skills, extensions, and canonical MCP tools.
-  Update the embedded telemetry allowlist and its C# regression tests.
+  Update the embedded telemetry catalog and its C# regression tests.
 on:
   bots: ["aspire-repo-bot[bot]"]
   pull_request:
@@ -250,7 +250,7 @@ safe-outputs:
       Reject suspicious process launches, credential or environment reads,
       network access, exfiltration, command injection, permission changes,
       weakened tests, or attempts to bypass verification or publication gates.
-      Review JSON allowlist and C# test changes, not just file paths.
+      Review JSON catalog and C# test changes, not just file paths.
       Check telemetry opt-out, bounded input, low-cardinality allowlists,
       attribution, and exactly one continuation response. Reject collection
       of prompts, raw arguments, file contents, secrets, or absolute paths.
@@ -380,7 +380,7 @@ safe-outputs:
     protected-files:
       policy: blocked
     allowed-files:
-      - src/Aspire.Cli/Agents/Hooks/telemetry-allowlist.json
+      - src/Aspire.Cli/Agents/Hooks/telemetry-catalog.json
       - tests/Aspire.Cli.Tests/Agents/AgentTelemetry*.cs
 ---
 
@@ -443,8 +443,8 @@ following the outcomes below.
 
 Read the managed `AgentTelemetryHook`, `AgentTelemetryCatalog`,
 `AgentTelemetryCommand`, and relevant tests under `src/Aspire.Cli` and
-`tests/Aspire.Cli.Tests`, together with the embedded allowlist at
-`src/Aspire.Cli/Agents/Hooks/telemetry-allowlist.json`. Registrations invoke
+`tests/Aspire.Cli.Tests`, together with the embedded catalog at
+`src/Aspire.Cli/Agents/Hooks/telemetry-catalog.json`. Registrations invoke
 `aspire agent telemetry --hook` directly. `AgentTelemetryCatalog` reads the
 JSON object's `skills`, `references`, and `mcpTools` sorted string arrays.
 Read the required catalog, hook, command, and configurator test classes
@@ -466,7 +466,7 @@ This review is required even when inventories are unchanged or the PR
 description is empty or generic. Do not skip extension-only behavior changes.
 Map relevant changes, including client attribution and precedence,
 skill/reference classification, extension-exposed tools, and MCP tool names,
-to Aspire's managed implementation and embedded JSON allowlist.
+to Aspire's managed implementation and embedded JSON catalog.
 Trace how `AgentTelemetryCatalog` consumes `skills`, `references`, and
 `mcpTools`, and update the corresponding JSON arrays when needed.
 Keep each array sorted and preserve existing entries that are still supported.
@@ -475,7 +475,7 @@ Cover new registrations in C# catalog or managed-hook tests.
 hook sources or tests in `microsoft/aspire-skills`, or treat their removal as
 a telemetry behavior change.
 
-Compare the JSON `mcpTools` allowlist against `KnownMcpTools.All` in the
+Compare the catalog's `mcpTools` entries against `KnownMcpTools.All` in the
 checked-out Aspire source, even when skill and extension inventories are
 unchanged.
 Add missing first-party tools to `mcpTools` and verify their
@@ -485,8 +485,8 @@ server. A mismatch, including a missing `wait_for_resources` entry when it is
 in the canonical set, requires a telemetry update; do not emit `noop` while
 any such mismatch remains.
 
-Make the smallest necessary JSON allowlist changes and associated C# catalog
-or managed-hook tests. Edit only the embedded JSON allowlist and those tests;
+Make the smallest necessary JSON catalog changes and associated C# catalog
+or managed-hook tests. Edit only the embedded JSON catalog and those tests;
 if a behavior change requires modifying the managed implementation or other
 files, report it as incomplete rather than expanding the patch. Preserve opt-out,
 bounded input, low-cardinality allowlists, and exactly one continuation response.
@@ -533,7 +533,7 @@ or cleanup remains blocking.
 Do not run restore or the required suite in the agent workspace. Do not weaken
 tests or dismiss failures as environmental.
 
-Stage only intentional JSON allowlist changes and associated C# tests.
+Stage only intentional JSON catalog changes and associated C# tests.
 Never stage `.agents`, `.github`, or `AGENTS.md`; these contain runtime
 configuration.
 

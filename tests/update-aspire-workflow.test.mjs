@@ -21,7 +21,7 @@ const markdown = readFileSync(workflowPath, "utf8");
 const authored = parse(/^---\r?\n([\s\S]*?)\r?\n---/.exec(markdown)[1]);
 const compiledText = readFileSync(workflowPath.replace(/\.md$/, ".lock.yml"), "utf8");
 const compiled = parse(compiledText);
-const allowedPath = "src/Aspire.Cli/Agents/Hooks/telemetry-allowlist.json";
+const allowedPath = "src/Aspire.Cli/Agents/Hooks/telemetry-catalog.json";
 
 function git(directory, ...args) {
   return execFileSync("git", ["-c", "core.hooksPath=/dev/null", ...args], {
@@ -158,7 +158,7 @@ test("workflow concurrency retains pending source assessments", () => {
   }
 });
 
-test("telemetry proposals target only the embedded allowlist and its C# regression tests", async () => {
+test("telemetry proposals target only the embedded catalog and its C# regression tests", async () => {
   const paths = [allowedPath, "tests/Aspire.Cli.Tests/Agents/AgentTelemetry*.cs"];
   assert.deepEqual(authored["safe-outputs"]["create-pull-request"]["allowed-files"], paths);
   assert.deepEqual((await publicationPolicy(root)).allowed_files, paths);
