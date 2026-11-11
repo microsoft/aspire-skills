@@ -1,0 +1,87 @@
+name: Update Aspire telemetry
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR number to synchronize
+        required: true
+        type: string
+      dry_run:
+        description: Preview the generated catalog without publishing a PR
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: aspire-skills-to-aspire
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: >-
+      (github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch')
+      && github.repository == 'microsoft/aspire-skills'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout trusted workflow scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+
+      - name: Resolve immutable source
+        id: source
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        with:
+          script: |
+            const { resolveTelemetrySource } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/update-aspire-telemetry.mjs`);
+            const source = await resolveTelemetrySource({ github, context });
+            core.setOutput("commit", source.commit);
+            core.setOutput("dry-run", String(source.dryRun));
+            core.setOutput("source", JSON.stringify(source));
+
+      - name: Checkout source inventory
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ steps.source.outputs.commit }}
+          path: _source
+          persist-credentials: false
+
+      - name: Generate Aspire publication token
+        id: token
+        if: steps.source.outputs.dry-run != 'true'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
+        with:
+          client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
+          private-key: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
+          owner: microsoft
+          repositories: aspire
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Synchronize telemetry catalog
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          TELEMETRY_SOURCE: ${{ steps.source.outputs.source }}
+        with:
+          github-token: ${{ steps.token.outputs.token || github.token }}
+          script: |
+            const { syncTelemetryCatalog } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/update-aspire-telemetry.mjs`);
+            const result = await syncTelemetryCatalog({
+              github,
+              directory: `${process.env.GITHUB_WORKSPACE}/_source`,
+              source: JSON.parse(process.env.TELEMETRY_SOURCE)
+            });
+            core.info(`Telemetry catalog: ${result.status}`);
+            core.summary.addHeading(`Telemetry catalog: ${result.status}`);
+            if (result.url) core.summary.addLink("Aspire pull request", result.url);
+            await core.summary.addCodeBlock(result.content, "json").write();

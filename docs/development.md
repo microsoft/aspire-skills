@@ -71,12 +71,26 @@ another workflow. Reruns must preserve the tag's commit and approved notes.
 
 ## Aspire telemetry maintenance
 
-The [update-aspire workflow](../.github/workflows/update-aspire.md) keeps Aspire CLI
-telemetry for aspire-skills usage up to date, including which skills and extension
-tools agents invoke. It updates
+The [update-aspire workflow](../.github/workflows/update-aspire.yml) deterministically
+generates Aspire's telemetry catalog from canonical `skills/<name>/` directories
+and their `references/**` files. It writes
 `src/Aspire.Cli/Agents/Hooks/telemetry-catalog.json` in `microsoft/aspire`,
-whose `skills`, `references`, and `mcpTools` properties are sorted string arrays,
-and associated C# catalog or managed-hook tests.
-It creates draft proposals with one isolated build/test attempt. Candidate build
-and test failures are reported in the draft or no-op summary; verifier setup,
-isolation, and security failures block publication.
+with ordinally sorted, unique `skills` and `references` arrays. Reference names use
+`<skill>/references/<path>` with forward slashes. JSON uses two-space indentation,
+LF line endings, and a trailing newline. Mirrors under `.github/plugins/`,
+`opencode/`, and `.github/skills/` are not scanned.
+The catalog must already exist in Aspire; this workflow does not introduce its reader
+or embedding.
+
+The workflow runs after a PR merges into main, or manually with a source
+`pr_number`. It checks out that PR's immutable merge commit, or its head commit
+when manually selecting an unmerged PR. A changed catalog creates or updates one
+draft PR on the automation-owned `update-aspire-telemetry-catalog` branch in Aspire
+using the existing bot app. Each update rebuilds that branch from Aspire's current
+main and changes only the catalog file, so do not edit the generated branch by hand.
+An identical catalog makes no changes. Manual `dry_run` previews the generated
+JSON in the Actions summary without creating a write token or publishing changes.
+
+No agent, destination code execution, or content interpretation is needed.
+Extension tools and behavior are not part of this inventory; their telemetry cannot
+be inferred from skill and reference paths. Aspire owns its MCP tool catalog.
