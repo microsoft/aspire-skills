@@ -1,14 +1,12 @@
 // Adapted from microsoft/aspire's Arcade-derived backport.yml at
 // 6bcd0302e2fb4a6dea2b1c3eedb8ab1caa4bb75c (Arcade 66269f6a88f6062f2cccf6eb84660a8a6f5cc5ec).
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+// Unlike Arcade, this builds the patch locally instead of downloading GitHub's PR patch.
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Repository, fullSha } from "./release-git.mjs";
 import { updateVersion, versionManifests, versionSnapshot } from "./release-versions.mjs";
 import { expectedCatalog } from "./release-catalog.mjs";
-import { assertPublishedHistory, commitFiles, ensurePullRequest, githubRequest, guardedPush, mergeChangelogs, releaseVersion, remoteHead } from "./release-automation.mjs";
+import { assertPublishedHistory, commitFiles, ensurePullRequest, githubRequest, guardedPush, mergeChangelogs, releaseSources, releaseVersion, remoteHead } from "./release-automation.mjs";
 
 export function validateBackport(repo, before, after, source, target) {
   const original = versionSnapshot(repo, before);
@@ -28,19 +26,66 @@ export function validateBackport(repo, before, after, source, target) {
   }
 }
 
-// Manifests are excluded from automatic patches, so a release-only content change would be lost silently.
-function assertVersionOnlyManifestChanges(repo, source) {
-  const normalize = (manifests, path) => updateVersion(manifests.get(path), path, "0.0.0");
-  const before = versionManifests(repo, repo.sha(`${source}^1`));
-  const after = versionManifests(repo, source);
-  for (const path of new Set([...before.keys(), ...after.keys()])) {
-    if (!before.has(path) || !after.has(path) || !normalize(before, path).equals(normalize(after, path))) {
-      throw new Error(`The release changes more than the version in ${path}; backport its content manually.`);
-    }
+function isAncestor(repo, ancestor, descendant) {
+  try {
+    repo.run(["merge-base", "--is-ancestor", ancestor, descendant]);
+    return true;
+  } catch {
+    return false;
   }
 }
 
-export function runBackport(repo, { repository, number, target, automatic = false, api = githubRequest, downloadPatch }) {
+function fetchHead(repo, number, head) {
+  try {
+    repo.run(["cat-file", "-e", `${head}^{commit}`]);
+  } catch {
+    // Merged PR branches may be deleted or live in forks, but GitHub keeps refs/pull/N/head.
+    repo.run(["fetch", "--no-tags", "origin", `refs/pull/${number}/head`]);
+    repo.run(["cat-file", "-e", `${head}^{commit}`]);
+  }
+}
+
+// GitHub diffs a release PR against main, which spans all dev work since the last release.
+// Diff from the recorded dev source instead.
+function patchBase(repo, head, source, targetTip) {
+  const recorded = releaseSources(repo.run(["log", "--format=%B%x00", head, "--not", targetTip, `${source}^1`]));
+  if (recorded.size > 1) throw new Error("The source PR records more than one release source; backport manually.");
+  if (recorded.size === 1) {
+    const [base] = recorded;
+    if (!isAncestor(repo, base, head) || !isAncestor(repo, base, targetTip)) {
+      throw new Error("The source PR and target do not share the recorded release source; backport manually.");
+    }
+    return base;
+  }
+  return fullSha(repo.run(["merge-base", head, `${source}^1`]).trim());
+}
+
+// Both sides use the target's version so the patch carries manifest content changes without version changes.
+function normalizedTree(repo, sha, version) {
+  const files = new Map();
+  for (const [path, bytes] of versionManifests(repo, sha)) {
+    const updated = updateVersion(bytes, path, version);
+    if (updated !== bytes) files.set(path, updated);
+  }
+  return repo.run(["rev-parse", `${commitFiles(repo, sha, files, "Normalize versions for backport")}^{tree}`]).trim();
+}
+
+function backportPatch(repo, pr, base, head, version) {
+  const parentTree = normalizedTree(repo, base, version);
+  const tree = normalizedTree(repo, head, version);
+  if (tree === parentTree) return null;
+  const parent = fullSha(repo.run(["commit-tree", parentTree], { input: "Backport base\n" }).trim());
+  const author = {
+    GIT_AUTHOR_NAME: pr.user.login,
+    GIT_AUTHOR_EMAIL: `${pr.user.id}+${pr.user.login}@users.noreply.github.com`
+  };
+  const commit = fullSha(repo.run(["commit-tree", tree, "-p", parent], {
+    input: `${pr.title}\n\nBackport of #${pr.number}.\n`, env: author
+  }).trim());
+  return repo.run(["format-patch", "--stdout", "--binary", "-1", commit], { binary: true });
+}
+
+export function runBackport(repo, { repository, number, target, automatic = false, api = githubRequest }) {
   if (!/^[1-9]\d*$/.test(String(number))) throw new Error("Source PR must be a positive integer.");
   if (automatic ? target !== "dev" : !target.startsWith("release/")) throw new Error("Invalid backport target.");
   if (!automatic) releaseVersion(target);
@@ -54,7 +99,6 @@ export function runBackport(repo, { repository, number, target, automatic = fals
   const branch = `backport/pr-${number}-to-${target}`;
   const runUrl = `${process.env.GITHUB_SERVER_URL ?? "https://github.com"}/${repository}/actions/runs/${process.env.GITHUB_RUN_ID ?? ""}`;
   const postComment = body => api(`repos/${repository}/issues/${number}/comments`, { method: "POST", body: { body } });
-  let directory;
   try {
     const targetTip = remoteHead(repo, target);
     if (!targetTip) throw new Error(`The specified target branch "${target}" was not found.`);
@@ -69,37 +113,21 @@ export function runBackport(repo, { repository, number, target, automatic = fals
       postComment(`Started backporting to \`${target}\` ([link to workflow run](${runUrl})).`);
       if (repo.run(["status", "--porcelain"]).trim()) throw new Error("Backport requires a clean working tree.");
       repo.run(["checkout", "--detach", targetTip]);
-      directory = mkdtempSync(join(tmpdir(), "aspire-backport-"));
-      const patch = join(directory, "changes.patch");
-      if (downloadPatch) {
-        writeFileSync(patch, downloadPatch(pr));
-      } else {
-        const result = spawnSync("gh", ["pr", "diff", "--patch", String(number), "--repo", repository], {
-          encoding: "utf8", maxBuffer: 64 * 1024 * 1024
-        });
-        if (result.error) throw result.error;
-        if (result.status !== 0) throw new Error(`Downloading backport patch failed: ${result.stderr}`);
-        writeFileSync(patch, result.stdout);
-      }
+      const head = fullSha(pr.head.sha);
+      fetchHead(repo, number, head);
+      const patch = backportPatch(repo, pr, patchBase(repo, head, source, targetTip), head, versionSnapshot(repo, targetTip).version);
       // Generated catalogs are rebuilt for the target instead of patched.
       const applyArgs = ["am", "--3way", "--empty=keep", "--ignore-whitespace", "--keep-non-patch", "--exclude=opencode/*"];
       let mergedChangelog;
       if (automatic) {
-        // Release snapshots must not replace dev's next version or changelog entry.
+        // Release snapshots must not replace dev's changelog entry.
         mergedChangelog = mergeChangelogs(
           repo.read(targetTip, "CHANGELOG.md").toString("utf8"),
           repo.read(source, "CHANGELOG.md").toString("utf8")
         );
         applyArgs.push("--exclude=CHANGELOG.md");
-        assertVersionOnlyManifestChanges(repo, source);
-        const manifests = new Set([
-          ...versionSnapshot(repo, targetTip).manifests.keys(),
-          ...versionSnapshot(repo, source).manifests.keys()
-        ]);
-        applyArgs.push(...[...manifests].map(path => `--exclude=${path}`));
       }
-      applyArgs.push(patch);
-      repo.run(applyArgs);
+      if (patch) repo.run(applyArgs, { input: patch });
       let patched = repo.sha("HEAD");
       if (mergedChangelog) {
         patched = commitFiles(repo, patched, new Map([["CHANGELOG.md", mergedChangelog]]), "Merge approved release notes into dev");
@@ -113,14 +141,16 @@ export function runBackport(repo, { repository, number, target, automatic = fals
     }
     return ensurePullRequest(api, repository, {
       branch, base: target, marker, title: `[${target}] ${pr.title}`,
-      body: `Backport of #${number} to ${target}\n\n/cc @${pr.user.login}\n\n## Customer Impact\n\n## Testing\n\n## Risk\n\n## Regression?\n\nGenerated using Arcade's patch-copy flow. Conflicts require manual resolution.\n\nWorkflow: ${runUrl}`
+      body: `Backport of #${number} to ${target}\n\n/cc @${pr.user.login}\n\n## Customer Impact\n\n## Testing\n\n## Risk\n\n## Regression?\n\nGenerated using Arcade's patch-copy flow with a locally built patch. Conflicts require manual resolution.\n\nWorkflow: ${runUrl}`
     });
   } catch (error) {
     console.error(error.message);
-    postComment(`Backporting to \`${target}\` failed. Please backport manually while preserving the target version, newer work, and changelog history. [Workflow output](${runUrl}).\n\n${error.message.slice(0, 10000)}`);
+    try {
+      postComment(`Backporting to \`${target}\` failed. Please backport manually while preserving the target version, newer work, and changelog history. [Workflow output](${runUrl}).\n\n${error.message.slice(0, 10000)}`);
+    } catch (commentError) {
+      console.error(`Failed to post the failure comment: ${commentError.message}`);
+    }
     throw error;
-  } finally {
-    if (directory) rmSync(directory, { recursive: true, force: true });
   }
 }
 

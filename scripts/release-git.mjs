@@ -35,8 +35,8 @@ export class Repository {
     this.trees = new Map();
   }
 
-  run(args, { binary = false, input, indexFile } = {}) {
-    const environment = gitEnvironment();
+  run(args, { binary = false, input, indexFile, env = {} } = {}) {
+    const environment = { ...gitEnvironment(), ...env };
     if (indexFile) environment.GIT_INDEX_FILE = indexFile;
     const result = spawnSync("git", [
       "-c", `safe.directory=${this.root}`, "-c", "core.hooksPath=/dev/null",

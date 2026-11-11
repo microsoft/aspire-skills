@@ -153,8 +153,15 @@ export function ensurePullRequest(api, repository, { branch, base, title, body, 
   });
 }
 
+const releaseSourceTrailer = "Aspire-Release-Source";
+
 function operationMarker(source, version, nextVersion) {
-  return `Aspire-Release-Source: ${source}\nAspire-Release-Version: ${version}\nAspire-Next-Version: ${nextVersion}`;
+  return `${releaseSourceTrailer}: ${source}\nAspire-Release-Version: ${version}\nAspire-Next-Version: ${nextVersion}`;
+}
+
+export function releaseSources(messages) {
+  const pattern = new RegExp(`^${releaseSourceTrailer}: ([0-9a-f]{40})$`, "gm");
+  return new Set([...messages.matchAll(pattern)].map(match => match[1]));
 }
 
 export function prepareRelease(repo, source, version, nextVersion) {

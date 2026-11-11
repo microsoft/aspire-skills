@@ -175,11 +175,19 @@ test("a remote update between the last read and push is rejected by the lease", 
   assert.equal(remoteHead(f.repo, branch), newer);
 });
 
-function sourcePull(github, number, source, base) {
+function sourcePull(github, number, source, base, head = source) {
   github.sources.set(number, {
-    merged: true, merge_commit_sha: source, base: { ref: base, repo: { full_name: "example/test" } },
-    title: "Fix an important instruction", user: { login: "contributor" }
+    number, merged: true, merge_commit_sha: source, base: { ref: base, repo: { full_name: "example/test" } },
+    head: { sha: head }, title: "Fix an important instruction", user: { login: "contributor", id: 1 }
   });
+}
+
+function mergeReleasePull(f, github, number, release, devBump) {
+  const releaseTree = new Map([...f.repo.files(release).keys()].map(path => [path, f.repo.read(release, path)]));
+  const source = commitFiles(f.repo, f.main, releaseTree, "Merge release PR");
+  guardedPush(f.repo, "main", source, f.main);
+  guardedPush(f.repo, "dev", devBump, remoteHead(f.repo, "dev"));
+  sourcePull(github, number, source, "main", release);
 }
 
 test("Arcade patch backport preserves unrelated target work and reruns reuse the PR", t => {
@@ -190,13 +198,14 @@ test("Arcade patch backport preserves unrelated target work and reruns reuse the
   const candidate = commitFiles(f.repo, f.dev, new Map([["skills/aspire/newer.md", Buffer.from("Keep candidate work.\n")]]), "Candidate work");
   guardedPush(f.repo, "release/0.0.4", candidate, null);
   sourcePull(github, 42, source, "dev");
-  const patch = f.repo.run(["format-patch", "--stdout", "-1", source]);
-  const options = { repository: "example/test", number: 42, target: "release/0.0.4", api: github.api, downloadPatch: () => patch };
+  const options = { repository: "example/test", number: 42, target: "release/0.0.4", api: github.api };
   runBackport(f.repo, options);
   const backport = remoteHead(f.repo, "backport/pr-42-to-release/0.0.4");
   assert.equal(f.repo.read(backport, "skills/aspire/fix.md").toString(), "Selected fix.\n");
   assert.equal(f.repo.read(backport, "skills/aspire/newer.md").toString(), "Keep candidate work.\n");
   assert.equal(versionSnapshot(f.repo, backport).version, "0.0.4");
+  assert.match(f.repo.run(["log", "--format=%an <%ae>%n%B", backport, "--not", candidate]),
+    /^contributor <1\+contributor@users\.noreply\.github\.com>\nFix an important instruction\n\nBackport of #42\.$/m);
   assert.equal(runBackport(f.repo, options).number, 1);
   assert.equal(github.pulls.length, 1);
   github.pulls[0].state = "closed";
@@ -211,9 +220,7 @@ test("automatic main-to-dev backport regenerates catalogs for the dev target", t
   guardedPush(f.repo, "main", release, f.main);
   guardedPush(f.repo, "dev", newer, f.dev);
   sourcePull(github, 43, release, "main");
-  // As with Arcade, exercise the PR's patch, not a synthetic merge of branch tips.
-  const patch = f.repo.run(["format-patch", "--stdout", "-1", release]);
-  runBackport(f.repo, { repository: "example/test", number: 43, target: "dev", automatic: true, api: github.api, downloadPatch: () => patch });
+  runBackport(f.repo, { repository: "example/test", number: 43, target: "dev", automatic: true, api: github.api });
   const backport = remoteHead(f.repo, "backport/pr-43-to-dev");
   assert.equal(f.repo.read(backport, "skills/aspire/newer.md").toString(), "Unreleased work.\n");
   validateCatalog(f.repo, backport, expectedCatalog(f.repo, backport));
@@ -227,17 +234,9 @@ test("automatic release backport preserves the bumped dev version", t => {
     Buffer.from(f.repo.read(plan.branches[0].commit, "CHANGELOG.md").toString().replace("Approved notes.", "Final release notes."))
   ]]), "Finalize release notes");
   const devBump = plan.branches[1].commit;
-  const releaseTree = new Map([...f.repo.files(release).keys()].map(path => [path, f.repo.read(release, path)]));
-  const source = commitFiles(f.repo, f.main, releaseTree, "Merge release PR");
-  guardedPush(f.repo, "main", source, f.main);
-  guardedPush(f.repo, "dev", devBump, f.dev);
-  sourcePull(github, 46, source, "main");
-  const patch = f.repo.run(["format-patch", "--stdout", "-1", source]);
+  mergeReleasePull(f, github, 46, release, devBump);
 
-  runBackport(f.repo, {
-    repository: "example/test", number: 46, target: "dev", automatic: true,
-    api: github.api, downloadPatch: () => patch
-  });
+  runBackport(f.repo, { repository: "example/test", number: 46, target: "dev", automatic: true, api: github.api });
 
   const backport = remoteHead(f.repo, "backport/pr-46-to-dev");
   assert.equal(versionSnapshot(f.repo, backport).version, "0.0.5");
@@ -252,25 +251,36 @@ test("automatic release backport preserves the bumped dev version", t => {
   validateCatalog(f.repo, backport, expectedCatalog(f.repo, backport));
 });
 
-test("automatic release backport fails when the release changes manifest content", t => {
+test("automatic release backport carries manifest content edits at the dev version", t => {
   const f = fixture(t);
   const github = githubFixture();
   const plan = prepareRelease(f.repo, f.dev, "0.0.4", "0.0.5");
   const body = f.repo.read(plan.branches[0].commit, "skills/aspire/SKILL.md").toString().replace("# Aspire", "# Aspire hotfix");
   const release = commitFiles(f.repo, plan.branches[0].commit, new Map([["skills/aspire/SKILL.md", Buffer.from(body)]]), "Hotfix skill");
-  const releaseTree = new Map([...f.repo.files(release).keys()].map(path => [path, f.repo.read(release, path)]));
-  const source = commitFiles(f.repo, f.main, releaseTree, "Merge release PR");
-  guardedPush(f.repo, "main", source, f.main);
-  guardedPush(f.repo, "dev", plan.branches[1].commit, f.dev);
-  sourcePull(github, 47, source, "main");
-  const patch = f.repo.run(["format-patch", "--stdout", "-1", source]);
-  const quiet = console.error;
-  console.error = () => {};
-  t.after(() => { console.error = quiet; });
-  assert.throws(() => runBackport(f.repo, {
-    repository: "example/test", number: 47, target: "dev", automatic: true,
-    api: github.api, downloadPatch: () => patch
-  }), /more than the version in skills\/aspire\/SKILL\.md/);
+  mergeReleasePull(f, github, 47, release, plan.branches[1].commit);
+
+  runBackport(f.repo, { repository: "example/test", number: 47, target: "dev", automatic: true, api: github.api });
+
+  const backport = remoteHead(f.repo, "backport/pr-47-to-dev");
+  assert.match(f.repo.read(backport, "skills/aspire/SKILL.md").toString(), /version: 0\.0\.5\n[\s\S]*# Aspire hotfix/);
+  assert.equal(versionSnapshot(f.repo, backport).version, "0.0.5");
+});
+
+test("automatic release backport does not replay dev history from before the release source", t => {
+  const f = fixture(t);
+  const github = githubFixture();
+  const released = commitFiles(f.repo, f.dev, new Map([["skills/aspire/links.md", Buffer.from("Released link.\n")]]), "Released dev work");
+  const newer = commitFiles(f.repo, released, new Map([["skills/aspire/links.md", Buffer.from("Newer dev link.\n")]]), "Newer dev work");
+  guardedPush(f.repo, "dev", newer, f.dev);
+  const plan = prepareRelease(f.repo, released, "0.0.4", "0.0.5");
+  const release = commitFiles(f.repo, plan.branches[0].commit, new Map([["skills/aspire/fix.md", Buffer.from("Release fix.\n")]]), "Release fix");
+  mergeReleasePull(f, github, 48, release, plan.branches[1].commit);
+
+  runBackport(f.repo, { repository: "example/test", number: 48, target: "dev", automatic: true, api: github.api });
+
+  const backport = remoteHead(f.repo, "backport/pr-48-to-dev");
+  assert.equal(f.repo.read(backport, "skills/aspire/links.md").toString(), "Newer dev link.\n");
+  assert.equal(f.repo.read(backport, "skills/aspire/fix.md").toString(), "Release fix.\n");
 });
 
 test("backports skip catalog hunks that would conflict and regenerate them", t => {
@@ -284,8 +294,7 @@ test("backports skip catalog hunks that would conflict and regenerate them", t =
   guardedPush(f.repo, "dev", source, f.dev);
   guardedPush(f.repo, "release/0.0.4", target, null);
   sourcePull(github, 45, source, "dev");
-  const patch = f.repo.run(["format-patch", "--stdout", "-1", source]);
-  runBackport(f.repo, { repository: "example/test", number: 45, target: "release/0.0.4", api: github.api, downloadPatch: () => patch });
+  runBackport(f.repo, { repository: "example/test", number: 45, target: "release/0.0.4", api: github.api });
   const backport = remoteHead(f.repo, "backport/pr-45-to-release/0.0.4");
   assert.equal(f.repo.read(backport, "skills/aspire/fix.md").toString(), "Selected fix.\n");
   validateCatalog(f.repo, backport, expectedCatalog(f.repo, backport));
@@ -299,13 +308,21 @@ test("Arcade patch conflicts are reported and create no branch or success-shaped
   guardedPush(f.repo, "dev", source, f.dev);
   guardedPush(f.repo, "release/0.0.4", target, null);
   sourcePull(github, 44, source, "dev");
-  const patch = f.repo.run(["format-patch", "--stdout", "-1", source]);
-  assert.throws(() => runBackport(f.repo, {
-    repository: "example/test", number: 44, target: "release/0.0.4", api: github.api, downloadPatch: () => patch
-  }), /git am failed/);
+  const options = { repository: "example/test", number: 44, target: "release/0.0.4", api: github.api };
+  assert.throws(() => runBackport(f.repo, options), /git am failed/);
   assert.equal(remoteHead(f.repo, "backport/pr-44-to-release/0.0.4"), null);
   assert.equal(github.pulls.length, 0);
   assert.match(github.comments.at(-1), /failed.*Please backport manually/);
+
+  f.repo.run(["am", "--abort"]);
+  const quiet = console.error;
+  console.error = () => {};
+  t.after(() => { console.error = quiet; });
+  const api = (path, request) => {
+    if (path.endsWith("/comments") && request.body.body.includes("failed")) throw new Error("comment API unavailable");
+    return github.api(path, request);
+  };
+  assert.throws(() => runBackport(f.repo, { ...options, api }), /git am failed/);
 });
 
 test("backport preservation checks reject version changes and loss of dev notes", t => {

@@ -50,8 +50,9 @@ The **Release branch check** fails any PR into main unless its head is a
    summary. Both PRs require review.
 2. **Prepare candidate fixes.** Run **Backport PR to branch** from main with a
    merged dev PR number and its target `release/<version>`. The copied
-   Arcade-derived workflow from `microsoft/aspire` applies the PR patch using
-   `git am` and opens `backport/pr-<number>-to-<target>` for review.
+   Arcade-derived workflow from `microsoft/aspire` builds the patch locally
+   from the PR's base to its head, applies it with `git am`, and opens
+   `backport/pr-<number>-to-<target>` for review.
    Backports skip generated catalog hunks and regenerate catalogs for the target.
    There is no `/backport` comment trigger.
 3. **Finalize the candidate.** Maintainers finalize the release notes and merge
@@ -65,16 +66,16 @@ The **Release branch check** fails any PR into main unless its head is a
    checks succeed. This is a patch backport, not a real merge: it does not
    retain merge ancestry, and it does not require merge-commit-only merging.
 
-Main-to-dev backports exclude coordinated version manifests and generated
-catalogs from the patch so a release cannot overwrite dev's next version.
-They merge main's approved release notes while preserving dev's current
-changelog entry, newer work, and non-version manifest edits, then regenerate
-catalogs for dev. A release that changes anything in a version manifest beyond
-its version fails the automatic backport so that content is backported manually.
-Other patch conflicts or preservation-check failures stop the operation and post
-a source-PR comment with the workflow link; they may occur before a PR is opened.
-Resolve those backports manually, preserving these invariants, rather than
-accepting one side wholesale.
+Backport patches set coordinated versions on both sides to the target's
+version. Manifest content edits still apply, but a release cannot overwrite the
+target's version. A release PR's patch starts at the dev commit in its
+`Aspire-Release-Source` trailer, so it does not replay older dev history.
+Main-to-dev backports also merge main's approved release notes while preserving
+dev's current changelog entry and newer work. Patch conflicts or
+preservation-check failures stop the operation and post a source-PR comment
+with the workflow link; they may occur before a PR is opened. Resolve those
+backports manually, preserving these invariants, rather than accepting one side
+wholesale.
 
 Reruns reuse matching open PRs and can recover from a branch push followed by a
 PR-creation failure. They do not reopen closed PRs, replace maintainer edits, or
