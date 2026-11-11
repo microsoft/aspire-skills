@@ -1314,6 +1314,10 @@ async function deliverConfirmation(domainId) {
 }
 
 function proposalRequestMessage(snapshot) {
+    // Dormant treatments for mapped dependencies stay stored but would be rejected if echoed back.
+    const mappedIds = new Set(accountedExternalDependencies(snapshot)
+        .filter(({ treatment }) => treatment === "mapped")
+        .map(({ id }) => id));
     const payload = {
         apphostStyle: snapshot.apphostStyle,
         services: snapshot.services.map((service) => ({
@@ -1328,7 +1332,8 @@ function proposalRequestMessage(snapshot) {
             include: service.include,
         })),
         externalDependencies: snapshot.externalDependencies,
-        externalDependencyTreatments: snapshot.proposal.externalDependencyTreatments ?? [],
+        externalDependencyTreatments: (snapshot.proposal.externalDependencyTreatments ?? [])
+            .filter(({ externalDependencyId }) => !mappedIds.has(externalDependencyId)),
     };
     return [
         "[aspireify canvas: review proposal]",

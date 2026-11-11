@@ -670,8 +670,16 @@ const NOT_PROPOSED_TREATMENT_LABELS = {
     "not-modeled": "Not modeled",
     deferred: "Deferred",
     "not-assessed": "Not assessed",
-    removed: "Removed from plan",
+    excluded: "Excluded mappings",
+    removed: "Removed mappings",
+    "excluded-removed": "Excluded or removed mappings",
 };
+
+function mappingStatus(mappings) {
+    const removed = mappings.some((mapping) => mapping.removed);
+    const excluded = mappings.some((mapping) => !mapping.removed);
+    return removed && excluded ? "excluded-removed" : removed ? "removed" : "excluded";
+}
 
 function renderNotProposedItems() {
     const services = Array.isArray(snapshot.notProposed) ? snapshot.notProposed : [];
@@ -708,7 +716,7 @@ function renderNotProposedItems() {
     list.replaceChildren(
         ...items.map(({ entry, external }) => {
             const treatment = external && entry.treatment === "mapped"
-                ? "removed"
+                ? mappingStatus(entry.resourceMappings)
                 : NOT_PROPOSED_TREATMENT_LABELS[entry.treatment]
                   ? entry.treatment
                   : "not-assessed";

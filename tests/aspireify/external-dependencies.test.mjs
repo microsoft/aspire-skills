@@ -281,12 +281,15 @@ test("mixed included and excluded or removed external mappings stay visible befo
     assert.equal(excludedSection.hidden, false);
     assert.match(excludedSection.textContent, /Billing API/);
     assert.match(excludedSection.textContent, /billing-endpoint \(Parameter; excluded\)/);
+    assert.match(excludedSection.textContent, /Excluded mappings/);
+    assert.doesNotMatch(excludedSection.textContent, /Removed/);
     assert.doesNotMatch(excludedSection.textContent, /billing \(External service; excluded\)/);
     assert.deepEqual(excluded, beforeRender, "rendering must not filter the snapshot's included mappings");
 
     assert.equal((await view.post("/api/proposal/resource/delete", { id: endpoint.id })).status, 200);
     let review = await view.snapshot();
     assert.match(renderOutsidePlan(review).textContent, /billing-endpoint \(Parameter; removed\)/);
+    assert.match(renderOutsidePlan(review).textContent, /Removed mappings/);
     assert.equal(review.externalDependencies[0].resourceMappings.find(({ id }) => id === billing.id).include, true);
 
     assert.equal((await view.post("/api/history/undo")).status, 200);
@@ -417,6 +420,30 @@ test("effective external decisions follow current mappings and return when a reg
         edges: [],
     });
     assert.equal((await view.snapshot()).externalDependencies[1].reason, externalDependencyTreatments[0].reason);
+});
+
+test("regeneration requests omit dormant treatments for mapped dependencies so they can be echoed back", async (t) => {
+    const p = await provider(t);
+    const { proposalGeneration } = await p.load();
+    await p.propose(proposalGeneration);
+    const identity = {
+        id: "identity-resource", name: "identity", type: "External service",
+        externalDependencyId: "identity",
+    };
+    await p.action("set_proposal", { proposalGeneration, resources: [api, billing, identity], edges: [] });
+    const view = await p.open();
+    assert.equal((await view.post("/api/proposal/request")).status, 202);
+    const request = p.session.messages.findLast((message) => message.includes("review proposal")).split("\n");
+    const { externalDependencyTreatments: echoed } = JSON.parse(request[3]);
+    assert.deepEqual(echoed.map(({ externalDependencyId }) => externalDependencyId), ["events"]);
+    const generation = Number(request.find((line) => line.startsWith("Proposal generation:")).match(/\d+/)[0]);
+    await p.action("set_proposal", {
+        proposalGeneration: generation,
+        resources: [api, billing, identity],
+        edges: [],
+        externalDependencyTreatments: echoed,
+    });
+    assert.equal((await view.snapshot()).externalDependencies[1].treatment, "mapped");
 });
 
 test("removed coalesced mappings survive inventory gaps, reload, regeneration and confirmation until a new run", async (t) => {
