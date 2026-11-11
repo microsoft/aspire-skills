@@ -48,6 +48,13 @@ export function generateTelemetryCatalog(directory) {
   });
 }
 
+function caseKey(value) {
+  // Preserve code point boundaries and ASCII separation when uppercase mappings expand.
+  return JSON.stringify(Array.from(value, character => [
+    character.charCodeAt(0) < 0x80, character.length, character.toUpperCase()
+  ]));
+}
+
 function validateValues(catalog, property) {
   const values = catalog[property];
   if (!Array.isArray(values) || !values.length) {
@@ -56,8 +63,9 @@ function validateValues(catalog, property) {
   const unique = new Set();
   values.forEach((value, index) => {
     if (typeof value !== "string" || !value) throw new Error(`Invalid ${property} entry: ${value}`);
-    if (unique.has(value.toLowerCase())) throw new Error(`Duplicate ${property} entry ignoring case: ${value}`);
-    unique.add(value.toLowerCase());
+    const key = caseKey(value);
+    if (unique.has(key)) throw new Error(`Duplicate ${property} entry ignoring case: ${value}`);
+    unique.add(key);
     if (index && values[index - 1] > value) throw new Error(`The ${property} array must be sorted ordinally.`);
   });
   return unique;
@@ -76,7 +84,7 @@ export function validateTelemetryCatalog(catalog) {
   validateValues(catalog, "references");
   for (const reference of catalog.references) {
     const segments = reference.split("/");
-    if (segments.length < 3 || !skills.has(segments[0].toLowerCase()) || segments[1] !== "references" ||
+    if (segments.length < 3 || !skills.has(caseKey(segments[0])) || segments[1] !== "references" ||
       reference.includes("\\") || segments.slice(2).some(segment => ["", ".", ".."].includes(segment))) {
       throw new Error(`Invalid reference path: ${reference}`);
     }
@@ -154,7 +162,17 @@ export async function syncTelemetryCatalog({ github, sourceGithub, directory, so
       try {
         await github.rest.git.deleteRef({ ...targetRepository, ref: `heads/${branch}` });
       } catch (error) {
-        if (![404, 422].includes(error.status)) throw error;
+        if (error.status === 422) {
+          try {
+            await github.rest.git.getRef({ ...targetRepository, ref: `heads/${branch}` });
+          } catch (lookupError) {
+            if (lookupError.status === 404) {
+              return { status: "closed", content, url: proposals[0].html_url };
+            }
+            throw lookupError;
+          }
+        }
+        if (error.status !== 404) throw error;
       }
       return { status: "closed", content, url: proposals[0].html_url };
     }

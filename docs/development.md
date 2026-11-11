@@ -86,6 +86,8 @@ The catalog is validated against Aspire's parser contract before any API call:
 both arrays are non-empty, skill names match `[a-zA-Z0-9_-]+`, entries are unique
 ignoring case and ordinally sorted, and each reference names a cataloged skill
 with no backslashes or empty, `.`, or `..` segments. A violation fails the run.
+Unicode filenames are supported; case comparison conservatively rejects ambiguous
+Unicode uppercase collisions rather than publishing a catalog Aspire might reject.
 
 The workflow runs after a PR merges into main, or manually with a source
 `pr_number`. A merged PR always publishes the current aspire-skills main commit,

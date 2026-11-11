@@ -158,6 +158,28 @@ test("an unchanged catalog closes an obsolete bot proposal and deletes its branc
   assert.equal(f.calls.find(call => call.name === "git.deleteRef").args.ref, "heads/update-aspire-telemetry-catalog");
 });
 
+test("branch cleanup ignores missing refs but surfaces other deletion failures", async t => {
+  const directory = fixture(t);
+  for (const [status, branchMissing] of [[404, true], [422, true], [422, false], [403, false]]) {
+    const f = publisher({ current: `${JSON.stringify(expected, null, 2)}\n`, existing: true });
+    const getRef = f.github.rest.git.getRef;
+    f.github.rest.git.getRef = args => {
+      if (args.ref !== "heads/main" && branchMissing) {
+        throw Object.assign(new Error("Missing branch"), { status: 404 });
+      }
+      return getRef(args);
+    };
+    f.github.rest.git.deleteRef = () => {
+      throw Object.assign(new Error("Branch deletion failed"), { status });
+    };
+    if (branchMissing) {
+      assert.equal((await syncTelemetryCatalog({ ...f, directory, source })).status, "closed");
+    } else {
+      await assert.rejects(syncTelemetryCatalog({ ...f, directory, source }), /Branch deletion failed/);
+    }
+  }
+});
+
 test("a snapshot superseded by newer main performs no mutations", async t => {
   const directory = fixture(t);
   for (const current of ['{"skills":[],"references":[]}\n', `${JSON.stringify(expected, null, 2)}\n`]) {
@@ -197,6 +219,39 @@ test("catalog validation enforces Aspire's parser contract", () => {
   ]) {
     assert.throws(() => validateTelemetryCatalog(catalog), error);
   }
+});
+
+test("Unicode references reject ordinal case collisions without rejecting distinct filenames", () => {
+  for (const names of [
+    ["\u03c2.md", "\u03c3.md"],
+    ["\u1f80.md", "\u1f88.md"]
+  ]) {
+    const catalog = {
+      skills: ["alpha"],
+      references: names.map(name => `alpha/references/${name}`)
+    };
+    assert.throws(() => validateTelemetryCatalog(catalog), /Duplicate references/);
+  }
+
+  const distinct = {
+    skills: ["alpha"],
+    references: ["S.md", "SS.md", "S\u00df.md", "\u00df.md", "\u00dfS.md", "\u00e4.md", "\u017f.md", "\u1e9e.md"]
+      .map(name => `alpha/references/${name}`)
+  };
+  assert.equal(validateTelemetryCatalog(distinct), distinct);
+});
+
+test("ambiguous Unicode uppercase collisions are rejected conservatively", () => {
+  assert.throws(() => validateTelemetryCatalog({
+    skills: ["alpha"],
+    references: ["alpha/references/\u0390.md", "alpha/references/\u1fd3.md"]
+  }), /Duplicate references/);
+});
+
+test("reference skill names must not fold non-ASCII characters into ASCII", () => {
+  assert.throws(() => validateTelemetryCatalog({
+    skills: ["k"], references: ["\u212a/references/a.md"]
+  }), /Invalid reference path/);
 });
 
 test("generated inventories that Aspire would reject fail before any API call", async t => {
