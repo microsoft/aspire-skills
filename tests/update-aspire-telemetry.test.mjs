@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { parse } from "yaml";
 import {
-  generateTelemetryCatalog, resolveTelemetrySource, syncTelemetryCatalog, validateTelemetryCatalog
+  generateTelemetryCatalog, resolveTelemetrySource, syncTelemetryCatalog, telemetrySummary, validateTelemetryCatalog
 } from "../scripts/update-aspire-telemetry.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -334,9 +334,10 @@ function sourceGithubFor({ merged, mergeSha = commit, main = newer, status = "ah
   } };
 }
 
-function sourceContext({ manual = false, dryRun = false } = {}) {
+function sourceContext({ manual = false, dryRun = false, ref = "refs/heads/main" } = {}) {
   return {
     eventName: manual ? "workflow_dispatch" : "pull_request",
+    ref,
     payload: {
       inputs: { pr_number: "123", dry_run: String(dryRun) },
       pull_request: { number: 123, merge_commit_sha: commit }
@@ -380,17 +381,50 @@ test("automatic source resolution rejects unmerged or mismatched events", async 
   }
 });
 
+test("manual publication requires the main workflow ref while previews may use any ref", async () => {
+  const github = sourceGithubFor({ merged: true });
+  await assert.rejects(
+    resolveTelemetrySource({ github, context: sourceContext({ manual: true, ref: "refs/heads/feature" }) }),
+    /must run the workflow from main/
+  );
+  const preview = await resolveTelemetrySource({
+    github, context: sourceContext({ manual: true, dryRun: true, ref: "refs/heads/feature" })
+  });
+  assert.equal(preview.dryRun, true);
+});
+
+test("job summary escapes source-controlled catalog content", () => {
+  const summary = telemetrySummary({
+    status: "preview", url: 'https://example.test/"><x>',
+    content: '{"references":["a/references/<img src=x onerror=alert(1)>&\'.md"]}\n'
+  });
+  assert.doesNotMatch(summary, /<img|<x>|onerror=alert\(1\)>/);
+  assert.match(summary, /&lt;img src=x onerror=alert\(1\)&gt;&amp;&#39;\.md/);
+  assert.match(summary, /href="https:\/\/example\.test\/&quot;&gt;&lt;x&gt;"/);
+});
+
 test("workflow retains activation and separates trusted scripts from read-only source evidence", () => {
   assert.deepEqual(workflow.on.pull_request, { branches: ["main"], types: ["closed"] });
   assert.equal(workflow.on.workflow_dispatch.inputs.dry_run.default, false);
+  assert.equal(workflow.concurrency, undefined);
+  const group = new Function("inputs", "github", "format", `return ${workflow.jobs.sync.concurrency.group.slice(3, -2)};`);
+  const format = (pattern, ...args) => pattern.replace(/\{(\d+)\}/g, (_, index) => args[index]);
+  assert.equal(group({ dry_run: false }, { run_id: 7 }, format), "aspire-skills-to-aspire");
+  assert.equal(group({}, { run_id: 7 }, format), "aspire-skills-to-aspire");
+  assert.equal(group({ dry_run: true }, { run_id: 7 }, format), "aspire-skills-to-aspire-preview-7");
+  assert.equal(workflow.jobs.sync.concurrency["cancel-in-progress"], false);
   const accepts = new Function("github", `return (${workflow.jobs.sync.if});`);
-  for (const [event, merged, repository, expected] of [
-    ["pull_request", true, "microsoft/aspire-skills", true],
-    ["pull_request", false, "microsoft/aspire-skills", false],
-    ["workflow_dispatch", false, "microsoft/aspire-skills", true],
-    ["workflow_dispatch", false, "example/fork", false]
+  for (const [event, merged, repository, headRepo, expected] of [
+    ["pull_request", true, "microsoft/aspire-skills", 1, true],
+    ["pull_request", true, "microsoft/aspire-skills", 2, false],
+    ["pull_request", false, "microsoft/aspire-skills", 1, false],
+    ["workflow_dispatch", false, "microsoft/aspire-skills", undefined, true],
+    ["workflow_dispatch", false, "example/fork", undefined, false]
   ]) {
-    assert.equal(accepts({ event_name: event, event: { pull_request: { merged } }, repository }), expected);
+    assert.equal(accepts({
+      event_name: event, repository, repository_id: 1,
+      event: { pull_request: { merged, head: { repo: { id: headRepo } } } }
+    }), expected);
   }
   const checkouts = workflow.jobs.sync.steps.filter(step => step.uses?.startsWith("actions/checkout@"));
   assert.deepEqual(checkouts.map(step => step.with), [

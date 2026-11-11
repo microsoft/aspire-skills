@@ -92,9 +92,12 @@ Unicode uppercase collisions rather than publishing a catalog Aspire might rejec
 The workflow runs after a PR merges into main, or manually with a source
 `pr_number`. A merged PR always publishes the current aspire-skills main commit,
 after confirming the PR merge commit is contained in it, so stale or out-of-order
-events cannot roll back newer skills or references. Runs are serialized, and a run
-whose main snapshot is no longer current exits without changes. An unmerged PR's
-head can only be previewed with `dry_run`.
+events cannot roll back newer skills or references. Publishing runs are serialized,
+and a run whose main snapshot is no longer current exits without changes. An
+unmerged PR's head can only be previewed with `dry_run`. Merge events from fork
+PRs are skipped, so use a manual run for them. Manual publishing must run the
+workflow from main. Previews run in their own concurrency group, so they cannot
+displace a pending publication.
 
 A changed catalog creates or updates one draft PR on the automation-owned
 `update-aspire-telemetry-catalog` branch in Aspire using the existing bot app.

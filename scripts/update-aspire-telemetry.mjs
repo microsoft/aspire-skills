@@ -112,6 +112,9 @@ export async function resolveTelemetrySource({ github, context }) {
     throw new Error("Automatic synchronization requires the triggering merged PR.");
   }
   const dryRun = manual && [true, "true"].includes(context.payload.inputs?.dry_run);
+  if (manual && !dryRun && context.ref !== "refs/heads/main") {
+    throw new Error("Manual publication must run the workflow from main.");
+  }
   if (!pr.merged && !dryRun) throw new Error("Unmerged PRs can only be previewed with dry_run.");
   // Merged PRs publish current main, so stale or out-of-order events cannot roll back newer inventory.
   const commit = pr.merged ? await mainCommit(github) : pr.head.sha;
@@ -129,6 +132,15 @@ export async function resolveTelemetrySource({ github, context }) {
     url: `https://github.com/microsoft/aspire-skills/pull/${number}`,
     dryRun
   };
+}
+
+const htmlEntities = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+const escapeHtml = value => String(value).replace(/[&<>"']/g, character => htmlEntities[character]);
+
+// Job summaries render HTML, and catalog content comes from source-controlled file names.
+export function telemetrySummary({ status, url, content }) {
+  const link = url ? `<p><a href="${escapeHtml(url)}">Aspire pull request</a></p>\n` : "";
+  return `<h2>Telemetry catalog: ${escapeHtml(status)}</h2>\n${link}<pre lang="json"><code>${escapeHtml(content)}</code></pre>`;
 }
 
 export async function syncTelemetryCatalog({ github, sourceGithub, directory, source }) {

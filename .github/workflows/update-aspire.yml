@@ -20,15 +20,16 @@ permissions:
   contents: read
   pull-requests: read
 
-concurrency:
-  group: aspire-skills-to-aspire
-  cancel-in-progress: false
-
 jobs:
   sync:
     if: >-
       (github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch')
       && github.repository == 'microsoft/aspire-skills'
+      && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id)
+    # Job-level so skipped events and previews cannot replace a pending publication run.
+    concurrency:
+      group: ${{ inputs.dry_run && format('aspire-skills-to-aspire-preview-{0}', github.run_id) || 'aspire-skills-to-aspire' }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -76,7 +77,7 @@ jobs:
         with:
           github-token: ${{ steps.token.outputs.token || github.token }}
           script: |
-            const { syncTelemetryCatalog } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/update-aspire-telemetry.mjs`);
+            const { syncTelemetryCatalog, telemetrySummary } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/update-aspire-telemetry.mjs`);
             const result = await syncTelemetryCatalog({
               github,
               sourceGithub: getOctokit(process.env.SOURCE_TOKEN),
@@ -84,6 +85,4 @@ jobs:
               source: JSON.parse(process.env.TELEMETRY_SOURCE)
             });
             core.info(`Telemetry catalog: ${result.status}`);
-            core.summary.addHeading(`Telemetry catalog: ${result.status}`);
-            if (result.url) core.summary.addLink("Aspire pull request", result.url);
-            await core.summary.addCodeBlock(result.content, "json").write();
+            await core.summary.addRaw(telemetrySummary(result), true).write();
