@@ -618,6 +618,26 @@ test("conflicting preserved external mappings fail atomically rather than replac
     assert.deepEqual(await view.snapshot(), before);
 });
 
+test("a preserved resource absorbs at most one generated resource", async (t) => {
+    const p = await provider(t);
+    const { proposalGeneration } = await p.load();
+    await p.propose(proposalGeneration, { resources: [api], edges: [] });
+    const view = await p.open();
+    assert.equal((await view.post("/api/proposal/resource/add", {
+        name: "billing", type: "External service",
+    })).status, 200);
+    await p.propose(proposalGeneration, { edges: [] });
+    const preserved = (await view.snapshot()).proposal.resources.find(({ name }) => name === "billing");
+    assert.notEqual(preserved.id, billing.id);
+    assert.equal((await view.post("/api/proposal/resource", { id: preserved.id, name: "billing-config" })).status, 200);
+    const before = await view.snapshot();
+    await assert.rejects(p.propose(proposalGeneration, {
+        resources: [api, billing, { ...billing, id: "billing-config-resource", name: "billing-config" }],
+        edges: [{ from: "api", to: "billing-config-resource", kind: "reference" }],
+    }), /billing-config/);
+    assert.deepEqual(await view.snapshot(), before);
+});
+
 test("runnable services and external dependencies may share an ID without sharing mappings", async (t) => {
     const p = await provider(t);
     const { proposalGeneration } = await p.load({

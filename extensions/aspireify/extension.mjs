@@ -2917,14 +2917,31 @@ const aspireifyCanvas = createCanvas({
                         .filter((resource) => resource.generatedResourceId)
                         .map((resource) => [resource.generatedResourceId, resource]),
                 );
-                const preservedResourceFor = (generated) =>
-                    preservedResourcesByGeneratedId.get(generated.id) ??
-                    preservedResourcesByName.get(generated.name.toLowerCase());
+                // Each user-added resource absorbs at most one generated resource; a second
+                // claim would silently drop that resource and redirect its edges.
+                const preservedBindings = new Map();
                 if (incomingResources) {
+                    const claimants = new Map();
+                    for (const generated of incomingResources) {
+                        const preserved =
+                            preservedResourcesByGeneratedId.get(generated.id) ??
+                            preservedResourcesByName.get(generated.name.toLowerCase());
+                        if (!preserved) {
+                            continue;
+                        }
+                        const claimant = claimants.get(preserved);
+                        if (claimant) {
+                            throw new Error(
+                                `Cannot apply the AppHost proposal: resources "${claimant.id}" and "${generated.id}" both match user-added resource "${preserved.name}". Rename or remove one of them.`,
+                            );
+                        }
+                        claimants.set(preserved, generated);
+                        preservedBindings.set(generated.id, preserved);
+                    }
                     const mappedPreservedResources = new Set(
                         incomingResources
                             .filter((resource) => resource.externalDependencyId)
-                            .map(preservedResourceFor),
+                            .map((resource) => preservedBindings.get(resource.id)),
                     );
                     for (const resource of preservedResources) {
                         if (!mappedPreservedResources.has(resource)) {
@@ -2989,7 +3006,7 @@ const aspireifyCanvas = createCanvas({
                                   return enrichResourceFromService(generated, linkedService);
                               })
                               .map((generated) => {
-                                  const preserved = preservedResourceFor(generated);
+                                  const preserved = preservedBindings.get(generated.id);
                                   if (preserved) {
                                       if (generated.externalDependencyId) {
                                           if (
