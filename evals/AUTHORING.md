@@ -8,6 +8,11 @@ How to add or modify eval stimuli for this plugin. Read [README.md](./README.md)
 
 Stimuli are declared **inline** in `skills/<skill>/evals/eval.yaml` under the top-level `stimuli:` array. There is no `tasks/<id>.yaml` file and no `--context-dir` flag — both were removed when the suite moved to vally's canonical `EvalSchema`.
 
+Cases that need a separate scoring policy can use a nested spec at
+`skills/<skill>/evals/<case>/eval.yaml`. PR gates, nightly runs, lint, and the
+skill-lift experiment include these specs. Adjust relative skill and fixture
+paths for the extra directory.
+
 ```yaml
 stimuli:
   - name: deploy-destroy-001              # unique within the spec
@@ -58,7 +63,20 @@ stimuli:
 | `environment.skills[]` | string[] | (Optional) skill dirs to **add** for this stimulus on top of the eval-level set — used by routing stimuli to pull in siblings. Union-merged during normal eval runs; experiment variants replace the resolved list wholesale. |
 | `constraints.max_agent_duration` | string | (Optional) constrain agent execution duration. Use a `skill-invocation` grader for skill activation assertions. |
 | `graders[]` | object[] | One or more graders. See below. |
-| `scoring` | object | (Optional) per-grader weights + pass threshold. Omitted → equal weights, threshold `1.0` (every grader must pass). |
+
+### Mandatory safety verdicts
+
+Declare `scoring` at the **evaluation root**, not on a stimulus. Vally 0.16.0
+ignores stimulus-level scoring overrides and keys weights by grader **type**,
+not by configured grader name. A threshold applies to averaged grader scores,
+then averaged trial and stimulus scores, so a tolerant evaluation can pass
+despite a failed safety grader.
+
+Put mandatory safety cases in a separate spec and omit `scoring.threshold`
+to use Vally's default all-graders-pass policy. For example, Aspireify's
+[`safety/eval.yaml`](../skills/aspireify/evals/safety/eval.yaml) keeps the shared
+bind-mount case separate from the general suite's `0.7` threshold. Every grader
+on every trial must pass, and another evaluation's score cannot mask a failure.
 
 ## Grader types
 
