@@ -21,7 +21,7 @@ const markdown = readFileSync(workflowPath, "utf8");
 const authored = parse(/^---\r?\n([\s\S]*?)\r?\n---/.exec(markdown)[1]);
 const compiledText = readFileSync(workflowPath.replace(/\.md$/, ".lock.yml"), "utf8");
 const compiled = parse(compiledText);
-const allowedPath = "src/Aspire.Cli/Agents/Hooks/AgentTelemetryCatalog.cs";
+const allowedPath = "src/Aspire.Cli/Agents/Hooks/telemetry-allowlist.json";
 
 function git(directory, ...args) {
   return execFileSync("git", ["-c", "core.hooksPath=/dev/null", ...args], {
@@ -156,6 +156,14 @@ test("workflow concurrency retains pending source assessments", () => {
     assert.equal(configuration["cancel-in-progress"], false);
     assert.equal(configuration.queue, "max");
   }
+});
+
+test("telemetry proposals target only the embedded allowlist and its C# regression tests", async () => {
+  const paths = [allowedPath, "tests/Aspire.Cli.Tests/Agents/AgentTelemetry*.cs"];
+  assert.deepEqual(authored["safe-outputs"]["create-pull-request"]["allowed-files"], paths);
+  assert.deepEqual((await publicationPolicy(root)).allowed_files, paths);
+  assert.match(markdown, /`skills`, `references`, and `mcpTools` sorted string arrays/);
+  assert.doesNotMatch(markdown, /track-telemetry\.(?:sh|ps1)|compatibility.script|TelemetryHookScriptTests/);
 });
 
 test("the configured source checkout resolves merged and diverged manual ancestry", async t => {
@@ -394,6 +402,13 @@ test("verification restores trusted code separately from offline candidate tests
   assert.ok(args.includes("--network=none"));
   assert.match(args.at(-1), /--no-restore/);
   assert.doesNotMatch(args.at(-1), /restore\.sh/);
+  for (const name of [
+    "AgentTelemetryCatalogTests", "AgentTelemetryHookTests", "AgentTelemetryCommandTests",
+    "TelemetryHookConfiguratorTests"
+  ]) {
+    assert.ok(args.at(-1).includes(`--filter-class '*.${name}'`));
+  }
+  assert.doesNotMatch(args.at(-1), /TelemetryHookScriptTests/);
   assert.throws(() => dockerArguments({ uid: 0, gid: 0 }), /unprivileged/);
   const restore = dockerArguments({ ...options, offline: false });
   assert.ok(restore.includes("--network=bridge"));
@@ -403,7 +418,7 @@ test("verification restores trusted code separately from offline candidate tests
 
 test("completed assertion failures produce an explicit result instead of an execution failure", () => {
   const output = [
-    "failed Aspire.Cli.Tests.Agents.AgentTelemetryHookTests.AllowlistsMatchCanonicalPowerShellHook",
+    "failed Aspire.Cli.Tests.Agents.AgentTelemetryCatalogTests.AllowlistsMatchCanonicalCatalog",
     "Test run summary: Failed!",
     "  total: 189",
     "  failed: 12",

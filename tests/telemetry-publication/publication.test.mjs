@@ -29,7 +29,7 @@ assert.ok(gateIndex >= 0 && publisherIndex > gateIndex, "The compiled publicatio
 const gate = steps[gateIndex];
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const runGate = new AsyncFunction("require", "github", "core", "context", "exec", "io", "getOctokit", gate.with.script);
-const allowedPath = "src/Aspire.Cli/Agents/Hooks/AgentTelemetryCatalog.cs";
+const allowedPath = "src/Aspire.Cli/Agents/Hooks/telemetry-allowlist.json";
 const readmePath = "src/Aspire.Cli/Agents/Hooks/README.md";
 const target = "https://github.com/microsoft/aspire.git";
 
@@ -325,10 +325,10 @@ exit ${testExitCode}
   };
 }
 
-test("the native policy exempts only the hook README from basename protection", async () => {
+test("the native policy protects READMEs without exemptions", async () => {
   const policy = await publicationPolicy(root);
   assert.ok(policy.protected_files.includes("README.md"));
-  assert.deepEqual(policy.protected_files_path_exclude, [readmePath]);
+  assert.deepEqual(policy.protected_files_path_exclude ?? [], []);
   const { checkFileProtectionPostApply } = require(join(runtime, "manifest_file_helpers.cjs"));
   for (const path of ["README.md", "src/Aspire.Cli/README.md"]) {
     assert.deepEqual(checkFileProtectionPostApply([path], {
@@ -337,18 +337,23 @@ test("the native policy exempts only the hook README from basename protection", 
   }
 });
 
-for (const telemetry of [false, true]) {
-  test(`verification accepts the hook README ${telemetry ? "mixed with telemetry" : "alone"}`, async t => {
-    const f = proposalFixture(t, { additionalPath: readmePath, telemetry });
+for (const additionalPath of [undefined, "tests/Aspire.Cli.Tests/Agents/AgentTelemetryCatalogTests.cs"]) {
+  test(`verification accepts the JSON allowlist ${additionalPath ? "with catalog tests" : "alone"}`, async t => {
+    const f = proposalFixture(t, { additionalPath });
     const result = await f.verify();
     assert.equal(result.tree, git(f.agent, "rev-parse", `${f.source.branch}^{tree}`));
     const patch = readFileSync(join(f.verified, result.patch), "utf8");
-    assert.ok(patch.includes(readmePath));
-    assert.equal(patch.includes(allowedPath), telemetry);
+    assert.ok(patch.includes(allowedPath));
+    if (additionalPath) assert.ok(patch.includes(additionalPath));
   });
 }
 
 for (const [outside, telemetry] of [
+  [readmePath, false], [readmePath, true],
+  ["src/Aspire.Cli/Agents/Hooks/AgentTelemetryCatalog.cs", true],
+  ["src/Aspire.Cli/Agents/Hooks/track-telemetry.sh", true],
+  ["src/Aspire.Cli/Agents/Hooks/track-telemetry.ps1", true],
+  ["tests/Aspire.Cli.Tests/Agents/TelemetryHookScriptTests.cs", true],
   [".github/workflows/publish.yml", false], [".github/workflows/publish.yml", true],
   [".github/CODEOWNERS", true], ["src/Aspire.Cli/Commands/DeployCommand.cs", true],
   ["tests/Aspire.Cli.Tests/Aspire.Cli.Tests.csproj", true], ["README.md", true]

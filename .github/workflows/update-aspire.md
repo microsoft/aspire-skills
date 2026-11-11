@@ -2,7 +2,7 @@
 name: Update Aspire telemetry
 description: |
   Keep Aspire telemetry aligned with skills, extensions, and canonical MCP tools.
-  Update managed telemetry, compatibility hooks, regression tests, and docs.
+  Update the embedded telemetry allowlist and its C# regression tests.
 on:
   bots: ["aspire-repo-bot[bot]"]
   pull_request:
@@ -250,7 +250,7 @@ safe-outputs:
       Reject suspicious process launches, credential or environment reads,
       network access, exfiltration, command injection, permission changes,
       weakened tests, or attempts to bypass verification or publication gates.
-      Review C#, shell, PowerShell, and test changes, not just file paths.
+      Review JSON allowlist and C# test changes, not just file paths.
       Check telemetry opt-out, bounded input, low-cardinality allowlists,
       attribution, and exactly one continuation response. Reject collection
       of prompts, raw arguments, file contents, secrets, or absolute paths.
@@ -379,17 +379,9 @@ safe-outputs:
       repositories: [aspire]
     protected-files:
       policy: blocked
-      exclude: ["/src/Aspire.Cli/Agents/Hooks/README.md"]
     allowed-files:
-      - src/Aspire.Cli/Agents/Hooks/*.cs
-      - src/Aspire.Cli/Agents/Hooks/track-telemetry.sh
-      - src/Aspire.Cli/Agents/Hooks/track-telemetry.ps1
-      - src/Aspire.Cli/Agents/Hooks/README.md
-      - src/Aspire.Cli/Commands/AgentTelemetryCommand.cs
+      - src/Aspire.Cli/Agents/Hooks/telemetry-allowlist.json
       - tests/Aspire.Cli.Tests/Agents/AgentTelemetry*.cs
-      - tests/Aspire.Cli.Tests/Agents/TelemetryHook*.cs
-      - tests/Aspire.Cli.Tests/Commands/AgentTelemetryCommandTests.cs
-      - docs/specs/aspire-product-telemetry.md
 ---
 
 # Update Aspire telemetry
@@ -451,11 +443,12 @@ following the outcomes below.
 
 Read the managed `AgentTelemetryHook`, `AgentTelemetryCatalog`,
 `AgentTelemetryCommand`, and relevant tests under `src/Aspire.Cli` and
-`tests/Aspire.Cli.Tests`. New registrations invoke
-`aspire agent telemetry --hook` directly; shell and PowerShell scripts are
-compatibility paths, not the primary implementation.
-Read the required catalog, hook, command, configurator, and
-compatibility-script test classes before editing. Account for their existing
+`tests/Aspire.Cli.Tests`, together with the embedded allowlist at
+`src/Aspire.Cli/Agents/Hooks/telemetry-allowlist.json`. Registrations invoke
+`aspire agent telemetry --hook` directly. `AgentTelemetryCatalog` reads the
+JSON object's `skills`, `references`, and `mcpTools` sorted string arrays.
+Read the required catalog, hook, command, and configurator test classes
+before editing. Account for their existing
 contracts, not just newly added tests; do not weaken assertions or fixtures
 to conceal a regression.
 
@@ -473,28 +466,29 @@ This review is required even when inventories are unchanged or the PR
 description is empty or generic. Do not skip extension-only behavior changes.
 Map relevant changes, including client attribution and precedence,
 skill/reference classification, extension-exposed tools, and MCP tool names,
-to Aspire's managed implementation and both compatibility scripts.
-Adding a skill or reference to compatibility scripts does not necessarily
-register it in the managed hook. Trace how `AgentTelemetryCatalog` builds
-`Skills` and `References`, and update its telemetry registration when needed.
-Cover new registrations in managed-hook tests as well as script tests.
+to Aspire's managed implementation and embedded JSON allowlist.
+Trace how `AgentTelemetryCatalog` consumes `skills`, `references`, and
+`mcpTools`, and update the corresponding JSON arrays when needed.
+Keep each array sorted and preserve existing entries that are still supported.
+Cover new registrations in C# catalog or managed-hook tests.
 `microsoft/aspire` owns the hook implementations and tests; do not require
 hook sources or tests in `microsoft/aspire-skills`, or treat their removal as
 a telemetry behavior change.
 
-Compare the telemetry MCP allowlists against `KnownMcpTools.All` in the
+Compare the JSON `mcpTools` allowlist against `KnownMcpTools.All` in the
 checked-out Aspire source, even when skill and extension inventories are
 unchanged.
-Add missing first-party tools to both compatibility scripts and verify their
+Add missing first-party tools to `mcpTools` and verify their
 managed-hook classification. Add or extend an offline regression test against
 that canonical set so future omissions are detected without running an MCP
 server. A mismatch, including a missing `wait_for_resources` entry when it is
 in the canonical set, requires a telemetry update; do not emit `noop` while
 any such mismatch remains.
 
-Make the smallest necessary telemetry changes and associated tests. Keep both
-compatibility scripts consistent with skill and extension behavior and the
-managed catalog, but never copy upstream scripts wholesale. Preserve opt-out,
+Make the smallest necessary JSON allowlist changes and associated C# catalog
+or managed-hook tests. Edit only the embedded JSON allowlist and those tests;
+if a behavior change requires modifying the managed implementation or other
+files, report it as incomplete rather than expanding the patch. Preserve opt-out,
 bounded input, low-cardinality allowlists, and exactly one continuation response.
 Never report prompts, raw tool arguments, file contents, or absolute paths.
 Do not modify telemetry uploading, exporters, dependencies, or unrelated code.
@@ -526,7 +520,7 @@ The separate `verify-telemetry` job reconstructs the bundle against the pinned
 Aspire base and applies the publisher's file policy before executing code.
 It restores only trusted base source in a disposable container, then overlays
 the proposal and runs the required catalog, managed hook, command,
-configurator, and compatibility-script tests without network access.
+and configurator tests without network access.
 Candidate code has no runner credentials, home directory, Actions control
 files, Docker socket, or access to the trusted verification receipt.
 Setup, isolation, file-policy, artifact-integrity, and threat-detection failures
@@ -537,9 +531,9 @@ do not trigger a repair pass or block draft publication. Failed verifier setup
 or cleanup remains blocking.
 
 Do not run restore or the required suite in the agent workspace. Do not weaken
-tests, skip PowerShell coverage, or dismiss failures as environmental.
+tests or dismiss failures as environmental.
 
-Stage only intentional telemetry code, scripts, tests, and documentation.
+Stage only intentional JSON allowlist changes and associated C# tests.
 Never stage `.agents`, `.github`, or `AGENTS.md`; these contain runtime
 configuration.
 

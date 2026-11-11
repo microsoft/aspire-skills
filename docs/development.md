@@ -73,7 +73,10 @@ another workflow. Reruns must preserve the tag's commit and approved notes.
 
 The [update-aspire workflow](../.github/workflows/update-aspire.md) keeps Aspire CLI
 telemetry for aspire-skills usage up to date, including which skills and extension
-tools agents invoke.
+tools agents invoke. It updates
+`src/Aspire.Cli/Agents/Hooks/telemetry-allowlist.json` in `microsoft/aspire`,
+whose `skills`, `references`, and `mcpTools` properties are sorted string arrays,
+and associated C# catalog or managed-hook tests.
 It creates draft proposals with one isolated build/test attempt. Candidate build
 and test failures are reported in the draft or no-op summary; verifier setup,
 isolation, and security failures block publication.
