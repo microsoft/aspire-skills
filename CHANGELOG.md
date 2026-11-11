@@ -13,6 +13,20 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   from Aspire 17.0.
 
 ### Changed
+- The Aspireify proposal canvas no longer opens when you ask to edit an AppHost
+  that already declares resources. Connecting or wiring a resource, adding a single
+  integration or API, running a one-off `aspire add`, and repairing the TypeScript
+  toolchain now stay in chat. The canvas still opens to wire an unwired AppHost, or
+  when you ask to aspireify, re-scan, or re-propose the whole resource graph.
+- AppHosts now reports an error when it cannot switch to the requested AppHost.
+- Aspireify now prompts you in Copilot to approve the AppHost plan you reviewed.
+  Starting over requires separate approval and preserves the previous review.
+- Aspireify marks the agent's findings and recommendations as unverified.
+  Review them before approving a plan.
+- Use a local checkout with AppHosts and Aspireify. UNC paths such as
+  `\\server\share\AppHost` are no longer supported.
+- Surfaced Aspireify's existing persistent-data recovery safeguards in the skill
+  entrypoint, including target-specific approval and protection for shared directories.
 - Simplified Aspireify's TypeScript AppHost examples to chain resource promises
   without redundant `await`, while retaining required lifecycle and callback awaits.
 - Corrected the Aspireify TypeScript data-volume example to the generated AppHost SDK:
@@ -50,6 +64,12 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   authoring reference with Aspire's subnet-based `subnet.AddPrivateEndpoint(target)` API,
   including the `Aspire.Hosting.Azure.Network` package reference and `ASPIREAZURE003` opt-in.
   Aspireify's authoring rules now route private endpoint requests to that API instead of raw Bicep.
+- Fixed the TypeScript deploy workflow reference and CI/CD setup snippet to install the
+  Aspire CLI and run `aspire restore` before `npm run build`. The generated
+  `.aspire/modules/` folder is gitignored, so on a clean checkout the build failed with
+  `TS2307: Cannot find module './.aspire/modules/aspire.mjs'`. In the shared Node setup
+  snippet, the restore runs only when `apphost.mts` exists, so C# and Go AppHosts with
+  JavaScript resources are unaffected.
 - Corrected Aspireify's TypeScript AppHost `package.json` guidance to match `aspire init`.
   With an existing root `package.json`, the AppHost goes in `aspire-apphost/` and the
   root only gains `aspire:start`/`aspire:build`/`aspire:dev` delegates; the merge rules

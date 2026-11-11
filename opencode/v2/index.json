@@ -11,7 +11,7 @@
     },
     {
       "name": "aspire-deployment",
-      "version": "sha512-51378a2fcb53bfa1f5e3baa2cc6273e85741c72d35717c8f05dbe597546c1a586edace7ec7caee028012da1e9d93f2418471228b4d08f9d41b4dc2c21ca29db6",
+      "version": "sha512-3c99432de4e8b9be178dae48ce06e398c7de716e43d27278264e1f0469fb26d9d8d1a0bcfd5dc5f4e89f94137b9d6e0a5c6c5c1b54dd83a7a2c68daf176e7423",
       "files": [
         "aspire-deployment.md",
         "references/aws.md",
@@ -78,7 +78,7 @@
     },
     {
       "name": "aspireify",
-      "version": "sha512-720797eee344d4b2371ab4ae91b8344b5edccfc29fc539eefd9f9f8b2666a1376abeed19130955d8b4ad85bb57c8f2cafeecc5e3b76664087eda9d6b0d3d1c28",
+      "version": "sha512-8f4c5d40a70ee143a9c04f93c093463245bbe4d114e27f68db009cf19ee160ef1fea76d9c69ed1c5cebc04f8b1bd72f960c1deb6f6a1771435af106a80253321",
       "files": [
         "aspireify.md",
         "references/apphost-wiring.md",
