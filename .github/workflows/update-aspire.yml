@@ -26,6 +26,7 @@ jobs:
       (github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch')
       && github.repository == 'microsoft/aspire-skills'
       && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id)
+      && (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main')
     # Job-level so skipped events and previews cannot replace a pending publication run.
     concurrency:
       group: ${{ inputs.dry_run && format('aspire-skills-to-aspire-preview-{0}', github.run_id) || 'aspire-skills-to-aspire' }}

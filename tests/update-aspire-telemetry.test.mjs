@@ -381,16 +381,14 @@ test("automatic source resolution rejects unmerged or mismatched events", async 
   }
 });
 
-test("manual publication requires the main workflow ref while previews may use any ref", async () => {
+test("manual runs, including previews, require the main workflow ref", async () => {
   const github = sourceGithubFor({ merged: true });
-  await assert.rejects(
-    resolveTelemetrySource({ github, context: sourceContext({ manual: true, ref: "refs/heads/feature" }) }),
-    /must run the workflow from main/
-  );
-  const preview = await resolveTelemetrySource({
-    github, context: sourceContext({ manual: true, dryRun: true, ref: "refs/heads/feature" })
-  });
-  assert.equal(preview.dryRun, true);
+  for (const dryRun of [false, true]) {
+    await assert.rejects(
+      resolveTelemetrySource({ github, context: sourceContext({ manual: true, dryRun, ref: "refs/heads/feature" }) }),
+      /must use the workflow from main/
+    );
+  }
 });
 
 test("job summary escapes source-controlled catalog content", () => {
@@ -414,15 +412,16 @@ test("workflow retains activation and separates trusted scripts from read-only s
   assert.equal(group({ dry_run: true }, { run_id: 7 }, format), "aspire-skills-to-aspire-preview-7");
   assert.equal(workflow.jobs.sync.concurrency["cancel-in-progress"], false);
   const accepts = new Function("github", `return (${workflow.jobs.sync.if});`);
-  for (const [event, merged, repository, headRepo, expected] of [
-    ["pull_request", true, "microsoft/aspire-skills", 1, true],
+  for (const [event, merged, repository, headRepo, expected, ref = "refs/heads/main"] of [
+    ["pull_request", true, "microsoft/aspire-skills", 1, true, "refs/pull/1/merge"],
     ["pull_request", true, "microsoft/aspire-skills", 2, false],
     ["pull_request", false, "microsoft/aspire-skills", 1, false],
     ["workflow_dispatch", false, "microsoft/aspire-skills", undefined, true],
+    ["workflow_dispatch", false, "microsoft/aspire-skills", undefined, false, "refs/heads/feature"],
     ["workflow_dispatch", false, "example/fork", undefined, false]
   ]) {
     assert.equal(accepts({
-      event_name: event, repository, repository_id: 1,
+      event_name: event, repository, repository_id: 1, ref,
       event: { pull_request: { merged, head: { repo: { id: headRepo } } } }
     }), expected);
   }

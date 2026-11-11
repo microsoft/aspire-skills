@@ -112,8 +112,8 @@ export async function resolveTelemetrySource({ github, context }) {
     throw new Error("Automatic synchronization requires the triggering merged PR.");
   }
   const dryRun = manual && [true, "true"].includes(context.payload.inputs?.dry_run);
-  if (manual && !dryRun && context.ref !== "refs/heads/main") {
-    throw new Error("Manual publication must run the workflow from main.");
+  if (manual && context.ref !== "refs/heads/main") {
+    throw new Error("Manual runs must use the workflow from main.");
   }
   if (!pr.merged && !dryRun) throw new Error("Unmerged PRs can only be previewed with dry_run.");
   // Merged PRs publish current main, so stale or out-of-order events cannot roll back newer inventory.
