@@ -82,14 +82,25 @@ LF line endings, and a trailing newline. Mirrors under `.github/plugins/`,
 The catalog must already exist in Aspire; this workflow does not introduce its reader
 or embedding.
 
+The catalog is validated against Aspire's parser contract before any API call:
+both arrays are non-empty, skill names match `[a-zA-Z0-9_-]+`, entries are unique
+ignoring case and ordinally sorted, and each reference names a cataloged skill
+with no backslashes or empty, `.`, or `..` segments. A violation fails the run.
+
 The workflow runs after a PR merges into main, or manually with a source
-`pr_number`. It checks out that PR's immutable merge commit, or its head commit
-when manually selecting an unmerged PR. A changed catalog creates or updates one
-draft PR on the automation-owned `update-aspire-telemetry-catalog` branch in Aspire
-using the existing bot app. Each update rebuilds that branch from Aspire's current
-main and changes only the catalog file, so do not edit the generated branch by hand.
-An identical catalog makes no changes. Manual `dry_run` previews the generated
-JSON in the Actions summary without creating a write token or publishing changes.
+`pr_number`. A merged PR always publishes the current aspire-skills main commit,
+after confirming the PR merge commit is contained in it, so stale or out-of-order
+events cannot roll back newer skills or references. Runs are serialized, and a run
+whose main snapshot is no longer current exits without changes. An unmerged PR's
+head can only be previewed with `dry_run`.
+
+A changed catalog creates or updates one draft PR on the automation-owned
+`update-aspire-telemetry-catalog` branch in Aspire using the existing bot app.
+Each update rebuilds that branch from Aspire's current main and changes only the
+catalog file, so do not edit the generated branch by hand. When Aspire main
+already matches the generated catalog, any open bot proposal is closed with a
+comment and its branch is deleted. Manual `dry_run` previews the generated JSON
+in the Actions summary without creating a write token or publishing changes.
 
 No agent, destination code execution, or content interpretation is needed.
 Extension tools and behavior are not part of this inventory; their telemetry cannot

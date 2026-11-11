@@ -42,10 +42,51 @@ export function generateTelemetryCatalog(directory) {
     }
   }
   if (!skills.length) throw new Error("The telemetry catalog must contain at least one skill.");
-  return {
+  return validateTelemetryCatalog({
     skills: [...new Set(skills)].sort(),
     references: [...new Set(references)].sort()
-  };
+  });
+}
+
+function validateValues(catalog, property) {
+  const values = catalog[property];
+  if (!Array.isArray(values) || !values.length) {
+    throw new Error(`The telemetry catalog must declare a non-empty ${property} array.`);
+  }
+  const unique = new Set();
+  values.forEach((value, index) => {
+    if (typeof value !== "string" || !value) throw new Error(`Invalid ${property} entry: ${value}`);
+    if (unique.has(value.toLowerCase())) throw new Error(`Duplicate ${property} entry ignoring case: ${value}`);
+    unique.add(value.toLowerCase());
+    if (index && values[index - 1] > value) throw new Error(`The ${property} array must be sorted ordinally.`);
+  });
+  return unique;
+}
+
+// Mirrors Aspire's AgentTelemetryCatalog.Parse so invalid inventories fail before publication.
+export function validateTelemetryCatalog(catalog) {
+  const keys = Object.keys(catalog ?? {});
+  if (keys.length !== 2 || !keys.includes("skills") || !keys.includes("references")) {
+    throw new Error("The telemetry catalog must contain only skills and references.");
+  }
+  const skills = validateValues(catalog, "skills");
+  for (const skill of catalog.skills) {
+    if (!/^[a-zA-Z0-9_-]+$/.test(skill)) throw new Error(`Invalid skill identifier: ${skill}`);
+  }
+  validateValues(catalog, "references");
+  for (const reference of catalog.references) {
+    const segments = reference.split("/");
+    if (segments.length < 3 || !skills.has(segments[0].toLowerCase()) || segments[1] !== "references" ||
+      reference.includes("\\") || segments.slice(2).some(segment => ["", ".", ".."].includes(segment))) {
+      throw new Error(`Invalid reference path: ${reference}`);
+    }
+  }
+  return catalog;
+}
+
+async function mainCommit(github) {
+  const { data } = await github.rest.git.getRef({ ...sourceRepository, ref: "heads/main" });
+  return data.object.sha;
 }
 
 export async function resolveTelemetrySource({ github, context }) {
@@ -62,17 +103,29 @@ export async function resolveTelemetrySource({ github, context }) {
   if (!manual && (!pr.merged || pr.merge_commit_sha !== context.payload.pull_request.merge_commit_sha)) {
     throw new Error("Automatic synchronization requires the triggering merged PR.");
   }
-  const commit = pr.merged ? pr.merge_commit_sha : pr.head.sha;
+  const dryRun = manual && [true, "true"].includes(context.payload.inputs?.dry_run);
+  if (!pr.merged && !dryRun) throw new Error("Unmerged PRs can only be previewed with dry_run.");
+  // Merged PRs publish current main, so stale or out-of-order events cannot roll back newer inventory.
+  const commit = pr.merged ? await mainCommit(github) : pr.head.sha;
   if (!/^[0-9a-f]{40}$/.test(commit ?? "")) throw new Error("Source must be an immutable commit SHA.");
+  if (pr.merged) {
+    const { data: comparison } = await github.rest.repos.compareCommits({
+      ...sourceRepository, base: pr.merge_commit_sha, head: commit
+    });
+    if (!["ahead", "identical"].includes(comparison.status)) {
+      throw new Error("The source PR merge commit is not contained in main.");
+    }
+  }
   return {
-    number, commit,
+    number, commit, snapshot: pr.merged ? "main" : "head",
     url: `https://github.com/microsoft/aspire-skills/pull/${number}`,
-    dryRun: manual && [true, "true"].includes(context.payload.inputs?.dry_run)
+    dryRun
   };
 }
 
-export async function syncTelemetryCatalog({ github, directory, source }) {
+export async function syncTelemetryCatalog({ github, sourceGithub, directory, source }) {
   const content = `${JSON.stringify(generateTelemetryCatalog(directory), null, 2)}\n`;
+  if (!source.dryRun && source.snapshot !== "main") throw new Error("Only current main snapshots can be published.");
   const { data: main } = await github.rest.git.getRef({ ...targetRepository, ref: "heads/main" });
   const base = main.object.sha;
   const { data: current } = await github.rest.repos.getContent({
@@ -81,14 +134,32 @@ export async function syncTelemetryCatalog({ github, directory, source }) {
   if (current.type !== "file" || current.encoding !== "base64") {
     throw new Error("The Aspire telemetry catalog must be a base64-encoded regular file.");
   }
-  if (Buffer.from(current.content, "base64").toString("utf8") === content) {
-    return { status: "unchanged", content };
-  }
-  if (source.dryRun) return { status: "preview", content };
+  const unchanged = Buffer.from(current.content, "base64").toString("utf8") === content;
+  if (source.dryRun) return { status: unchanged ? "unchanged" : "preview", content };
+  if (await mainCommit(sourceGithub) !== source.commit) return { status: "superseded", content };
 
   const { data: proposals } = await github.rest.pulls.list({
     ...targetRepository, state: "open", base: "main", head: `microsoft:${branch}`
   });
+  if (unchanged) {
+    // Aspire main already matches, so any open proposal carries obsolete changes.
+    for (const proposal of proposals) {
+      await github.rest.issues.createComment({
+        ...targetRepository, issue_number: proposal.number,
+        body: `Closing because Aspire main already matches the telemetry catalog generated from microsoft/aspire-skills@${source.commit}.`
+      });
+      await github.rest.pulls.update({ ...targetRepository, pull_number: proposal.number, state: "closed" });
+    }
+    if (proposals.length) {
+      try {
+        await github.rest.git.deleteRef({ ...targetRepository, ref: `heads/${branch}` });
+      } catch (error) {
+        if (![404, 422].includes(error.status)) throw error;
+      }
+      return { status: "closed", content, url: proposals[0].html_url };
+    }
+    return { status: "unchanged", content };
+  }
   let head;
   try {
     const { data } = await github.rest.git.getRef({ ...targetRepository, ref: `heads/${branch}` });

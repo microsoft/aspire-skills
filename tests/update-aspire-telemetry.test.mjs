@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { parse } from "yaml";
 import {
-  generateTelemetryCatalog, resolveTelemetrySource, syncTelemetryCatalog
+  generateTelemetryCatalog, resolveTelemetrySource, syncTelemetryCatalog, validateTelemetryCatalog
 } from "../scripts/update-aspire-telemetry.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -15,8 +15,9 @@ const catalogPath = "src/Aspire.Cli/Agents/Hooks/telemetry-catalog.json";
 const base = "1".repeat(40);
 const head = "2".repeat(40);
 const commit = "3".repeat(40);
+const newer = "4".repeat(40);
 const source = {
-  number: 123, commit,
+  number: 123, commit, snapshot: "main",
   url: "https://github.com/microsoft/aspire-skills/pull/123", dryRun: false
 };
 
@@ -55,7 +56,16 @@ const expected = {
   ]
 };
 
-function publisher({ current = '{"skills":[],"references":[]}\n', existing = false, identicalHead = false } = {}) {
+function sourceClient(main = commit) {
+  return { rest: { git: { getRef: async args => {
+    assert.deepEqual(args, { owner: "microsoft", repo: "aspire-skills", ref: "heads/main" });
+    return { data: { object: { sha: main } } };
+  } } } };
+}
+
+function publisher({
+  current = '{"skills":[],"references":[]}\n', existing = false, identicalHead = false, main = commit
+} = {}) {
   const calls = [];
   const methods = {};
   const results = {
@@ -67,7 +77,7 @@ function publisher({ current = '{"skills":[],"references":[]}\n', existing = fal
     "repos.getContent": () => ({
       type: "file", encoding: "base64", content: Buffer.from(current).toString("base64")
     }),
-    "pulls.list": () => existing ? [{ number: 42 }] : [],
+    "pulls.list": () => existing ? [{ number: 42, html_url: "https://github.com/microsoft/aspire/pull/42" }] : [],
     "git.getCommit": args => args.commit_sha === base
       ? { tree: { sha: "base-tree" }, parents: [] }
       : { tree: { sha: identicalHead ? "generated-tree" : "old-tree" }, parents: [{ sha: base }] },
@@ -77,7 +87,9 @@ function publisher({ current = '{"skills":[],"references":[]}\n', existing = fal
     "git.updateRef": () => ({}),
     "pulls.create": () => ({ number: 42, html_url: "https://github.com/microsoft/aspire/pull/42" }),
     "pulls.update": () => ({ number: 42, html_url: "https://github.com/microsoft/aspire/pull/42" }),
-    "issues.addLabels": () => ({})
+    "issues.addLabels": () => ({}),
+    "issues.createComment": () => ({}),
+    "git.deleteRef": () => ({})
   };
   for (const [name, result] of Object.entries(results)) {
     const [group, method] = name.split(".");
@@ -89,7 +101,7 @@ function publisher({ current = '{"skills":[],"references":[]}\n', existing = fal
       return { data: result(args) };
     };
   }
-  return { github: { rest: methods }, calls };
+  return { github: { rest: methods }, sourceGithub: sourceClient(main), calls };
 }
 
 test("catalog inventories only canonical skills and all reference files in ordinal order", t => {
@@ -128,12 +140,74 @@ test("dry-run previews exact two-field JSON with stable formatting and performs 
   assert.equal(f.calls[1].args.path, catalogPath);
 });
 
-test("an unchanged catalog performs no mutations", async t => {
+test("an unchanged catalog without a proposal performs no mutations", async t => {
   const directory = fixture(t);
   const f = publisher({ current: `${JSON.stringify(expected, null, 2)}\n` });
   const result = await syncTelemetryCatalog({ ...f, directory, source });
   assert.equal(result.status, "unchanged");
-  assert.deepEqual(f.calls.map(call => call.name), ["git.getRef", "repos.getContent"]);
+  assert.deepEqual(f.calls.map(call => call.name), ["git.getRef", "repos.getContent", "pulls.list"]);
+});
+
+test("an unchanged catalog closes an obsolete bot proposal and deletes its branch", async t => {
+  const directory = fixture(t);
+  const f = publisher({ current: `${JSON.stringify(expected, null, 2)}\n`, existing: true });
+  const result = await syncTelemetryCatalog({ ...f, directory, source });
+  assert.equal(result.status, "closed");
+  assert.deepEqual(f.calls.map(call => call.name).slice(3), ["issues.createComment", "pulls.update", "git.deleteRef"]);
+  assert.equal(f.calls.find(call => call.name === "pulls.update").args.state, "closed");
+  assert.equal(f.calls.find(call => call.name === "git.deleteRef").args.ref, "heads/update-aspire-telemetry-catalog");
+});
+
+test("a snapshot superseded by newer main performs no mutations", async t => {
+  const directory = fixture(t);
+  for (const current of ['{"skills":[],"references":[]}\n', `${JSON.stringify(expected, null, 2)}\n`]) {
+    const f = publisher({ current, existing: true, main: newer });
+    assert.equal((await syncTelemetryCatalog({ ...f, directory, source })).status, "superseded");
+    assert.deepEqual(f.calls.map(call => call.name), ["git.getRef", "repos.getContent"]);
+  }
+});
+
+test("unmerged PR head snapshots can only be previewed", async t => {
+  const directory = fixture(t);
+  const f = publisher();
+  await assert.rejects(
+    syncTelemetryCatalog({ ...f, directory, source: { ...source, snapshot: "head" } }),
+    /Only current main snapshots/
+  );
+  assert.equal(f.calls.length, 0);
+  const preview = await syncTelemetryCatalog({ ...f, directory, source: { ...source, snapshot: "head", dryRun: true } });
+  assert.equal(preview.status, "preview");
+});
+
+test("catalog validation enforces Aspire's parser contract", () => {
+  assert.equal(validateTelemetryCatalog(expected), expected);
+  for (const [catalog, error] of [
+    [{ skills: ["alpha"], references: [] }, /non-empty references/],
+    [{ skills: [], references: ["alpha/references/a.md"] }, /non-empty skills/],
+    [{ ...expected, mcpTools: ["x"] }, /only skills and references/],
+    [{ skills: ["alpha.beta"], references: ["alpha.beta/references/a.md"] }, /Invalid skill identifier/],
+    [{ skills: ["Alpha", "alpha"], references: ["alpha/references/a.md"] }, /Duplicate skills/],
+    [{ skills: ["zeta", "alpha"], references: ["alpha/references/a.md"] }, /sorted ordinally/],
+    [{ skills: ["alpha"], references: ["alpha/references/A.md", "alpha/references/a.md"] }, /Duplicate references/],
+    [{ skills: ["alpha"], references: ["alpha/references/a\\b.md"] }, /Invalid reference path/],
+    [{ skills: ["alpha"], references: ["alpha/references/../a.md"] }, /Invalid reference path/],
+    [{ skills: ["alpha"], references: ["beta/references/a.md"] }, /Invalid reference path/],
+    [{ skills: ["alpha"], references: ["alpha/assets/a.md"] }, /Invalid reference path/],
+    [{ skills: ["alpha"], references: ["alpha/references"] }, /Invalid reference path/]
+  ]) {
+    assert.throws(() => validateTelemetryCatalog(catalog), error);
+  }
+});
+
+test("generated inventories that Aspire would reject fail before any API call", async t => {
+  const directory = fixture(t);
+  for (const path of ["skills/alpha/references", "skills/zeta/references"]) rmSync(join(directory, path), { recursive: true, force: true });
+  const f = publisher();
+  await assert.rejects(syncTelemetryCatalog({ ...f, directory, source }), /non-empty references/);
+  assert.equal(f.calls.length, 0);
+  write(directory, "skills/alpha/references/a.md");
+  write(directory, "skills/bad.name/SKILL.md");
+  assert.throws(() => generateTelemetryCatalog(directory), /Invalid skill identifier: bad\.name/);
 });
 
 test("changed inventory creates a draft Aspire PR whose commit changes only the catalog", async t => {
@@ -188,40 +262,66 @@ test("publication fails explicitly on permission failures instead of treating th
   assert.ok(!f.calls.some(call => call.name.startsWith("git.create")));
 });
 
-test("source resolution pins merge commits and manual heads without reading their content", async () => {
-  for (const [manual, merged, dryRun] of [
-    [false, true, false], [true, true, true], [true, false, false]
-  ]) {
-    const context = {
-      eventName: manual ? "workflow_dispatch" : "pull_request",
-      payload: {
-        inputs: { pr_number: "123", dry_run: String(dryRun) },
-        pull_request: { number: 123, merge_commit_sha: commit }
-      }
-    };
-    const github = { rest: { pulls: { get: async args => {
+function sourceGithubFor({ merged, mergeSha = commit, main = newer, status = "ahead", calls = [] }) {
+  return { rest: {
+    pulls: { get: async args => {
       assert.deepEqual(args, { owner: "microsoft", repo: "aspire-skills", pull_number: 123 });
       return { data: {
         base: { ref: "main", repo: { full_name: "microsoft/aspire-skills" } },
-        merged, merge_commit_sha: commit, head: { sha: head }
+        merged, merge_commit_sha: mergeSha, head: { sha: head }
       } };
-    } } } };
-    assert.deepEqual(await resolveTelemetrySource({ github, context }), {
-      ...source, commit: merged ? commit : head, dryRun
+    } },
+    git: { getRef: async () => ({ data: { object: { sha: main } } }) },
+    repos: { compareCommits: async args => {
+      calls.push(args);
+      return { data: { status } };
+    } }
+  } };
+}
+
+function sourceContext({ manual = false, dryRun = false } = {}) {
+  return {
+    eventName: manual ? "workflow_dispatch" : "pull_request",
+    payload: {
+      inputs: { pr_number: "123", dry_run: String(dryRun) },
+      pull_request: { number: 123, merge_commit_sha: commit }
+    }
+  };
+}
+
+test("merged sources publish current main so stale or out-of-order events cannot roll back inventory", async () => {
+  for (const [manual, dryRun] of [[false, false], [true, false], [true, true]]) {
+    const calls = [];
+    const github = sourceGithubFor({ merged: true, calls });
+    assert.deepEqual(await resolveTelemetrySource({ github, context: sourceContext({ manual, dryRun }) }), {
+      ...source, commit: newer, dryRun
     });
+    assert.deepEqual(calls, [{ owner: "microsoft", repo: "aspire-skills", base: commit, head: newer }]);
   }
 });
 
+test("merged sources must be contained in main", async () => {
+  for (const status of ["behind", "diverged"]) {
+    const github = sourceGithubFor({ merged: true, status });
+    await assert.rejects(resolveTelemetrySource({ github, context: sourceContext() }), /not contained in main/);
+  }
+});
+
+test("unmerged manual sources preview their head but cannot publish", async () => {
+  const github = sourceGithubFor({ merged: false });
+  assert.deepEqual(await resolveTelemetrySource({ github, context: sourceContext({ manual: true, dryRun: true }) }), {
+    ...source, commit: head, snapshot: "head", dryRun: true
+  });
+  await assert.rejects(
+    resolveTelemetrySource({ github, context: sourceContext({ manual: true }) }),
+    /only be previewed with dry_run/
+  );
+});
+
 test("automatic source resolution rejects unmerged or mismatched events", async () => {
-  const context = { eventName: "pull_request", payload: { pull_request: { number: 123, merge_commit_sha: commit } } };
-  for (const pr of [
-    { merged: false, merge_commit_sha: commit },
-    { merged: true, merge_commit_sha: head }
-  ]) {
-    const github = { rest: { pulls: { get: async () => ({ data: {
-      ...pr, base: { ref: "main", repo: { full_name: "microsoft/aspire-skills" } }
-    } }) } } };
-    await assert.rejects(resolveTelemetrySource({ github, context }), /requires the triggering merged PR/);
+  for (const [merged, mergeSha] of [[false, commit], [true, head]]) {
+    const github = sourceGithubFor({ merged, mergeSha });
+    await assert.rejects(resolveTelemetrySource({ github, context: sourceContext() }), /requires the triggering merged PR/);
   }
 });
 
@@ -246,4 +346,7 @@ test("workflow retains activation and separates trusted scripts from read-only s
   assert.equal(token.if, "steps.source.outputs.dry-run != 'true'");
   assert.equal(token.with.repositories, "aspire");
   assert.equal(workflow.jobs.sync.steps.some(step => step.run), false);
+  const sync = workflow.jobs.sync.steps.at(-1);
+  assert.equal(sync.env.SOURCE_TOKEN, "${{ github.token }}");
+  assert.match(sync.with.script, /sourceGithub: getOctokit\(process\.env\.SOURCE_TOKEN\)/);
 });
