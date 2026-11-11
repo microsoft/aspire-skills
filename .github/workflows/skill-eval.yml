@@ -70,6 +70,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          shopt -s globstar nullglob
           # List paths from the PR files API rather than the PR diff: the diff
           # endpoint returns HTTP 406 once a PR's diff exceeds 20,000 lines.
           changed_files="$(
@@ -112,8 +113,8 @@ jobs:
               echo "::error::Invalid skill directory name: $skill" >&2
               exit 1
             fi
-            spec="skills/${skill}/evals/eval.yaml"
-            if [ -f "$spec" ]; then
+            specs=("skills/${skill}/evals"/**/eval.yaml)
+            if [ "${#specs[@]}" -gt 0 ]; then
               matched="${matched} ${skill}"
             fi
           done
@@ -162,7 +163,7 @@ jobs:
         # Use runtime env auth, not Vally's GITHUB_TOKEN -> SDK gitHubToken
         # user-token override. The Actions token is not a PAT.
         #
-        # Run each changed spec in an isolated Vally process. Vally's session
+        # Run each changed skill's specs in an isolated Vally process. Vally's session
         # filesystem provider is process-global, so multiple workers can race
         # while configuring it; one worker per process avoids that race while
         # the processes still run concurrently. Apply the ci-gate-equivalent
@@ -173,17 +174,22 @@ jobs:
         env:
           COPILOT_GITHUB_TOKEN: ${{ github.token }}
         run: |
-          set -uo pipefail
+          set -euo pipefail
+          shopt -s globstar failglob
           unset GITHUB_TOKEN GH_TOKEN GITHUB_COPILOT_API_TOKEN
           pids=()
 
           for skill in ${{ steps.changed.outputs.matched }}; do
             echo "Evaluating changed skill: $skill"
+            eval_args=()
+            for spec in "skills/${skill}/evals"/**/eval.yaml; do
+              eval_args+=(--eval-spec "$spec")
+            done
             vally eval \
               --require-pass \
               --runs 1 \
               --max-retries 2 \
-              --eval-spec "skills/${skill}/evals/eval.yaml" \
+              "${eval_args[@]}" \
               --tag priority=p0,p1 \
               --workers 1 \
               --output-dir "./results/${skill}" &
@@ -204,7 +210,7 @@ jobs:
           {
             echo "### ℹ️ ci-gate eval skipped"
             echo ""
-            echo "No skill eval specs (\`skills/<skill>/evals/eval.yaml\`) were modified in"
+            echo "No skills with eval specs under \`skills/<skill>/evals/\` were modified in"
             echo "this PR, so the model-backed ci-gate had nothing to evaluate. The full"
             echo "suite still runs in the scheduled **Skill Eval (nightly)** workflow."
           } >> "$GITHUB_STEP_SUMMARY"

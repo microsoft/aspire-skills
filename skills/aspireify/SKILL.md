@@ -95,6 +95,13 @@ container lifetimes and data volumes for databases/caches, use HTTPS endpoints b
 default, pass endpoint references instead of hardcoded URLs, and model external SaaS
 URLs/API keys as parameters so they are visible in the dashboard.
 
+### Persistent-data recovery
+
+Before recommending or performing a persistent-data reset, including read-only
+advice, read and follow the
+[recovery safeguards](references/apphost-wiring.md#container-lifetimes).
+Require explicit approval for the exact destructive target; never clear shared data.
+
 ### Redis TLS edge case
 
 Aspire can automatically provision TLS certificates for container resources. If Redis
