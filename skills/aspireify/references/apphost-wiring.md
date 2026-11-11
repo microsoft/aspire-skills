@@ -389,6 +389,11 @@ To fix it, choose the least destructive option the user approves:
      mounted host directory is dedicated to this one resource and get explicit approval
      naming that exact path before removing the container and resetting only that
      directory's data. Do not remove or clear a parent directory.
+   - If the bind-mounted directory is shared with other data, do not clear it and do not
+     propose a replacement path inside it or next to it as safe, because you have not
+     verified its contents. Recommend restoring the previous password, or ask the user to
+     choose a new empty directory dedicated to this resource and confirm it before
+     changing the mount.
 3. **Reset all Aspire-owned volume data for the AppHost.**
    `aspire stop --force --volumes --apphost <filesystem-path>` removes the AppHost's
    persistent resources and every named volume Aspire created for it. In an AppHost with
