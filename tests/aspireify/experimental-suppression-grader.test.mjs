@@ -6,7 +6,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
-import { gradeAppHost } from "../../evals/aspireify-experimental-diagnostics/grade-suppressions.mjs";
+import { cases, gradeAppHost } from "../../evals/aspireify-experimental-diagnostics/grade-suppressions.mjs";
 
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 const fixtures = join(repoRoot, "evals/aspireify-experimental-diagnostics");
@@ -185,6 +185,55 @@ test("file-based AppHost requires the certificate call on the api resource for .
   edit(variable, "apphost.cs", source => source.replace("builder.Build().Run();", `${both}` +
     'var api = builder.AddCSharpApp("api", "./api/Api.csproj");\napi.WithHttpsDeveloperCertificate();\n\nbuilder.Build().Run();'));
   assert.deepEqual(grade(variable, "file"), []);
+});
+
+// C# source text is not the string's value: "..\\Api" is the path ..\Api, @"..\Api\" is a verbatim
+// string ending in a backslash and "..\Api" does not compile (\A is not an escape).
+test("AppHosts compare the decoded value of regular and verbatim string literals", t => {
+  const passing = {
+    file: [String.raw`".\\api"`, String.raw`@".\api"`, String.raw`@".\api\"`, String.raw`".\\api\\Api.csproj"`,
+      String.raw`"./api\u002FApi.csproj"`, String.raw`@"./api/"`],
+    project: [String.raw`"..\\Api"`, String.raw`@"..\Api"`, String.raw`@"..\Api\"`, String.raw`"..\\Api\\Api.csproj"`,
+      String.raw`"..\u005CApi"`],
+  };
+  for (const [caseName, literals] of Object.entries(passing)) {
+    const source = caseName === "file" ? "apphost.cs" : "AppHost/AppHost.cs";
+    for (const literal of literals) {
+      const root = workspace(t, caseName);
+      edit(root, source, wireApi("PATH", both));
+      edit(root, source, text => text.replace('"PATH"', literal));
+      assert.deepEqual(grade(root, caseName), [], `${caseName} ${literal}`);
+    }
+  }
+
+  const failing = {
+    file: [String.raw`".\api"`, String.raw`".\\\\api"`, String.raw`@".\\api"`],
+    project: [String.raw`"..\Api"`, String.raw`"..\\\\Api"`, String.raw`@"..\\Api"`],
+  };
+  for (const [caseName, literals] of Object.entries(failing)) {
+    const source = caseName === "file" ? "apphost.cs" : "AppHost/AppHost.cs";
+    for (const literal of literals) {
+      const root = workspace(t, caseName);
+      edit(root, source, wireApi("PATH", both));
+      edit(root, source, text => text.replace('"PATH"', literal));
+      assert.deepEqual(grade(root, caseName),
+        [`${source} does not add the api resource with AddCSharpApp("api", "${cases[caseName].apiPaths[0]}")`], `${caseName} ${literal}`);
+    }
+  }
+});
+
+test("project-based AppHost compares the echo resource's literals by value", t => {
+  const root = workspace(t, "project");
+  edit(root, "AppHost/AppHost.cs", wireApi("../Api", both));
+  edit(root, "AppHost/AppHost.cs", source => source
+    .replace('AddContainer("echo", "hashicorp/http-echo")', 'AddContainer(@"echo", @"hashicorp/http-echo")')
+    .replace('WithHttpProbe(ProbeType.Liveness, "/")', 'WithHttpProbe(ProbeType.Liveness, @"/")'));
+  assert.deepEqual(grade(root, "project"), []);
+
+  const quoted = workspace(t, "project");
+  edit(quoted, "AppHost/AppHost.cs", wireApi("../Api", both));
+  edit(quoted, "AppHost/AppHost.cs", source => source.replace('ProbeType.Liveness, "/"', 'ProbeType.Liveness, "\\"/"'));
+  assert.match(grade(quoted, "project").join("\n"), /no longer chains WithHttpProbe\(ProbeType\.Liveness, "\/"\)/);
 });
 
 test("file-based AppHost ignores a commented-out #:property NoWarn", t => {

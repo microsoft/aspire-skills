@@ -143,6 +143,10 @@ test("Aspireify 17.0 AddDotnetProject eval fails a response that omits the packa
   assert.deepEqual(gradeDotnet17Response(suppressed.replace(/17\.0\.0/g, "17.0.1-preview.1.25611.2")), []);
   assert.deepEqual(gradeDotnet17Response(
     "```bash\naspire add Aspire.Hosting.Dotnet\n```\n\n" + suppressed.replace("#:sdk Aspire.AppHost.Sdk@17.0.0\n", "")), []);
+  for (const path of [String.raw`".\\api"`, String.raw`@".\api\"`]) {
+    assert.deepEqual(gradeDotnet17Response(suppressed.replace('"./api"', path)), [], path);
+  }
+  assert.ok(score(suppressed.replace('"./api"', String.raw`".\api"`)) < threshold, String.raw`".\api" (\a is a bell) still passes`);
   for (const [omitted, output] of Object.entries(failing)) {
     assert.ok(score(output) < threshold, `A response without ${omitted} still passes at ${score(output)} >= ${threshold}`);
   }

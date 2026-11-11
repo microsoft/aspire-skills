@@ -1,6 +1,7 @@
 // Program grader for the Aspireify experimental-diagnostics stimuli.
 // For the file and project cases it inspects the AppHost the agent wrote under <workspace>/app and
-// fails unless the api resource is added to the AppHost's builder for the supplied project with the
+// fails unless the api resource is added to the AppHost's builder for the supplied project (string literals are
+// compared by their decoded C# value, so "..\\Api" and @"..\Api" both mean ..\Api) with the
 // certificate call chained from it, the AppHost still creates and runs that builder, the existing
 // echo container keeps its endpoint and probe wiring, every call to an Aspire 13.6 experimental API
 // is covered by an unconditional, case-sensitive #pragma or NoWarn suppression that no conditional
@@ -41,9 +42,35 @@ export const cases = {
 
 const read = path => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
 
+// C# string literals. In a verbatim string (@"...") backslashes are literal and "" is a quote; in a
+// regular string a backslash starts an escape sequence.
+const verbatimLiteral = String.raw`@"(?:[^"]|"")*"`;
+const regularLiteral = String.raw`"(?:\\.|[^"\\\n])*"`;
+const stringLiteral = String.raw`(?:\$@|@\$?)"(?:[^"]|"")*"|\$?${regularLiteral}`;
+const charLiteral = String.raw`'(?:\\.|[^'\\\n])'`;
+const literalAt = new RegExp(`${stringLiteral}|${charLiteral}`, "y");
+
+const escapes = { "'": "'", '"': '"', "\\": "\\", 0: "\0", a: "\x07", b: "\b", f: "\f", n: "\n", r: "\r", t: "\t", v: "\v" };
+
+// Returns the value of a non-interpolated C# string literal, or undefined when it contains an escape
+// sequence C# rejects, so the source text is never mistaken for the string it denotes.
+function stringValue(literal) {
+  if (literal.startsWith("@")) return literal.slice(2, -1).replace(/""/g, '"');
+  let valid = true;
+  const value = literal.slice(1, -1).replace(/\\(?:u([0-9A-Fa-f]{4})|U([0-9A-Fa-f]{8})|x([0-9A-Fa-f]{1,4})|(.))/g,
+    (_, u, U, x, c) => {
+      if (u ?? x) return String.fromCharCode(parseInt(u ?? x, 16));
+      if (U && parseInt(U, 16) <= 0x10FFFF) return String.fromCodePoint(parseInt(U, 16));
+      if (c !== undefined && Object.hasOwn(escapes, c)) return escapes[c];
+      valid = false;
+      return "";
+    });
+  return valid ? value : undefined;
+}
+
 // Blanks comments (keeping line breaks) without touching comment-like text inside string literals.
 function stripComments(code) {
-  return code.replace(/"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])'|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
+  return code.replace(new RegExp(`${stringLiteral}|${charLiteral}|//[^\n]*|/\\*[\\s\\S]*?\\*/`, "g"),
     token => token.startsWith("/") ? token.replace(/[^\n]/g, " ") : token);
 }
 
@@ -161,8 +188,10 @@ function pragmaCoverage(code, apis) {
 function closeParen(code, open) {
   let depth = 0;
   for (let i = open; i < code.length; i++) {
-    if (code[i] === '"') {
-      for (i++; i < code.length && code[i] !== '"'; i++) if (code[i] === "\\") i++;
+    literalAt.lastIndex = i;
+    const literal = literalAt.exec(code);
+    if (literal) {
+      i += literal[0].length - 1;
     } else if (code[i] === "(") {
       depth++;
     } else if (code[i] === ")" && --depth === 0) {
@@ -188,7 +217,8 @@ function chainedCalls(code, from) {
 
 const normalizePath = path => path.replace(/\\/g, "/").replace(/\/+$/, "").replace(/^(?!\.{1,2}\/)/, "./");
 
-const twoStringArgs = /^\s*(?:name\s*:\s*)?"([^"]*)"\s*,\s*(?:\w+\s*:\s*)?@?"([^"]*)"\s*$/;
+const argLiteral = `(${verbatimLiteral}|${regularLiteral})`;
+const twoStringArgs = new RegExp(String.raw`^\s*(?:name\s*:\s*)?${argLiteral}\s*,\s*(?:\w+\s*:\s*)?${argLiteral}\s*$`);
 
 // Finds `method("<name>", "<value>")` calls in unconditional code whose name is `name` and whose
 // value passes accept. For each it returns the call's position, the receiver it is called on and
@@ -200,7 +230,8 @@ function resourceCalls(code, method, name, accept) {
     const end = closeParen(code, open);
     if (end < 0) continue;
     const args = code.slice(open + 1, end - 1).match(twoStringArgs);
-    if (!args || args[1] !== name || !accept(args[2])) continue;
+    const [resourceName, value] = args ? [stringValue(args[1]), stringValue(args[2])] : [];
+    if (resourceName !== name || value === undefined || !accept(value)) continue;
     const before = code.slice(0, match.index);
     const calls = chainedCalls(code, end);
     const variable = before.match(/\b([A-Za-z_]\w*)\s*(?<![=!<>])=(?!=)\s*[A-Za-z_][\w.]*?\s*\.\s*$/)?.[1];
@@ -248,7 +279,14 @@ function appHostProblems(code, where, call) {
   return problems;
 }
 
-const compact = args => args.replace(/\s+/g, "");
+// Rewrites each string literal in call arguments as its decoded value in regular-string form, then
+// removes whitespace, so @"/" and "/" compare equal.
+const compact = args => args
+  .replace(new RegExp(`${verbatimLiteral}|${regularLiteral}`, "g"), literal => {
+    const value = stringValue(literal);
+    return value === undefined ? literal : JSON.stringify(value);
+  })
+  .replace(/\s+/g, "");
 
 // Returns problems unless the resource the prompt asks to keep is still added with its chained
 // calls and their original arguments.
