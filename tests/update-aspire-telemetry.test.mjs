@@ -255,6 +255,54 @@ test("superseded first attempts defer reporting, and final attempts recommend a 
   }
 });
 
+test("a superseded run publishes the newly resolved main inventory on retry", async t => {
+  const firstDirectory = fixture(t);
+  const retryDirectory = fixture(t);
+  write(retryDirectory, "skills/beta/SKILL.md");
+  write(retryDirectory, "skills/beta/references/new.md");
+
+  let currentMain = commit;
+  const comparisons = [];
+  const sourceGithub = sourceGithubFor({ merged: true, calls: comparisons });
+  sourceGithub.rest.git.getRef = async args => {
+    assert.deepEqual(args, { owner: "microsoft", repo: "aspire-skills", ref: "heads/main" });
+    return { data: { object: { sha: currentMain } } };
+  };
+  const f = publisher();
+  const outputs = [];
+  const summaries = [];
+  const core = {
+    setOutput: (name, value) => outputs.push([name, value]),
+    info: () => {},
+    warning: message => assert.fail(message),
+    summary: { addRaw: value => ({ write: async () => summaries.push(value) }) }
+  };
+  const context = sourceContext();
+  const first = await resolveTelemetrySource({ github: sourceGithub, context });
+  currentMain = newer;
+  const superseded = await runTelemetrySync({
+    ...f, sourceGithub, core, directory: firstDirectory, source: first, final: false
+  });
+  assert.equal(superseded.status, "superseded");
+  assert.deepEqual(f.calls.map(call => call.name), ["git.getRef", "repos.getContent"]);
+  assert.equal(summaries.length, 0);
+
+  const retry = await resolveTelemetrySource({ github: sourceGithub, context });
+  const result = await runTelemetrySync({
+    ...f, sourceGithub, core, directory: retryDirectory, source: retry, final: true
+  });
+  assert.equal(retry.commit, newer);
+  assert.deepEqual(comparisons.map(comparison => comparison.head), [commit, newer]);
+  assert.equal(result.status, "created");
+  const published = f.calls.find(call => call.name === "git.createTree").args.tree[0].content;
+  assert.deepEqual(JSON.parse(published), {
+    skills: ["alpha", "beta", "zeta"],
+    references: [...expected.references, "beta/references/new.md"]
+  });
+  assert.deepEqual(outputs, [["status", "superseded"], ["status", "created"]]);
+  assert.equal(summaries.length, 1);
+});
+
 test("unmerged PR head snapshots can only be previewed", async t => {
   const directory = fixture(t);
   const f = publisher();
