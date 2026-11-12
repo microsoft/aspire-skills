@@ -234,10 +234,18 @@ For a release PR, verify:
   notes. Reruns preserve that tag and those notes; no manual tag step, generated
   archive upload, or token-triggered follow-up job is needed.
 
-Backflow starts from current dev and merges main. Keep dev's next version,
-current changelog notes, and newer work, including non-version manifest changes;
-bring in main's approved changelog history and regenerate catalogs. Target dev
-and merge with a merge commit, not squash or rebase.
+The Arcade-derived workflow opens selected dev-to-release patch backports by
+manual dispatch and automatically attempts a main-to-dev patch backport when a
+same-repository PR merges into main. There is no comment trigger. Keep dev's next
+version, current changelog notes, and newer work, including non-version manifest
+changes; bring in main's approved changelog history and regenerate catalogs. Patch conflicts and preservation failures require manual
+resolution and a source-PR notification. This flow uses `git am`, not a real
+merge; retained merge ancestry and merge-commit-only merging are not requirements.
+
+Automation uses the Aspire App so final bot commits run ordinary required checks.
+Reruns must not duplicate PRs, reopen closed PRs, replace maintainer edits, or
+overwrite newer refs. Tag publication still uses `GITHUB_TOKEN` and cannot move
+existing tags.
 
 **Severity:** `important` for inaccurate guidance or missing validation evidence;
 `blocking` for source/version mismatches or publication of unapproved code.

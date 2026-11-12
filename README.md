@@ -285,7 +285,9 @@ Merging a same-repository `release/<version>` PR into `main` runs
 copies the approved changelog notes into a source-only GitHub release, and uploads
 no generated archives. It uses `GITHUB_TOKEN`, not a repo bot or stored personal
 token. Reruns preserve the tag's commit and notes.
-See [the development guide](docs/development.md) for the release flow.
+Release preparation, dev bumps, and Arcade patch backports use
+the Aspire repository GitHub App to open reviewable PRs and run normal checks.
+See [the development guide](docs/development.md) for the release flow and setup.
 
 ## Contributing
 
