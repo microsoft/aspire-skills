@@ -62,6 +62,13 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   authoring reference with Aspire's subnet-based `subnet.AddPrivateEndpoint(target)` API,
   including the `Aspire.Hosting.Azure.Network` package reference and `ASPIREAZURE003` opt-in.
   Aspireify's authoring rules now route private endpoint requests to that API instead of raw Bicep.
+- Documented the `ASPIRECSHARPAPPS001` and `ASPIRECERTIFICATES001` suppressions that
+  Aspireify's C# `AddCSharpApp` and `WithHttpsDeveloperCertificate` examples need. Without
+  them, a C# AppHost fails to build with these experimental-API diagnostics as errors.
+  The guidance is version-aware for Aspire 17.0: `AddCSharpApp` is obsolete there, new
+  .NET services use `AddDotnetProject` with an explicit `Aspire.Hosting.Dotnet` package
+  reference (the 17.0 SDK doesn't add it), existing apps are not migrated unprompted, and
+  `WithHttpsDeveloperCertificate` keeps its `ASPIRECERTIFICATES001` suppression.
 - Fixed the TypeScript deploy workflow reference and CI/CD setup snippet to install the
   Aspire CLI and run `aspire restore` before `npm run build`. The generated
   `.aspire/modules/` folder is gitignored, so on a clean checkout the build failed with
