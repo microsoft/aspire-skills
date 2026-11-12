@@ -71,9 +71,49 @@ another workflow. Reruns must preserve the tag's commit and approved notes.
 
 ## Aspire telemetry maintenance
 
-The [update-aspire workflow](../.github/workflows/update-aspire.md) keeps Aspire CLI
-telemetry for aspire-skills usage up to date, including which skills and extension
-tools agents invoke.
-It creates draft proposals with one isolated build/test attempt. Candidate build
-and test failures are reported in the draft or no-op summary; verifier setup,
-isolation, and security failures block publication.
+The [update-aspire workflow](../.github/workflows/update-aspire.yml) deterministically
+generates Aspire's telemetry catalog from canonical `skills/<name>/` directories
+and their `references/**` files. It writes
+`src/Aspire.Cli/Agents/Hooks/telemetry-catalog.json` in `microsoft/aspire`,
+with ordinally sorted, unique `skills` and `references` arrays. Reference names use
+`<skill>/references/<path>` with forward slashes. JSON uses two-space indentation,
+LF line endings, and a trailing newline. Mirrors under `.github/plugins/`,
+`opencode/`, and `.github/skills/` are not scanned.
+The catalog must already exist in Aspire; this workflow does not introduce its reader
+or embedding.
+
+The catalog is validated against Aspire's parser contract before any API call:
+both arrays are non-empty, skill names match `[a-zA-Z0-9_-]+`, entries are unique
+ignoring case and ordinally sorted, and each reference names a cataloged skill
+with no backslashes or empty, `.`, or `..` segments. A violation fails the run.
+Unicode filenames are supported; case comparison conservatively rejects ambiguous
+Unicode uppercase collisions rather than publishing a catalog Aspire might reject.
+
+The workflow runs after a PR merges into main, or manually with a source
+`pr_number`. A merged PR always publishes the current aspire-skills main commit,
+after confirming the PR merge commit is contained in it, so stale or out-of-order
+events cannot roll back newer skills or references. Publishing runs are queued and
+run one at a time. If aspire-skills main moves after a run resolves its source,
+for example through a fork merge or direct push that starts no run of its own, the
+run repeats the same source resolution, containment check, read-only checkout, and
+publication once against the newer main. If main moves again during that retry,
+the run publishes nothing and its summary recommends a manual dispatch. To recover
+after a direct push to main, dispatch the workflow from main with any merged
+`pr_number`; it publishes the current main snapshot. An
+unmerged PR's head can only be previewed with `dry_run`. Merge events from fork
+PRs are skipped, so use a manual run for them. All manual runs, including
+previews, must use the workflow from main. Previews run in their own concurrency group, so they cannot
+displace a pending publication.
+
+A changed catalog creates or updates one draft PR on the automation-owned
+`update-aspire-telemetry-catalog` branch in Aspire using the existing bot app.
+Each update rebuilds that branch from Aspire's current main and changes only the
+catalog file, so do not edit the generated branch by hand. When Aspire main
+already matches the generated catalog, any open bot proposal is closed with a
+comment and the branch is deleted, including an orphan branch left without an
+open proposal. Manual `dry_run` previews the generated JSON
+in the Actions summary without creating a write token or publishing changes.
+
+No agent, destination code execution, or content interpretation is needed.
+Extension tools and behavior are not part of this inventory; their telemetry cannot
+be inferred from skill and reference paths. Aspire owns its MCP tool catalog.
