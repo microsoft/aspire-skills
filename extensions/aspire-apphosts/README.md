@@ -27,6 +27,9 @@ changes appear without reopening the panel. Opening the canvas never starts an
 AppHost; Run, Stop, Deploy, Publish, and pipeline-step operations are explicit
 and serialized per AppHost.
 
+Closing the canvas stops polling and closes its listener after in-flight
+requests finish. It does not cancel an operation that has already started.
+
 Snapshots carry a monotonic content revision across HTTP and server-sent events.
 An older response cannot replace a newer model, and freshness updates apply only
 to the model revision they describe. Selected context includes the owning

@@ -25,6 +25,15 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   Review them before approving a plan.
 - Use a local checkout with AppHosts and Aspireify. UNC paths such as
   `\\server\share\AppHost` are no longer supported.
+- Closed Aspire AppHosts canvas listeners promptly after in-flight commands
+  finish, without canceling those commands.
+- Kept skill-supplied external APIs, streams, and SDK-owned dependencies visible
+  in the Aspireify canvas without treating them as runnable services. Resource
+  mappings, not-modeled or deferred reasons, and unassessed items now survive
+  reload, immutable confirmation, and the chat handoff. Regenerated proposals
+  honor removals and withdraw obsolete mappings; discovery refreshes clear
+  stale references without losing removal history if dependencies disappear and
+  return.
 - Surfaced Aspireify's existing persistent-data recovery safeguards in the skill
   entrypoint, including target-specific approval and protection for shared directories.
 - Corrected the Aspireify TypeScript data-volume example to the generated AppHost SDK:

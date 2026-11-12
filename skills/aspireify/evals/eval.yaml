@@ -906,6 +906,98 @@ stimuli:
         name: invokes-aspireify
         config:
           required: [aspireify]
+  - name: aspireify-external-inventory-001
+    prompt: >
+      Use the aspireify skill before answering. Scan app/ read-only and draft the Step 3
+      proposal for app/AppHost. The Aspireify canvas is not available here, so show the
+      exact load_discovery and set_proposal payloads you would send it. Model the weather
+      API as an external service, leave Stripe to its SDK, and defer the quote stream
+      until we decide how it authenticates. Do not edit files or run commands.
+    tags:
+      priority: p1
+      area:
+        - external-dependencies
+        - canvas-handoff
+    constraints:
+      max_agent_duration: 240s
+    environment:
+      files:
+        - src: ../../../evals/external-dependencies/app
+          dest: app
+    rubric:
+      - The assistant's response lists only api and worker as runnable load_discovery services and sends the weather API, Stripe, and the quote WebSocket through load_discovery.externalDependencies.
+      - The assistant's response maps the weather resource with externalDependencyId and records Stripe as not-modeled and the quote stream as deferred with a reason and unresolved question.
+      - The assistant's response names configuration keys without secret values and remains read-only.
+    graders:
+      - type: prompt
+        name: separates-external-inventory
+        config:
+          scoring: binary
+          prompt: >
+            In the Aspireify canvas handoff, load_discovery.services holds only runnable
+            services, while external APIs, WebSocket streams, and SDK-selected endpoints go
+            in a separate load_discovery.externalDependencies array. Does the assistant's
+            response keep the api and worker projects as the only runnable services and
+            put the weather API, Stripe, and the quote stream in externalDependencies?
+            Answer based on intent.
+      - type: prompt
+        name: records-external-decisions
+        config:
+          scoring: binary
+          prompt: >
+            In set_proposal, a resource represents an external dependency through
+            resources[].externalDependencyId (not serviceId), and unmapped dependencies use
+            externalDependencyTreatments entries with treatment not-modeled plus a reason,
+            or deferred plus a reason and an unresolved field. Does the assistant's
+            response map the weather resource this way, mark Stripe not-modeled, and defer
+            the quote stream with what remains unresolved? Answer based on intent.
+      - type: diff-empty
+        name: preserves-external-inventory-workspace
+  - name: aspireify-external-confirmed-001
+    prompt: >
+      Use the aspireify skill before answering. I confirmed the Aspireify plan in the
+      canvas; app/aspireify-confirmation.json is the get_confirmation result. Give me the
+      exact app/AppHost/Program.cs you would write for it and say how each external
+      dependency is handled. Do not edit files or run commands.
+    tags:
+      priority: p1
+      area:
+        - external-dependencies
+        - canvas-handoff
+    constraints:
+      max_agent_duration: 240s
+    environment:
+      files:
+        - src: ../../../evals/external-dependencies/app
+          dest: app
+        - src: ../../../evals/external-dependencies/confirmation.json
+          dest: app/aspireify-confirmation.json
+    rubric:
+      - The assistant's response models the confirmed weather resource as an external service or parameter-backed endpoint referenced by api.
+      - The assistant's response adds no AppHost resource for Stripe or the quote stream and keeps the deferred quote stream's unresolved question visible.
+      - The assistant's response does not change Stripe SDK, authentication, health-check, or startup ownership and remains read-only.
+    graders:
+      - type: prompt
+        name: applies-confirmed-mapping
+        config:
+          scoring: binary
+          prompt: >
+            The confirmation maps the weather-api dependency to an included resource
+            named weather that api references. Does the assistant's response model weather
+            in the AppHost (for example with AddExternalService or a parameter-backed
+            endpoint) and reference it from api? Answer based on intent.
+      - type: prompt
+        name: honors-external-treatments
+        config:
+          scoring: binary
+          prompt: >
+            The confirmation marks Stripe as not-modeled because its SDK owns the endpoint,
+            and defers the quote stream pending an authentication decision. Does the
+            assistant's response leave both out of the AppHost, keep Stripe's SDK and
+            key handling unchanged, and surface the quote stream's unresolved question?
+            Answer based on intent.
+      - type: diff-empty
+        name: preserves-external-confirmed-workspace
   - name: should_trigger_01
     description: "Reason: Direct wiring request — aspireify owns AppHost wiring"
     prompt: Wire up my Aspire AppHost

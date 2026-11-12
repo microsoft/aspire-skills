@@ -16,6 +16,7 @@ import {
 } from "./interaction-model.js";
 
 const apiToken = new URLSearchParams(window.location.search).get("token") || "";
+let expandedExternalDetails = new Set();
 
 const EDGE_LABELS = {
     reference: { outgoing: "references", incoming: "referenced by", tone: "reference" },
@@ -516,6 +517,10 @@ function render(nextSnapshot) {
         if (snapshotRevisionIsStale(nextSnapshot)) {
             return;
         }
+        expandedExternalDetails = new Set(
+            domainChanged ? [] : [...document.querySelectorAll(".external-dependency-details[open]")]
+                .map((details) => details.id),
+        );
         unobserveDetailTextareas();
         mutationError = "";
         confirmationError = "";
@@ -566,7 +571,7 @@ function render(nextSnapshot) {
         elements.planContent.hidden = false;
         renderProposalIdentity();
         renderResourcePlan();
-        renderNotProposedServices();
+        renderNotProposedItems();
         renderStatus();
         renderConfirmation();
         restoreFocusToken(focusToken);
@@ -665,10 +670,29 @@ const NOT_PROPOSED_TREATMENT_LABELS = {
     "not-modeled": "Not modeled",
     deferred: "Deferred",
     "not-assessed": "Not assessed",
+    excluded: "Excluded mappings",
+    removed: "Removed mappings",
+    "excluded-removed": "Excluded or removed mappings",
 };
 
-function renderNotProposedServices() {
+function mappingStatus(mappings) {
+    const removed = mappings.some((mapping) => mapping.removed);
+    const excluded = mappings.some((mapping) => !mapping.removed);
+    return removed && excluded ? "excluded-removed" : removed ? "removed" : "excluded";
+}
+
+function renderNotProposedItems() {
     const services = Array.isArray(snapshot.notProposed) ? snapshot.notProposed : [];
+    const externalDependencies = (snapshot.externalDependencies ?? [])
+        .map((dependency) => ({
+            ...dependency,
+            resourceMappings: dependency.resourceMappings.filter((mapping) => !mapping.include),
+        }))
+        .filter((dependency) => dependency.treatment !== "mapped" || dependency.resourceMappings.length);
+    const items = [
+        ...services.map((entry) => ({ entry, external: false })),
+        ...externalDependencies.map((entry) => ({ entry, external: true })),
+    ];
     let section = document.getElementById("not-proposed-services");
     if (!section) {
         section = createElement("section", {
@@ -682,39 +706,61 @@ function renderNotProposedServices() {
         );
         elements.resourcePlanPanel.append(section);
     }
-    section.hidden = services.length === 0;
-    section.querySelector(":scope > p").textContent = services.some(
-        (service) => service.treatment === "not-assessed",
+    section.hidden = items.length === 0;
+    section.querySelector(":scope > p").textContent = items.some(
+        ({ entry }) => entry.treatment === "not-assessed",
     )
-        ? "Agent-supplied discovery and exclusion or deferral reasons. Not assessed means the agent supplied no treatment."
-        : "Agent-supplied discovery and exclusion or deferral reasons. These reasons do not establish that a decision occurred in chat.";
+        ? "Agent-supplied discovery, exclusion or deferral reasons, and excluded or removed resource mappings. Not assessed means the agent supplied no treatment."
+        : "Agent-supplied discovery, exclusion or deferral reasons, and excluded or removed resource mappings. These reasons do not establish that a decision occurred in chat.";
     const list = section.querySelector(".not-proposed-list");
     list.replaceChildren(
-        ...services.map((service) => {
-            const treatment = NOT_PROPOSED_TREATMENT_LABELS[service.treatment]
-                ? service.treatment
-                : "not-assessed";
+        ...items.map(({ entry, external }) => {
+            const treatment = external && entry.treatment === "mapped"
+                ? mappingStatus(entry.resourceMappings)
+                : NOT_PROPOSED_TREATMENT_LABELS[entry.treatment]
+                  ? entry.treatment
+                  : "not-assessed";
             const item = createElement("li", {
                 className: "not-proposed-item",
                 attrs: { "data-treatment": treatment },
             });
             const identity = createElement("div", { className: "not-proposed-identity" });
-            identity.append(createElement("strong", { text: service.name }));
-            if (service.path) {
-                identity.append(createElement("code", { text: service.path }));
+            identity.append(createElement("strong", { text: entry.name }));
+            if (external) {
+                identity.append(createElement("span", {
+                    className: "external-dependency-kind muted",
+                    text: `External: ${entry.type}`,
+                }));
             }
-            if (service.reason) {
+            if (entry.path) {
+                identity.append(createElement("code", { text: entry.path }));
+            }
+            if (entry.reason) {
                 identity.append(
-                    createElement("span", { className: "not-proposed-reason", text: `Agent-supplied reason: ${service.reason}` }),
+                    createElement("span", { className: "not-proposed-reason", text: `Agent-supplied reason: ${entry.reason}` }),
                 );
             }
-            if (service.unresolved) {
+            if (entry.unresolved) {
                 identity.append(
                     createElement("span", {
                         className: "not-proposed-unresolved",
-                        text: `Agent-supplied unresolved issue: ${service.unresolved}`,
+                        text: `Agent-supplied unresolved issue: ${entry.unresolved}`,
                     }),
                 );
+            }
+            if (external) {
+                if (entry.resourceMappings.length) {
+                    identity.append(createElement("span", {
+                        className: "not-proposed-reason",
+                        text: `Resource mappings: ${entry.resourceMappings.map((mapping) =>
+                            `${mapping.name} (${mapping.type}; ${mapping.removed ? "removed" : "excluded"})`,
+                        ).join(", ")}`,
+                    }));
+                }
+                const details = renderExternalDependencyDetails(entry);
+                if (details) {
+                    identity.append(details);
+                }
             }
             item.append(
                 identity,
@@ -809,6 +855,7 @@ function renderOverview(resources, edges, resourceIssues, confirmed) {
 
 function renderOverviewNode(resource, edges, issues, confirmed) {
     const service = serviceForResource(resource);
+    const externalDependency = externalDependencyForResource(resource);
     const selected = resource.id === selectedResourceId;
     const drafts = [...fieldDrafts.values()].filter(
         (draft) => draft.resourceId === resource.id,
@@ -837,15 +884,23 @@ function renderOverviewNode(resource, edges, issues, confirmed) {
         className: "overview-kind-marker",
         attrs: { "aria-hidden": "true" },
     });
-    const copy = createElement("span", { className: "overview-node-copy" });
+    const copy = createElement(confirmed ? "div" : "span", { className: "overview-node-copy" });
     copy.append(createResourceTitleLine(resource));
-    if (service) {
+    if (service || externalDependency) {
         copy.append(
             createElement("span", {
-                className: "overview-source muted",
-                text: `${service.name} → ${resource.name}`,
+                className: `overview-source muted${externalDependency ? " external-dependency-mapping" : ""}`,
+                text: service
+                    ? `${service.name} → ${resource.name}`
+                    : `External: ${externalDependency.name} (${externalDependency.type}) → ${resource.name}`,
             }),
         );
+    }
+    if (confirmed && externalDependency) {
+        const details = renderExternalDependencyDetails(externalDependency, resource.id);
+        if (details) {
+            copy.append(details);
+        }
     }
     const relationships = relationshipsFor(resource, edges);
     const meta = createElement("span", { className: "overview-node-meta" });
@@ -1192,12 +1247,16 @@ function createRemoveResourceButton(resource) {
 }
 
 function renderSourceMapping(resource, service) {
-    if (!service) {
+    const externalDependency = externalDependencyForResource(resource);
+    if (!service && !externalDependency) {
         return null;
     }
     const mapping = createElement("p", { className: "resource-mapping muted" });
     mapping.append(
-        createElement("span", { className: "resource-mapping-value", text: service.name }),
+        createElement("span", {
+            className: "resource-mapping-value",
+            text: service ? service.name : `External: ${externalDependency.name}`,
+        }),
         createElement("span", { className: "mapping-arrow", text: "→" }),
         createElement("span", { className: "resource-mapping-value", text: resource.name }),
     );
@@ -1243,6 +1302,11 @@ function renderResourceFacts(resource, service) {
     if (service) {
         appendFact(facts, "Exposes HTTP", service.exposesHttp ? "Yes" : "No");
     }
+    const externalDependency = externalDependencyForResource(resource);
+    if (externalDependency) {
+        appendFact(facts, "Dependency type", externalDependency.type);
+        appendExternalDependencyFacts(facts, externalDependency);
+    }
     const path = servicePathForDisplay(service?.path);
     if (path) {
         appendPathFact(facts, resource, path);
@@ -1254,6 +1318,39 @@ function renderResourceFacts(resource, service) {
         appendEditableDefaultsFact(facts, resource);
     }
     return facts;
+}
+
+function appendExternalDependencyFacts(list, dependency) {
+    for (const [label, value, code] of [
+        ["Purpose", dependency.purpose],
+        ["Configuration keys", dependency.configurationKeys?.join(", "), true],
+        ["Source", dependency.source, true],
+        ["Lifecycle owner", dependency.lifecycleOwner],
+        ["Endpoint selection", dependency.endpointSelection],
+    ]) {
+        if (value) {
+            appendFact(list, label, value, code);
+        }
+    }
+}
+
+function renderExternalDependencyDetails(dependency, location = "outside") {
+    const facts = createElement("dl", { className: "external-dependency-facts" });
+    appendExternalDependencyFacts(facts, dependency);
+    if (!facts.childElementCount) {
+        return null;
+    }
+    const id = `external-details-${domIdToken(dependency.id)}-${domIdToken(location)}`;
+    const details = createElement("details", {
+        className: "external-dependency-details",
+        attrs: { id },
+    });
+    details.open = expandedExternalDetails.has(id);
+    details.append(createElement("summary", {
+        text: "Dependency details",
+        attrs: { id: `${id}-summary` },
+    }), facts);
+    return details;
 }
 
 function appendEditableTextFact(list, label, resource, field, value, options = {}) {
@@ -2366,6 +2463,12 @@ function fillResourceSelect(select, resources) {
 
 function serviceForResource(resource) {
     return snapshot.services.find((service) => service.id === resource.serviceId);
+}
+
+function externalDependencyForResource(resource) {
+    return (snapshot.externalDependencies ?? []).find(
+        (dependency) => dependency.id === resource.externalDependencyId,
+    );
 }
 
 function resourceKind(resource) {

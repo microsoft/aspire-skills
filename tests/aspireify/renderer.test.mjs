@@ -87,7 +87,7 @@ async function createRenderer(initialSnapshot) {
     });
     runInContext(rendererSource, context, { filename: "aspireify/ui/app.js" });
     // Keep the dialog, snapshot, and transport paths real without constructing the resource graph DOM.
-    runInContext("renderResourcePlan = () => {}; renderNotProposedServices = () => {};", context);
+    runInContext("renderResourcePlan = () => {}; renderNotProposedItems = () => {};", context);
     documentListeners.get("DOMContentLoaded")();
     await new Promise((resolve) => setImmediate(resolve));
     events.onopen();
