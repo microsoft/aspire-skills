@@ -284,6 +284,7 @@ catalog.
 | Rule | Why |
 |------|-----|
 | Use **unified `withEnvironment(name, value)`** in TS — never the deprecated per-kind helpers (`withEnvironmentEndpoint`, `withEnvironmentParameter`, etc.) | Single API handles all value kinds; per-kind helpers are deprecated |
+| Prefer un-awaited fluent resource declarations in TS | `*ResourcePromise` exposes the fluent API directly; await builder creation, build/run, and asynchronous callback operations. See [TypeScript authoring](references/typescript-authoring.md#promise-fluent-return-types) |
 | Use `AddNextJsApp` / `AddViteApp` over hand-rolled Dockerfiles for JS frontends | First-class lifecycle + `PublishAs*` integration |
 | Use `PublishAsStaticWebsite` / `PublishAsNodeServer` / `PublishAsPackageScript` for JS publish | Replaces hand-rolled Dockerfiles; SPA → static, SSR Node → NodeServer, package-script SSR → PackageScript |
 | Add `WithBrowserLogs()` to frontend resources for browser console + screenshots in dashboard | `Aspire.Hosting.Browsers` surfaces browser telemetry in the dashboard |
@@ -308,7 +309,7 @@ catalog.
 | Concept | C# | TypeScript |
 |---------|----|------------|
 | Builder | `var builder = DistributedApplication.CreateBuilder(args);` | `const builder = await createBuilder();` |
-| Add project | `builder.AddProject<Projects.Api>("api")` (SDK) or `AddProject("api", "../Api/Api.csproj")` | `await builder.addProject('api', '../Api/Api.csproj')` |
+| Add project | `builder.AddProject<Projects.Api>("api")` (SDK) or `AddProject("api", "../Api/Api.csproj")` | `builder.addProject('api', '../Api/Api.csproj')` |
 | Wire env var (any value type) | `.WithEnvironment("KEY", value)` | `.withEnvironment('KEY', value)` ← unified API |
 | Wait for dependency | `.WaitFor(db)` | `.waitFor(db)` |
 | Pass connection | `.WithReference(db)` | `.withReference(db)` |
