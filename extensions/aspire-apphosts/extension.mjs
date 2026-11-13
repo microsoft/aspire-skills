@@ -896,12 +896,20 @@ function publishStreamModel(entry, state) {
     scheduleStreamPublish(entry);
 }
 
+function requestStreamRefresh(entry) {
+    if (entry.refreshPromise) {
+        entry.refreshQueued = true;
+        return;
+    }
+    void requestRefresh(entry);
+}
+
 function scheduleInitialStreamReconciliation(entry, state) {
     if (state.initialSyncTimer || entry.closed) return;
     state.initialSyncTimer = setTimeout(() => {
         state.initialSyncTimer = null;
         if (entry.closed || entry.paused || entry.describeStreams.get(state.record.id) !== state) return;
-        void requestRefresh(entry);
+        requestStreamRefresh(entry);
     }, STREAM_PUBLISH_DEBOUNCE_MS);
     state.initialSyncTimer.unref?.();
 }
@@ -958,7 +966,7 @@ async function startDescribeStream(entry, state) {
             if (logFile && !gotData && optionalFlagIsUnsupported({ error, stderr: stderrTail }, "--log-file")) {
                 backgroundLogFileSupported = false;
                 void discardBackgroundLogFile(logFile);
-                if (!entry.paused) void requestRefresh(entry);
+                if (!entry.paused) requestStreamRefresh(entry);
                 return;
             }
             const healthy = code === 0 && !error && gotData && Date.now() - startedAt >= 5_000;
@@ -981,12 +989,12 @@ async function startDescribeStream(entry, state) {
             state.restartTimer = setTimeout(() => {
                 state.restartTimer = null;
                 if (!entry.paused && entry.describeStreams.get(state.record.id) === state) {
-                    void requestRefresh(entry);
+                    requestStreamRefresh(entry);
                 }
             }, delay);
             state.restartTimer.unref?.();
             // Replace the exited stream's resources now; the pending restart timer keeps the backoff.
-            if (gotData && !healthy && !entry.paused) void requestRefresh(entry);
+            if (gotData && !healthy && !entry.paused) requestStreamRefresh(entry);
         },
     });
     if (state.run === run) {

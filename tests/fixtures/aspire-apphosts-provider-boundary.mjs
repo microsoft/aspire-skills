@@ -1144,6 +1144,59 @@ test("a describe stream that fails after data falls back to one-shot describe", 
     });
 });
 
+test("a stream failure during refresh queues a fresh one-shot model", async (t) => {
+    const streams = [];
+    const describeStarted = deferred();
+    const releaseDescribe = deferred();
+    let heldPath = null;
+    let holdDescribe = false;
+    let describeState = "Running";
+    const h = await harness(t, {
+        cliOverride: async (args) => {
+            if (holdDescribe && args[0] === "describe"
+                && args[args.indexOf("--apphost") + 1] === heldPath) {
+                describeStarted.resolve();
+                await releaseDescribe.promise;
+                return ok(describe(baseInputs, describeState));
+            }
+            return undefined;
+        },
+        stream: (args, options) => {
+            streams.push({ args, ...options });
+            return { kill() {} };
+        },
+    });
+    const open = await h.open();
+    await waitUntil(() => streams.length === paths.length);
+    const [failedStream, waitingStream] = streams;
+    failedStream.onLine(JSON.stringify(describe(baseInputs, "Running")));
+    await waitUntil(async () => {
+        const { state } = await h.request(open, "/api/state");
+        return allNodes(state.roots).some((node) => node.resourceName === "api"
+            && node.resource?.state === "Running");
+    });
+
+    heldPath = waitingStream.args[waitingStream.args.indexOf("--apphost") + 1];
+    holdDescribe = true;
+    [...h.intervals][0].callback();
+    await describeStarted.promise;
+
+    describeState = "Stopped";
+    h.controls.state = "Stopped";
+    const failedPath = failedStream.args[failedStream.args.indexOf("--apphost") + 1];
+    const callsBeforeExit = h.calls.length;
+    failedStream.onExit({ code: 1 });
+    releaseDescribe.resolve();
+
+    await waitUntil(() => h.calls.slice(callsBeforeExit).some(({ args }) =>
+        args[0] === "describe" && args[args.indexOf("--apphost") + 1] === failedPath));
+    await waitUntil(async () => {
+        const { state } = await h.request(open, "/api/state");
+        return allNodes(state.roots).filter((node) => node.resourceName === "api"
+            && node.resource?.state === "Stopped").length === paths.length;
+    });
+});
+
 test("failed background logs are kept under a bounded prefix without touching active logs", async (t) => {
     const root = await mkdtemp(join(tmpdir(), "aspire-logs-"));
     t.after(() => rm(root, { recursive: true, force: true }));
