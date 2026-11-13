@@ -102,7 +102,8 @@ test("native executable invocation preserves JSON, quotes, empty tokens, and she
 for (const command of ["aspire.exe", "aspire-13.6"]) {
     test(`Windows native launcher resolves ${command} through PATH, ignoring working-directory copies`, { skip: process.platform !== "win32" }, async (t) => {
         const root = await mkdtemp(join(tmpdir(), "aspire-cli-launch-"));
-        t.after(() => rm(root, { recursive: true, force: true }));
+        // Windows can hold the just-exited executable copies briefly, so retry EBUSY cleanup.
+        t.after(() => rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
         const installed = join(root, "installed");
         const workspace = join(root, "workspace");
         const appHost = join(workspace, "Demo.AppHost");
