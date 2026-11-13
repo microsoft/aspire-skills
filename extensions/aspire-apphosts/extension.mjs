@@ -554,7 +554,11 @@ async function runPreparedWithCompatibility(args, options = {}) {
         ? beginCommandLog(commandLog.entry, args, commandLog, runOptions.sensitiveValues)
         : undefined;
     if (item) {
-        runOptions.onOutput = (_stream, text) => receiveCommandOutput(commandLog.entry, item, text);
+        runOptions.onOutput = (stream, text) => {
+            if (stream !== "stdout" || commandLog.publishStdout !== false) {
+                receiveCommandOutput(commandLog.entry, item, text);
+            }
+        };
     }
     const tail = item && commandLog.tailAppHostPath
         ? createDetachedRunLogTail({
@@ -574,15 +578,31 @@ async function runPreparedWithCompatibility(args, options = {}) {
         throw error;
     }
     await tail?.stop();
-    if (item) finishCommandLog(commandLog.entry, item, result);
+    if (item) {
+        const loggedResult = commandLog.publishStdout === false && !result.ok && result.stdout
+            ? {
+                ...result,
+                error: result.stderr || "The Aspire CLI command failed.",
+            }
+            : result;
+        finishCommandLog(commandLog.entry, item, loggedResult);
+    }
     return result;
 }
 
 async function runJsonWithCompatibility(args, options = {}) {
     const prepared = [...args, "--non-interactive", "--nologo"];
-    const result = await runPreparedWithCompatibility(prepared, options);
+    const result = await runPreparedWithCompatibility(prepared, {
+        ...options,
+        commandLog: options.commandLog
+            ? { ...options.commandLog, publishStdout: false }
+            : undefined,
+    });
     return {
         ...result,
+        error: !result.ok && result.stdout
+            ? result.stderr || "The Aspire CLI command failed."
+            : result.error,
         data: result.ok ? extractJsonPayload(result.stdout) : undefined,
     };
 }
@@ -998,6 +1018,8 @@ function indexTree(entry, roots) {
 function clearedTree(entry) {
     indexTree(entry, []);
     entry.snapshot = { candidates: [], runningHosts: [] };
+    entry.hostRecords = new Map();
+    entry.commandInputMetadata.prune(() => false);
     const { roots, summary } = initialState(entry.viewMode, entry.includeHidden);
     return { roots, summary, lastSuccessfulAt: null };
 }

@@ -16,6 +16,7 @@ import {
     publicAppHost,
     runProcess,
     sanitizeCommandArgumentInputs,
+    streamProcess,
     validateCommandArguments,
 } from "../extensions/aspire-apphosts/lib/app-model.mjs";
 
@@ -173,6 +174,23 @@ test("output limits and timeouts redact partial secret streams as well as comple
     assert.match(timeout.error, /timed out/);
     assert.match(timeout.stderr, /before \[redacted\]/);
     assert.doesNotMatch(timeout.stderr, /DUMMY-/);
+});
+
+test("streamProcess rejects oversized complete lines before publishing them", async () => {
+    const lines = [];
+    const result = await new Promise((resolveResult) => {
+        streamProcess(process.execPath, [
+            "-e",
+            "process.stdout.write('x'.repeat(256) + '\\n');",
+        ], {
+            maxLineBytes: 64,
+            onLine: (line) => lines.push(line),
+            onExit: resolveResult,
+        });
+    });
+
+    assert.deepEqual(lines, []);
+    assert.notEqual(result.code, 0);
 });
 
 test("interrupted output redacts a complete self-overlapping secret before considering partial tails", async () => {

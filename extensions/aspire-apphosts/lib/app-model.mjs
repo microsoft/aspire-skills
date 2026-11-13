@@ -726,8 +726,8 @@ export function createDetachedRunLogTail({
         candidates.sort((a, b) => b.time - a.time);
         for (const candidate of candidates) {
             const head = (await readChunk(candidate.path, 0, 64 * 1024)).toString("utf8");
-            const spawn = /Spawning child CLI: .*? --apphost (.+?) --log-file (.+?\.log)/.exec(head);
-            const unquote = (value) => value.replace(/^"(.*)"$/, "$1");
+            const spawn = /Spawning child CLI: .*? --apphost (.+?) --log-file ("[^"]+?\.log"|'[^']+?\.log'|[^\s]+?\.log)(?:\s|$)/.exec(head);
+            const unquote = (value) => value.replace(/^(["'])(.*)\1$/, "$2");
             if (spawn && samePath(unquote(spawn[1]), appHostPath, platform)) {
                 return unquote(spawn[2]);
             }
@@ -2281,8 +2281,14 @@ export function streamProcess(command, args, {
             pending += chunk;
             let index;
             while ((index = pending.indexOf("\n")) >= 0) {
-                emit(pending.slice(0, index));
+                const line = pending.slice(0, index);
                 pending = pending.slice(index + 1);
+                if (Buffer.byteLength(line, "utf8") > maxLineBytes) {
+                    pending = "";
+                    try { child.kill(); } catch { /* already exited */ }
+                    return;
+                }
+                emit(line);
             }
             if (Buffer.byteLength(pending, "utf8") > maxLineBytes) {
                 pending = "";

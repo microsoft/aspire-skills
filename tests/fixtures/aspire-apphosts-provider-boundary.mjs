@@ -410,17 +410,79 @@ test("dot-prefixed workspace AppHosts remain visible and open source without adm
 });
 
 test("switching view mode publishes an empty tree before the new mode loads", async (t) => {
-    const h = await harness(t);
+    const workspaceRefresh = deferred();
+    let loaderCalls = 0;
+    const h = await harness(t, {
+        cliOverride: async (args) => {
+            if (args[0] === "ls") {
+                await workspaceRefresh.promise;
+                return ok([]);
+            }
+            if (args[0] === "resource" && args.includes("--load-arguments")) {
+                loaderCalls++;
+                return ok(baseInputs);
+            }
+            return undefined;
+        },
+    });
     const open = await h.open();
     const { state } = await h.request(open, "/api/state");
     assert.ok(state.roots.length > 0);
+    const commandRequest = await requestFor(h, open);
+    assert.equal((await h.request(open, "/api/command-inputs", {
+        ...commandRequest,
+        arguments: { environment: "prod", key: "secret" },
+    })).ok, true);
+    assert.equal(loaderCalls, 1);
     const stream = await sse(h, open);
     t.after(() => stream.close());
-    await h.request(open, "/api/mode", { viewMode: "workspace" });
+    const modeRequest = h.request(open, "/api/mode", { viewMode: "workspace" });
     const cleared = (await stream.waitFor((event) => event.type === "state"
         && event.state.viewMode === "workspace" && event.state.status === "loading")).state;
     assert.deepEqual(cleared.roots, []);
     assert.equal(cleared.selectionId ?? null, null);
+    const staleOperation = await h.request(open, "/api/apphost-operation", {
+        appHostId: commandRequest.appHostId,
+        operation: "stop",
+    });
+    assert.equal(staleOperation.status, 404);
+    workspaceRefresh.resolve();
+    await modeRequest;
+    await h.request(open, "/api/mode", { viewMode: "global" });
+    assert.equal((await h.request(open, "/api/command-inputs", {
+        ...commandRequest,
+        arguments: { environment: "prod", key: "secret" },
+    })).ok, true);
+    assert.equal(loaderCalls, 2, "mode clearing must revoke cached command-input authority");
+});
+
+test("machine-readable stdout stays provider-side", async (t) => {
+    const privateValue = "private-machine-json-value";
+    let failPs = false;
+    const h = await harness(t, {
+        cliOverride: async (args, options) => {
+            if (args[0] === "ps") {
+                const stdout = JSON.stringify({ privateValue });
+                options.onOutput?.("stdout", stdout);
+                if (failPs) {
+                    return { ok: false, code: 1, stdout, stderr: "", error: stdout };
+                }
+            } else if (args[0] === "describe") {
+                options.onOutput?.("stdout", JSON.stringify({ environment: { privateValue } }));
+            }
+            return undefined;
+        },
+    });
+    const open = await h.open();
+    const stream = await sse(h, open);
+    t.after(() => stream.close());
+    const snapshot = await stream.waitFor((event) => event.type === "command-log-snapshot");
+    assert.ok(snapshot.commands.length > 0);
+    assert.doesNotMatch(JSON.stringify(snapshot), new RegExp(privateValue));
+    failPs = true;
+    await h.action("refresh_model");
+    await stream.waitFor((event) => event.type === "command-log" && event.command.status === "failed");
+    assert.doesNotMatch(JSON.stringify(stream.events), new RegExp(privateValue));
 });
 
 async function sse(h, open) {

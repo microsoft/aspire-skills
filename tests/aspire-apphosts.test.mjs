@@ -494,7 +494,7 @@ test("detached run log tail follows the child log named by the matching start in
         const appHostPath = join(tmpdir(), "Repo", "App.AppHost.csproj");
         const otherChild = join(logDir, `cli_${stamp}000_detach-child_other.log`);
         const child = join(logDir, `cli_${stamp}001_detach-child_match.log`);
-        const spawn = (target, log) => `[x] [DBUG] [AppHostLauncher] Spawning child CLI: aspire (isDotnetHost=False) with args: run --non-interactive --apphost ${target} --log-file ${log}\n`;
+        const spawn = (target, log) => `[x] [DBUG] [AppHostLauncher] Spawning child CLI: aspire (isDotnetHost=False) with args: run --non-interactive --apphost "${target}" --log-file "${log}"\n`;
         await writeFile(join(logDir, `cli_${stamp}_aaaa.log`), spawn(join(tmpdir(), "Other", "Other.csproj"), otherChild));
         await writeFile(join(logDir, `cli_${stamp}_bbbb.log`), spawn(appHostPath, child));
         await writeFile(otherChild, "[x] [INFO] [Build] wrong AppHost\n");
