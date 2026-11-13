@@ -1069,28 +1069,57 @@ test("a reconnect snapshot does not replay buffered command output as a live del
     await running;
 });
 
-test("an incomplete initial describe stream burst retains the complete one-shot model", async (t) => {
+test("oversized command lines are discarded through newline without leaking split tokens", async (t) => {
+    const h = await harness(t);
+    h.controls.inputs = [];
+    const open = await h.open();
+    const stream = await sse(h, open);
+    t.after(() => stream.close());
+    const request = await requestFor(h, open);
+    const privateValue = "private-output-token";
+    h.controls.executor = async (_args, options) => {
+        options.onOutput("stdout", `${"x".repeat(9_000)} https://localhost/?token=`);
+        options.onOutput("stdout", `${privateValue}\nsafe output\n`);
+        return ok({ completed: true });
+    };
+    assert.equal((await h.request(open, "/api/command", request)).ok, true);
+    const completed = await stream.waitFor((event) => event.type === "command-log"
+        && event.command.status === "succeeded");
+    assert.equal(completed.command.status, "succeeded");
+    assert.doesNotMatch(JSON.stringify(stream.events), new RegExp(privateValue));
+    assert.match(JSON.stringify(stream.events), /safe output/);
+});
+
+test("initial describe stream reconciliation removes resources missing from a fresh snapshot", async (t) => {
     const streams = [];
+    let missingPath = null;
     const h = await harness(t, {
-        stream: (_args, options) => {
-            streams.push(options);
+        cliOverride: (args) => {
+            if (args[0] === "describe" && args[args.indexOf("--apphost") + 1] === missingPath) {
+                return ok({ resources: [describe().resources[0]] });
+            }
+            return undefined;
+        },
+        stream: (args, options) => {
+            streams.push({ args, ...options });
             return { kill() {} };
         },
     });
     const open = await h.open();
     await waitUntil(() => streams.length > 0);
     const baseline = describe().resources;
+    missingPath = streams[0].args[streams[0].args.indexOf("--apphost") + 1];
+    const callsBeforeLine = h.calls.length;
     streams[0].onLine(JSON.stringify({ ...baseline[0], state: "Starting" }));
-    await new Promise((done) => setTimeout(done, 250));
-    let state = (await h.request(open, "/api/state")).state;
-    assert.equal(allNodes(state.roots).filter((node) => node.resourceName === "db").length, paths.length);
-    streams[0].onLine(JSON.stringify(baseline[1]));
+    await waitUntil(() => h.calls.slice(callsBeforeLine).some(({ args }) =>
+        args[0] === "describe" && args[args.indexOf("--apphost") + 1] === missingPath));
+    let state;
     await waitUntil(async () => {
         state = (await h.request(open, "/api/state")).state;
         return allNodes(state.roots).some((node) => node.resourceName === "api"
             && node.resource?.state === "Starting");
     });
-    assert.equal(allNodes(state.roots).filter((node) => node.resourceName === "db").length, paths.length);
+    assert.equal(allNodes(state.roots).filter((node) => node.resourceName === "db").length, paths.length - 1);
 });
 
 test("a describe stream that fails after data falls back to one-shot describe", async (t) => {

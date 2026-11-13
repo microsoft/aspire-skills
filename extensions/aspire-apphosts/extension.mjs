@@ -348,6 +348,7 @@ function beginCommandLog(entry, args, meta, sensitiveValues = []) {
         record,
         sensitiveValues,
         heldLine: "",
+        discardingLine: false,
         unsent: "",
         flushTimer: null,
     };
@@ -386,13 +387,27 @@ function flushCommandLogOutput(entry, item) {
 function receiveCommandOutput(entry, item, text) {
     // Path redaction is line-oriented, so only complete lines are published while a
     // command runs. A path split across process chunks is therefore never exposed.
-    const combined = item.heldLine + text;
-    const lastBreak = combined.lastIndexOf("\n");
-    let ready = lastBreak >= 0 ? combined.slice(0, lastBreak + 1) : "";
-    item.heldLine = lastBreak >= 0 ? combined.slice(lastBreak + 1) : combined;
-    if (item.heldLine.length > COMMAND_LINE_HOLD_MAX) {
-        ready += item.heldLine;
-        item.heldLine = "";
+    let combined = item.heldLine + text;
+    let ready = "";
+    item.heldLine = "";
+    if (item.discardingLine) {
+        const nextBreak = combined.indexOf("\n");
+        if (nextBreak < 0) return;
+        item.discardingLine = false;
+        combined = combined.slice(nextBreak + 1);
+    }
+    let nextBreak;
+    while ((nextBreak = combined.indexOf("\n")) >= 0) {
+        const line = combined.slice(0, nextBreak + 1);
+        combined = combined.slice(nextBreak + 1);
+        if (line.length <= COMMAND_LINE_HOLD_MAX) {
+            ready += line;
+        }
+    }
+    if (combined.length > COMMAND_LINE_HOLD_MAX) {
+        item.discardingLine = true;
+    } else {
+        item.heldLine = combined;
     }
     if (ready) {
         appendCommandLogText(entry, item, publicCommandText(entry, item.record, ready, Infinity, item.sensitiveValues));
@@ -400,10 +415,11 @@ function receiveCommandOutput(entry, item, text) {
 }
 
 function finishCommandLog(entry, item, result) {
-    if (item.heldLine) {
+    if (!item.discardingLine && item.heldLine) {
         appendCommandLogText(entry, item, publicCommandText(entry, item.record, item.heldLine, Infinity, item.sensitiveValues));
         item.heldLine = "";
     }
+    item.discardingLine = false;
     flushCommandLogOutput(entry, item);
     item.status = result?.ok ? "succeeded" : "failed";
     item.exitCode = Number.isInteger(result?.code) ? result.code : null;
@@ -865,6 +881,31 @@ function overlayStreamModels(entry, runningHosts, models) {
     return next;
 }
 
+function publishStreamModel(entry, state) {
+    if (state.initialSyncTimer) {
+        clearTimeout(state.initialSyncTimer);
+        state.initialSyncTimer = null;
+    }
+    state.model = {
+        ...projectDescribePayload({ resources: [...state.resources.values()] }),
+        stale: false,
+        error: null,
+        compatibilityWarning: null,
+        lastSuccessfulAt: new Date().toISOString(),
+    };
+    scheduleStreamPublish(entry);
+}
+
+function scheduleInitialStreamReconciliation(entry, state) {
+    if (state.initialSyncTimer || entry.closed) return;
+    state.initialSyncTimer = setTimeout(() => {
+        state.initialSyncTimer = null;
+        if (entry.closed || entry.paused || entry.describeStreams.get(state.record.id) !== state) return;
+        void requestRefresh(entry);
+    }, STREAM_PUBLISH_DEBOUNCE_MS);
+    state.initialSyncTimer.unref?.();
+}
+
 async function startDescribeStream(entry, state) {
     state.starting = true;
     const logFile = await createBackgroundLogFile();
@@ -882,6 +923,10 @@ async function startDescribeStream(entry, state) {
     state.initialPending = new Set(
         entry.hostModels.get(state.record.id)?.resources?.map((resource) => resource.name) ?? [],
     );
+    if (state.initialSyncTimer) {
+        clearTimeout(state.initialSyncTimer);
+        state.initialSyncTimer = null;
+    }
     let gotData = false;
     const isCurrent = () => entry.describeStreams.get(state.record.id) === state && state.run === run;
     const handle = cli.stream(withLogFile(describeStreamArgs(entry, state.record), logFile), {
@@ -890,15 +935,11 @@ async function startDescribeStream(entry, state) {
             if (!isCurrent() || !mergeStreamLine(state, line)) return;
             gotData = true;
             state.streamed = true;
-            if (state.initialPending.size > 0) return;
-            state.model = {
-                ...projectDescribePayload({ resources: [...state.resources.values()] }),
-                stale: false,
-                error: null,
-                compatibilityWarning: null,
-                lastSuccessfulAt: new Date().toISOString(),
-            };
-            scheduleStreamPublish(entry);
+            if (state.initialPending.size > 0) {
+                scheduleInitialStreamReconciliation(entry, state);
+                return;
+            }
+            publishStreamModel(entry, state);
         },
         onExit({ code, error, stderrTail }) {
             activeStreams.delete(handle);
@@ -908,6 +949,10 @@ async function startDescribeStream(entry, state) {
             }
             state.handle = null;
             state.run = null;
+            if (state.initialSyncTimer) {
+                clearTimeout(state.initialSyncTimer);
+                state.initialSyncTimer = null;
+            }
             // An exited stream no longer owns resource state; refreshes fall back to one-shot describe.
             state.model = null;
             if (logFile && !gotData && optionalFlagIsUnsupported({ error, stderr: stderrTail }, "--log-file")) {
@@ -958,6 +1003,7 @@ function stopDescribeStream(entry, id) {
     if (!state) return;
     entry.describeStreams.delete(id);
     if (state.restartTimer) clearTimeout(state.restartTimer);
+    if (state.initialSyncTimer) clearTimeout(state.initialSyncTimer);
     if (state.handle) {
         activeStreams.delete(state.handle);
         state.handle.kill();
@@ -983,10 +1029,25 @@ function syncDescribeStreams(entry, runningHosts) {
     for (const record of runningHosts) {
         let state = entry.describeStreams.get(record.id);
         if (!state) {
-            state = { record, handle: null, run: null, starting: false, resources: new Map(), raw: new Map(), model: null, streamed: false, restartTimer: null, failures: 0, disabled: false };
+            state = { record, handle: null, run: null, starting: false, resources: new Map(), raw: new Map(), model: null, streamed: false, restartTimer: null, initialSyncTimer: null, failures: 0, disabled: false };
             entry.describeStreams.set(record.id, state);
         }
         state.record = record;
+        if (state.initialPending?.size) {
+            const currentNames = new Set(
+                entry.hostModels.get(record.id)?.resources?.map((resource) => resource.name) ?? [],
+            );
+            for (const name of state.initialPending) {
+                if (!currentNames.has(name)) state.initialPending.delete(name);
+            }
+            if (state.initialPending.size === 0 && state.resources.size > 0) {
+                if (state.initialSyncTimer) {
+                    clearTimeout(state.initialSyncTimer);
+                    state.initialSyncTimer = null;
+                }
+                publishStreamModel(entry, state);
+            }
+        }
         if (!state.handle && !state.starting && !state.restartTimer && !state.disabled) {
             void startDescribeStream(entry, state);
         }
