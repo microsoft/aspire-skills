@@ -1891,15 +1891,15 @@ body.is-loading .canvas-footer .footer-count:empty {
 
 .graph-heading {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 12px;
-    margin-bottom: 10px;
+    gap: 10px 18px;
+    margin-bottom: 12px;
 }
 
 .graph-heading > p {
-    max-width: 68ch;
+    max-width: 64ch;
     color: var(--muted);
     font-size: var(--text-meta);
 }
@@ -1961,7 +1961,7 @@ body.is-loading .canvas-footer .footer-count:empty {
     flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
-    gap: 6px 12px;
+    gap: 8px 14px;
 }
 
 .graph-legend-item {
@@ -1974,7 +1974,7 @@ body.is-loading .canvas-footer .footer-count:empty {
 }
 
 .graph-legend-swatch {
-    width: 24px;
+    width: 26px;
     height: 8px;
     flex: none;
     overflow: visible;
@@ -2006,9 +2006,9 @@ body.is-loading .canvas-footer .footer-count:empty {
     position: relative;
     z-index: 2;
     display: grid;
-    grid-template-columns: repeat(var(--graph-columns), minmax(170px, 220px));
+    grid-template-columns: repeat(var(--graph-columns), 170px);
     align-items: start;
-    justify-content: space-between;
+    justify-content: start;
     gap: 28px;
     pointer-events: none;
 }
@@ -2031,11 +2031,11 @@ body.is-loading .canvas-footer .footer-count:empty {
 }
 
 .graph-node.tone-warning {
-    border-color: color-mix(in srgb, var(--warning) 52%, var(--border));
+    border-color: color-mix(in srgb, var(--warning) 44%, var(--border));
 }
 
 .graph-node.tone-error {
-    border-color: color-mix(in srgb, var(--failure) 56%, var(--border));
+    border-color: color-mix(in srgb, var(--failure) 48%, var(--border));
 }
 
 .graph-node.is-connected {
@@ -2043,7 +2043,7 @@ body.is-loading .canvas-footer .footer-count:empty {
 }
 
 .graph-node.is-dimmed {
-    opacity: 0.38;
+    opacity: 0.44;
 }
 
 .graph-node-header {
@@ -2052,7 +2052,7 @@ body.is-loading .canvas-footer .footer-count:empty {
     min-height: 54px;
     align-items: center;
     gap: 8px;
-    padding: 9px;
+    padding: 10px;
 }
 
 .graph-node-identity {
@@ -2072,11 +2072,13 @@ body.is-loading .canvas-footer .footer-count:empty {
 .graph-node-identity strong {
     font-size: var(--text-detail);
     font-weight: var(--weight-semibold);
+    line-height: var(--leading-meta);
 }
 
 .graph-node-identity span {
     color: var(--muted);
     font-size: var(--text-compact);
+    line-height: 16px;
 }
 
 .graph-node-meta {
@@ -2084,7 +2086,7 @@ body.is-loading .canvas-footer .footer-count:empty {
     min-width: 0;
     flex-direction: column;
     gap: 5px;
-    padding: 6px 9px;
+    padding: 7px 10px;
     border-top: 1px solid var(--border-soft);
 }
 
@@ -2125,7 +2127,7 @@ body.is-loading .canvas-footer .footer-count:empty {
 .graph-node-inspect {
     display: block;
     width: 100%;
-    padding: 6px 10px;
+    padding: 7px 10px;
     border: 0;
     border-top: 1px solid var(--border-soft);
     background: transparent;
@@ -2160,16 +2162,42 @@ body.is-loading .canvas-footer .footer-count:empty {
     outline: none;
 }
 
+.graph-edge-focus,
+.graph-edge-selection {
+    fill: none;
+    opacity: 0;
+    pointer-events: none;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+}
+
+.graph-edge-focus {
+    stroke: var(--focus);
+    stroke-width: 10;
+}
+
+.graph-edge-selection {
+    stroke: var(--surface);
+    stroke-width: 7;
+}
+
+.graph-edge-group:focus-visible .graph-edge-focus,
+.graph-edge-group.is-selected .graph-edge-selection {
+    opacity: 1;
+}
+
 .graph-edge-hit {
     fill: none;
     stroke: transparent;
-    stroke-width: 14;
+    stroke-width: 24;
     pointer-events: stroke;
 }
 
 .graph-edge {
     fill: none;
-    stroke-width: 1.7;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
     vector-effect: non-scaling-stroke;
     pointer-events: none;
     transition: opacity 120ms ease-out;
@@ -2194,51 +2222,137 @@ body.is-loading .canvas-footer .footer-count:empty {
     stroke-width: 2.2;
 }
 
+.graph-edge.is-combined-reference-waitfor.is-reference {
+    stroke: var(--accent);
+    stroke-width: 2.8;
+}
+
+.graph-edge.is-combined-reference-waitfor.is-wait-for {
+    stroke: var(--warning);
+    stroke-width: 1.4;
+    stroke-dasharray: 5 5;
+}
+
 .graph-edge-group.is-dimmed .graph-edge {
-    opacity: 0.14;
+    opacity: 0.18;
 }
 
 .graph-edge-group:is(:hover, :focus-visible, .is-selected) .graph-edge {
     opacity: 1;
-    stroke-width: 3;
+    stroke-width: 2.6;
+}
+
+.graph-edge-group:is(:hover, :focus-visible, .is-selected)
+    .graph-edge.is-combined-reference-waitfor.is-reference {
+    stroke-width: 3.4;
+}
+
+.graph-edge-group:is(:hover, :focus-visible, .is-selected)
+    .graph-edge.is-combined-reference-waitfor.is-wait-for {
+    stroke-width: 1.7;
 }
 
 .graph-edge-layer:has(.graph-edge-group:is(:hover, :focus-visible))
     .graph-edge-group:not(:hover, :focus-visible) .graph-edge {
-    opacity: 0.14;
+    opacity: 0.18;
 }
 
 .graph-arrow.is-reference {
-    fill: var(--accent);
+    fill: none;
+    stroke: var(--accent);
 }
 
 .graph-arrow.is-parent {
-    fill: var(--brand);
+    fill: none;
+    stroke: var(--brand);
 }
 
 .graph-arrow.is-wait-for {
-    fill: var(--warning);
+    fill: none;
+    stroke: var(--warning);
 }
 
 .graph-arrow.is-combined {
-    fill: var(--brand);
+    fill: none;
+    stroke: var(--brand);
+}
+
+.graph-arrow {
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
 }
 
 @container (max-width: 719px) {
+    .graph-heading {
+        align-items: flex-start;
+    }
+
+    .graph-legend {
+        width: 100%;
+        min-width: 0;
+        flex: 1 1 100%;
+        justify-content: flex-start;
+    }
+
     .resource-graph-canvas {
         min-width: 100%;
-        padding-top: 16px;
+        padding: 16px clamp(10px, 3cqw, 16px) 20px;
     }
 
     .graph-columns {
-        grid-template-columns: minmax(0, 1fr);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         justify-content: stretch;
-        gap: 28px;
+        gap: 32px clamp(12px, 4cqw, 24px);
     }
 
     .graph-column {
-        width: min(100%, 360px);
-        justify-self: center;
+        grid-column: var(--graph-compact-column);
+        grid-row: var(--graph-compact-row);
+        width: 100%;
+    }
+
+    .graph-node-identity strong,
+    .graph-node-identity span,
+    .graph-node .resource-status,
+    .graph-node-health span {
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+}
+
+@container (max-width: 439px) {
+    .graph-columns {
+        grid-template-columns: minmax(0, 1fr);
+        row-gap: 30px;
+    }
+
+    .graph-column {
+        grid-column: 1;
+        grid-row: var(--graph-linear-row);
+        width: min(88%, 300px);
+    }
+
+    .graph-column:nth-child(odd) {
+        justify-self: start;
+    }
+
+    .graph-column:nth-child(even) {
+        justify-self: end;
+    }
+}
+
+@media (pointer: coarse) {
+    .graph-node-inspect,
+    .relationship-select {
+        min-height: 44px;
+    }
+
+    .graph-edge-hit {
+        stroke-width: 44;
     }
 }
 
@@ -2917,6 +3031,19 @@ body.is-loading .canvas-footer .footer-count:empty {
         outline: 2px solid Highlight;
         outline-offset: -2px;
     }
+
+    .graph-edge-focus {
+        stroke: Highlight;
+    }
+
+    .graph-edge-selection {
+        stroke: CanvasText;
+    }
+
+    .graph-edge,
+    .graph-arrow {
+        forced-color-adjust: auto;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2926,6 +3053,11 @@ body.is-loading .canvas-footer .footer-count:empty {
     .model-view,
     .empty-state,
     .resource-row-main {
+        transition: none;
+    }
+
+    .graph-node,
+    .graph-edge {
         transition: none;
     }
 

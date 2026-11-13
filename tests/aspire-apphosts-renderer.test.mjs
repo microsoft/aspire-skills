@@ -1242,7 +1242,18 @@ test("filtered graph counts are honest and one combined relationship can be sele
     assert.match(list.querySelector("summary").textContent, /Relationships \(1\)/);
     assert.equal(list.querySelectorAll("li").length, 1);
     const relationship = list.querySelector(".relationship-select");
-    assert.match(relationship.textContent, /Public API references Database\. Public API waits for Database\./);
+    assert.equal(
+        relationship.textContent,
+        "From Database to Public API: Public API references and waits for Database.",
+    );
+    assert.match(
+        renderer.document.querySelector(".graph-heading").textContent,
+        /Arrows point from an owner, referenced resource, or dependency to its child, referencing resource, or waiting resource/,
+    );
+    assert.match(
+        renderer.document.querySelector(".graph-legend").textContent,
+        /Reference \+ Wait for \(both relationships\)/,
+    );
     relationship.click();
     assert.equal(renderer.evaluate("selectedNodeId"), "host-a:relationship:database-api");
     assert.equal(renderer.context.findNode("host-a:relationship:database-api").kind, "relationship");
@@ -1264,6 +1275,16 @@ test("filtered graph counts are honest and one combined relationship can be sele
     const emptyPanel = renderer.context.renderResourceGraphPanel(emptyGraph, true);
     assert.match(emptyPanel.textContent, /0 of 2 resources and 0 of 1 relationships visible/);
     assert.ok(button(emptyPanel, "Clear filters"));
+
+    const graphWithoutRelationships = renderer.context.renderResourceGraphPanel({
+        nodes: [{ resourceName: "solo", label: "Solo", resourceType: "Project", layer: 0 }],
+        edges: [],
+        sourceNodeCount: 1,
+        sourceEdgeCount: 0,
+        filtered: false,
+    }, true);
+    assert.match(graphWithoutRelationships.textContent, /no declared resource relationships/i);
+    assert.equal(graphWithoutRelationships.querySelector(".graph-relationships"), null);
 });
 
 test("graph fan-in ports are distinct, bounded, and stable regardless of edge enumeration", async () => {
@@ -1277,17 +1298,17 @@ test("graph fan-in ports are distinct, bounded, and stable regardless of edge en
     const ports = renderer.context.graphIncomingPorts(edges, nodeBounds);
     const reversed = renderer.context.graphIncomingPorts([...edges].reverse(), nodeBounds);
     assert.equal(JSON.stringify([...ports]), JSON.stringify([...reversed]));
-    assert.equal(ports.get(edges[1].id).y - ports.get(edges[0].id).y, 14);
+    assert.equal(ports.get(edges[1].id).y - ports.get(edges[0].id).y, 18);
     const canvas = { left: 0, top: 0, width: 800, height: 400 };
     const paths = edges.map((edge) => renderer.context.graphEdgePath(
         nodeBounds.get(edge.from), nodeBounds.get(edge.to), canvas, false, 0, 1, undefined, ports.get(edge.id),
     ));
-    assert.match(paths[0], /284 58 L 296 58$/);
-    assert.match(paths[1], /284 72 L 296 72$/);
+    assert.match(paths[0], /284 56 L 296 56$/);
+    assert.match(paths[1], /284 74 L 296 74$/);
     const many = Array.from({ length: 12 }, (_, index) => ({ id: `edge-${index}`, from: "api", to: "orders" }));
     const crowded = [...renderer.context.graphIncomingPorts(many, nodeBounds).values()];
     assert.equal(new Set(crowded.map((port) => port.y)).size, many.length);
-    assert.ok(crowded.every((port) => Math.abs(port.y) <= 29));
+    assert.ok(crowded.every((port) => Math.abs(port.y) <= 36));
     assert.equal(renderer.context.graphIncomingPorts([edges[0]], nodeBounds).get(edges[0].id).y, 0);
     const outgoingEdges = [
         { id: "api-orders", from: "api", to: "orders" },
@@ -1296,33 +1317,87 @@ test("graph fan-in ports are distinct, bounded, and stable regardless of edge en
     const outgoing = renderer.context.graphOutgoingPorts(outgoingEdges, nodeBounds);
     const outgoingReversed = renderer.context.graphOutgoingPorts([...outgoingEdges].reverse(), nodeBounds);
     assert.equal(JSON.stringify([...outgoing]), JSON.stringify([...outgoingReversed]));
-    assert.equal(outgoing.get("api-catalog").y - outgoing.get("api-orders").y, 14);
+    assert.equal(outgoing.get("api-catalog").y - outgoing.get("api-orders").y, 18);
+    const denseFanOut = Array.from({ length: 12 }, (_, index) => ({
+        id: `outgoing-${index}`,
+        from: "api",
+        to: index % 2 === 0 ? "orders" : "catalog",
+    }));
+    const crowdedOutgoing = [...renderer.context.graphOutgoingPorts(denseFanOut, nodeBounds).values()];
+    assert.equal(new Set(crowdedOutgoing.map((port) => port.y)).size, denseFanOut.length);
+    assert.ok(crowdedOutgoing.every((port) => Math.abs(port.y) <= 36));
 });
 
-test("long graph edges receive stable, separate routing lanes", async () => {
+test("graph layout deterministically orders layers to reduce crossings and compacts related columns", async () => {
+    const renderer = await boot();
+    const nodes = [
+        { resourceName: "a", label: "A", layer: 0 },
+        { resourceName: "b", label: "B", layer: 0 },
+        { resourceName: "x", label: "X", layer: 1 },
+        { resourceName: "y", label: "Y", layer: 1 },
+        { resourceName: "z", label: "Z", layer: 2 },
+    ];
+    const edges = [
+        { id: "a-y", from: "a", to: "y" },
+        { id: "b-x", from: "b", to: "x" },
+        { id: "y-z", from: "y", to: "z" },
+    ];
+    const graph = { nodes: [...nodes].reverse(), edges: [...edges].reverse() };
+    const columns = renderer.context.graphLayoutColumns(graph);
+    assert.equal(
+        JSON.stringify(columns.map((column) => column.map((node) => node.resourceName))),
+        JSON.stringify([["a", "b"], ["y", "x"], ["z"]]),
+    );
+    assert.equal(
+        JSON.stringify(renderer.context.graphLayoutColumns({ nodes, edges })
+            .map((column) => column.map((node) => node.resourceName))),
+        JSON.stringify(columns.map((column) => column.map((node) => node.resourceName))),
+    );
+
+    const heights = new Map(nodes.map((node) => [node.resourceName, 80]));
+    const positions = renderer.context.graphCompactNodePositions(columns, edges, heights);
+    assert.equal(positions.get("x") - positions.get("y"), 98, "nodes keep the fixed compact vertical gap");
+    assert.equal(positions.get("z"), positions.get("y"), "the final layer aligns with its relationship");
+    assert.equal(JSON.stringify(renderer.context.graphCompactPlacement(0)), '{"column":1,"row":1}');
+    assert.equal(JSON.stringify(renderer.context.graphCompactPlacement(1)), '{"column":2,"row":1}');
+    assert.equal(JSON.stringify(renderer.context.graphCompactPlacement(2)), '{"column":2,"row":2}');
+    assert.equal(JSON.stringify(renderer.context.graphCompactPlacement(3)), '{"column":1,"row":2}');
+    assert.equal(JSON.stringify(renderer.context.graphCompactPlacement(4)), '{"column":1,"row":3}');
+});
+
+test("exceptional graph edges share stable lanes only when their layer spans do not overlap", async () => {
     const renderer = await boot();
     const nodeByName = new Map([
         ["database", { layer: 0 }],
         ["api", { layer: 2 }],
         ["gateway", { layer: 3 }],
+        ["worker", { layer: 4 }],
+        ["client", { layer: 5 }],
     ]);
     const edges = [
         { id: "database-gateway", from: "database", to: "gateway" },
         { id: "database-api", from: "database", to: "api" },
+        { id: "worker-client", from: "worker", to: "client" },
+        { id: "client-worker", from: "client", to: "worker" },
     ];
     const lanes = renderer.context.graphLongEdgeLanes(edges, nodeByName);
     const reversed = renderer.context.graphLongEdgeLanes([...edges].reverse(), nodeByName);
     assert.equal(JSON.stringify([...lanes]), JSON.stringify([...reversed]));
-    assert.equal(new Set(lanes.values()).size, 2);
+    assert.notEqual(lanes.get("database-gateway"), lanes.get("database-api"));
+    assert.equal(lanes.get("client-worker"), 0, "a disjoint backward relationship reuses the first corridor");
+    assert.equal(lanes.has("worker-client"), false, "ordinary forward relationships stay in local gutters");
     const rect = (left) => ({ left, top: 80, right: left + 100, bottom: 160, width: 100, height: 80 });
     const canvas = { left: 0, top: 0, width: 900, height: 400 };
     const first = renderer.context.graphEdgePath(
-        rect(20), rect(600), canvas, false, 0, 3, undefined, { x: 0, y: 0 }, lanes.get("database-gateway"),
+        rect(20), rect(600), canvas, false, 0, 3, undefined, { x: 0, y: 0 },
+        lanes.get("database-gateway"), { x: 0, y: 0 }, 24,
     );
     const second = renderer.context.graphEdgePath(
-        rect(20), rect(300), canvas, false, 0, 2, undefined, { x: 0, y: 0 }, lanes.get("database-api"),
+        rect(20), rect(300), canvas, false, 0, 2, undefined, { x: 0, y: 0 },
+        lanes.get("database-api"), { x: 0, y: 0 }, 14,
     );
-    assert.notEqual(first.match(/L \d+ (\d+)/)?.[1], second.match(/L \d+ (\d+)/)?.[1]);
+    assert.match(first, /L \d+ 24 L/);
+    assert.match(second, /L \d+ 14 L/);
 });
 
 test("graph arrows approach the target boundary in the correct direction for every route", async () => {
@@ -1346,9 +1421,44 @@ test("graph arrows approach the target boundary in the correct direction for eve
         );
         assert.match(path, scenario.end);
     }
-    const marker = renderer.context.graphMarker({ id: "combined", className: "is-combined" });
-    assert.equal(marker.getAttribute("refX"), "10", "the triangle tip must be anchored on the path endpoint");
+    const marker = renderer.context.graphMarker({
+        id: "combined",
+        className: "is-combined",
+        dualMarker: true,
+    });
+    assert.equal(marker.getAttribute("refX"), "7", "the chevron tip must be anchored on the path endpoint");
+    assert.equal(marker.getAttribute("markerWidth"), "5");
+    assert.equal(marker.getAttribute("markerHeight"), "5");
     assert.equal(marker.getAttribute("orient"), "auto");
+    assert.equal(marker.querySelectorAll("path").length, 2);
+    assert.ok(marker.querySelector("path.is-reference"));
+    assert.ok(marker.querySelector("path.is-wait-for"));
+
+    const compactHorizontal = renderer.context.graphEdgePath(
+        rect(20, 20), rect(180, 20), canvas, false, 0, 1,
+        undefined, { x: 0, y: 0 }, 0, { x: 0, y: 0 }, undefined, true,
+    );
+    assert.match(compactHorizontal, /168 60 L 180 60$/);
+    const compactVertical = renderer.context.graphEdgePath(
+        rect(180, 20), rect(180, 160), canvas, false, 1, 2,
+        undefined, { x: 0, y: 0 }, 0, { x: 0, y: 0 }, undefined, true,
+    );
+    assert.match(compactVertical, /230 148 L 230 160$/);
+    const compactLong = renderer.context.graphEdgePath(
+        rect(20, 20), rect(180, 300), canvas, false, 0, 3,
+        undefined, { x: 0, y: 0 }, 0, { x: 0, y: 0 }, undefined, true,
+    );
+    assert.match(compactLong, /L 8 340 L 168 340 L 180 340$/);
+
+    const reciprocalLeft = renderer.context.graphEdgePath(
+        rect(100, 20), rect(100, 200), canvas, false, 0, 0,
+        "left", { x: 0, y: 0 },
+    );
+    const reciprocalRight = renderer.context.graphEdgePath(
+        rect(100, 200), rect(100, 20), canvas, false, 0, 0,
+        "right", { x: 0, y: 0 },
+    );
+    assert.notEqual(reciprocalLeft, reciprocalRight, "reciprocal edges route on opposite sides");
 });
 
 test("drawn fan-in connectors retain combined semantics and use separated target ports", async () => {
@@ -1382,18 +1492,40 @@ test("drawn fan-in connectors retain combined semantics and use separated target
     renderer.flushFrames();
     const paths = canvas.querySelectorAll("path.graph-edge");
     const groups = canvas.querySelectorAll(".graph-edge-group");
-    assert.equal(paths.length, 2);
+    assert.equal(paths.length, 4);
     assert.equal(groups.length, 2);
     assert.ok(paths.every((path) => path.classList.contains("is-combined-reference-waitfor")));
-    assert.ok(paths.every((path) => path.getAttribute("marker-end") === "url(#graph-arrow-combined-reference-waitfor)"));
-    assert.notEqual(paths[0].getAttribute("d").split(" L ").at(-1), paths[1].getAttribute("d").split(" L ").at(-1));
+    assert.equal(paths.filter((path) => path.classList.contains("is-reference")).length, 2);
+    assert.equal(paths.filter((path) => path.classList.contains("is-wait-for")).length, 2);
+    assert.equal(
+        paths.filter((path) =>
+            path.getAttribute("marker-end") === "url(#graph-arrow-combined-reference-waitfor)").length,
+        2,
+    );
+    assert.notEqual(
+        groups[0].querySelector(".graph-edge").getAttribute("d").split(" L ").at(-1),
+        groups[1].querySelector(".graph-edge").getAttribute("d").split(" L ").at(-1),
+    );
     assert.ok(groups.every((group) => group.getAttribute("role") === "button"));
-    assert.ok(groups.every((group) => /references|waits for/.test(group.getAttribute("aria-label"))));
+    assert.ok(groups.every((group) =>
+        /^From .+ to .+: .+ references and waits for .+\.$/.test(group.getAttribute("aria-label"))));
     groups[0].dispatch("keydown", { key: "Enter", preventDefault() {} });
     assert.match(renderer.evaluate("selectedNodeId"), /^host-a:relationship:/);
     renderer.flushFrames();
-    assert.equal(renderer.document.querySelector(".graph-edge-group.is-selected").getAttribute("aria-pressed"), "true");
+    let selectedGroup = renderer.document.querySelector(".graph-edge-group.is-selected");
+    assert.equal(selectedGroup.getAttribute("aria-pressed"), "true");
+    assert.equal(renderer.document.activeElement, selectedGroup, "focus follows the replacement edge after rerender");
     assert.equal(renderer.document.querySelector(".graph-relationships").open, false);
+    const otherGroup = renderer.document.querySelector(".graph-edge-group:not(.is-selected)");
+    let prevented = false;
+    otherGroup.dispatch("keydown", { key: " ", preventDefault() { prevented = true; } });
+    renderer.flushFrames();
+    selectedGroup = renderer.document.querySelector(".graph-edge-group.is-selected");
+    assert.equal(prevented, true);
+    assert.equal(renderer.document.activeElement, selectedGroup);
+    assert.equal(selectedGroup.getAttribute("aria-pressed"), "true");
+    assert.ok(selectedGroup.querySelector(".graph-edge-focus"));
+    assert.ok(selectedGroup.querySelector(".graph-edge-selection"));
 });
 
 test("narrow More reuses confirmations and exposes disabled operations without executing them", async () => {
@@ -1499,9 +1631,18 @@ test("responsive and theme selectors preserve host priority, the official mark, 
     assert.doesNotMatch(styles, /\.apphost-trigger\.resource-menu-trigger\s*\{[^}]*margin-left/);
     assert.match(styles, /\.host-more-actions\s*\{\s*display: inline-flex;/);
     assert.match(styles, /\.graph-columns\s*\{[^}]*pointer-events: none;/);
+    assert.match(styles, /\.graph-columns\s*\{[^}]*grid-template-columns: repeat\(var\(--graph-columns\), 170px\);[^}]*justify-content: start;[^}]*gap: 28px;/);
     assert.match(styles, /\.graph-node\s*\{[^}]*pointer-events: auto;/);
     assert.match(styles, /@container \(min-width: 720px\)[\s\S]*?\.resource-board\s*\{[^}]*grid-template-columns:/);
-    assert.match(styles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.inspector\.is-entering/);
+    assert.match(styles, /@container \(max-width: 719px\)[\s\S]*?\.graph-columns\s*\{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);[^}]*gap: 32px clamp\(12px, 4cqw, 24px\);/);
+    assert.match(styles, /@container \(max-width: 439px\)[\s\S]*?\.graph-column\s*\{[^}]*grid-column: 1;[^}]*width: min\(88%, 300px\);/);
+    assert.match(styles, /\.graph-edge-hit\s*\{[^}]*stroke-width: 24;/);
+    assert.match(styles, /\.graph-edge-group:focus-visible \.graph-edge-focus,[\s\S]*?opacity: 1;/);
+    assert.match(styles, /\.graph-edge-selection\s*\{[^}]*stroke: var\(--surface\);[^}]*stroke-width: 7;/);
+    assert.doesNotMatch(styles, /\.graph-edge-selection\s*\{[^}]*stroke-dasharray/);
+    assert.match(styles, /@media \(pointer: coarse\)[\s\S]*?\.graph-node-inspect,[\s\S]*?min-height: 44px;[\s\S]*?\.graph-edge-hit\s*\{[^}]*stroke-width: 44;/);
+    assert.match(styles, /@media \(forced-colors: active\)[\s\S]*?\.graph-edge-focus\s*\{[^}]*stroke: Highlight;[\s\S]*?\.graph-edge-selection\s*\{[^}]*stroke: CanvasText;/);
+    assert.match(styles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.graph-node,[\s\S]*?\.graph-edge\s*\{[^}]*transition: none;[\s\S]*?\.inspector\.is-entering/);
     assert.match(styles, /@media \(max-width: 520px\)[\s\S]*?#mode-label,\s*\.host-action-bar \.is-secondary-operation\s*\{\s*display: none;/);
     assert.match(markup, /class="brand-mark canvas-brand"[\s\S]*?width="22"\s+height="22"/);
     const renderer = await boot();
