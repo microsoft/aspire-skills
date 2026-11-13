@@ -642,6 +642,17 @@ function setSelected(node) {
     requestAnimationFrame(() => focusNodeControl(node.id));
 }
 
+function setSelectedGraphEdge(edge) {
+    if (!edge.context) {
+        return;
+    }
+    recordSelection(edge.context);
+    renderTree();
+    requestAnimationFrame(() => {
+        document.querySelector(`[data-graph-edge-id="${CSS.escape(edge.id)}"]`)?.focus({ preventScroll: true });
+    });
+}
+
 function isAppHostNode(node) {
     return node.kind === "apphost-running" || node.kind === "apphost-idle";
 }
@@ -1556,11 +1567,12 @@ function renderAppModelTabs(resourceCount, visibleCount) {
 const GRAPH_RELATIONSHIPS = {
     Parent: { label: "Ownership", className: "is-parent" },
     Reference: { label: "Reference", className: "is-reference" },
-    WaitFor: { label: "WaitFor", className: "is-wait-for" },
+    WaitFor: { label: "Wait for", className: "is-wait-for" },
 };
-const GRAPH_NODE_MIN_WIDTH = 180;
-const GRAPH_COLUMN_GAP = 36;
+const GRAPH_NODE_MIN_WIDTH = 170;
+const GRAPH_COLUMN_GAP = 28;
 const GRAPH_CANVAS_PADDING = 32;
+const GRAPH_ROUTE_LANE_GAP = 10;
 
 function graphEdgePresentation(edge) {
     if (edge.types.length === 1) {
@@ -1598,8 +1610,12 @@ function renderGraphLegend(graph) {
                 class: `graph-edge ${presentation.className}`,
                 x1: "1",
                 y1: "4",
-                x2: "23",
+                x2: "18",
                 y2: "4",
+            }));
+            swatch.appendChild(svgElement("path", {
+                class: `graph-arrow ${presentation.className}`,
+                d: "M18 1 L24 4 L18 7 Z",
             }));
             return (
             element("span", { class: "graph-legend-item" }, [
@@ -1609,9 +1625,14 @@ function renderGraphLegend(graph) {
         }));
 }
 
-function renderGraphNode(node) {
+function renderGraphNode(node, selectedEdge) {
+    const relationshipState = selectedEdge
+        ? selectedEdge.from === node.resourceName || selectedEdge.to === node.resourceName
+            ? " is-connected"
+            : " is-dimmed"
+        : "";
     return element("article", {
-        class: `graph-node${node.tone ? ` tone-${node.tone}` : ""}`,
+        class: `graph-node${node.tone ? ` tone-${node.tone}` : ""}${relationshipState}`,
         role: "listitem",
         dataset: { graphNodeId: node.resourceName },
     }, [
@@ -1687,9 +1708,12 @@ function renderResourceGraphPanel(graph, active) {
     const maxLayer = Math.max(...graph.nodes.map((node) => node.layer), 0);
     const columns = Array.from({ length: maxLayer + 1 }, (_, layer) =>
         graph.nodes.filter((node) => node.layer === layer));
+    const selectedEdge = graph.edges.find((edge) => edge.context?.id === selectedNodeId);
+    const routeLaneCount = graphLongEdgeLanes(graph.edges, nodeByName).size;
     const edgeLayer = svgElement("svg", {
         class: "graph-edge-layer",
-        "aria-hidden": "true",
+        role: "group",
+        "aria-label": "Resource relationships. Select a line to inspect it.",
     });
     const canvas = element("div", { class: "resource-graph-canvas" }, [
         edgeLayer,
@@ -1701,9 +1725,13 @@ function renderResourceGraphPanel(graph, active) {
             element("div", {
                 class: "graph-column",
                 dataset: { graphLayer: String(layer) },
-            }, nodes.map(renderGraphNode)))),
+            }, nodes.map((node) => renderGraphNode(node, selectedEdge))))),
     ]);
     canvas.style.setProperty("--graph-columns", String(columns.length));
+    canvas.style.setProperty(
+        "--graph-top-gutter",
+        `${routeLaneCount === 0 ? 16 : 24 + routeLaneCount * GRAPH_ROUTE_LANE_GAP}px`,
+    );
     canvas.style.setProperty(
         "--graph-min-width",
         `${columns.length * GRAPH_NODE_MIN_WIDTH
@@ -1721,7 +1749,7 @@ function renderResourceGraphPanel(graph, active) {
         element("header", { class: "graph-heading" }, [
             element("p", {
                 text: graph.edges.length
-                    ? "Arrows flow from dependencies and parents toward the resources that use them."
+                    ? "Dependencies point to the resources that use them. Select a line or relationship to trace it."
                     : graph.sourceEdgeCount > 0
                         ? "No relationships are visible for these resources."
                         : "This AppHost has no declared resource relationships.",
@@ -1751,7 +1779,7 @@ function renderGraphRelationships(graph, nodeByName) {
         open: graphRelationshipsExpanded,
         on: { toggle: (event) => { graphRelationshipsExpanded = event.currentTarget.open; } },
     }, [
-        element("summary", { text: `Relationships (${graph.edges.length}) · Select to add to chat` }),
+        element("summary", { text: `Relationships (${graph.edges.length}) · Select one to inspect` }),
         element("ul", { "aria-label": "Resource relationships" }, graph.edges.map((edge) => {
             const sentence = edge.types.map((type) => graphRelationshipSentence(edge, type, nodeByName)).join(" ");
             return element("li", {}, [
@@ -1850,18 +1878,33 @@ function renderResourceBoardPanel(appHost, entries, visible, dashboardAvailable,
 function graphMarker(presentation) {
     const marker = svgElement("marker", {
         id: `graph-arrow-${presentation.id}`,
-        viewBox: "0 0 8 8",
-        refX: "8",
-        refY: "4",
-        markerWidth: "6",
-        markerHeight: "6",
+        viewBox: "0 0 10 10",
+        refX: "10",
+        refY: "5",
+        markerWidth: "7",
+        markerHeight: "7",
         orient: "auto",
     });
     marker.appendChild(svgElement("path", {
         class: `graph-arrow ${presentation.className}`,
-        d: "M0 0 L8 4 L0 8 Z",
+        d: "M0 0 L10 5 L0 10 Z",
     }));
     return marker;
+}
+
+function graphLongEdgeLanes(edges, nodeByName) {
+    const longEdges = edges
+        .filter((edge) => Math.abs(
+            (nodeByName.get(edge.to)?.layer ?? 0) - (nodeByName.get(edge.from)?.layer ?? 0),
+        ) > 1)
+        .sort((left, right) => {
+            const leftFrom = nodeByName.get(left.from)?.layer ?? 0;
+            const rightFrom = nodeByName.get(right.from)?.layer ?? 0;
+            const leftTo = nodeByName.get(left.to)?.layer ?? 0;
+            const rightTo = nodeByName.get(right.to)?.layer ?? 0;
+            return leftFrom - rightFrom || leftTo - rightTo || left.id.localeCompare(right.id);
+        });
+    return new Map(longEdges.map((edge, lane) => [edge.id, lane]));
 }
 
 function graphIncomingPorts(edges, nodeBounds) {
@@ -1893,9 +1936,49 @@ function graphIncomingPorts(edges, nodeBounds) {
     return ports;
 }
 
-function graphEdgePath(from, to, canvas, selfEdge, fromLayer, toLayer, reciprocalSide, port = { x: 0, y: 0 }) {
-    const fromCenterX = from.left + from.width / 2 - canvas.left;
-    const fromCenterY = from.top + from.height / 2 - canvas.top;
+function graphOutgoingPorts(edges, nodeBounds) {
+    const outgoing = new Map();
+    for (const edge of edges) {
+        if (!nodeBounds.has(edge.from) || !nodeBounds.has(edge.to)) {
+            continue;
+        }
+        const group = outgoing.get(edge.from) ?? [];
+        group.push(edge);
+        outgoing.set(edge.from, group);
+    }
+    const ports = new Map();
+    for (const [source, group] of outgoing) {
+        group.sort((left, right) => {
+            const a = nodeBounds.get(left.to);
+            const b = nodeBounds.get(right.to);
+            return (a.top + a.height / 2) - (b.top + b.height / 2)
+                || (a.left + a.width / 2) - (b.left + b.width / 2)
+                || left.id.localeCompare(right.id);
+        });
+        const bounds = nodeBounds.get(source);
+        const spacing = (size) => Math.min(14, Math.max(0, size - 32) / Math.max(1, group.length - 1));
+        group.forEach((edge, index) => {
+            const slot = index - (group.length - 1) / 2;
+            ports.set(edge.id, { x: slot * spacing(bounds.width), y: slot * spacing(bounds.height) });
+        });
+    }
+    return ports;
+}
+
+function graphEdgePath(
+    from,
+    to,
+    canvas,
+    selfEdge,
+    fromLayer,
+    toLayer,
+    reciprocalSide,
+    port = { x: 0, y: 0 },
+    routeLane = 0,
+    sourcePort = { x: 0, y: 0 },
+) {
+    const fromCenterX = from.left + from.width / 2 - canvas.left + sourcePort.x;
+    const fromCenterY = from.top + from.height / 2 - canvas.top + sourcePort.y;
     const toCenterX = to.left + to.width / 2 - canvas.left + port.x;
     const toCenterY = to.top + to.height / 2 - canvas.top + port.y;
 
@@ -1918,7 +2001,7 @@ function graphEdgePath(from, to, canvas, selfEdge, fromLayer, toLayer, reciproca
         if (toLayer - fromLayer > 1) {
             const firstGutterX = startX + 28;
             const lastGutterX = endX - 28;
-            const corridorY = 8;
+            const corridorY = 12 + routeLane * GRAPH_ROUTE_LANE_GAP;
             return `M ${startX} ${startY} C ${firstGutterX} ${startY}, ${firstGutterX} ${corridorY}, ${firstGutterX} ${corridorY} L ${lastGutterX} ${corridorY} C ${lastGutterX} ${corridorY}, ${lastGutterX} ${endY}, ${approachX} ${endY} L ${endX} ${endY}`;
         }
         const bend = Math.max(12, (approachX - startX) * 0.44);
@@ -1943,6 +2026,12 @@ function graphEdgePath(from, to, canvas, selfEdge, fromLayer, toLayer, reciproca
         const startY = fromCenterY;
         const endX = to.right - canvas.left;
         const endY = toCenterY;
+        if (fromLayer - toLayer > 1) {
+            const firstGutterX = startX - 28;
+            const lastGutterX = endX + 28;
+            const corridorY = 12 + routeLane * GRAPH_ROUTE_LANE_GAP;
+            return `M ${startX} ${startY} C ${firstGutterX} ${startY}, ${firstGutterX} ${corridorY}, ${firstGutterX} ${corridorY} L ${lastGutterX} ${corridorY} C ${lastGutterX} ${corridorY}, ${lastGutterX} ${endY}, ${endX + 12} ${endY} L ${endX} ${endY}`;
+        }
         const outerY = Math.max(8, Math.min(from.top, to.top) - canvas.top - 24);
         return `M ${startX} ${startY} C ${startX - 32} ${outerY}, ${endX + 32} ${endY}, ${endX + 12} ${endY} L ${endX} ${endY}`;
     }
@@ -1970,6 +2059,7 @@ function drawResourceGraphEdges() {
         .map((node) => [node.dataset.graphNodeId, node]));
     const nodeBounds = new Map([...nodeElements].map(([name, node]) => [name, node.getBoundingClientRect()]));
     const incomingPorts = graphIncomingPorts(activeGraphModel.edges, nodeBounds);
+    const outgoingPorts = graphOutgoingPorts(activeGraphModel.edges, nodeBounds);
     svg.setAttribute("viewBox", `0 0 ${canvasBounds.width} ${canvasBounds.height}`);
     svg.setAttribute("width", String(canvasBounds.width));
     svg.setAttribute("height", String(canvasBounds.height));
@@ -1985,7 +2075,9 @@ function drawResourceGraphEdges() {
     }
     const paths = [];
     const nodeByName = new Map(activeGraphModel.nodes.map((node) => [node.resourceName, node]));
+    const longEdgeLanes = graphLongEdgeLanes(activeGraphModel.edges, nodeByName);
     const edgeKeys = new Set(activeGraphModel.edges.map((edge) => `${edge.from}\u0000${edge.to}`));
+    const selectedEdge = activeGraphModel.edges.find((edge) => edge.context?.id === selectedNodeId);
     for (const edge of activeGraphModel.edges) {
         const fromElement = nodeElements.get(edge.from);
         const toElement = nodeElements.get(edge.to);
@@ -2001,26 +2093,57 @@ function drawResourceGraphEdges() {
             && edgeKeys.has(`${edge.to}\u0000${edge.from}`)
             ? edge.from.localeCompare(edge.to) < 0 ? "left" : "right"
             : undefined;
+        const sentence = edge.types
+            .map((type) => graphRelationshipSentence(edge, type, nodeByName))
+            .join(" ");
+        const pathData = graphEdgePath(
+            fromBounds,
+            toBounds,
+            canvasBounds,
+            edge.from === edge.to,
+            fromNode?.layer ?? 0,
+            toNode?.layer ?? 0,
+            reciprocalSide,
+            incomingPorts.get(edge.id),
+            longEdgeLanes.get(edge.id) ?? 0,
+            outgoingPorts.get(edge.id),
+        );
+        const selected = edge.context?.id === selectedNodeId;
+        const group = svgElement("g", {
+            class: `graph-edge-group${selected ? " is-selected" : ""}${selectedEdge && !selected ? " is-dimmed" : ""}`,
+            ...(edge.context ? {
+                role: "button",
+                tabindex: "0",
+                "aria-label": sentence,
+                "aria-pressed": String(selected),
+                "data-graph-edge-id": edge.id,
+            } : {}),
+        });
+        if (edge.context) {
+            const selectEdge = () => setSelectedGraphEdge(edge);
+            group.addEventListener("click", selectEdge);
+            group.addEventListener("keydown", (event) => {
+                if (event.key !== "Enter" && event.key !== " ") {
+                    return;
+                }
+                event.preventDefault?.();
+                selectEdge();
+            });
+            group.appendChild(svgElement("path", {
+                class: "graph-edge-hit",
+                d: pathData,
+            }));
+        }
         const path = svgElement("path", {
             class: `graph-edge ${presentation.className}`,
-            d: graphEdgePath(
-                fromBounds,
-                toBounds,
-                canvasBounds,
-                edge.from === edge.to,
-                fromNode?.layer ?? 0,
-                toNode?.layer ?? 0,
-                reciprocalSide,
-                incomingPorts.get(edge.id),
-            ),
+            d: pathData,
             "marker-end": `url(#graph-arrow-${presentation.id})`,
         });
         const title = svgElement("title");
-        title.textContent = edge.types
-            .map((type) => graphRelationshipSentence(edge, type, nodeByName))
-            .join(" ");
+        title.textContent = sentence;
         path.appendChild(title);
-        paths.push(path);
+        group.appendChild(path);
+        paths.push(group);
     }
     svg.replaceChildren(definitions, ...paths);
 }

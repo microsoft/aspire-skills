@@ -1227,7 +1227,7 @@ test("filtered graph counts are honest and one combined relationship can be sele
     const renderer = await boot();
     renderer.document.getElementById("graph-view-tab").click();
     const canvas = renderer.document.querySelector(".resource-graph-canvas");
-    assert.equal(canvas.style["--graph-min-width"], "428px");
+    assert.equal(canvas.style["--graph-min-width"], "400px");
     const graphNode = renderer.context.renderGraphNode({
         label: "postgres",
         resourceName: "postgres",
@@ -1247,6 +1247,7 @@ test("filtered graph counts are honest and one combined relationship can be sele
     assert.equal(renderer.evaluate("selectedNodeId"), "host-a:relationship:database-api");
     assert.equal(renderer.context.findNode("host-a:relationship:database-api").kind, "relationship");
     assert.equal(renderer.document.querySelector(".relationship-select").getAttribute("aria-pressed"), "true");
+    assert.equal(renderer.document.querySelectorAll(".graph-node.is-connected").length, 2);
     button(renderer.document.body, "Add relationship to chat").click();
     assert.deepEqual(renderer.request("/api/copilot-context").body, { nodeId: "host-a:relationship:database-api" });
     const search = renderer.document.getElementById("search-input");
@@ -1288,6 +1289,40 @@ test("graph fan-in ports are distinct, bounded, and stable regardless of edge en
     assert.equal(new Set(crowded.map((port) => port.y)).size, many.length);
     assert.ok(crowded.every((port) => Math.abs(port.y) <= 29));
     assert.equal(renderer.context.graphIncomingPorts([edges[0]], nodeBounds).get(edges[0].id).y, 0);
+    const outgoingEdges = [
+        { id: "api-orders", from: "api", to: "orders" },
+        { id: "api-catalog", from: "api", to: "catalog" },
+    ];
+    const outgoing = renderer.context.graphOutgoingPorts(outgoingEdges, nodeBounds);
+    const outgoingReversed = renderer.context.graphOutgoingPorts([...outgoingEdges].reverse(), nodeBounds);
+    assert.equal(JSON.stringify([...outgoing]), JSON.stringify([...outgoingReversed]));
+    assert.equal(outgoing.get("api-catalog").y - outgoing.get("api-orders").y, 14);
+});
+
+test("long graph edges receive stable, separate routing lanes", async () => {
+    const renderer = await boot();
+    const nodeByName = new Map([
+        ["database", { layer: 0 }],
+        ["api", { layer: 2 }],
+        ["gateway", { layer: 3 }],
+    ]);
+    const edges = [
+        { id: "database-gateway", from: "database", to: "gateway" },
+        { id: "database-api", from: "database", to: "api" },
+    ];
+    const lanes = renderer.context.graphLongEdgeLanes(edges, nodeByName);
+    const reversed = renderer.context.graphLongEdgeLanes([...edges].reverse(), nodeByName);
+    assert.equal(JSON.stringify([...lanes]), JSON.stringify([...reversed]));
+    assert.equal(new Set(lanes.values()).size, 2);
+    const rect = (left) => ({ left, top: 80, right: left + 100, bottom: 160, width: 100, height: 80 });
+    const canvas = { left: 0, top: 0, width: 900, height: 400 };
+    const first = renderer.context.graphEdgePath(
+        rect(20), rect(600), canvas, false, 0, 3, undefined, { x: 0, y: 0 }, lanes.get("database-gateway"),
+    );
+    const second = renderer.context.graphEdgePath(
+        rect(20), rect(300), canvas, false, 0, 2, undefined, { x: 0, y: 0 }, lanes.get("database-api"),
+    );
+    assert.notEqual(first.match(/L \d+ (\d+)/)?.[1], second.match(/L \d+ (\d+)/)?.[1]);
 });
 
 test("graph arrows approach the target boundary in the correct direction for every route", async () => {
@@ -1312,7 +1347,7 @@ test("graph arrows approach the target boundary in the correct direction for eve
         assert.match(path, scenario.end);
     }
     const marker = renderer.context.graphMarker({ id: "combined", className: "is-combined" });
-    assert.equal(marker.getAttribute("refX"), "8", "the triangle tip must be anchored on the path endpoint");
+    assert.equal(marker.getAttribute("refX"), "10", "the triangle tip must be anchored on the path endpoint");
     assert.equal(marker.getAttribute("orient"), "auto");
 });
 
@@ -1323,7 +1358,19 @@ test("drawn fan-in connectors retain combined semantics and use separated target
     const cache = { ...graph.nodes[0], id: "host-a:resource:cache", resourceName: "cache", label: "Cache" };
     graph.nodes.push(cache);
     state.roots[0].children[0].children.push(cache);
-    graph.edges.push({ id: "cache-api", from: "cache", to: "api", types: ["Reference", "WaitFor"] });
+    graph.edges.push({
+        id: "cache-api",
+        from: "cache",
+        to: "api",
+        types: ["Reference", "WaitFor"],
+        context: {
+            id: "host-a:relationship:cache-api",
+            kind: "relationship",
+            label: "Public API uses Cache",
+            appHostId: "host-a",
+            relationship: { from: "cache", to: "api", types: ["Reference", "WaitFor"] },
+        },
+    });
     await renderer.push({ type: "state", state });
     renderer.document.getElementById("graph-view-tab").click();
     const canvas = renderer.document.querySelector(".resource-graph-canvas");
@@ -1334,10 +1381,19 @@ test("drawn fan-in connectors retain combined semantics and use separated target
     canvas.querySelector('[data-graph-node-id="api"]').getBoundingClientRect = () => makeBounds(296, 20);
     renderer.flushFrames();
     const paths = canvas.querySelectorAll("path.graph-edge");
+    const groups = canvas.querySelectorAll(".graph-edge-group");
     assert.equal(paths.length, 2);
+    assert.equal(groups.length, 2);
     assert.ok(paths.every((path) => path.classList.contains("is-combined-reference-waitfor")));
     assert.ok(paths.every((path) => path.getAttribute("marker-end") === "url(#graph-arrow-combined-reference-waitfor)"));
     assert.notEqual(paths[0].getAttribute("d").split(" L ").at(-1), paths[1].getAttribute("d").split(" L ").at(-1));
+    assert.ok(groups.every((group) => group.getAttribute("role") === "button"));
+    assert.ok(groups.every((group) => /references|waits for/.test(group.getAttribute("aria-label"))));
+    groups[0].dispatch("keydown", { key: "Enter", preventDefault() {} });
+    assert.match(renderer.evaluate("selectedNodeId"), /^host-a:relationship:/);
+    renderer.flushFrames();
+    assert.equal(renderer.document.querySelector(".graph-edge-group.is-selected").getAttribute("aria-pressed"), "true");
+    assert.equal(renderer.document.querySelector(".graph-relationships").open, false);
 });
 
 test("narrow More reuses confirmations and exposes disabled operations without executing them", async () => {
@@ -1442,6 +1498,8 @@ test("responsive and theme selectors preserve host priority, the official mark, 
     assert.match(styles, /\.apphost-switcher > \.apphost-heading\s*\{[^}]*padding: 0 8px;/);
     assert.doesNotMatch(styles, /\.apphost-trigger\.resource-menu-trigger\s*\{[^}]*margin-left/);
     assert.match(styles, /\.host-more-actions\s*\{\s*display: inline-flex;/);
+    assert.match(styles, /\.graph-columns\s*\{[^}]*pointer-events: none;/);
+    assert.match(styles, /\.graph-node\s*\{[^}]*pointer-events: auto;/);
     assert.match(styles, /@container \(min-width: 720px\)[\s\S]*?\.resource-board\s*\{[^}]*grid-template-columns:/);
     assert.match(styles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.inspector\.is-entering/);
     assert.match(styles, /@media \(max-width: 520px\)[\s\S]*?#mode-label,\s*\.host-action-bar \.is-secondary-operation\s*\{\s*display: none;/);
