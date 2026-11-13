@@ -3,7 +3,7 @@
 A GitHub Copilot App canvas extension that brings Aspire AppHosts into a
 canvas-native workbench: Workspace and Global discovery, a focused AppHost
 switcher, live resource state, parented resources, endpoints, health checks,
-commands, Dashboard-backed diagnostics, and a read-only relationship graph.
+commands, parameters, resource dependencies, and Dashboard-backed diagnostics.
 
 Open the canvas with `open_aspire_apphosts`, or use canvas ID `aspire-apphosts`
 with `open_canvas`.
@@ -78,16 +78,16 @@ bounded request bodies.
   switcher and a bounded describe fanout of four.
 - A responsive resource board that removes explorer-style nesting while
   preserving parent ownership.
-- A second **Graph** tab visualizes Parent, Reference, and WaitFor relationships
-  from dependencies and parents toward the resources that use them. Graph nodes
-  are deliberately read-only; all operations remain in the default Resources
-  card view. Multiple semantics between the same pair collapse into one labeled
-  connector, and long edges route through column gutters rather than through
-  intermediate resources. Incoming connectors use separate attachment points
-  with straight final approaches so their arrowheads remain distinguishable.
-  A read-only relationship list supports selection and
-  sanitized Copilot context without enabling graph editing. Filtered graph
-  summaries distinguish hidden relationships from an AppHost with none declared.
+- The roster has collapsible **Resources** and **Parameters** sections. Parameters
+  appear only when the AppHost declares them, and parameter values are never
+  shown. Parameters with a missing value count toward resources that need
+  attention because they block startup.
+- Parent relationships drive roster nesting. The resource inspector lists
+  **Depends on** and **Used by** with each related resource's state, merging
+  Reference and WaitFor into one row per resource. Selecting a related name
+  opens that resource.
+- A resource in the Waiting state names the resources it is waiting for in its
+  roster row.
 - Resource cards keep natural content-driven heights instead of stretching to
   match neighboring cards.
 - Team App-style resource cards with compact labeled Endpoints and Health rows,

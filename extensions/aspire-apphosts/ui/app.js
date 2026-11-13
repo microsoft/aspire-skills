@@ -14,7 +14,6 @@ const els = {
     modeLabel: document.getElementById("mode-label"),
     modeSwitch: document.getElementById("mode-switch"),
     hostBar: document.getElementById("host-bar"),
-    viewTabs: document.getElementById("view-tabs"),
     rosterControls: document.getElementById("roster-controls"),
     filtersPanel: document.getElementById("filters-panel"),
     filterSelects: document.getElementById("filter-selects"),
@@ -157,14 +156,9 @@ let renderedViewMode = null;
 let activeAppHostId = null;
 let pendingViewMode = null;
 let activeModeTransition = null;
-let appModelView = "resources";
-let activeGraphModel = null;
-let graphDrawFrame = null;
-let retainedGraphEdgeFocusId = null;
 let renderedAppHostId = null;
-let graphRelationshipsExpanded = false;
-let relationshipFocusName = null;
-let selectedRelationshipId = null;
+let resourcesSectionCollapsed = false;
+let parametersSectionCollapsed = false;
 let eventStreamStatus = "connecting";
 let selectedResourceId = null;
 let inspectorReturnFocusId = null;
@@ -187,10 +181,6 @@ const dynamicLoadTimers = new Map();
 const dynamicLoadGenerations = new Map();
 const dynamicLoadingIds = new Set();
 const dynamicLoadFailedIds = new Set();
-const appModelViewStateByAppHost = new Map();
-const graphResizeObserver = typeof ResizeObserver === "function"
-    ? new ResizeObserver(() => scheduleResourceGraphDraw())
-    : null;
 
 function element(tag, properties = {}, children = []) {
     const node = document.createElement(tag);
@@ -254,15 +244,6 @@ function svgIcon(name, size = 16) {
     use.setAttribute("href", `/canvas-icons.svg#${ICONS.has(name) ? name : "resource"}`);
     svg.appendChild(use);
     return svg;
-}
-
-function svgElement(tag, attributes = {}) {
-    const namespace = "http://www.w3.org/2000/svg";
-    const node = document.createElementNS(namespace, tag);
-    for (const [name, value] of Object.entries(attributes)) {
-        node.setAttribute(name, String(value));
-    }
-    return node;
 }
 
 async function api(path, { method = "GET", body } = {}) {
@@ -424,7 +405,7 @@ function setModePickerOpen(open, { restoreFocus = false } = {}) {
 }
 
 function modeScopedControls() {
-    return [els.surface, els.hostBar, els.viewTabs, document.querySelector(".control-row")].filter(Boolean);
+    return [els.surface, els.hostBar, document.querySelector(".control-row")].filter(Boolean);
 }
 
 function beginModeSwitch(viewMode) {
@@ -451,11 +432,8 @@ function resetModeScopedState() {
     renderedAppHostId = null;
     inspectorReturnFocusId = null;
     pendingConfirmation = null;
-    appModelView = "resources";
-    appModelViewStateByAppHost.clear();
-    graphRelationshipsExpanded = false;
-    relationshipFocusName = null;
-    selectedRelationshipId = null;
+    resourcesSectionCollapsed = false;
+    parametersSectionCollapsed = false;
     filterText = "";
     els.searchInput.value = "";
     attentionOnly = false;
@@ -465,7 +443,6 @@ function resetModeScopedState() {
     if (els.pipelineDialog.open) {
         els.pipelineDialog.close("cancel");
     }
-    clearResourceGraphDrawing();
 }
 
 function showModeSwitchLoading() {
@@ -566,8 +543,12 @@ function updateFooterCount() {
         return;
     }
     const host = findNode(activeAppHostId) ?? (modelState?.roots ?? []).find(isAppHostNode);
-    const total = host ? flattenResources(appHostResources(host)).length : 0;
-    els.footerCount.textContent = host ? `${total} resource${total === 1 ? "" : "s"}` : "";
+    const entries = host ? flattenResources(appHostResources(host)) : [];
+    const parameters = entries.filter(({ resource }) => resource.isParameter).length;
+    const resources = entries.length - parameters;
+    els.footerCount.textContent = host
+        ? `${resources} resource${resources === 1 ? "" : "s"}${parameters ? ` · ${parameters} parameter${parameters === 1 ? "" : "s"}` : ""}`
+        : "";
 }
 
 function updateStatus() {
@@ -613,10 +594,6 @@ function findNode(nodeId, nodes = modelState?.roots ?? []) {
         if (node.id === nodeId) {
             return node;
         }
-        const relationship = node.graph?.edges?.find((edge) => edge.context?.id === nodeId)?.context;
-        if (relationship) {
-            return relationship;
-        }
         const found = findNode(nodeId, node.children ?? []);
         if (found) {
             return found;
@@ -645,15 +622,6 @@ function setSelected(node) {
     recordSelection(node);
     renderTree();
     requestAnimationFrame(() => focusNodeControl(node.id));
-}
-
-function setSelectedGraphEdge(edge) {
-    if (!edge.context) {
-        return;
-    }
-    retainedGraphEdgeFocusId = edge.id;
-    recordSelection(edge.context);
-    renderTree();
 }
 
 function isAppHostNode(node) {
@@ -1008,9 +976,12 @@ function selectResource(resource) {
         clearActiveCommand();
     }
     selectedResourceId = resource.id;
-    relationshipFocusName = resource.resourceName;
-    selectedRelationshipId = null;
     inspectorReturnFocusId = resource.id;
+    if (resource.isParameter) {
+        parametersSectionCollapsed = false;
+    } else {
+        resourcesSectionCollapsed = false;
+    }
     hideActionMenu();
     recordSelection(resource);
     // Only a new selection animates; model refreshes re-render without motion.
@@ -1048,7 +1019,6 @@ function showResourceInRoster(resourceName) {
     if (!entry) {
         return;
     }
-    appModelView = "resources";
     selectResource(entry.resource);
 }
 
@@ -1216,6 +1186,9 @@ function rowTreeGuides(visible, index, visibleLabels) {
 function renderResourceRow({ resource, parentLabel, depth }, dashboardAvailable, visibleLabels, guides = []) {
     const selected = resource.id === selectedResourceId;
     const parentVisible = Boolean(parentLabel) && visibleLabels.has(parentLabel);
+    const secondaryText = resource.waitingForLabels?.length
+        ? `Waiting for ${resource.waitingForLabels.join(", ")}`
+        : resource.description;
     return element("li", {
         class: `resource-row${selected ? " is-selected" : ""}${resourceNeedsAttention(resource) ? " needs-attention" : ""}`,
         dataset: { resourceId: resource.id, depth: String(Math.min(depth, MAX_ROW_DEPTH)) },
@@ -1231,7 +1204,7 @@ function renderResourceRow({ resource, parentLabel, depth }, dashboardAvailable,
             rowIcon(resource),
             element("span", { class: "resource-row-text" }, [
                 element("span", { class: "resource-row-name", text: resource.label, title: resource.label }),
-                element("span", { class: "resource-row-type", text: resource.description, title: resource.description }),
+                element("span", { class: "resource-row-type", text: secondaryText, title: secondaryText }),
                 ...(parentVisible ? [element("span", { class: "sr-only", text: `Part of ${parentLabel}` })] : []),
             ]),
             element("span", { class: "resource-row-state" }, [
@@ -1355,12 +1328,46 @@ function healthRow(health) {
     ]);
 }
 
-function renderInspector({ resource, parentLabel }, dashboardAvailable, attention = 0, appHostNode = {}) {
+const RELATION_LABELS = { Reference: "Reference", WaitFor: "Waits for" };
+
+function relationKindLabel(types) {
+    const labels = types.map((type) => RELATION_LABELS[type] ?? type);
+    return labels.map((label, index) => (index === 0 ? label : label.toLowerCase())).join(", ");
+}
+
+function relationRows(relations, entries) {
+    return (relations ?? []).flatMap(({ resourceName, types }) => {
+        const related = entries.find(({ resource }) => resource.resourceName === resourceName)?.resource;
+        if (!related) {
+            return [];
+        }
+        const tone = related.lifecycleTone || "inactive";
+        return [element("li", { class: "inspector-row relation-row" }, [
+            element("span", {
+                class: `state-icon tone-${related.tone || tone}${related.icon === "loading" ? " is-spinning" : ""}`,
+            }, [svgIcon(related.icon || "resource", 13)]),
+            element("button", {
+                class: "inspector-row-name relation-link",
+                type: "button",
+                text: related.label,
+                title: `Show ${related.label}`,
+                dataset: { focusKey: `relation:${related.id}` },
+                on: { click: () => showResourceInRoster(resourceName) },
+            }),
+            element("span", { class: "relation-kind", text: relationKindLabel(types) }),
+            element("span", { class: `health-status tone-${tone}`, text: related.statusLabel || "Unknown" }),
+        ])];
+    });
+}
+
+function renderInspector({ resource, parentLabel }, dashboardAvailable, attention = 0, appHostNode = {}, entries = []) {
     const endpoints = childrenOfKind(resource, "endpoint");
     const healthChecks = firstChildOfKind(resource, "health-group")?.children ?? [];
     const commands = firstChildOfKind(resource, "commands-group")?.children ?? [];
     const activeCommand = commands.find((command) => command.id === activeCommandId);
     const copyName = resourceCopyName(resource);
+    const dependsOn = relationRows(resource.dependsOn, entries);
+    const usedBy = relationRows(resource.usedBy, entries);
     const investigate = [
         ...(dashboardAvailable ? [
             inspectorButton("details", resource),
@@ -1410,6 +1417,12 @@ function renderInspector({ resource, parentLabel }, dashboardAvailable, attentio
                 }))] : []),
             ]),
         ]),
+        inspectorSection("Depends on", dependsOn.length
+            ? [element("ul", { class: "inspector-list" }, dependsOn)]
+            : []),
+        inspectorSection("Used by", usedBy.length
+            ? [element("ul", { class: "inspector-list" }, usedBy)]
+            : []),
         inspectorSection("Endpoints", endpoints.length
             ? [element("ul", { class: "inspector-list endpoint-list" }, endpoints.map(endpointRow))]
             : []),
@@ -1468,23 +1481,6 @@ function renderHostOverview(entries) {
     ]);
 }
 
-function visibleResourceGraph(appHost, resources) {
-    const visibleNames = new Set(resources.map(({ resource }) => resource.resourceName));
-    const source = appHost.graph ?? { nodes: [], edges: [] };
-    const nodes = source.nodes.filter((node) => visibleNames.has(node.resourceName));
-    const nodeNames = new Set(nodes.map((node) => node.resourceName));
-    const edges = source.edges.filter((edge) => nodeNames.has(edge.from) && nodeNames.has(edge.to));
-    const sourceLayers = [...new Set(nodes.map((node) => node.layer))].sort((left, right) => left - right);
-    const normalizedLayers = new Map(sourceLayers.map((layer, index) => [layer, index]));
-    return {
-        nodes: nodes.map((node) => ({ ...node, layer: normalizedLayers.get(node.layer) ?? 0 })),
-        edges,
-        sourceNodeCount: source.nodes.length,
-        sourceEdgeCount: source.edges.length,
-        filtered: rosterFiltersActive(),
-    };
-}
-
 function clearFilter() {
     filterText = "";
     els.searchInput.value = "";
@@ -1505,769 +1501,84 @@ function clearFilterButton() {
     });
 }
 
-function setAppModelView(view) {
-    if (view !== "resources" && view !== "graph" || appModelView === view) {
-        return;
+function toggleRosterSection(key) {
+    if (key === "parameters") {
+        parametersSectionCollapsed = !parametersSectionCollapsed;
+    } else {
+        resourcesSectionCollapsed = !resourcesSectionCollapsed;
     }
-    appModelView = view;
-    hideActionMenu();
     renderTree();
-    requestAnimationFrame(() => {
-        document.querySelector(`#${view}-view-tab`)?.focus();
-    });
 }
 
-function handleAppModelTabKey(event, view) {
-    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
-        return;
-    }
-    event.preventDefault();
-    const nextView = event.key === "ArrowLeft" || event.key === "Home"
-        ? "resources"
-        : event.key === "ArrowRight" || event.key === "End"
-            ? "graph"
-            : view;
-    setAppModelView(nextView);
-}
-
-function renderAppModelTabs(resourceCount, visibleCount) {
-    const definitions = [
-        { id: "resources", label: "Resources", icon: "layers", count: resourceCount },
-        { id: "graph", label: "Relationships", icon: "steps" },
-    ];
-    return element("div", {
-        class: "app-model-tabs",
-        role: "tablist",
-        "aria-label": "App model view",
-    }, definitions.map((definition) => {
-        const active = appModelView === definition.id;
-        return element("button", {
-            class: `app-model-tab${active ? " is-active" : ""}`,
-            id: `${definition.id}-view-tab`,
-            type: "button",
-            role: "tab",
-            tabIndex: active ? 0 : -1,
-            "aria-selected": active,
-            "aria-controls": `${definition.id}-view-panel`,
-            "aria-label": definition.count === undefined
-                ? definition.label
-                : rosterFiltersActive()
-                    ? `${definition.label}, ${visibleCount} of ${definition.count}`
-                    : `${definition.label}, ${definition.count}`,
-            on: {
-                click: () => setAppModelView(definition.id),
-                keydown: (event) => handleAppModelTabKey(event, definition.id),
-            },
-        }, [
-            element("span", { text: definition.label }),
-            ...(definition.count === undefined ? [] : [element("span", {
-                class: "roster-count",
-                text: rosterFiltersActive() ? `${visibleCount} of ${definition.count}` : String(definition.count),
-                "aria-hidden": "true",
-            })]),
-        ]);
-    }));
-}
-
-const GRAPH_RELATIONSHIPS = {
-    Parent: { label: "Ownership", direction: "owner → child", className: "is-parent" },
-    Reference: { label: "Reference", direction: "referenced → referencing", className: "is-reference" },
-    WaitFor: { label: "Wait for", direction: "dependency → waiting resource", className: "is-wait-for" },
-};
-const GRAPH_NODE_MIN_WIDTH = 170;
-const GRAPH_COLUMN_GAP = 28;
-const GRAPH_CANVAS_PADDING = 32;
-const GRAPH_NODE_GAP = 18;
-const GRAPH_ROUTE_LANE_GAP = 10;
-
-function graphCompactPlacement(layer) {
-    return {
-        column: [1, 2, 2, 1][layer % 4],
-        row: Math.floor(layer / 2) + 1,
-    };
-}
-
-function graphLayoutColumns(graph) {
-    const maxLayer = Math.max(...graph.nodes.map((node) => node.layer), 0);
-    const columns = Array.from({ length: maxLayer + 1 }, (_, layer) =>
-        graph.nodes
-            .filter((node) => node.layer === layer)
-            .sort((left, right) =>
-                left.label.localeCompare(right.label) || left.resourceName.localeCompare(right.resourceName)));
-    const nodeByName = new Map(graph.nodes.map((node) => [node.resourceName, node]));
-    const neighbors = new Map(graph.nodes.map((node) => [node.resourceName, []]));
-    for (const edge of graph.edges) {
-        if (!nodeByName.has(edge.from) || !nodeByName.has(edge.to) || edge.from === edge.to) {
-            continue;
-        }
-        neighbors.get(edge.from).push(edge.to);
-        neighbors.get(edge.to).push(edge.from);
-    }
-
-    const sweep = (layers, direction) => {
-        const positions = new Map(columns.flatMap((nodes) =>
-            nodes.map((node, index) => [node.resourceName, index])));
-        for (const layer of layers) {
-            const nodes = columns[layer];
-            const previousPositions = new Map(nodes.map((node, index) => [node.resourceName, index]));
-            nodes.sort((left, right) => {
-                const score = (node) => {
-                    const related = neighbors.get(node.resourceName)
-                        .filter((name) => {
-                            const relatedLayer = nodeByName.get(name).layer;
-                            return direction > 0 ? relatedLayer < layer : relatedLayer > layer;
-                        })
-                        .map((name) => positions.get(name));
-                    return related.length
-                        ? related.reduce((total, position) => total + position, 0) / related.length
-                        : previousPositions.get(node.resourceName);
-                };
-                return score(left) - score(right)
-                    || previousPositions.get(left.resourceName) - previousPositions.get(right.resourceName)
-                    || left.resourceName.localeCompare(right.resourceName);
-            });
-            nodes.forEach((node, index) => positions.set(node.resourceName, index));
-        }
-    };
-
-    for (let pass = 0; pass < 4; pass += 1) {
-        sweep(Array.from({ length: columns.length - 1 }, (_, index) => index + 1), 1);
-        sweep(Array.from({ length: columns.length - 1 }, (_, index) => columns.length - index - 2), -1);
-    }
-    return columns;
-}
-
-function graphCompactNodePositions(columns, edges, heights, gap = GRAPH_NODE_GAP) {
-    const nodeByName = new Map(columns.flat().map((node) => [node.resourceName, node]));
-    const neighbors = new Map([...nodeByName.keys()].map((name) => [name, []]));
-    for (const edge of edges) {
-        if (!nodeByName.has(edge.from) || !nodeByName.has(edge.to) || edge.from === edge.to) {
-            continue;
-        }
-        neighbors.get(edge.from).push(edge.to);
-        neighbors.get(edge.to).push(edge.from);
-    }
-    const localPositions = columns.map((nodes) => {
-        let nextTop = 0;
-        return new Map(nodes.map((node) => {
-            const top = nextTop;
-            nextTop += (heights.get(node.resourceName) ?? 0) + gap;
-            return [node.resourceName, top];
-        }));
-    });
-    const offsets = columns.map(() => 0);
-    const center = (name) => {
-        const node = nodeByName.get(name);
-        return localPositions[node.layer].get(name) + offsets[node.layer] + (heights.get(name) ?? 0) / 2;
-    };
-    const alignLayer = (layer, direction) => {
-        const deltas = columns[layer].flatMap((node) => {
-            const related = neighbors.get(node.resourceName).filter((name) => {
-                const relatedLayer = nodeByName.get(name).layer;
-                return direction > 0 ? relatedLayer < layer : relatedLayer > layer;
-            });
-            if (related.length === 0) {
-                return [];
-            }
-            const relatedCenter = related.reduce((total, name) => total + center(name), 0) / related.length;
-            const localCenter = localPositions[layer].get(node.resourceName)
-                + (heights.get(node.resourceName) ?? 0) / 2;
-            return [relatedCenter - localCenter];
-        }).sort((left, right) => left - right);
-        if (deltas.length > 0) {
-            offsets[layer] = deltas[Math.floor(deltas.length / 2)];
-        }
-    };
-
-    for (let pass = 0; pass < 4; pass += 1) {
-        for (let layer = 1; layer < columns.length; layer += 1) {
-            alignLayer(layer, 1);
-        }
-        for (let layer = columns.length - 2; layer >= 0; layer -= 1) {
-            alignLayer(layer, -1);
-        }
-        const minimumOffset = Math.min(...offsets);
-        offsets.forEach((offset, layer) => { offsets[layer] = offset - minimumOffset; });
-    }
-
-    return new Map(columns.flatMap((nodes, layer) =>
-        nodes.map((node) => [
-            node.resourceName,
-            localPositions[layer].get(node.resourceName) + offsets[layer],
-        ])));
-}
-
-function graphEdgePresentation(edge) {
-    if (edge.types.length === 1) {
-        const type = edge.types[0];
-        return {
-            id: type.toLowerCase(),
-            ...GRAPH_RELATIONSHIPS[type],
-            channels: [GRAPH_RELATIONSHIPS[type].className],
-        };
-    }
-    const typeKey = edge.types.map((type) => type.toLowerCase()).join("-");
-    const referenceAndWaitFor = edge.types.length === 2
-        && edge.types.includes("Reference")
-        && edge.types.includes("WaitFor");
-    return {
-        id: `combined-${typeKey}`,
-        label: edge.types.map((type) => GRAPH_RELATIONSHIPS[type].label).join(" + "),
-        direction: referenceAndWaitFor ? "both relationships" : "combined relationships",
-        className: `is-combined is-combined-${typeKey}`,
-        channels: referenceAndWaitFor ? ["is-reference", "is-wait-for"] : ["is-combined"],
-        dualMarker: referenceAndWaitFor,
-    };
-}
-
-function renderGraphLegend(graph) {
-    const presentations = new Map();
-    for (const edge of graph.edges) {
-        const presentation = graphEdgePresentation(edge);
-        presentations.set(presentation.id, presentation);
-    }
-    if (presentations.size === 0) {
-        return null;
-    }
-    return element("div", { class: "graph-legend", "aria-label": "Relationship legend" },
-        [...presentations.values()].map((presentation) => {
-            const swatch = svgElement("svg", {
-                class: "graph-legend-swatch",
-                viewBox: "0 0 26 8",
-                "aria-hidden": "true",
-            });
-            for (const channel of presentation.channels) {
-                swatch.appendChild(svgElement("line", {
-                    class: `graph-edge ${presentation.className} ${channel}`,
-                    x1: "1",
-                    y1: "4",
-                    x2: "20",
-                    y2: "4",
-                }));
-            }
-            if (presentation.dualMarker) {
-                swatch.appendChild(svgElement("path", {
-                    class: "graph-arrow is-reference",
-                    d: "M20 1 L26 4",
-                }));
-                swatch.appendChild(svgElement("path", {
-                    class: "graph-arrow is-wait-for",
-                    d: "M20 7 L26 4",
-                }));
-            } else {
-                swatch.appendChild(svgElement("path", {
-                    class: `graph-arrow ${presentation.className}`,
-                    d: "M20 1 L26 4 L20 7",
-                }));
-            }
-            return (
-            element("span", { class: "graph-legend-item" }, [
-                swatch,
-                element("span", { text: `${presentation.label} (${presentation.direction})` }),
-            ]));
-        }));
-}
-
-function renderGraphNode(node, selectedEdge) {
-    const relationshipState = selectedEdge
-        ? selectedEdge.from === node.resourceName || selectedEdge.to === node.resourceName
-            ? " is-connected"
-            : " is-dimmed"
-        : "";
-    return element("article", {
-        class: `graph-node${node.tone ? ` tone-${node.tone}` : ""}${relationshipState}`,
-        role: "listitem",
-        dataset: { graphNodeId: node.resourceName },
-    }, [
-        element("header", { class: "graph-node-header" }, [
-            rowIcon(node),
-            element("span", { class: "graph-node-identity" }, [
-                element("strong", { text: node.label, title: node.label }),
-                element("span", { text: node.resourceType, title: node.resourceType }),
-            ]),
-        ]),
-        ...((node.statusLabel || node.healthLabel) ? [element("div", {
-            class: "graph-node-meta",
-        }, [
-            ...(node.statusLabel ? [element("span", {
-                class: `resource-status${node.lifecycleTone ? ` tone-${node.lifecycleTone}` : ""}`,
-                text: node.statusLabel,
-                title: node.statusLabel,
-            })] : []),
-            ...(node.healthLabel ? [element("div", {
-                class: `graph-node-health${node.healthTone ? ` tone-${node.healthTone}` : ""}`,
+function renderRosterSection({ key, title, entries, visible, collapsed }, dashboardAvailable) {
+    const listId = `roster-section-${key}`;
+    const visibleLabels = new Set(visible.map(({ resource }) => resource.label));
+    const count = rosterFiltersActive() ? `(${visible.length} of ${entries.length})` : `(${entries.length})`;
+    return [
+        element("div", { class: "roster-header roster-section-header" }, [
+            element("button", {
+                class: "roster-section-toggle",
+                type: "button",
+                "aria-expanded": collapsed ? "false" : "true",
+                "aria-controls": listId,
+                dataset: { focusKey: `roster-section:${key}` },
+                on: { click: () => toggleRosterSection(key) },
             }, [
-                svgIcon("heart", 12),
-                element("span", { text: node.healthLabel, title: node.healthLabel }),
-            ])] : []),
-        ])] : []),
-        element("button", {
-            class: "graph-node-inspect",
-            type: "button",
-            "aria-label": `Inspect ${node.label} in Resources`,
-            on: { click: () => showResourceInRoster(node.resourceName) },
-        }, [element("span", { text: "Inspect" })]),
-    ]);
+                svgIcon("chevron", 12),
+                element("span", { text: title }),
+                element("span", { class: "roster-count", text: count }),
+            ]),
+            element("span", { "aria-hidden": "true", text: "State / health" }),
+        ]),
+        element("ul", { class: "resource-roster", id: listId, role: "list", hidden: collapsed },
+            visible.map((entry, index) => renderResourceRow(
+                entry,
+                dashboardAvailable,
+                visibleLabels,
+                rowTreeGuides(visible, index, visibleLabels),
+            ))),
+    ];
 }
 
-function renderGraphColumn(nodes, layer, selectedEdge) {
-    const placement = graphCompactPlacement(layer);
-    const column = element("div", {
-        class: "graph-column",
-        dataset: { graphLayer: String(layer) },
-    }, nodes.map((node) => renderGraphNode(node, selectedEdge)));
-    column.style.setProperty("--graph-linear-row", String(layer + 1));
-    column.style.setProperty("--graph-compact-column", String(placement.column));
-    column.style.setProperty("--graph-compact-row", String(placement.row));
-    return column;
-}
-
-function graphRelationshipSentence(edge, nodeByName) {
-    const from = nodeByName.get(edge.from)?.label ?? edge.from;
-    const to = nodeByName.get(edge.to)?.label ?? edge.to;
-    const prefix = `From ${from} to ${to}: `;
-    if (edge.types.length === 1 && edge.types[0] === "Parent") {
-        return `${prefix}${from} owns ${to}.`;
+function renderRosterSections(entries, visible, dashboardAvailable) {
+    if (!visible.length) {
+        return [element("div", { class: "roster-empty", role: "status" }, [
+            element("p", { text: "No resources match these filters." }),
+            clearFilterButton(),
+        ])];
     }
-    if (edge.types.length === 1 && edge.types[0] === "WaitFor") {
-        return `${prefix}${to} waits for ${from}.`;
-    }
-    if (edge.types.length === 1 && edge.types[0] === "Reference") {
-        return `${prefix}${to} references ${from}.`;
-    }
-    if (edge.types.length === 2
-        && edge.types.includes("Reference")
-        && edge.types.includes("WaitFor")) {
-        return `${prefix}${to} references and waits for ${from}.`;
-    }
-    const meanings = edge.types.map((type) => {
-        if (type === "Parent") {
-            return `${from} owns ${to}`;
-        }
-        if (type === "WaitFor") {
-            return `${to} waits for ${from}`;
-        }
-        return `${to} references ${from}`;
-    });
-    return `${prefix}${meanings.join("; ")}.`;
-}
-
-function relationshipNodeNeedsAttention(node) {
-    return node.tone === "error"
-        || node.tone === "danger"
-        || node.tone === "warning"
-        || node.lifecycleTone === "error"
-        || node.lifecycleTone === "danger"
-        || node.lifecycleTone === "warning"
-        || node.healthTone === "error"
-        || node.healthTone === "danger"
-        || node.healthTone === "warning";
-}
-
-function chooseRelationshipFocus(graph) {
-    const nodeByName = new Map(graph.nodes.map((node) => [node.resourceName, node]));
-    if (relationshipFocusName && nodeByName.has(relationshipFocusName)) {
-        return nodeByName.get(relationshipFocusName);
-    }
-
-    const selectedResource = graph.nodes.find((node) => node.id === selectedResourceId);
-    if (selectedResource) {
-        relationshipFocusName = selectedResource.resourceName;
-        return selectedResource;
-    }
-
-    const blockedTargets = new Set(graph.edges
-        .filter((edge) => edge.types.includes("WaitFor"))
-        .map((edge) => edge.to));
-    const focus = graph.nodes.find((node) =>
-        blockedTargets.has(node.resourceName) && relationshipNodeNeedsAttention(node))
-        || graph.nodes.find((node) => blockedTargets.has(node.resourceName))
-        || graph.nodes.find(relationshipNodeNeedsAttention)
-        || graph.nodes[0];
-    relationshipFocusName = focus?.resourceName ?? null;
-    return focus;
-}
-
-function focusRelationshipResource(resourceName) {
-    relationshipFocusName = resourceName;
-    selectedRelationshipId = null;
-    renderTree();
-    requestAnimationFrame(() => {
-        document.getElementById("relationship-focus-select")?.focus();
-    });
-}
-
-function relationshipList(items) {
-    const labels = items.map((item) => item.label);
-    if (labels.length <= 1) {
-        return labels[0] ?? "";
-    }
-    if (labels.length === 2) {
-        return `${labels[0]} and ${labels[1]}`;
-    }
-    return `${labels.slice(0, -1).join(", ")}, and ${labels.at(-1)}`;
-}
-
-function relationshipEntryDescriptor(edge, focus, related) {
-    const incoming = edge.to === focus.resourceName;
-    const waits = edge.types.includes("WaitFor");
-    const references = edge.types.includes("Reference");
-    if (edge.types.includes("Parent")) {
-        return edge.from === focus.resourceName
-            ? {
-                kind: "ownership",
-                label: "Contains",
-                title: `${focus.label} contains ${related.label}`,
-                explanation: `${related.label} is a child resource owned by ${focus.label}.`,
-                order: 2,
-            }
-            : {
-                kind: "ownership",
-                label: "Part of",
-                title: `${focus.label} is part of ${related.label}`,
-                explanation: `${related.label} owns and contains ${focus.label}.`,
-                order: 2,
-            };
-    }
-    if (incoming && waits) {
-        return {
-            kind: "blocked-by",
-            label: references ? "Waits for + references" : "Waits for",
-            title: references
-                ? `${focus.label} waits for and references ${related.label}`
-                : `${focus.label} waits for ${related.label}`,
-            explanation: references
-                ? `${focus.label} declares ${related.label} as both a startup dependency and a source of values or endpoints.`
-                : `${focus.label} declares ${related.label} as a startup dependency.`,
-            order: 0,
-        };
-    }
-    if (incoming && references) {
-        return {
-            kind: "references",
-            label: "References",
-            title: `${focus.label} references ${related.label}`,
-            explanation: `${focus.label} uses values or endpoints exposed by ${related.label}.`,
-            order: 1,
-        };
-    }
-    if (!incoming && waits) {
-        return {
-            kind: "affects",
-            label: references ? "Referenced + awaited by" : "Required by",
-            title: references
-                ? `${related.label} waits for and references ${focus.label}`
-                : `${related.label} waits for ${focus.label}`,
-            explanation: references
-                ? `${related.label} declares ${focus.label} as both a startup dependency and a source of values or endpoints.`
-                : `${related.label} declares ${focus.label} as a startup dependency.`,
-            order: 3,
-        };
-    }
-    return {
-        kind: "affects",
-        label: "Referenced by",
-        title: `${related.label} references ${focus.label}`,
-        explanation: `${related.label} uses values or endpoints exposed by ${focus.label}.`,
-        order: 3,
-    };
-}
-
-function relationshipEntries(graph, focus, nodeByName) {
-    const entries = [];
-    for (const edge of graph.edges) {
-        let relatedName = null;
-        if (edge.to === focus.resourceName) {
-            relatedName = edge.from;
-        } else if (edge.from === focus.resourceName) {
-            relatedName = edge.to;
-        }
-        const related = nodeByName.get(relatedName);
-        if (!related) {
-            continue;
-        }
-        entries.push({
-            edge,
-            related,
-            ...relationshipEntryDescriptor(edge, focus, related),
-            sentence: graphRelationshipSentence(edge, nodeByName),
+    const parameterEntries = entries.filter(({ resource }) => resource.isParameter);
+    const sections = [{
+        key: "resources",
+        title: "Resources",
+        entries: entries.filter(({ resource }) => !resource.isParameter),
+        visible: visible.filter(({ resource }) => !resource.isParameter),
+        collapsed: resourcesSectionCollapsed,
+    }];
+    if (parameterEntries.length) {
+        sections.push({
+            key: "parameters",
+            title: "Parameters",
+            entries: parameterEntries,
+            visible: visible.filter(({ resource }) => resource.isParameter),
+            collapsed: parametersSectionCollapsed,
         });
     }
-
-    return entries.sort((left, right) =>
-        left.order - right.order
-        || Number(relationshipNodeNeedsAttention(right.related))
-            - Number(relationshipNodeNeedsAttention(left.related))
-        || left.related.label.localeCompare(right.related.label));
+    return sections.flatMap((section) => renderRosterSection(section, dashboardAvailable));
 }
 
-function relationshipDiagnosis(focus, entries) {
-    const blockers = entries.filter((entry) => entry.kind === "blocked-by");
-    if (blockers.length === 0) {
-        return `${focus.label} has no declared wait dependencies.`;
-    }
-    const related = blockers.map(({ related }) => related);
-    const attention = related.filter(relationshipNodeNeedsAttention);
-    const firstSentence = `${focus.label} waits for ${relationshipList(related)}.`;
-    if (attention.length === 0) {
-        return `${firstSentence} No blocker currently needs attention.`;
-    }
-    return `${firstSentence} ${relationshipList(attention)} ${attention.length === 1 ? "needs" : "need"} attention.`;
-}
-
-function renderRelationshipState(node) {
-    const status = node.statusLabel || node.stateLabel || node.state || "Unknown";
-    const health = node.healthLabel || node.health || null;
-    return element("span", { class: "relationship-row-state" }, [
-        element("span", {
-            class: `status-badge tone-${node.lifecycleTone ?? node.tone ?? "inactive"}`,
-            text: status,
-        }),
-        ...(health && health !== status ? [element("span", {
-            class: `status-badge tone-${node.healthTone ?? node.tone ?? "inactive"}`,
-            text: health,
-        })] : []),
-    ]);
-}
-
-function selectRelationshipEntry(entry) {
-    selectedRelationshipId = entry.edge.id;
-    renderTree();
-    requestAnimationFrame(() => {
-        document.querySelector(`[data-relationship-id="${CSS.escape(entry.edge.id)}"]`)?.focus();
-    });
-}
-
-function chooseSelectedRelationship(entries) {
-    const selected = entries.find((entry) => entry.edge.id === selectedRelationshipId) ?? entries[0] ?? null;
-    selectedRelationshipId = selected?.edge.id ?? null;
-    return selected;
-}
-
-function renderRelationshipEntry(focus, entry, selected) {
-    return element("li", { class: "relationship-browser-item" }, [
-        element("button", {
-            class: `relationship-browser-row${selected ? " is-selected" : ""}`,
-            type: "button",
-            dataset: { relationshipId: entry.edge.id },
-            "aria-pressed": selected,
-            "aria-label": `${entry.label}. ${entry.title}. Select for details.`,
-            on: { click: () => selectRelationshipEntry(entry) },
-        }, [
-            element("span", { class: "relationship-kind", text: entry.label }),
-            element("span", { class: "relationship-row-identity" }, [
-                rowIcon(entry.related),
-                element("span", { class: "relationship-row-copy" }, [
-                    element("strong", { text: entry.related.label }),
-                    element("span", { text: entry.explanation }),
-                ]),
-            ]),
-            renderRelationshipState(entry.related),
-        ]),
-        ...(selected ? [renderRelationshipDetail(focus, entry, "relationship-inline-detail")] : []),
-    ]);
-}
-
-function renderRelationshipDetail(focus, entry, variant = "") {
-    const titleId = variant ? `${variant}-title` : "relationship-detail-title";
-    if (!entry) {
-        return element("section", {
-            class: `relationship-detail is-empty${variant ? ` ${variant}` : ""}`,
-            "aria-labelledby": titleId,
-        }, [
-            element("h3", { id: titleId, text: "No direct relationships" }),
-            element("p", {
-                text: `${focus.label} has no declared references, wait dependencies, ownership links, or dependents.`,
-            }),
-        ]);
-    }
-
-    return element("section", {
-        class: `relationship-detail${variant ? ` ${variant}` : ""}`,
-        "aria-labelledby": titleId,
-        "aria-live": "polite",
-    }, [
-        element("div", { class: "relationship-detail-heading" }, [
-            element("h3", { id: titleId, text: entry.title }),
-            element("span", { class: "relationship-kind", text: entry.label }),
-        ]),
-        element("p", { class: "relationship-detail-copy", text: entry.explanation }),
-        element("div", {
-            class: "relationship-statement",
-            "aria-label": entry.sentence,
-        }, [
-            element("span", { class: "relationship-statement-resource" }, [
-                rowIcon(focus),
-                element("strong", { text: focus.label }),
-            ]),
-            element("span", { class: "relationship-statement-verb", text: entry.label }),
-            element("span", { class: "relationship-statement-resource" }, [
-                rowIcon(entry.related),
-                element("strong", { text: entry.related.label }),
-            ]),
-        ]),
-        element("div", { class: "relationship-detail-state" }, [
-            element("span", { text: `${entry.related.label} status` }),
-            renderRelationshipState(entry.related),
-        ]),
-        element("div", { class: "relationship-detail-actions" }, [
-            element("button", {
-                class: "button button-primary button-small",
-                type: "button",
-                text: `Focus ${entry.related.label}`,
-                on: { click: () => focusRelationshipResource(entry.related.resourceName) },
-            }),
-            ...(entry.edge.context ? [element("button", {
-                class: "button button-secondary button-small",
-                type: "button",
-                text: "Add relationship to chat",
-                on: { click: () => void executeNodeAction("ask", entry.edge.context) },
-            })] : []),
-        ]),
-    ]);
-}
-
-function renderRelationshipBrowser(focus, entries) {
-    const selected = chooseSelectedRelationship(entries);
-    return element("div", {
-        class: "relationship-browser",
-        "aria-label": `Direct relationships for ${focus.label}`,
-    }, [
-        element("section", {
-            class: "relationship-browser-index",
-            "aria-labelledby": "relationship-browser-title",
-        }, [
-            element("header", { class: "relationship-browser-heading" }, [
-                element("div", {}, [
-                    element("h3", { id: "relationship-browser-title", text: "Direct relationships" }),
-                    element("p", { text: "Select for details. Use Focus to change resources." }),
-                ]),
-                element("span", {
-                    class: "relationship-count",
-                    text: String(entries.length),
-                    "aria-label": `${entries.length} ${entries.length === 1 ? "relationship" : "relationships"}`,
-                }),
-            ]),
-            entries.length
-                ? element("ul", { class: "relationship-browser-list" },
-                    entries.map((entry) => renderRelationshipEntry(focus, entry, entry === selected)))
-                : element("p", { class: "relationship-browser-empty", text: "No direct relationships" }),
-        ]),
-        renderRelationshipDetail(focus, selected),
-    ]);
-}
-
-function renderResourceGraphPanel(graph, active) {
-    activeGraphModel = null;
-    const nodeByName = new Map(graph.nodes.map((node) => [node.resourceName, node]));
-    const focus = chooseRelationshipFocus(graph);
-    if (!focus) {
-        return element("div", {
-            class: "app-model-panel",
-            id: "graph-view-panel",
-            role: "tabpanel",
-            "aria-labelledby": "graph-view-tab",
-            hidden: !active,
-        }, [
-            element("div", { class: "resource-board-empty" }, [
-                svgIcon("steps", 18),
-                element("strong", {
-                    text: graph.filtered ? "No resources match these filters" : "No relationships yet",
-                }),
-                element("span", {
-                    text: graph.filtered
-                        ? "Clear the filters to choose a resource and inspect its relationships."
-                        : "Start this AppHost to inspect evaluated resource relationships.",
-                }),
-                ...(graph.filtered ? [clearFilterButton()] : []),
-            ]),
-        ]);
-    }
-
-    const entries = relationshipEntries(graph, focus, nodeByName);
-    return element("div", {
-        class: "app-model-panel relationship-workbench",
-        id: "graph-view-panel",
-        role: "tabpanel",
-        "aria-labelledby": "graph-view-tab",
-        hidden: !active,
-    }, [
-        element("div", { class: "relationship-toolbar" }, [
-            element("label", { for: "relationship-focus-select", text: "Focused resource" }),
-            element("select", {
-                id: "relationship-focus-select",
-                on: {
-                    change: (event) => focusRelationshipResource(event.currentTarget.value),
-                },
-            }, [...graph.nodes]
-                .sort((left, right) => left.label.localeCompare(right.label))
-                .map((node) => element("option", {
-                    value: node.resourceName,
-                    text: node.label,
-                    selected: node.resourceName === focus.resourceName,
-                }))),
-            ...(graph.filtered ? [element("div", { class: "relationship-filter-summary" }, [
-                element("span", {
-                    text: `${graph.nodes.length} of ${graph.sourceNodeCount} resources visible`,
-                }),
-                clearFilterButton(),
-            ])] : []),
-        ]),
-        element("section", {
-            class: `relationship-focus-summary tone-${focus.tone ?? "inactive"}`,
-            "aria-labelledby": "relationship-focus-title",
-        }, [
-            element("div", { class: "relationship-focus-heading" }, [
-                element("span", { class: "relationship-focus-icon" }, [rowIcon(focus)]),
-                element("div", {}, [
-                    element("h2", { id: "relationship-focus-title", text: focus.label }),
-                ]),
-                renderRelationshipState(focus),
-            ]),
-            element("p", { class: "relationship-diagnosis", text: relationshipDiagnosis(focus, entries) }),
-            element("button", {
-                class: "button button-secondary button-small",
-                type: "button",
-                text: "Inspect resource",
-                on: { click: () => showResourceInRoster(focus.resourceName) },
-            }),
-        ]),
-        renderRelationshipBrowser(focus, entries),
-    ]);
-}
-
-function renderResourceBoardPanel(appHost, entries, visible, dashboardAvailable, active) {
+function renderResourceBoardPanel(appHost, entries, visible, dashboardAvailable) {
     const selectedEntry = selectedResourceId
         ? entries.find(({ resource }) => resource.id === selectedResourceId)
         : null;
-    const visibleLabels = new Set(visible.map(({ resource }) => resource.label));
     return element("div", {
         class: "app-model-panel",
         id: "resources-view-panel",
-        role: "tabpanel",
-        "aria-labelledby": "resources-view-tab",
-        hidden: !active,
     }, [
         entries.length
             ? element("div", { class: `resource-board${selectedResourceId ? " is-inspecting" : ""}` }, [
-                element("section", { class: "roster-pane", "aria-label": "Resources" }, [
-                    element("div", { class: "roster-header", "aria-hidden": "true" }, [
-                        element("span", { text: "Resource" }),
-                        element("span", { text: "State / health" }),
-                    ]),
-                    visible.length
-                        ? element("ul", { class: "resource-roster", role: "list" },
-                            visible.map((entry, index) => renderResourceRow(
-                                entry,
-                                dashboardAvailable,
-                                visibleLabels,
-                                rowTreeGuides(visible, index, visibleLabels),
-                            )))
-                        : element("div", { class: "roster-empty", role: "status" }, [
-                            element("p", { text: "No resources match these filters." }),
-                            clearFilterButton(),
-                        ]),
-                ]),
+                element("section", { class: "roster-pane", "aria-label": "Resources" },
+                    renderRosterSections(entries, visible, dashboardAvailable)),
                 element("section", {
                     class: "inspector-pane",
                     "aria-labelledby": "inspector-title",
@@ -2275,7 +1586,7 @@ function renderResourceBoardPanel(appHost, entries, visible, dashboardAvailable,
                     on: { keydown: handleInspectorKey },
                 }, [
                     selectedEntry
-                        ? renderInspector(selectedEntry, dashboardAvailable, attentionCount(entries), appHost)
+                        ? renderInspector(selectedEntry, dashboardAvailable, attentionCount(entries), appHost, entries)
                         : selectedResourceId
                             ? renderMissingResource(attentionCount(entries))
                             : renderHostOverview(entries),
@@ -2300,499 +1611,6 @@ function renderResourceBoardPanel(appHost, entries, visible, dashboardAvailable,
                     }),
                 ]),
     ]);
-}
-
-function graphMarker(presentation) {
-    const marker = svgElement("marker", {
-        id: `graph-arrow-${presentation.id}`,
-        viewBox: "0 0 8 10",
-        refX: "7",
-        refY: "5",
-        markerWidth: "5",
-        markerHeight: "5",
-        orient: "auto",
-    });
-    if (presentation.dualMarker) {
-        marker.appendChild(svgElement("path", {
-            class: "graph-arrow is-reference",
-            d: "M1 1 L7 5",
-        }));
-        marker.appendChild(svgElement("path", {
-            class: "graph-arrow is-wait-for",
-            d: "M1 9 L7 5",
-        }));
-    } else {
-        marker.appendChild(svgElement("path", {
-            class: `graph-arrow ${presentation.className}`,
-            d: "M1 1 L7 5 L1 9",
-        }));
-    }
-    return marker;
-}
-
-function graphLongEdgeLanes(edges, nodeByName) {
-    const longEdges = edges
-        .filter((edge) => {
-            const fromLayer = nodeByName.get(edge.from)?.layer ?? 0;
-            const toLayer = nodeByName.get(edge.to)?.layer ?? 0;
-            return toLayer < fromLayer || toLayer - fromLayer > 1;
-        })
-        .sort((left, right) => {
-            const leftFrom = nodeByName.get(left.from)?.layer ?? 0;
-            const rightFrom = nodeByName.get(right.from)?.layer ?? 0;
-            const leftTo = nodeByName.get(left.to)?.layer ?? 0;
-            const rightTo = nodeByName.get(right.to)?.layer ?? 0;
-            const leftStart = Math.min(leftFrom, leftTo);
-            const rightStart = Math.min(rightFrom, rightTo);
-            const leftEnd = Math.max(leftFrom, leftTo);
-            const rightEnd = Math.max(rightFrom, rightTo);
-            return leftStart - rightStart || leftEnd - rightEnd || left.id.localeCompare(right.id);
-        });
-    const laneSpans = [];
-    return new Map(longEdges.map((edge) => {
-        const fromLayer = nodeByName.get(edge.from)?.layer ?? 0;
-        const toLayer = nodeByName.get(edge.to)?.layer ?? 0;
-        const span = { start: Math.min(fromLayer, toLayer), end: Math.max(fromLayer, toLayer) };
-        let lane = laneSpans.findIndex((spans) =>
-            spans.every((existing) => span.end < existing.start || span.start > existing.end));
-        if (lane < 0) {
-            lane = laneSpans.length;
-            laneSpans.push([]);
-        }
-        laneSpans[lane].push(span);
-        return [edge.id, lane];
-    }));
-}
-
-function graphIncomingPorts(edges, nodeBounds) {
-    const incoming = new Map();
-    for (const edge of edges) {
-        if (!nodeBounds.has(edge.from) || !nodeBounds.has(edge.to)) {
-            continue;
-        }
-        const group = incoming.get(edge.to) ?? [];
-        group.push(edge);
-        incoming.set(edge.to, group);
-    }
-    const ports = new Map();
-    for (const [target, group] of incoming) {
-        group.sort((left, right) => {
-            const a = nodeBounds.get(left.from);
-            const b = nodeBounds.get(right.from);
-            return (a.top + a.height / 2) - (b.top + b.height / 2)
-                || (a.left + a.width / 2) - (b.left + b.width / 2)
-                || left.id.localeCompare(right.id);
-        });
-        const bounds = nodeBounds.get(target);
-        const spacing = (size) => Math.min(18, Math.max(0, size - 32) / Math.max(1, group.length - 1));
-        group.forEach((edge, index) => {
-            const slot = index - (group.length - 1) / 2;
-            ports.set(edge.id, { x: slot * spacing(bounds.width), y: slot * spacing(bounds.height) });
-        });
-    }
-    return ports;
-}
-
-function graphOutgoingPorts(edges, nodeBounds) {
-    const outgoing = new Map();
-    for (const edge of edges) {
-        if (!nodeBounds.has(edge.from) || !nodeBounds.has(edge.to)) {
-            continue;
-        }
-        const group = outgoing.get(edge.from) ?? [];
-        group.push(edge);
-        outgoing.set(edge.from, group);
-    }
-    const ports = new Map();
-    for (const [source, group] of outgoing) {
-        group.sort((left, right) => {
-            const a = nodeBounds.get(left.to);
-            const b = nodeBounds.get(right.to);
-            return (a.top + a.height / 2) - (b.top + b.height / 2)
-                || (a.left + a.width / 2) - (b.left + b.width / 2)
-                || left.id.localeCompare(right.id);
-        });
-        const bounds = nodeBounds.get(source);
-        const spacing = (size) => Math.min(18, Math.max(0, size - 32) / Math.max(1, group.length - 1));
-        group.forEach((edge, index) => {
-            const slot = index - (group.length - 1) / 2;
-            ports.set(edge.id, { x: slot * spacing(bounds.width), y: slot * spacing(bounds.height) });
-        });
-    }
-    return ports;
-}
-
-function graphEdgePath(
-    from,
-    to,
-    canvas,
-    selfEdge,
-    fromLayer,
-    toLayer,
-    reciprocalSide,
-    port = { x: 0, y: 0 },
-    routeLane = 0,
-    sourcePort = { x: 0, y: 0 },
-    routeY,
-    compactLayout = false,
-) {
-    const fromCenterX = from.left + from.width / 2 - canvas.left + sourcePort.x;
-    const fromCenterY = from.top + from.height / 2 - canvas.top + sourcePort.y;
-    const toCenterX = to.left + to.width / 2 - canvas.left + port.x;
-    const toCenterY = to.top + to.height / 2 - canvas.top + port.y;
-
-    if (selfEdge) {
-        const startX = from.right - canvas.left;
-        const startY = fromCenterY;
-        const endX = toCenterX;
-        const endY = from.top - canvas.top;
-        const outerX = startX + 30;
-        const outerY = Math.max(8, endY - 24);
-        return `M ${startX} ${startY} L ${outerX} ${startY} L ${outerX} ${outerY} L ${endX} ${outerY} L ${endX} ${endY - 12} L ${endX} ${endY}`;
-    }
-
-    if (compactLayout) {
-        const sameBand = Math.abs(fromCenterY - toCenterY) < Math.min(from.height, to.height) * 0.6;
-        if (sameBand && to.left > from.right + 8) {
-            const startX = from.right - canvas.left;
-            const endX = to.left - canvas.left;
-            const approachX = endX - 12;
-            const middleX = (startX + endX) / 2;
-            return `M ${startX} ${fromCenterY} L ${middleX} ${fromCenterY} L ${middleX} ${toCenterY} L ${approachX} ${toCenterY} L ${endX} ${toCenterY}`;
-        }
-        if (sameBand && from.left > to.right + 8) {
-            const startX = from.left - canvas.left;
-            const endX = to.right - canvas.left;
-            const approachX = endX + 12;
-            const middleX = (startX + endX) / 2;
-            return `M ${startX} ${fromCenterY} L ${middleX} ${fromCenterY} L ${middleX} ${toCenterY} L ${approachX} ${toCenterY} L ${endX} ${toCenterY}`;
-        }
-
-        const downward = toCenterY >= fromCenterY;
-        const layerSpan = Math.abs(toLayer - fromLayer);
-        if (layerSpan <= 1) {
-            const startY = (downward ? from.bottom : from.top) - canvas.top;
-            const endY = (downward ? to.top : to.bottom) - canvas.top;
-            const approachY = endY + (downward ? -12 : 12);
-            const middleY = (startY + endY) / 2;
-            return `M ${fromCenterX} ${startY} L ${fromCenterX} ${middleY} L ${toCenterX} ${middleY} L ${toCenterX} ${approachY} L ${toCenterX} ${endY}`;
-        }
-
-        const useRightGutter = canvas.right - Math.max(from.right, to.right)
-            > Math.min(from.left, to.left) - canvas.left;
-        const corridorX = useRightGutter ? canvas.width - 8 : 8;
-        const startX = (useRightGutter ? from.right : from.left) - canvas.left;
-        const endX = (useRightGutter ? to.right : to.left) - canvas.left;
-        const startY = fromCenterY;
-        const endY = toCenterY;
-        const approachX = endX + (useRightGutter ? 12 : -12);
-        return `M ${startX} ${startY} L ${corridorX} ${startY} L ${corridorX} ${endY} L ${approachX} ${endY} L ${endX} ${endY}`;
-    }
-
-    if (to.left > from.right + 8) {
-        const startX = from.right - canvas.left;
-        const startY = fromCenterY;
-        const endX = to.left - canvas.left;
-        const endY = toCenterY;
-        const approachX = endX - 12;
-        if (toLayer - fromLayer > 1) {
-            const firstGutterX = startX + GRAPH_COLUMN_GAP / 2;
-            const lastGutterX = endX - GRAPH_COLUMN_GAP / 2;
-            const corridorY = routeY ?? 12 + routeLane * GRAPH_ROUTE_LANE_GAP;
-            return `M ${startX} ${startY} L ${firstGutterX} ${startY} L ${firstGutterX} ${corridorY} L ${lastGutterX} ${corridorY} L ${lastGutterX} ${endY} L ${approachX} ${endY} L ${endX} ${endY}`;
-        }
-        const gutterX = (startX + endX) / 2;
-        return `M ${startX} ${startY} L ${gutterX} ${startY} L ${gutterX} ${endY} L ${approachX} ${endY} L ${endX} ${endY}`;
-    }
-
-    if (fromLayer === toLayer) {
-        const useRightGutter = reciprocalSide === "right";
-        const startX = (useRightGutter ? from.right : from.left) - canvas.left;
-        const startY = fromCenterY;
-        const endX = (useRightGutter ? to.right : to.left) - canvas.left;
-        const endY = toCenterY;
-        const approachX = endX + (useRightGutter ? 12 : -12);
-        const gutterX = useRightGutter
-            ? Math.min(canvas.width - 6, Math.max(startX, endX) + 16)
-            : Math.max(6, Math.min(startX, endX) - 16);
-        return `M ${startX} ${startY} L ${gutterX} ${startY} L ${gutterX} ${endY} L ${approachX} ${endY} L ${endX} ${endY}`;
-    }
-
-    if (from.left > to.right + 8) {
-        const startX = from.left - canvas.left;
-        const startY = fromCenterY;
-        const endX = to.right - canvas.left;
-        const endY = toCenterY;
-        const approachX = endX + 12;
-        if (fromLayer > toLayer) {
-            const firstGutterX = startX - GRAPH_COLUMN_GAP / 2;
-            const lastGutterX = endX + GRAPH_COLUMN_GAP / 2;
-            const corridorY = routeY ?? 12 + routeLane * GRAPH_ROUTE_LANE_GAP;
-            return `M ${startX} ${startY} L ${firstGutterX} ${startY} L ${firstGutterX} ${corridorY} L ${lastGutterX} ${corridorY} L ${lastGutterX} ${endY} L ${approachX} ${endY} L ${endX} ${endY}`;
-        }
-        const outerY = Math.max(8, Math.min(from.top, to.top) - canvas.top - 24);
-        const gutterX = (startX + endX) / 2;
-        return `M ${startX} ${startY} L ${gutterX} ${startY} L ${gutterX} ${outerY} L ${approachX} ${outerY} L ${approachX} ${endY} L ${endX} ${endY}`;
-    }
-
-    const downward = toCenterY >= fromCenterY;
-    const startX = fromCenterX;
-    const endX = toCenterX;
-    const startY = (downward ? from.bottom : from.top) - canvas.top;
-    const endY = (downward ? to.top : to.bottom) - canvas.top;
-    const approachY = endY + (downward ? -12 : 12);
-    const middleY = (startY + endY) / 2;
-    return `M ${startX} ${startY} L ${startX} ${middleY} L ${endX} ${middleY} L ${endX} ${approachY} L ${endX} ${endY}`;
-}
-
-function layoutResourceGraphNodes(canvas, graph) {
-    const columnElements = [...canvas.querySelectorAll(".graph-column")];
-    const graphColumns = canvas.querySelector(".graph-columns");
-    const nodeElements = new Map([...canvas.querySelectorAll("[data-graph-node-id]")]
-        .map((node) => [node.dataset.graphNodeId, node]));
-    for (const node of nodeElements.values()) {
-        node.style.transform = "";
-    }
-    for (const column of columnElements) {
-        column.style.height = "";
-    }
-    graphColumns.style.minHeight = "";
-    const columnLefts = new Set(columnElements.map((column) =>
-        Math.round(column.getBoundingClientRect().left)));
-    if (columnLefts.size < columnElements.length) {
-        return;
-    }
-    const heights = new Map([...nodeElements].map(([name, node]) =>
-        [name, node.getBoundingClientRect().height]));
-    if ([...heights.values()].every((height) => height === 0)) {
-        return;
-    }
-    const columns = graphLayoutColumns(graph);
-    const positions = graphCompactNodePositions(columns, graph.edges, heights);
-    let layoutHeight = 0;
-    columns.forEach((nodes, layer) => {
-        const column = columnElements[layer];
-        if (!column) {
-            return;
-        }
-        let naturalTop = 0;
-        let columnHeight = 0;
-        for (const node of nodes) {
-            const nodeElement = nodeElements.get(node.resourceName);
-            const targetTop = positions.get(node.resourceName);
-            const height = heights.get(node.resourceName);
-            nodeElement.style.transform = `translateY(${targetTop - naturalTop}px)`;
-            naturalTop += height + GRAPH_NODE_GAP;
-            columnHeight = Math.max(columnHeight, targetTop + height);
-        }
-        column.style.height = `${columnHeight}px`;
-        layoutHeight = Math.max(layoutHeight, columnHeight);
-    });
-    graphColumns.style.minHeight = `${layoutHeight}px`;
-}
-
-function drawResourceGraphEdges() {
-    graphDrawFrame = null;
-    const canvas = els.tree.querySelector(".resource-graph-canvas");
-    const svg = canvas?.querySelector(".graph-edge-layer");
-    if (!canvas || !svg || !activeGraphModel) {
-        return;
-    }
-
-    layoutResourceGraphNodes(canvas, activeGraphModel);
-    const canvasBounds = canvas.getBoundingClientRect();
-    const nodeElements = new Map([...canvas.querySelectorAll("[data-graph-node-id]")]
-        .map((node) => [node.dataset.graphNodeId, node]));
-    const nodeBounds = new Map([...nodeElements].map(([name, node]) => [name, node.getBoundingClientRect()]));
-    const incomingPorts = graphIncomingPorts(activeGraphModel.edges, nodeBounds);
-    const outgoingPorts = graphOutgoingPorts(activeGraphModel.edges, nodeBounds);
-    const graphColumns = [...canvas.querySelectorAll(".graph-column")];
-    const compactLayout = new Set(graphColumns.map((column) =>
-        Math.round(column.getBoundingClientRect().left))).size < graphColumns.length;
-    svg.setAttribute("viewBox", `0 0 ${canvasBounds.width} ${canvasBounds.height}`);
-    svg.setAttribute("width", String(canvasBounds.width));
-    svg.setAttribute("height", String(canvasBounds.height));
-
-    const definitions = svgElement("defs");
-    const presentations = new Map();
-    for (const edge of activeGraphModel.edges) {
-        const presentation = graphEdgePresentation(edge);
-        presentations.set(presentation.id, presentation);
-    }
-    for (const presentation of presentations.values()) {
-        definitions.appendChild(graphMarker(presentation));
-    }
-    const paths = [];
-    const nodeByName = new Map(activeGraphModel.nodes.map((node) => [node.resourceName, node]));
-    const longEdgeLanes = graphLongEdgeLanes(activeGraphModel.edges, nodeByName);
-    const edgeKeys = new Set(activeGraphModel.edges.map((edge) => `${edge.from}\u0000${edge.to}`));
-    const selectedEdge = activeGraphModel.edges.find((edge) => edge.context?.id === selectedNodeId);
-    for (const edge of activeGraphModel.edges) {
-        const fromElement = nodeElements.get(edge.from);
-        const toElement = nodeElements.get(edge.to);
-        if (!fromElement || !toElement) {
-            continue;
-        }
-        const fromBounds = nodeBounds.get(edge.from);
-        const toBounds = nodeBounds.get(edge.to);
-        const presentation = graphEdgePresentation(edge);
-        const fromNode = nodeByName.get(edge.from);
-        const toNode = nodeByName.get(edge.to);
-        const reciprocalSide = edge.from !== edge.to
-            && edgeKeys.has(`${edge.to}\u0000${edge.from}`)
-            ? edge.from.localeCompare(edge.to) < 0 ? "left" : "right"
-            : undefined;
-        const sentence = graphRelationshipSentence(edge, nodeByName);
-        const routeLane = longEdgeLanes.get(edge.id);
-        const fromLayer = fromNode?.layer ?? 0;
-        const toLayer = toNode?.layer ?? 0;
-        const spannedNodeTops = [...nodeBounds.entries()]
-            .filter(([name]) => {
-                const layer = nodeByName.get(name)?.layer ?? 0;
-                return layer >= Math.min(fromLayer, toLayer) && layer <= Math.max(fromLayer, toLayer);
-            })
-            .map(([, bounds]) => bounds.top - canvasBounds.top);
-        const routeY = routeLane === undefined
-            ? undefined
-            : Math.max(8, Math.min(...spannedNodeTops) - 14 - routeLane * GRAPH_ROUTE_LANE_GAP);
-        const pathData = graphEdgePath(
-            fromBounds,
-            toBounds,
-            canvasBounds,
-            edge.from === edge.to,
-            fromNode?.layer ?? 0,
-            toNode?.layer ?? 0,
-            reciprocalSide,
-            incomingPorts.get(edge.id),
-            routeLane ?? 0,
-            outgoingPorts.get(edge.id),
-            routeY,
-            compactLayout,
-        );
-        const selected = edge.context?.id === selectedNodeId;
-        const group = svgElement("g", {
-            class: `graph-edge-group${selected ? " is-selected" : ""}${selectedEdge && !selected ? " is-dimmed" : ""}`,
-            ...(edge.context ? {
-                role: "button",
-                tabindex: "0",
-                "aria-label": sentence,
-                "aria-pressed": String(selected),
-                "data-graph-edge-id": edge.id,
-            } : {}),
-        });
-        if (edge.context) {
-            const selectEdge = () => setSelectedGraphEdge(edge);
-            group.addEventListener("click", selectEdge);
-            group.addEventListener("keydown", (event) => {
-                if (event.key !== "Enter" && event.key !== " ") {
-                    return;
-                }
-                event.preventDefault?.();
-                selectEdge();
-            });
-            group.appendChild(svgElement("path", {
-                class: "graph-edge-focus",
-                d: pathData,
-            }));
-            group.appendChild(svgElement("path", {
-                class: "graph-edge-selection",
-                d: pathData,
-            }));
-            group.appendChild(svgElement("path", {
-                class: "graph-edge-hit",
-                d: pathData,
-            }));
-        }
-        presentation.channels.forEach((channel, index) => {
-            const path = svgElement("path", {
-                class: `graph-edge ${presentation.className} ${channel}`,
-                d: pathData,
-                ...(index === presentation.channels.length - 1
-                    ? { "marker-end": `url(#graph-arrow-${presentation.id})` }
-                    : {}),
-            });
-            if (index === 0) {
-                const title = svgElement("title");
-                title.textContent = sentence;
-                path.appendChild(title);
-            }
-            group.appendChild(path);
-        });
-        paths.push(group);
-    }
-    svg.replaceChildren(definitions, ...paths);
-    const retainedEdge = activeGraphModel.edges.find((edge) =>
-        edge.id === retainedGraphEdgeFocusId && edge.context?.id === selectedNodeId);
-    if (retainedEdge) {
-        const focusTarget = svg.querySelector(
-            `[data-graph-edge-id="${CSS.escape(retainedEdge.id)}"]`,
-        );
-        if (focusTarget) {
-            focusTarget.focus({ preventScroll: true });
-        }
-    }
-}
-
-function scheduleResourceGraphDraw() {
-    if (graphDrawFrame !== null) {
-        cancelAnimationFrame(graphDrawFrame);
-    }
-    graphDrawFrame = requestAnimationFrame(drawResourceGraphEdges);
-}
-
-function clearResourceGraphDrawing() {
-    activeGraphModel = null;
-    graphResizeObserver?.disconnect();
-    if (graphDrawFrame !== null) {
-        cancelAnimationFrame(graphDrawFrame);
-        graphDrawFrame = null;
-    }
-}
-
-function mountResourceGraph() {
-    const canvas = els.tree.querySelector(".resource-graph-canvas");
-    if (!canvas || !activeGraphModel) {
-        return;
-    }
-    graphResizeObserver?.observe(canvas);
-    scheduleResourceGraphDraw();
-}
-
-function rememberAppModelViewState() {
-    if (!renderedAppHostId) {
-        return;
-    }
-    const viewport = els.tree.querySelector(".resource-graph-viewport");
-    const graphPanel = els.tree.querySelector("#graph-view-panel");
-    const graphVisible = Boolean(viewport && graphPanel && !graphPanel.hidden);
-    const existing = appModelViewStateByAppHost.get(renderedAppHostId);
-    const active = document.activeElement;
-    const focusId = active?.id === "resources-view-tab" || active?.id === "graph-view-tab"
-        ? active.id
-        : null;
-    appModelViewStateByAppHost.set(renderedAppHostId, {
-        scrollLeft: graphVisible ? viewport.scrollLeft : existing?.scrollLeft ?? 0,
-        scrollTop: graphVisible ? viewport.scrollTop : existing?.scrollTop ?? 0,
-        focusId,
-        viewportFocused: graphVisible && active === viewport,
-    });
-}
-
-function restoreAppModelViewState(hostId) {
-    const state = appModelViewStateByAppHost.get(hostId);
-    if (!state) {
-        return;
-    }
-    const viewport = els.tree.querySelector(".resource-graph-viewport");
-    if (viewport) {
-        viewport.scrollLeft = state.scrollLeft;
-        viewport.scrollTop = state.scrollTop;
-    }
-    if (state.focusId) {
-        document.querySelector(`#${state.focusId}`)?.focus();
-    } else if (state.viewportFocused && appModelView === "graph") {
-        viewport?.focus();
-    }
 }
 
 function capturePaneScroll() {
@@ -2973,7 +1791,6 @@ function renderHostStage(appHost, hosts) {
         renderHostStatus(appHost),
         renderAppHostActionTray(presentationHost),
     );
-    els.viewTabs.replaceChildren(renderAppModelTabs(entries.length, visible.length));
     els.rosterControls.replaceChildren(...renderRosterControls(entries));
     els.filterSelects.replaceChildren(
         rosterSelect("State", STATE_FILTERS, stateFilter, "state-filter", (value) => { stateFilter = value; }),
@@ -2986,13 +1803,12 @@ function renderHostStage(appHost, hosts) {
     }, [
         ...notices.map(renderHostNotice),
         element("section", { class: "resource-workspace", "aria-label": "App model" }, [
-            renderResourceBoardPanel(appHost, entries, visible, dashboardAvailable, appModelView === "resources"),
-            renderResourceGraphPanel(visibleResourceGraph(appHost, visible), appModelView === "graph"),
+            renderResourceBoardPanel(appHost, entries, visible, dashboardAvailable),
         ]),
     ]);
 }
 
-const FOCUS_SCOPES = "#model-view, #host-bar, #view-tabs, #roster-controls, #filters-panel";
+const FOCUS_SCOPES = "#model-view, #host-bar, #roster-controls, #filters-panel";
 
 function captureFocusKey() {
     const active = document.activeElement;
@@ -3000,8 +1816,6 @@ function captureFocusKey() {
 }
 
 function renderTree() {
-    rememberAppModelViewState();
-    clearResourceGraphDrawing();
     const source = modelState?.roots ?? [];
     const hosts = orderAppHosts(source.filter(isAppHostNode));
     if (activeCommandId && !treeContains(source, activeCommandId)) {
@@ -3015,7 +1829,6 @@ function renderTree() {
         renderedAppHostId = null;
         document.body.classList.remove("has-host", "is-inspecting");
         els.hostBar.replaceChildren();
-        els.viewTabs.replaceChildren();
         els.rosterControls.replaceChildren();
         els.tree.replaceChildren();
         updateFooterCount();
@@ -3024,8 +1837,6 @@ function renderTree() {
     if (renderedAppHostId && renderedAppHostId !== selectedHost.id) {
         selectedResourceId = null;
         inspectorReturnFocusId = null;
-        relationshipFocusName = null;
-        selectedRelationshipId = null;
     }
     activeAppHostId = selectedHost.id;
     const currentSelection = findNode(selectedNodeId);
@@ -3037,11 +1848,9 @@ function renderTree() {
     const paneScroll = renderedAppHostId === selectedHost.id ? capturePaneScroll() : null;
     els.tree.replaceChildren(renderHostStage(selectedHost, hosts));
     document.body.classList.add("has-host");
-    document.body.classList.toggle("is-inspecting", Boolean(selectedResourceId) && appModelView === "resources");
+    document.body.classList.toggle("is-inspecting", Boolean(selectedResourceId));
     updateFooterCount();
     renderedAppHostId = selectedHost.id;
-    mountResourceGraph();
-    restoreAppModelViewState(selectedHost.id);
     restorePaneScroll(paneScroll);
     restoreCommandFocus(focusState);
     if (focusKey) {
@@ -4265,14 +3074,6 @@ els.hiddenCheckbox.addEventListener("change", async () => {
 });
 els.filtersClear.addEventListener("click", () => void clearPopoverFilters());
 
-document.addEventListener("focusin", (event) => {
-    const edgeId = event.target.closest?.(".graph-edge-group")?.dataset.graphEdgeId;
-    if (edgeId) {
-        retainedGraphEdgeFocusId = edgeId;
-    } else if (event.target !== document.body) {
-        retainedGraphEdgeFocusId = null;
-    }
-});
 document.addEventListener("pointerdown", (event) => {
     if (!els.actionMenu.hidden && !event.target.closest("#action-menu, .resource-menu-trigger")) {
         hideActionMenu();

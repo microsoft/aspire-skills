@@ -342,17 +342,13 @@ function snapshot(revision = 1, overrides = {}) {
         command: { argumentInputs: inputs() },
     };
     const resources = [
-        { id: "host-a:resource:database", kind: "resource", label: "Database", resourceName: "database", appHostId: "host-a", tone: "healthy", children: [] },
+        { id: "host-a:resource:database", kind: "resource", label: "Database", resourceName: "database", appHostId: "host-a", tone: "healthy",
+            lifecycleTone: "healthy", statusLabel: "Running", usedBy: [{ resourceName: "api", types: ["Reference", "WaitFor"] }], children: [] },
         { id: "host-a:resource:api", kind: "resource", label: "Public API", resourceName: "api", description: "Project",
-            appHostId: "host-a", tone: "healthy", children: [
+            appHostId: "host-a", tone: "healthy", dependsOn: [{ resourceName: "database", types: ["Reference", "WaitFor"] }], children: [
                 { id: "commands", kind: "commands-group", children: [command] },
             ] },
     ];
-    const edge = {
-        id: "database-api", from: "database", to: "api", types: ["Reference", "WaitFor"],
-        context: { id: "host-a:relationship:database-api", kind: "relationship", label: "Public API uses Database",
-            appHostId: "host-a", relationship: { from: "database", to: "api", types: ["Reference", "WaitFor"] } },
-    };
     return {
         revision, status: "ready", viewMode: "workspace", refreshing: false, includeHidden: false,
         lastSuccessfulAt: "2026-09-10T11:00:00Z", generatedAt: "2026-09-10T11:00:00Z",
@@ -360,7 +356,6 @@ function snapshot(revision = 1, overrides = {}) {
             id: "host-a", appHostId: "host-a", kind: "apphost-running", label: "Shop.AppHost", identityHint: "shop-main · a1b2c3",
             actions: ["dashboard", "stop", "deploy", "publish", "pipeline-step", "source"],
             children: [{ id: "resources", kind: "resources-group", children: resources }],
-            graph: { nodes: resources.map((resource, layer) => ({ ...resource, layer })), edges: [edge] },
         }],
         summary: { appHosts: 1, running: 1, resources: 2 },
         ...overrides,
@@ -1168,12 +1163,12 @@ test("roster filters combine attention, state, and health and Clear filters rese
     await renderer.push({ type: "state", state });
     const count = () => renderer.document.querySelector(".roster-count").textContent;
     const rows = () => renderer.document.querySelectorAll(".resource-row").map((row) => row.getAttribute("data-resource-id"));
-    assert.equal(count(), "2");
+    assert.equal(count(), "(2)");
     assert.equal(renderer.document.querySelector(".roster-attention-count").textContent, "1");
     renderer.document.querySelector(".roster-attention").click();
     assert.equal(renderer.document.querySelector(".roster-attention").getAttribute("aria-pressed"), "true");
     assert.deepEqual(rows(), [database.id]);
-    assert.equal(count(), "1 of 2");
+    assert.equal(count(), "(1 of 2)");
     const health = renderer.document.querySelector('[data-focus-key="health-filter"]');
     health.value = "healthy";
     health.dispatch("change");
@@ -1187,7 +1182,7 @@ test("roster filters combine attention, state, and health and Clear filters rese
     assert.equal(renderer.evaluate("attentionOnly"), false);
     assert.equal(renderer.evaluate("healthFilter"), "all");
     assert.equal(renderer.evaluate("stateFilter"), "all");
-    assert.equal(count(), "2");
+    assert.equal(count(), "(2)");
     const notReported = renderer.document.querySelector('[data-focus-key="health-filter"]');
     notReported.value = "not-reported";
     notReported.dispatch("change");
@@ -1230,337 +1225,82 @@ test("the Filters panel anchors under its trigger and stays inside the control r
     assert.equal(panel.style.left, "360px");
 });
 
-test("relationship browser diagnoses blockers, explains selection, and requires an explicit refocus", async () => {
+test("the inspector lists dependencies both ways and selecting a related name opens it", async () => {
     const renderer = await boot();
-    renderer.document.getElementById("graph-view-tab").click();
-    assert.equal(renderer.document.getElementById("graph-view-tab").textContent, "Relationships");
-    const focus = renderer.document.getElementById("relationship-focus-select");
-    assert.equal(focus.value, "api");
-    assert.equal(renderer.document.getElementById("relationship-focus-title").textContent, "Public API");
-    assert.match(
-        renderer.document.querySelector(".relationship-diagnosis").textContent,
-        /Public API waits for Database\. No blocker currently needs attention\./,
-    );
-    const rows = renderer.document.querySelectorAll(".relationship-browser-row");
-    assert.equal(rows.length, 1);
-    assert.equal(rows[0].getAttribute("aria-pressed"), "true");
-    assert.match(rows[0].textContent, /Waits for \+ references/);
-    assert.match(rows[0].textContent, /Database/);
-    assert.match(
-        renderer.document.querySelector(".relationship-inline-detail").textContent,
-        /Public API waits for and references Database/,
-    );
-    const detail = renderer.document.querySelector(".relationship-browser > .relationship-detail");
-    assert.match(detail.textContent, /Public API waits for and references Database/);
-    assert.match(detail.textContent, /startup dependency and a source of values or endpoints/);
-    button(detail, "Add relationship to chat").click();
-    assert.deepEqual(renderer.request("/api/copilot-context").body, { nodeId: "host-a:relationship:database-api" });
-    button(detail, "Focus Database").click();
-    renderer.flushFrames();
-    assert.equal(renderer.document.getElementById("relationship-focus-select").value, "database");
-    assert.equal(renderer.document.activeElement, renderer.document.getElementById("relationship-focus-select"));
-    assert.equal(renderer.document.getElementById("relationship-focus-title").textContent, "Database");
-    assert.match(renderer.document.querySelector(".relationship-diagnosis").textContent, /no declared wait dependencies/i);
+    selectApi(renderer);
+    const sections = () => renderer.document.querySelectorAll(".inspector-section");
+    const section = (title) => sections().find((node) => node.querySelector("h4").textContent === title);
+    assert.equal(section("Used by"), undefined);
+    const dependsOn = section("Depends on");
+    assert.equal(sections().indexOf(dependsOn), 0, "relationships precede Endpoints and later sections");
+    const row = dependsOn.querySelector(".relation-row");
+    assert.equal(row.querySelector(".relation-kind").textContent, "Reference, waits for");
+    assert.equal(row.querySelector(".health-status").textContent, "Running");
+    assert.match(row.querySelector(".health-status").className, /tone-healthy/);
+    button(row, "Database").click();
+    assert.equal(renderer.document.getElementById("inspector-title").textContent, "Database");
+    assert.equal(section("Depends on"), undefined);
+    button(section("Used by"), "Public API").click();
+    assert.equal(renderer.document.getElementById("inspector-title").textContent, "Public API");
 
-    focusRelationship("api");
-    assert.equal(renderer.document.getElementById("relationship-focus-title").textContent, "Public API");
-    const search = renderer.document.getElementById("search-input");
-    search.value = "Public API";
-    search.dispatch("input");
-    const panel = renderer.document.getElementById("graph-view-panel");
-    assert.match(panel.textContent, /1 of 2 resources visible/);
-    assert.match(panel.textContent, /Public API has no declared wait dependencies/);
-    button(panel, "Clear filters").click();
-    assert.equal(search.value, "");
-    assert.equal(renderer.document.querySelectorAll(".relationship-browser-row").length, 1);
-    renderer.evaluate('filterText = "commands"');
-    const emptyGraph = renderer.context.visibleResourceGraph(snapshot().roots[0], []);
-    const emptyPanel = renderer.context.renderResourceGraphPanel(emptyGraph, true);
-    assert.match(emptyPanel.textContent, /No resources match these filters/);
-    assert.ok(button(emptyPanel, "Clear filters"));
-
-    const graphWithoutRelationships = renderer.context.renderResourceGraphPanel({
-        nodes: [{ resourceName: "solo", label: "Solo", resourceType: "Project", layer: 0 }],
-        edges: [],
-        sourceNodeCount: 1,
-        sourceEdgeCount: 0,
-        filtered: false,
-    }, true);
-    assert.match(graphWithoutRelationships.textContent, /Solo has no declared wait dependencies/i);
-    assert.match(graphWithoutRelationships.querySelector(".relationship-browser-empty").textContent, /No direct relationships/);
-    assert.match(graphWithoutRelationships.querySelector(".relationship-detail.is-empty").textContent, /No direct relationships/);
-
-    function focusRelationship(resourceName) {
-        const select = renderer.document.getElementById("relationship-focus-select");
-        select.value = resourceName;
-        select.dispatch("change");
-    }
-});
-
-test("relationship workbench follows the resource selected in the roster", async () => {
-    const renderer = await boot();
-    renderer.document.querySelector(
-        '[data-resource-id="host-a:resource:database"] .resource-row-main',
-    ).click();
-    renderer.document.getElementById("graph-view-tab").click();
-    assert.equal(renderer.document.getElementById("relationship-focus-select").value, "database");
-    assert.equal(renderer.document.getElementById("relationship-focus-title").textContent, "Database");
-    button(renderer.document.getElementById("graph-view-panel"), "Inspect resource").click();
-    assert.equal(renderer.evaluate("appModelView"), "resources");
-    assert.equal(renderer.evaluate("selectedResourceId"), "host-a:resource:database");
-});
-
-test("graph fan-in ports are distinct, bounded, and stable regardless of edge enumeration", async () => {
-    const renderer = await boot();
-    const bounds = (left, top) => ({ left, top, right: left + 220, bottom: top + 90, width: 220, height: 90 });
-    const nodeBounds = new Map([["api", bounds(20, 20)], ["catalog", bounds(20, 130)], ["orders", bounds(296, 20)]]);
-    const edges = [
-        { id: "api-orders", from: "api", to: "orders", types: ["Reference", "WaitFor"] },
-        { id: "catalog-orders", from: "catalog", to: "orders", types: ["Reference", "WaitFor"] },
-    ];
-    const ports = renderer.context.graphIncomingPorts(edges, nodeBounds);
-    const reversed = renderer.context.graphIncomingPorts([...edges].reverse(), nodeBounds);
-    assert.equal(JSON.stringify([...ports]), JSON.stringify([...reversed]));
-    assert.equal(ports.get(edges[1].id).y - ports.get(edges[0].id).y, 18);
-    const canvas = { left: 0, top: 0, width: 800, height: 400 };
-    const paths = edges.map((edge) => renderer.context.graphEdgePath(
-        nodeBounds.get(edge.from), nodeBounds.get(edge.to), canvas, false, 0, 1, undefined, ports.get(edge.id),
-    ));
-    assert.match(paths[0], /284 56 L 296 56$/);
-    assert.match(paths[1], /284 74 L 296 74$/);
-    const many = Array.from({ length: 12 }, (_, index) => ({ id: `edge-${index}`, from: "api", to: "orders" }));
-    const crowded = [...renderer.context.graphIncomingPorts(many, nodeBounds).values()];
-    assert.equal(new Set(crowded.map((port) => port.y)).size, many.length);
-    assert.ok(crowded.every((port) => Math.abs(port.y) <= 36));
-    assert.equal(renderer.context.graphIncomingPorts([edges[0]], nodeBounds).get(edges[0].id).y, 0);
-    const outgoingEdges = [
-        { id: "api-orders", from: "api", to: "orders" },
-        { id: "api-catalog", from: "api", to: "catalog" },
-    ];
-    const outgoing = renderer.context.graphOutgoingPorts(outgoingEdges, nodeBounds);
-    const outgoingReversed = renderer.context.graphOutgoingPorts([...outgoingEdges].reverse(), nodeBounds);
-    assert.equal(JSON.stringify([...outgoing]), JSON.stringify([...outgoingReversed]));
-    assert.equal(outgoing.get("api-catalog").y - outgoing.get("api-orders").y, 18);
-    const denseFanOut = Array.from({ length: 12 }, (_, index) => ({
-        id: `outgoing-${index}`,
-        from: "api",
-        to: index % 2 === 0 ? "orders" : "catalog",
-    }));
-    const crowdedOutgoing = [...renderer.context.graphOutgoingPorts(denseFanOut, nodeBounds).values()];
-    assert.equal(new Set(crowdedOutgoing.map((port) => port.y)).size, denseFanOut.length);
-    assert.ok(crowdedOutgoing.every((port) => Math.abs(port.y) <= 36));
-});
-
-test("graph layout deterministically orders layers to reduce crossings and compacts related columns", async () => {
-    const renderer = await boot();
-    const nodes = [
-        { resourceName: "a", label: "A", layer: 0 },
-        { resourceName: "b", label: "B", layer: 0 },
-        { resourceName: "x", label: "X", layer: 1 },
-        { resourceName: "y", label: "Y", layer: 1 },
-        { resourceName: "z", label: "Z", layer: 2 },
-    ];
-    const edges = [
-        { id: "a-y", from: "a", to: "y" },
-        { id: "b-x", from: "b", to: "x" },
-        { id: "y-z", from: "y", to: "z" },
-    ];
-    const graph = { nodes: [...nodes].reverse(), edges: [...edges].reverse() };
-    const columns = renderer.context.graphLayoutColumns(graph);
-    assert.equal(
-        JSON.stringify(columns.map((column) => column.map((node) => node.resourceName))),
-        JSON.stringify([["a", "b"], ["y", "x"], ["z"]]),
-    );
-    assert.equal(
-        JSON.stringify(renderer.context.graphLayoutColumns({ nodes, edges })
-            .map((column) => column.map((node) => node.resourceName))),
-        JSON.stringify(columns.map((column) => column.map((node) => node.resourceName))),
-    );
-
-    const heights = new Map(nodes.map((node) => [node.resourceName, 80]));
-    const positions = renderer.context.graphCompactNodePositions(columns, edges, heights);
-    assert.equal(positions.get("x") - positions.get("y"), 98, "nodes keep the fixed compact vertical gap");
-    assert.equal(positions.get("z"), positions.get("y"), "the final layer aligns with its relationship");
-    assert.equal(JSON.stringify(renderer.context.graphCompactPlacement(0)), '{"column":1,"row":1}');
-    assert.equal(JSON.stringify(renderer.context.graphCompactPlacement(1)), '{"column":2,"row":1}');
-    assert.equal(JSON.stringify(renderer.context.graphCompactPlacement(2)), '{"column":2,"row":2}');
-    assert.equal(JSON.stringify(renderer.context.graphCompactPlacement(3)), '{"column":1,"row":2}');
-    assert.equal(JSON.stringify(renderer.context.graphCompactPlacement(4)), '{"column":1,"row":3}');
-});
-
-test("exceptional graph edges share stable lanes only when their layer spans do not overlap", async () => {
-    const renderer = await boot();
-    const nodeByName = new Map([
-        ["database", { layer: 0 }],
-        ["api", { layer: 2 }],
-        ["gateway", { layer: 3 }],
-        ["worker", { layer: 4 }],
-        ["client", { layer: 5 }],
-    ]);
-    const edges = [
-        { id: "database-gateway", from: "database", to: "gateway" },
-        { id: "database-api", from: "database", to: "api" },
-        { id: "worker-client", from: "worker", to: "client" },
-        { id: "client-worker", from: "client", to: "worker" },
-    ];
-    const lanes = renderer.context.graphLongEdgeLanes(edges, nodeByName);
-    const reversed = renderer.context.graphLongEdgeLanes([...edges].reverse(), nodeByName);
-    assert.equal(JSON.stringify([...lanes]), JSON.stringify([...reversed]));
-    assert.notEqual(lanes.get("database-gateway"), lanes.get("database-api"));
-    assert.equal(lanes.get("client-worker"), 0, "a disjoint backward relationship reuses the first corridor");
-    assert.equal(lanes.has("worker-client"), false, "ordinary forward relationships stay in local gutters");
-    const rect = (left) => ({ left, top: 80, right: left + 100, bottom: 160, width: 100, height: 80 });
-    const canvas = { left: 0, top: 0, width: 900, height: 400 };
-    const first = renderer.context.graphEdgePath(
-        rect(20), rect(600), canvas, false, 0, 3, undefined, { x: 0, y: 0 },
-        lanes.get("database-gateway"), { x: 0, y: 0 }, 24,
-    );
-    const second = renderer.context.graphEdgePath(
-        rect(20), rect(300), canvas, false, 0, 2, undefined, { x: 0, y: 0 },
-        lanes.get("database-api"), { x: 0, y: 0 }, 14,
-    );
-    assert.match(first, /L \d+ 24 L/);
-    assert.match(second, /L \d+ 14 L/);
-});
-
-test("graph arrows approach the target boundary in the correct direction for every route", async () => {
-    const renderer = await boot();
-    const rect = (left, top) => ({ left, top, right: left + 100, bottom: top + 80, width: 100, height: 80 });
-    const canvas = { left: 0, top: 0, width: 900, height: 600 };
-    const cases = [
-        { from: rect(20, 20), to: rect(300, 100), layers: [0, 1], end: /288 147 L 300 147$/ },
-        { from: rect(20, 20), to: rect(600, 100), layers: [0, 3], end: /588 147 L 600 147$/ },
-        { from: rect(600, 20), to: rect(300, 100), layers: [2, 1], end: /412 147 L 400 147$/ },
-        { from: rect(100, 20), to: rect(100, 200), layers: [0, 0], end: /88 247 L 100 247$/ },
-        { from: rect(100, 200), to: rect(100, 20), layers: [0, 0], side: "right", end: /212 67 L 200 67$/ },
-        { from: rect(100, 20), to: rect(100, 200), layers: [0, 1], end: /157 188 L 157 200$/ },
-        { from: rect(100, 200), to: rect(100, 20), layers: [1, 0], end: /157 112 L 157 100$/ },
-        { from: rect(100, 100), to: rect(100, 100), layers: [0, 0], self: true, end: /157 88 L 157 100$/ },
-    ];
-    for (const scenario of cases) {
-        const path = renderer.context.graphEdgePath(
-            scenario.from, scenario.to, canvas, scenario.self ?? false,
-            ...scenario.layers, scenario.side, { x: 7, y: 7 },
-        );
-        assert.match(path, scenario.end);
-    }
-    const marker = renderer.context.graphMarker({
-        id: "combined",
-        className: "is-combined",
-        dualMarker: true,
-    });
-    assert.equal(marker.getAttribute("refX"), "7", "the chevron tip must be anchored on the path endpoint");
-    assert.equal(marker.getAttribute("markerWidth"), "5");
-    assert.equal(marker.getAttribute("markerHeight"), "5");
-    assert.equal(marker.getAttribute("orient"), "auto");
-    assert.equal(marker.querySelectorAll("path").length, 2);
-    assert.ok(marker.querySelector("path.is-reference"));
-    assert.ok(marker.querySelector("path.is-wait-for"));
-
-    const compactHorizontal = renderer.context.graphEdgePath(
-        rect(20, 20), rect(180, 20), canvas, false, 0, 1,
-        undefined, { x: 0, y: 0 }, 0, { x: 0, y: 0 }, undefined, true,
-    );
-    assert.match(compactHorizontal, /168 60 L 180 60$/);
-    const compactVertical = renderer.context.graphEdgePath(
-        rect(180, 20), rect(180, 160), canvas, false, 1, 2,
-        undefined, { x: 0, y: 0 }, 0, { x: 0, y: 0 }, undefined, true,
-    );
-    assert.match(compactVertical, /230 148 L 230 160$/);
-    const compactLong = renderer.context.graphEdgePath(
-        rect(20, 20), rect(180, 300), canvas, false, 0, 3,
-        undefined, { x: 0, y: 0 }, 0, { x: 0, y: 0 }, undefined, true,
-    );
-    assert.match(compactLong, /L 8 340 L 168 340 L 180 340$/);
-
-    const reciprocalLeft = renderer.context.graphEdgePath(
-        rect(100, 20), rect(100, 200), canvas, false, 0, 0,
-        "left", { x: 0, y: 0 },
-    );
-    const reciprocalRight = renderer.context.graphEdgePath(
-        rect(100, 200), rect(100, 20), canvas, false, 0, 0,
-        "right", { x: 0, y: 0 },
-    );
-    assert.notEqual(reciprocalLeft, reciprocalRight, "reciprocal edges route on opposite sides");
-});
-
-test("relationship browser orders blockers first and selection does not change focus", async () => {
-    const renderer = await boot();
     const state = snapshot(2);
-    const graph = state.roots[0].graph;
-    const node = (resourceName, label, tone = "healthy") => ({
-        id: `host-a:resource:${resourceName}`,
-        kind: "resource",
-        resourceName,
-        label,
-        appHostId: "host-a",
-        tone,
-        statusLabel: tone === "healthy" ? "Running" : "Needs attention",
-        children: [],
-    });
-    const cache = node("cache", "Cache", "warning");
-    const vacations = node("vacations", "Vacations", "error");
-    const server = node("server", "Server", "warning");
-    const frontend = node("frontend", "Frontend");
-    const worker = node("worker", "Worker");
-    const child = node("child", "Worker child");
-    graph.nodes = [cache, vacations, server, frontend, worker, child];
-    state.roots[0].children[0].children = graph.nodes;
-    const edge = (id, from, to, types) => ({
-        id,
-        from,
-        to,
-        types,
-        context: {
-            id: `host-a:relationship:${id}`,
-            kind: "relationship",
-            label: id,
-            appHostId: "host-a",
-            relationship: { from, to, types },
-        },
-    });
-    graph.edges = [
-        edge("cache-server", "cache", "server", ["Reference", "WaitFor"]),
-        edge("vacations-server", "vacations", "server", ["WaitFor"]),
-        edge("server-frontend", "server", "frontend", ["Reference"]),
-        edge("worker-child", "worker", "child", ["Parent"]),
-    ];
+    state.roots[0].children[0].children[1].dependsOn.push({ resourceName: "missing", types: ["Reference"] });
     await renderer.push({ type: "state", state });
-    renderer.document.getElementById("graph-view-tab").click();
-    assert.equal(renderer.document.getElementById("relationship-focus-select").value, "server");
-    assert.match(
-        renderer.document.querySelector(".relationship-diagnosis").textContent,
-        /Server waits for Cache and Vacations\. Cache and Vacations need attention\./,
-    );
-    let rows = renderer.document.querySelectorAll(".relationship-browser-row");
-    assert.equal(rows.length, 3);
-    assert.match(rows[0].textContent, /Waits for \+ references/);
-    assert.match(rows[0].textContent, /Cache/);
-    assert.match(rows[1].textContent, /Waits for/);
-    assert.match(rows[1].textContent, /Vacations/);
-    const frontendRow = rows.find((row) => /Frontend/.test(row.textContent));
-    frontendRow.click();
-    renderer.flushFrames();
-    assert.equal(renderer.document.getElementById("relationship-focus-select").value, "server");
-    assert.equal(frontendRow.getAttribute("aria-pressed"), "false");
-    assert.match(renderer.document.querySelector(".relationship-browser > .relationship-detail").textContent, /Frontend references Server/);
-    assert.equal(renderer.document.querySelector(".relationship-browser-row.is-selected").textContent.includes("Frontend"), true);
-    button(renderer.document.querySelector(".relationship-browser > .relationship-detail"), "Focus Frontend").click();
-    assert.equal(renderer.document.getElementById("relationship-focus-select").value, "frontend");
+    assert.equal(section("Depends on").querySelectorAll(".relation-row").length, 1, "unavailable resources are skipped");
+});
 
-    const focus = renderer.document.getElementById("relationship-focus-select");
-    focus.value = "worker";
-    focus.dispatch("change");
-    rows = renderer.document.querySelectorAll(".relationship-browser-row");
-    assert.equal(rows.length, 1);
-    assert.match(rows[0].textContent, /Contains/);
-    assert.match(rows[0].textContent, /Worker child/);
-    rows[0].click();
-    assert.equal(renderer.document.getElementById("relationship-focus-select").value, "worker");
-    button(renderer.document.querySelector(".relationship-browser > .relationship-detail"), "Focus Worker child").click();
-    assert.equal(renderer.document.getElementById("relationship-focus-select").value, "child");
-    assert.match(renderer.document.querySelector(".relationship-browser-row").textContent, /Part of/);
-    assert.match(renderer.document.querySelector(".relationship-browser-row").textContent, /Worker/);
+test("waiting rows name the resources they are waiting for", async () => {
+    const renderer = createRenderer();
+    const state = snapshot();
+    Object.assign(state.roots[0].children[0].children[1], { statusLabel: "Waiting", waitingForLabels: ["Database", "cache"] });
+    await renderer.push({ type: "state", state });
+    const text = (id) => renderer.document.querySelector(`[data-resource-id="${id}"] .resource-row-type`).textContent;
+    assert.equal(text("host-a:resource:api"), "Waiting for Database, cache");
+    state.roots[0].children[0].children[1].waitingForLabels = [];
+    await renderer.push({ type: "state", state: { ...state, revision: 2 } });
+    assert.equal(text("host-a:resource:api"), "Project");
+});
+
+test("parameters render in their own collapsible section after resources", async () => {
+    const renderer = await boot();
+    const headers = () => renderer.document.querySelectorAll(".roster-section-toggle");
+    assert.deepEqual(headers().map((header) => header.querySelector("span").textContent), ["Resources"]);
+    assert.equal(renderer.document.getElementById("footer-count").textContent, "2 resources");
+
+    const state = snapshot(2);
+    const parameter = {
+        id: "host-a:resource:password", kind: "resource", label: "password", resourceName: "password",
+        description: "Parameter · Value protected", appHostId: "host-a", isParameter: true,
+        statusLabel: "Value missing", lifecycleTone: "warning", lifecycleTransitioning: false, children: [],
+        usedBy: [{ resourceName: "api", types: ["Reference"] }],
+    };
+    state.roots[0].children[0].children.push(parameter);
+    await renderer.push({ type: "state", state });
+    assert.deepEqual(headers().map((header) => header.querySelector("span").textContent), ["Resources", "Parameters"]);
+    assert.deepEqual(headers().map((header) => header.querySelector(".roster-count").textContent), ["(2)", "(1)"]);
+    const lists = renderer.document.querySelectorAll(".resource-roster");
+    assert.deepEqual(lists.map((list) => list.querySelectorAll(".resource-row").map((row) => row.getAttribute("data-resource-id"))),
+        [["host-a:resource:database", "host-a:resource:api"], [parameter.id]]);
+    assert.equal(renderer.document.querySelector(".roster-attention-count").textContent, "1", "missing values need attention");
+    assert.equal(renderer.document.getElementById("footer-count").textContent, "2 resources · 1 parameter");
+
+    const toggle = headers()[1];
+    assert.equal(toggle.getAttribute("aria-expanded"), "true");
+    assert.equal(toggle.getAttribute("aria-controls"), "roster-section-parameters");
+    renderer.document.querySelector(`[data-resource-id="${parameter.id}"] .resource-row-main`).click();
+    toggle.click();
+    assert.equal(headers()[1].getAttribute("aria-expanded"), "false");
+    assert.equal(renderer.document.getElementById("roster-section-parameters").hidden, true);
+    assert.equal(renderer.document.getElementById("roster-section-resources").hidden, false);
+    assert.equal(renderer.document.getElementById("inspector-title").textContent, "password", "a collapsed section keeps its selection");
+    headers()[0].click();
+    assert.equal(renderer.document.getElementById("roster-section-resources").hidden, true);
+    headers()[1].click();
+    assert.equal(renderer.document.getElementById("roster-section-parameters").hidden, false);
+
+    button(renderer.document.querySelector(".relation-row"), "Public API").click();
+    assert.equal(renderer.document.getElementById("inspector-title").textContent, "Public API");
+    assert.equal(renderer.document.getElementById("roster-section-resources").hidden, false, "selecting a related resource reveals its section");
 });
 
 test("narrow More reuses confirmations and exposes disabled operations without executing them", async () => {
@@ -1665,19 +1405,7 @@ test("responsive and theme selectors preserve host priority, the official mark, 
     assert.match(styles, /\.apphost-switcher > \.apphost-heading\s*\{[^}]*padding: 0 8px;/);
     assert.doesNotMatch(styles, /\.apphost-trigger\.resource-menu-trigger\s*\{[^}]*margin-left/);
     assert.match(styles, /\.host-more-actions\s*\{\s*display: inline-flex;/);
-    assert.match(styles, /\.graph-columns\s*\{[^}]*pointer-events: none;/);
-    assert.match(styles, /\.graph-columns\s*\{[^}]*grid-template-columns: repeat\(var\(--graph-columns\), 170px\);[^}]*justify-content: start;[^}]*gap: 28px;/);
-    assert.match(styles, /\.graph-node\s*\{[^}]*pointer-events: auto;/);
     assert.match(styles, /@container \(min-width: 720px\)[\s\S]*?\.resource-board\s*\{[^}]*grid-template-columns:/);
-    assert.match(styles, /@container \(max-width: 719px\)[\s\S]*?\.graph-columns\s*\{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);[^}]*gap: 32px clamp\(12px, 4cqw, 24px\);/);
-    assert.match(styles, /@container \(max-width: 439px\)[\s\S]*?\.graph-column\s*\{[^}]*grid-column: 1;[^}]*width: min\(88%, 300px\);/);
-    assert.match(styles, /\.graph-edge-hit\s*\{[^}]*stroke-width: 24;/);
-    assert.match(styles, /\.graph-edge-group:focus-visible \.graph-edge-focus,[\s\S]*?opacity: 1;/);
-    assert.match(styles, /\.graph-edge-selection\s*\{[^}]*stroke: var\(--surface\);[^}]*stroke-width: 7;/);
-    assert.doesNotMatch(styles, /\.graph-edge-selection\s*\{[^}]*stroke-dasharray/);
-    assert.match(styles, /@media \(pointer: coarse\)[\s\S]*?\.graph-node-inspect,[\s\S]*?min-height: 44px;[\s\S]*?\.graph-edge-hit\s*\{[^}]*stroke-width: 44;/);
-    assert.match(styles, /@media \(forced-colors: active\)[\s\S]*?\.graph-edge-focus\s*\{[^}]*stroke: Highlight;[\s\S]*?\.graph-edge-selection\s*\{[^}]*stroke: CanvasText;/);
-    assert.match(styles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.graph-node,[\s\S]*?\.graph-edge\s*\{[^}]*transition: none;[\s\S]*?\.inspector\.is-entering/);
     assert.match(styles, /@media \(max-width: 520px\)[\s\S]*?#mode-label,\s*\.host-action-bar \.is-secondary-operation\s*\{\s*display: none;/);
     assert.match(markup, /class="brand-mark canvas-brand"[\s\S]*?width="22"\s+height="22"/);
     const renderer = await boot();

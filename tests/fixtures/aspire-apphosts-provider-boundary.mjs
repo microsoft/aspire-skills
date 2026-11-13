@@ -587,7 +587,7 @@ async function sse(h, open) {
     };
 }
 
-test("context is owner-specific, fresh/stale-aware, and relationship-selectable through HTTP and SDK", async (t) => {
+test("context is owner-specific, fresh/stale-aware, and carries resource dependencies through HTTP and SDK", async (t) => {
     const h = await harness(t);
     const open = await h.open();
     const { state } = await h.request(open, "/api/state");
@@ -615,13 +615,9 @@ test("context is owner-specific, fresh/stale-aware, and relationship-selectable 
             assert.deepEqual(h.attachments.at(-1).attachments[0].payload, context);
             if (kind === "resource") contexts.push(context);
         }
-        const edge = root.graph.edges[0];
-        assert.deepEqual(edge.context.relationship, { from: edge.from, to: edge.to, types: edge.types });
-        assert.equal(edge.context.id, `${root.id}:relationship:${edge.id}`);
-        assert.ok(!nodes.some((node) => node.kind === "relationship"), "edges must not pollute resource tree children");
-        assert.equal((await h.request(open, "/api/selection", { nodeId: edge.context.id })).ok, true);
-        assert.deepEqual(clone(await h.action("get_selected_context")).relationship, edge.context.relationship);
-        assert.equal((await h.request(open, "/api/copilot-context", { nodeId: edge.context.id })).ok, true);
+        const api = nodes.find((node) => node.kind === "resource" && node.resourceName === "api");
+        assert.deepEqual(clone(api.dependsOn), [{ resourceName: "db", types: ["Reference", "WaitFor"] }]);
+        assert.equal(root.graph, undefined);
     }
     h.controls.attachError = new Error("Composer unavailable");
     const failedAttach = await h.request(open, "/api/copilot-context", { nodeId: contexts[0].nodeId });

@@ -998,6 +998,10 @@ function commandIsRenderable(command) {
     return commandIsVisible(command) && (state === "enabled" || state === "disabled");
 }
 
+function isParameterResource(resource) {
+    return resource.resourceType.toLowerCase().includes("parameter");
+}
+
 function resourceDescription(resource) {
     const parts = [resource.resourceType];
     if (resource.state) {
@@ -1006,7 +1010,7 @@ function resourceDescription(resource) {
     if (resource.exitCode !== undefined && resource.exitCode !== 0) {
         parts.push(`Exit code ${resource.exitCode}`);
     }
-    if (resource.resourceType.toLowerCase().includes("parameter")) {
+    if (isParameterResource(resource)) {
         parts.push("Value protected");
     }
     return parts.join(" · ");
@@ -1114,7 +1118,9 @@ function resourceStateIcon(resource) {
     return "record";
 }
 
-export function buildResourceGraph(resources) {
+const DEPENDENCY_TYPE_ORDER = ["Reference", "WaitFor"];
+
+function resourceNameResolver(resources) {
     const resourceByName = new Map(resources.map((resource) => [resource.name, resource]));
     const resourceNamesByDisplayName = new Map();
     for (const resource of resources) {
@@ -1123,175 +1129,55 @@ export function buildResourceGraph(resources) {
         names.push(resource.name);
         resourceNamesByDisplayName.set(key, names);
     }
-    const edgeTypesByPair = new Map();
-    const typeOrder = new Map([
-        ["Parent", 0],
-        ["Reference", 1],
-        ["WaitFor", 2],
-    ]);
-
-    const resolveResourceName = (value) => {
+    return (value) => {
         if (resourceByName.has(value)) {
             return value;
         }
         const matches = resourceNamesByDisplayName.get(String(value ?? "").toLowerCase()) ?? [];
         return matches.length === 1 ? matches[0] : undefined;
     };
-    const addEdge = (from, to, type) => {
-        const canonicalFrom = resolveResourceName(from);
-        const canonicalTo = resolveResourceName(to);
-        if (!canonicalFrom || !canonicalTo) {
+}
+
+// Reference and WaitFor edges run from the dependency to the dependent; Parent drives tree nesting instead.
+function resourceDependencies(resources, resolveName) {
+    const resourceByName = new Map(resources.map((resource) => [resource.name, resource]));
+    const dependsOn = new Map(resources.map((resource) => [resource.name, new Map()]));
+    const usedBy = new Map(resources.map((resource) => [resource.name, new Map()]));
+    const addType = (relations, owner, related, type) => {
+        const types = relations.get(owner).get(related) ?? new Set();
+        types.add(type);
+        relations.get(owner).set(related, types);
+    };
+    const addEdge = (dependency, dependent, type) => {
+        const from = resolveName(dependency);
+        if (!from || from === dependent) {
             return;
         }
-        const key = `${canonicalFrom}\u0000${canonicalTo}`;
-        const types = edgeTypesByPair.get(key) ?? new Set();
-        types.add(type);
-        edgeTypesByPair.set(key, types);
+        addType(dependsOn, dependent, from, type);
+        addType(usedBy, from, dependent, type);
     };
-
     for (const resource of resources) {
         for (const relationship of resource.relationships) {
-            addEdge(relationship.resourceName, resource.name, relationship.type);
+            if (relationship.type !== "Parent") {
+                addEdge(relationship.resourceName, resource.name, relationship.type);
+            }
         }
         for (const dependency of resource.waitingFor) {
             addEdge(dependency, resource.name, "WaitFor");
         }
     }
-
-    const edges = [...edgeTypesByPair.entries()]
-        .map(([key, types]) => {
-            const [from, to] = key.split("\u0000");
-            return {
-                id: `graph-edge:${stableId(key)}`,
-                from,
-                to,
-                types: [...types].sort((left, right) =>
-                    (typeOrder.get(left) ?? 99) - (typeOrder.get(right) ?? 99)
-                    || left.localeCompare(right)),
-            };
-        })
+    const toList = (related) => [...related.entries()]
+        .map(([resourceName, types]) => ({
+            resourceName,
+            types: DEPENDENCY_TYPE_ORDER.filter((type) => types.has(type)),
+        }))
         .sort((left, right) =>
-            resourceByName.get(left.from).displayName.localeCompare(resourceByName.get(right.from).displayName)
-            || resourceByName.get(left.to).displayName.localeCompare(resourceByName.get(right.to).displayName));
-
-    const byDisplayName = (left, right) =>
-        resourceByName.get(left).displayName.localeCompare(resourceByName.get(right).displayName)
-        || left.localeCompare(right);
-    const adjacency = new Map(resources.map((resource) => [resource.name, new Set()]));
-    for (const edge of edges) {
-        if (edge.from !== edge.to) {
-            adjacency.get(edge.from).add(edge.to);
-        }
-    }
-
-    let nextIndex = 0;
-    const indexByName = new Map();
-    const lowLinkByName = new Map();
-    const stack = [];
-    const onStack = new Set();
-    const components = [];
-    const visit = (name) => {
-        indexByName.set(name, nextIndex);
-        lowLinkByName.set(name, nextIndex);
-        nextIndex++;
-        stack.push(name);
-        onStack.add(name);
-
-        for (const dependent of [...adjacency.get(name)].sort(byDisplayName)) {
-            if (!indexByName.has(dependent)) {
-                visit(dependent);
-                lowLinkByName.set(name, Math.min(lowLinkByName.get(name), lowLinkByName.get(dependent)));
-            } else if (onStack.has(dependent)) {
-                lowLinkByName.set(name, Math.min(lowLinkByName.get(name), indexByName.get(dependent)));
-            }
-        }
-
-        if (lowLinkByName.get(name) !== indexByName.get(name)) {
-            return;
-        }
-        const component = [];
-        let member;
-        do {
-            member = stack.pop();
-            onStack.delete(member);
-            component.push(member);
-        } while (member !== name);
-        component.sort(byDisplayName);
-        components.push(component);
-    };
-
-    for (const name of [...resourceByName.keys()].sort(byDisplayName)) {
-        if (!indexByName.has(name)) {
-            visit(name);
-        }
-    }
-
-    const componentByName = new Map();
-    components.forEach((component, componentIndex) => {
-        component.forEach((name) => componentByName.set(name, componentIndex));
-    });
-    const componentOutgoing = new Map(components.map((_, index) => [index, new Set()]));
-    const componentIndegree = new Map(components.map((_, index) => [index, 0]));
-    for (const edge of edges) {
-        const fromComponent = componentByName.get(edge.from);
-        const toComponent = componentByName.get(edge.to);
-        if (fromComponent === toComponent || componentOutgoing.get(fromComponent).has(toComponent)) {
-            continue;
-        }
-        componentOutgoing.get(fromComponent).add(toComponent);
-        componentIndegree.set(toComponent, componentIndegree.get(toComponent) + 1);
-    }
-
-    const compareComponents = (left, right) =>
-        byDisplayName(components[left][0], components[right][0]);
-    const componentLayers = new Map(components.map((_, index) => [index, 0]));
-    const queue = [...componentIndegree.entries()]
-        .filter(([, count]) => count === 0)
-        .map(([component]) => component)
-        .sort(compareComponents);
-    while (queue.length > 0) {
-        const current = queue.shift();
-        for (const dependent of [...componentOutgoing.get(current)].sort(compareComponents)) {
-            componentLayers.set(
-                dependent,
-                Math.max(componentLayers.get(dependent), componentLayers.get(current) + 1),
-            );
-            const nextIndegree = componentIndegree.get(dependent) - 1;
-            componentIndegree.set(dependent, nextIndegree);
-            if (nextIndegree === 0) {
-                queue.push(dependent);
-                queue.sort(compareComponents);
-            }
-        }
-    }
-
-    const layers = new Map([...resourceByName.keys()].map((name) => [
-        name,
-        componentLayers.get(componentByName.get(name)) ?? 0,
-    ]));
-
-    const nodes = resources
-        .map((resource) => {
-            const healthSummary = resourceHealthSummary(resource);
-            const displayNameMatches = resourceNamesByDisplayName.get(resource.displayName.toLowerCase()) ?? [];
-            return {
-                id: `graph-node:${stableId(resource.name)}`,
-                resourceName: resource.name,
-                label: displayNameMatches.length === 1 ? resource.displayName : resource.name,
-                resourceType: resource.resourceType,
-                description: resourceDescription(resource),
-                statusLabel: resourceStatusLabel(resource),
-                lifecycleTone: resourceLifecycleTone(resource),
-                healthLabel: healthSummary?.label,
-                healthTone: healthSummary?.tone,
-                icon: resourceStateIcon(resource),
-                tone: classifyResource(resource),
-                layer: layers.get(resource.name) ?? 0,
-            };
-        })
-        .sort((left, right) => left.layer - right.layer || left.label.localeCompare(right.label));
-
-    return { nodes, edges };
+            resourceByName.get(left.resourceName).displayName.localeCompare(resourceByName.get(right.resourceName).displayName)
+            || left.resourceName.localeCompare(right.resourceName));
+    return new Map(resources.map((resource) => [resource.name, {
+        dependsOn: toList(dependsOn.get(resource.name)),
+        usedBy: toList(usedBy.get(resource.name)),
+    }]));
 }
 
 function endpointNode(appHostId, resource, endpoint, index) {
@@ -1393,6 +1279,8 @@ function commandsGroupNode(appHostId, resource, commands) {
 
 export function buildResourceTree(resources, appHostId) {
     const resourceByName = new Map(resources.map((resource) => [resource.name, resource]));
+    const resolveName = resourceNameResolver(resources);
+    const dependencies = resourceDependencies(resources, resolveName);
     const childrenByParent = new Map();
     const childNames = new Set();
     for (const resource of resources) {
@@ -1422,6 +1310,12 @@ export function buildResourceTree(resources, appHostId) {
             .map((endpoint, index) => endpointNode(appHostId, resource, endpoint, index));
         const visibleCommands = resource.commands.filter(commandIsRenderable);
         const healthSummary = resourceHealthSummary(resource);
+        const waitingForLabels = resource.state.toLowerCase() === "waiting"
+            ? [...new Set(resource.waitingFor
+                .map(resolveName)
+                .filter(Boolean)
+                .map((name) => resourceByName.get(name).displayName))]
+            : [];
         const trailingChildren = [
             ...endpoints,
             ...(resource.healthReports.length > 0 ? [healthGroupNode(appHostId, resource)] : []),
@@ -1443,6 +1337,10 @@ export function buildResourceTree(resources, appHostId) {
             resourceName: resource.name,
             terminalEnabled: resource.terminalEnabled,
             terminalReplicaIndex: resource.terminalReplicaIndex,
+            isParameter: isParameterResource(resource),
+            dependsOn: dependencies.get(resource.name).dependsOn,
+            usedBy: dependencies.get(resource.name).usedBy,
+            waitingForLabels,
             resource,
             defaultExpanded: childResources.length > 0,
             children: [...childResources, ...trailingChildren],
@@ -1534,16 +1432,6 @@ export function buildAppHostTreeNode(record, model, {
     );
     const actions = appHostActions(record, operation)
         .filter((action) => action !== "dashboard" || hasDashboard);
-    const graph = buildResourceGraph(resources);
-    for (const edge of graph.edges) {
-        edge.context = {
-            id: `apphost:${record.id}:relationship:${edge.id}`,
-            kind: "relationship",
-            label: clampText(`${edge.from} → ${edge.to} (${edge.types.join(", ")})`, 500),
-            appHostId: record.id,
-            relationship: { from: edge.from, to: edge.to, types: edge.types },
-        };
-    }
     const appHostChildren = [
         ...(nestedResources && resourceNodes.length > 0 ? [{
             id: `apphost:${record.id}:resources`,
@@ -1589,7 +1477,6 @@ export function buildAppHostTreeNode(record, model, {
         unavailableActionReason: appHostUnavailableReason(record),
         unavailableActionLabel: appHostUnavailableReason(record) ? "Build not confirmed" : undefined,
         operation,
-        graph,
         defaultExpanded: record.status === "running",
         children: appHostChildren,
     };

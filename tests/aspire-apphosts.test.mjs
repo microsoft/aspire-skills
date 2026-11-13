@@ -13,7 +13,6 @@ import {
     buildCommandArgumentTokens,
     buildDashboardViewUrl,
     buildGlobalTree,
-    buildResourceGraph,
     buildResourceTree,
     buildResourceCommandArgs,
     buildTerminalAttachCommand,
@@ -350,7 +349,7 @@ test("pending health checks keep a running resource in a warning state", () => {
     });
 });
 
-test("resource graph layers dependencies before dependents and preserves relationship semantics", () => {
+test("resource nodes list merged dependencies both ways without Parent edges", () => {
     const resources = projectDescribePayload({
         resources: [
             { name: "cache", resourceType: "Container", state: "Running" },
@@ -364,7 +363,7 @@ test("resource graph layers dependencies before dependents and preserves relatio
             {
                 name: "api",
                 resourceType: "Project",
-                state: "Running",
+                state: "Waiting",
                 relationships: [
                     { type: "Reference", resourceName: "cache" },
                     { type: "Reference", resourceName: "catalog" },
@@ -372,95 +371,49 @@ test("resource graph layers dependencies before dependents and preserves relatio
                 ],
                 waitingFor: ["cache", "catalog"],
             },
-            {
-                name: "web",
-                resourceType: "Project",
-                state: "Running",
-                relationships: [{ type: "Reference", resourceName: "api" }],
-                waitingFor: ["api"],
-            },
-            { name: "worker", resourceType: "Project", state: "Running" },
+            { name: "web", resourceType: "Project", state: "Running", relationships: [{ type: "Reference", resourceName: "api" }] },
+            { name: "password", resourceType: "Parameter", state: "ValueMissing", stateStyle: "warning" },
         ],
     }).resources;
+    const nodes = new Map();
+    const visit = (node) => {
+        nodes.set(node.resourceName, node);
+        for (const child of node.children ?? []) if (child.kind === "resource") visit(child);
+    };
+    buildResourceTree(resources, "host").forEach(visit);
 
-    const graph = buildResourceGraph(resources);
-    const nodeByName = new Map(graph.nodes.map((node) => [node.resourceName, node]));
-    const edgeByPair = new Map(graph.edges.map((edge) => [`${edge.from}->${edge.to}`, edge]));
-
-    assert.equal(nodeByName.get("cache").layer, 0);
-    assert.equal(nodeByName.get("postgres").layer, 0);
-    assert.equal(nodeByName.get("worker").layer, 0);
-    assert.equal(nodeByName.get("catalog").layer, 1);
-    assert.equal(nodeByName.get("api").layer, 2);
-    assert.equal(nodeByName.get("web").layer, 3);
-    assert.deepEqual(edgeByPair.get("cache->api").types, ["Reference", "WaitFor"]);
-    assert.deepEqual(edgeByPair.get("catalog->api").types, ["Reference", "WaitFor"]);
-    assert.deepEqual(edgeByPair.get("postgres->catalog").types, ["Parent"]);
-    assert.deepEqual(edgeByPair.get("api->web").types, ["Reference", "WaitFor"]);
-    assert.equal(graph.edges.length, 4);
+    assert.deepEqual(nodes.get("api").dependsOn, [
+        { resourceName: "cache", types: ["Reference", "WaitFor"] },
+        { resourceName: "catalog", types: ["Reference", "WaitFor"] },
+    ]);
+    assert.deepEqual(nodes.get("api").usedBy, [{ resourceName: "web", types: ["Reference"] }]);
+    assert.deepEqual(nodes.get("cache").usedBy, [{ resourceName: "api", types: ["Reference", "WaitFor"] }]);
+    assert.deepEqual(nodes.get("catalog").dependsOn, [], "Parent is shown by nesting instead");
+    assert.deepEqual(nodes.get("postgres").usedBy, []);
+    assert.deepEqual(nodes.get("api").waitingForLabels, ["cache", "catalog"]);
+    assert.deepEqual(nodes.get("web").waitingForLabels, []);
+    assert.equal(nodes.get("password").isParameter, true);
+    assert.equal(nodes.get("api").isParameter, false);
+    assert.equal(nodes.get("password").lifecycleTone, "warning");
 });
 
-test("resource graph keeps cycles stable without inventing dependency depth", () => {
-    const resources = projectDescribePayload({
-        resources: [
-            { name: "x", resourceType: "Project", state: "Running" },
-            {
-                name: "a",
-                resourceType: "Project",
-                state: "Running",
-                relationships: [
-                    { type: "Reference", resourceName: "x" },
-                    { type: "Reference", resourceName: "b" },
-                ],
-            },
-            {
-                name: "b",
-                resourceType: "Project",
-                state: "Running",
-                relationships: [{ type: "Reference", resourceName: "a" }],
-            },
-            {
-                name: "c",
-                resourceType: "Project",
-                state: "Running",
-                relationships: [{ type: "Reference", resourceName: "b" }],
-            },
-        ],
-    }).resources;
+test("dependencies resolve unique display names without guessing ambiguous names", () => {
+    const node = (resources, name) => buildResourceTree(projectDescribePayload({ resources }).resources, "host")
+        .find((candidate) => candidate.resourceName === name);
+    const api = node([
+        { name: "messaging-abcxyz", displayName: "messaging", resourceType: "Container", state: "Running" },
+        { name: "api", resourceType: "Project", state: "Waiting", waitingFor: ["Messaging"] },
+    ], "api");
+    assert.deepEqual(api.dependsOn, [{ resourceName: "messaging-abcxyz", types: ["WaitFor"] }]);
+    assert.deepEqual(api.waitingForLabels, ["messaging"]);
 
-    const graph = buildResourceGraph(resources);
-    assert.deepEqual(graph.nodes.map((node) => [node.resourceName, node.layer]), [
-        ["x", 0],
-        ["a", 1],
-        ["b", 1],
-        ["c", 2],
-    ]);
-    assert.equal(graph.edges.length, 4);
-});
-
-test("resource graph resolves unique waitingFor display names without guessing ambiguous names", () => {
-    const graph = buildResourceGraph(projectDescribePayload({
-        resources: [
-            { name: "messaging-abcxyz", displayName: "messaging", resourceType: "Container", state: "Running" },
-            { name: "api", resourceType: "Project", state: "Running", waitingFor: ["messaging"] },
-        ],
-    }).resources);
-    assert.deepEqual(graph.edges.map((edge) => [edge.from, edge.to, edge.types]), [
-        ["messaging-abcxyz", "api", ["WaitFor"]],
-    ]);
-
-    const ambiguous = buildResourceGraph(projectDescribePayload({
-        resources: [
-            { name: "worker-one", displayName: "worker", resourceType: "Project", state: "Running" },
-            { name: "worker-two", displayName: "worker", resourceType: "Project", state: "Running" },
-            { name: "api", resourceType: "Project", state: "Running", waitingFor: ["worker"] },
-        ],
-    }).resources);
-    assert.equal(ambiguous.edges.length, 0);
-    assert.deepEqual(
-        ambiguous.nodes.filter((node) => node.resourceName.startsWith("worker-")).map((node) => node.label),
-        ["worker-one", "worker-two"],
-    );
+    const ambiguous = node([
+        { name: "worker-one", displayName: "worker", resourceType: "Project", state: "Running" },
+        { name: "worker-two", displayName: "worker", resourceType: "Project", state: "Running" },
+        { name: "api", resourceType: "Project", state: "Waiting", waitingFor: ["worker"] },
+    ], "api");
+    assert.deepEqual(ambiguous.dependsOn, []);
+    assert.deepEqual(ambiguous.waitingForLabels, []);
 });
 
 test("detached run log filter keeps build and AppHost output and drops CLI diagnostics", () => {
@@ -1152,39 +1105,6 @@ test("duplicate AppHosts expose stable recognizable hints without their full pat
     assert.equal(single.locationHint, undefined);
 });
 
-test("relationship context retains every edge semantic and belongs to its AppHost", () => {
-    const resources = projectDescribePayload({ resources: [
-        { name: "cache", resourceType: "Container", state: "Running" },
-        {
-            name: "api", resourceType: "Project", state: "Running",
-            relationships: [
-                { type: "Reference", resourceName: "cache" },
-                { type: "WaitFor", resourceName: "cache" },
-            ],
-        },
-    ] }).resources;
-    const records = normalizePsPayload(["first", "second"].map((checkout) => ({
-        appHostPath: repoPath(checkout, "Commerce.AppHost", "Commerce.AppHost.csproj"),
-        status: "running",
-    })));
-    const models = new Map(records.map((record) => [record.id, { resources }]));
-    const roots = buildGlobalTree({ runningHosts: records, models });
-    const contextIds = [];
-    for (const root of roots) {
-        assert.equal(root.graph.edges.length, 1);
-        const edge = root.graph.edges[0];
-        assert.equal(edge.context.kind, "relationship");
-        assert.equal(edge.context.appHostId, root.appHostId);
-        assert.equal(edge.context.id, `${root.id}:relationship:${edge.id}`);
-        assert.deepEqual(edge.context.relationship, {
-            from: edge.from, to: edge.to, types: edge.types,
-        });
-        assert.deepEqual(new Set(edge.context.relationship.types), new Set(["Reference", "WaitFor"]));
-        contextIds.push(edge.context.id);
-    }
-    assert.equal(new Set(contextIds).size, roots.length);
-});
-
 test("mapWithConcurrency never exceeds the configured fanout", async () => {
     let active = 0;
     let peak = 0;
@@ -1400,19 +1320,11 @@ test("canvas source carries the confirmed direction and protected data routes", 
     assert.match(client, /host-action-bar/);
     assert.match(client, /Add to chat/);
     assert.match(client, /resource-board/);
-    assert.match(client, /app-model-tabs/);
-    assert.match(client, /resource-graph/);
-    assert.match(client, /drawResourceGraphEdges/);
-    assert.match(client, /graphEdgePresentation/);
-    assert.match(client, /is-combined/);
-    assert.match(client, /rememberAppModelViewState/);
-    assert.match(client, /restoreAppModelViewState/);
     assert.match(client, /renderedAppHostId/);
     assert.match(client, /actionMenuTrigger/);
     assert.match(client, /hideActionMenu\(\{ restoreFocus: true \}\)/);
     assert.doesNotMatch(client, /dashboardActionChip/);
     assert.doesNotMatch(client, /"Diagnostics"/);
-    assert.match(client, /role: "tablist"/);
     assert.match(client, /shortLabel/);
     assert.match(client, /CONFIRMATIONS/);
     assert.match(client, /unavailableActionReason/);
@@ -1447,10 +1359,11 @@ test("canvas source carries the confirmed direction and protected data routes", 
     assert.match(styles, /\.endpoint-actions \.chip-status[\s\S]*color:\s*var\(--muted\)/);
     assert.match(styles, /\.detail-chip > span:not\(\.chip-status\)[\s\S]*text-overflow:\s*ellipsis/);
     assert.match(model, /statusLabel:\s*address/);
-    assert.match(client, /\{ id: "graph", label: "Graph", icon: "steps" \}/);
-    assert.doesNotMatch(client, /graph\.edges\.reduce\(\(total, edge\) => total \+ edge\.types\.length, 0\)/);
-    assert.match(client, /class: `graph-edge \$\{presentation\.className\}`/);
-    assert.match(styles, /\.graph-legend-swatch[\s\S]*width:\s*24px/);
+    assert.doesNotMatch(client, /graph|appModelView|role: "tablist"/i);
+    assert.doesNotMatch(styles, /graph-|relationship-|app-model-tab|view-tabs/);
+    assert.match(client, /class: "roster-header roster-section-header"/);
+    assert.match(client, /"Depends on"/);
+    assert.match(client, /"Used by"/);
     assert.match(provider, /CommandInputMetadataStore/);
     assert.match(provider, /sendAttachmentsToMessage/);
     assert.match(provider, /type: "extension_context"/);

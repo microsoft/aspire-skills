@@ -1123,11 +1123,6 @@ function indexTree(entry, roots) {
         for (const child of node.children ?? []) {
             visit(child);
         }
-        for (const edge of node.graph?.edges ?? []) {
-            if (edge.context) {
-                visit(edge.context);
-            }
-        }
     };
     roots.forEach(visit);
     if (entry.selectionId && !entry.nodeIndex.has(entry.selectionId)) {
@@ -1423,9 +1418,6 @@ function nodeContext(entry, node) {
     }
     if (node.healthCheckName) {
         context.healthCheck = node.healthCheckName;
-    }
-    if (node.relationship) {
-        context.relationship = node.relationship;
     }
     return JSON.parse(JSON.stringify(context, (key, value) => typeof value === "string"
         ? publicCommandText(entry, record, value.replace(/[\u0000-\u001f\u007f-\u009f]/g, ""), 1000)
