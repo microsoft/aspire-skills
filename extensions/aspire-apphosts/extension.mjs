@@ -226,6 +226,9 @@ function addSseClient(entry, req, res) {
         Connection: "keep-alive",
     });
     res.write(": connected\n\n");
+    for (const item of entry.commandLog) {
+        flushCommandLogOutput(entry, item);
+    }
     entry.clients.add(res);
     res.write(`data: ${JSON.stringify({ type: "state", state: publicState(entry) })}\n\n`);
     res.write(`data: ${JSON.stringify(commandLogSnapshot(entry))}\n\n`);
@@ -821,12 +824,14 @@ function mergeStreamLine(state, line) {
     const items = snapshot ? payload.resources : [payload];
     let changed = false;
     if (snapshot) {
-        changed = state.resources.size > 0;
+        changed = state.resources.size > 0 || state.initialPending.size > 0;
         state.resources.clear();
         state.raw.clear();
+        state.initialPending.clear();
     }
     for (const item of items) {
         if (!item || typeof item !== "object" || typeof item.name !== "string") continue;
+        state.initialPending.delete(item.name);
         const serialized = JSON.stringify(item);
         if (state.raw.get(item.name) === serialized) continue;
         state.raw.set(item.name, serialized);
@@ -874,6 +879,9 @@ async function startDescribeStream(entry, state) {
     state.run = run;
     state.resources = new Map();
     state.raw = new Map();
+    state.initialPending = new Set(
+        entry.hostModels.get(state.record.id)?.resources?.map((resource) => resource.name) ?? [],
+    );
     let gotData = false;
     const isCurrent = () => entry.describeStreams.get(state.record.id) === state && state.run === run;
     const handle = cli.stream(withLogFile(describeStreamArgs(entry, state.record), logFile), {
@@ -882,6 +890,7 @@ async function startDescribeStream(entry, state) {
             if (!isCurrent() || !mergeStreamLine(state, line)) return;
             gotData = true;
             state.streamed = true;
+            if (state.initialPending.size > 0) return;
             state.model = {
                 ...projectDescribePayload({ resources: [...state.resources.values()] }),
                 stale: false,

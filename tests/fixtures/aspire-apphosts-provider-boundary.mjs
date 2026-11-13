@@ -1040,6 +1040,59 @@ test("background polling pauses without a connected view and resumes when one re
     await waitUntil(() => h.calls.slice(callsWhilePaused).some(({ args }) => args[0] === "ps"));
 });
 
+test("a reconnect snapshot does not replay buffered command output as a live delta", async (t) => {
+    const h = await harness(t);
+    h.controls.inputs = [];
+    const open = await h.open();
+    const request = await requestFor(h, open);
+    const outputWritten = deferred();
+    const release = deferred();
+    h.controls.executor = async (_args, options) => {
+        options.onOutput("stdout", "one buffered line\n");
+        outputWritten.resolve();
+        await release.promise;
+        return ok({ completed: true });
+    };
+    const running = h.request(open, "/api/command", request);
+    await outputWritten.promise;
+    const stream = await sse(h, open);
+    t.after(() => stream.close());
+    const snapshot = await stream.waitFor((event) => event.type === "command-log-snapshot");
+    assert.match(snapshot.commands.find((command) => command.status === "running").output, /one buffered line/);
+    await new Promise((done) => setTimeout(done, 200));
+    assert.equal(
+        stream.events.filter((event) => event.type === "command-output"
+            && event.text.includes("one buffered line")).length,
+        0,
+    );
+    release.resolve();
+    await running;
+});
+
+test("an incomplete initial describe stream burst retains the complete one-shot model", async (t) => {
+    const streams = [];
+    const h = await harness(t, {
+        stream: (_args, options) => {
+            streams.push(options);
+            return { kill() {} };
+        },
+    });
+    const open = await h.open();
+    await waitUntil(() => streams.length > 0);
+    const baseline = describe().resources;
+    streams[0].onLine(JSON.stringify({ ...baseline[0], state: "Starting" }));
+    await new Promise((done) => setTimeout(done, 250));
+    let state = (await h.request(open, "/api/state")).state;
+    assert.equal(allNodes(state.roots).filter((node) => node.resourceName === "db").length, paths.length);
+    streams[0].onLine(JSON.stringify(baseline[1]));
+    await waitUntil(async () => {
+        state = (await h.request(open, "/api/state")).state;
+        return allNodes(state.roots).some((node) => node.resourceName === "api"
+            && node.resource?.state === "Starting");
+    });
+    assert.equal(allNodes(state.roots).filter((node) => node.resourceName === "db").length, paths.length);
+});
+
 test("a describe stream that fails after data falls back to one-shot describe", async (t) => {
     const streams = [];
     const h = await harness(t, {
