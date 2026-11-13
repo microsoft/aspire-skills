@@ -1893,6 +1893,7 @@ body.is-loading .canvas-footer .footer-count:empty {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: 12px;
     margin-bottom: 10px;
 }
@@ -1992,7 +1993,7 @@ body.is-loading .canvas-footer .footer-count:empty {
     position: relative;
     min-width: max(100%, var(--graph-min-width));
     min-height: 140px;
-    padding: 20px;
+    padding: 16px;
     isolation: isolate;
 }
 
@@ -2000,10 +2001,10 @@ body.is-loading .canvas-footer .footer-count:empty {
     position: relative;
     z-index: 2;
     display: grid;
-    grid-template-columns: repeat(var(--graph-columns), minmax(210px, 220px));
+    grid-template-columns: repeat(var(--graph-columns), minmax(180px, 220px));
     align-items: start;
-    justify-content: center;
-    gap: 56px;
+    justify-content: space-between;
+    gap: 36px;
 }
 
 .graph-column {
@@ -2062,10 +2063,20 @@ body.is-loading .canvas-footer .footer-count:empty {
     font-size: var(--text-compact);
 }
 
+.graph-node-meta {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 5px;
+    padding: 6px 9px;
+    border-top: 1px solid var(--border-soft);
+}
+
 .graph-node .resource-status {
-    max-width: 88px;
+    max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .graph-node-health {
@@ -2073,8 +2084,6 @@ body.is-loading .canvas-footer .footer-count:empty {
     min-width: 0;
     align-items: center;
     gap: 5px;
-    padding: 6px 9px;
-    border-top: 1px solid var(--border-soft);
     color: var(--muted);
     font-size: var(--text-compact);
 }

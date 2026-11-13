@@ -1558,6 +1558,9 @@ const GRAPH_RELATIONSHIPS = {
     Reference: { label: "Reference", className: "is-reference" },
     WaitFor: { label: "WaitFor", className: "is-wait-for" },
 };
+const GRAPH_NODE_MIN_WIDTH = 180;
+const GRAPH_COLUMN_GAP = 36;
+const GRAPH_CANVAS_PADDING = 32;
 
 function graphEdgePresentation(edge) {
     if (edge.types.length === 1) {
@@ -1618,16 +1621,21 @@ function renderGraphNode(node) {
                 element("strong", { text: node.label, title: node.label }),
                 element("span", { text: node.resourceType, title: node.resourceType }),
             ]),
+        ]),
+        ...((node.statusLabel || node.healthLabel) ? [element("div", {
+            class: "graph-node-meta",
+        }, [
             ...(node.statusLabel ? [element("span", {
                 class: `resource-status${node.lifecycleTone ? ` tone-${node.lifecycleTone}` : ""}`,
                 text: node.statusLabel,
+                title: node.statusLabel,
             })] : []),
-        ]),
-        ...(node.healthLabel ? [element("div", {
-            class: `graph-node-health${node.healthTone ? ` tone-${node.healthTone}` : ""}`,
-        }, [
-            svgIcon("heart", 12),
-            element("span", { text: node.healthLabel }),
+            ...(node.healthLabel ? [element("div", {
+                class: `graph-node-health${node.healthTone ? ` tone-${node.healthTone}` : ""}`,
+            }, [
+                svgIcon("heart", 12),
+                element("span", { text: node.healthLabel, title: node.healthLabel }),
+            ])] : []),
         ])] : []),
         element("button", {
             class: "graph-node-inspect",
@@ -1698,7 +1706,9 @@ function renderResourceGraphPanel(graph, active) {
     canvas.style.setProperty("--graph-columns", String(columns.length));
     canvas.style.setProperty(
         "--graph-min-width",
-        `${columns.length * 220 + Math.max(0, columns.length - 1) * 56 + 40}px`,
+        `${columns.length * GRAPH_NODE_MIN_WIDTH
+            + Math.max(0, columns.length - 1) * GRAPH_COLUMN_GAP
+            + GRAPH_CANVAS_PADDING}px`,
     );
 
     return element("div", {

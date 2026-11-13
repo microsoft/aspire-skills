@@ -1226,6 +1226,18 @@ test("the Filters panel anchors under its trigger and stays inside the control r
 test("filtered graph counts are honest and one combined relationship can be selected and added to chat", async () => {
     const renderer = await boot();
     renderer.document.getElementById("graph-view-tab").click();
+    const canvas = renderer.document.querySelector(".resource-graph-canvas");
+    assert.equal(canvas.style["--graph-min-width"], "428px");
+    const graphNode = renderer.context.renderGraphNode({
+        label: "postgres",
+        resourceName: "postgres",
+        resourceType: "Container",
+        statusLabel: "RuntimeUnhealthy",
+        healthLabel: "0/1 healthy",
+    });
+    assert.equal(graphNode.querySelector(".graph-node-header .resource-status"), null);
+    assert.equal(graphNode.querySelector(".graph-node-meta .resource-status").title, "RuntimeUnhealthy");
+    assert.equal(graphNode.querySelector(".graph-node-health span").title, "0/1 healthy");
     const list = renderer.document.querySelector(".graph-relationships");
     assert.match(list.querySelector("summary").textContent, /Relationships \(1\)/);
     assert.equal(list.querySelectorAll("li").length, 1);
