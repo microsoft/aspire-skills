@@ -598,6 +598,12 @@ async function runPreparedWithCompatibility(args, options = {}) {
     }
     await tail?.stop();
     if (item) {
+        const projectedOutput = result.ok && commandLog.projectStdout
+            ? commandLog.projectStdout(result.stdout)
+            : "";
+        if (projectedOutput) {
+            receiveCommandOutput(commandLog.entry, item, `${projectedOutput}\n`);
+        }
         const loggedResult = commandLog.publishStdout === false && !result.ok && result.stdout
             ? {
                 ...result,
@@ -752,6 +758,13 @@ function workspaceRunningHosts(entry, candidates, runningHosts) {
             candidate.id === running.id || sameAppHostDirectory(candidate.appHostPath, running.appHostPath)));
 }
 
+function sanitizedJsonOutput(project) {
+    return (stdout) => {
+        const payload = extractJsonPayload(stdout);
+        return payload === undefined ? "" : JSON.stringify(project(payload), null, 2);
+    };
+}
+
 async function describeAppHost(entry, record, previousModel) {
     const baseArgs = [
         "describe",
@@ -768,7 +781,13 @@ async function describeAppHost(entry, record, previousModel) {
     const options = {
         cwd: defaultCwdForAppHost(record.appHostPath, entry.workingDirectory),
         timeoutMs: CLI_TIMEOUT_MS,
-        commandLog: { entry, record, source: "background", label: `Describe ${record.displayName}` },
+        commandLog: {
+            entry,
+            record,
+            source: "background",
+            label: `Describe ${record.displayName}`,
+            projectStdout: sanitizedJsonOutput(projectDescribePayload),
+        },
     };
     const result = await runWithOptionalFlagFallback(
         (args) => runJsonWithCompatibility(args, options),
@@ -1153,7 +1172,18 @@ async function performRefresh(entry, generation, showProgress) {
         {
             cwd: entry.workingDirectory,
             timeoutMs: CLI_TIMEOUT_MS,
-            commandLog: { entry, source: "background", label: "List running AppHosts" },
+            commandLog: {
+                entry,
+                source: "background",
+                label: "List running AppHosts",
+                projectStdout: sanitizedJsonOutput((payload) => ({
+                    appHosts: normalizePsPayload(payload).map(({ displayName, status, sdkVersion }) => ({
+                        displayName,
+                        status,
+                        sdkVersion,
+                    })),
+                })),
+            },
         },
     );
     const candidatePromise = viewMode === "workspace"

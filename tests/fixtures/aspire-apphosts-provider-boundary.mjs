@@ -491,6 +491,24 @@ test("machine-readable stdout stays provider-side", async (t) => {
     const snapshot = await stream.waitFor((event) => event.type === "command-log-snapshot");
     assert.ok(snapshot.commands.length > 0);
     assert.doesNotMatch(JSON.stringify(snapshot), new RegExp(privateValue));
+    await h.action("refresh_model");
+    await stream.waitFor((event) => event.type === "command-output" && /"appHosts"/.test(event.text));
+    await stream.waitFor((event) => event.type === "command-output" && /"resources"/.test(event.text));
+    const reconnected = await sse(h, open);
+    t.after(() => reconnected.close());
+    const projectedSnapshot = await reconnected.waitFor((event) => event.type === "command-log-snapshot");
+    const listOutputs = projectedSnapshot.commands
+        .filter((command) => command.label === "List running AppHosts")
+        .map((command) => command.output);
+    const describeOutputs = projectedSnapshot.commands
+        .filter((command) => command.label.startsWith("Describe "))
+        .map((command) => command.output);
+    assert.ok(listOutputs.some((output) => /"appHosts"/.test(output)));
+    assert.ok(describeOutputs.some((output) => /"resources"/.test(output)));
+    assert.doesNotMatch(
+        JSON.stringify(describeOutputs),
+        /not-for-composer|dummy-dashboard-token|private-endpoint-token/,
+    );
     const commandRequest = await requestFor(h, open);
     assert.equal((await h.request(open, "/api/command-inputs", {
         ...commandRequest,

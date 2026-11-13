@@ -51,6 +51,8 @@ The provider projects an explicit allow-list of resource fields. It never sends
 environment values, arbitrary resource properties, connection strings, volumes,
 source paths, parameter values, or the token-bearing dashboard URL to the
 renderer or Copilot. Endpoint userinfo, query strings, and fragments are removed.
+Machine-readable commands can publish formatted allow-listed projections to the
+Output panel, but their raw stdout remains provider-side.
 Secret command inputs are redacted from command results and never persisted.
 Redaction happens before output is truncated. Duplicate AppHosts use a bounded
 directory-name hint and stable ID to distinguish targets, not a full source path.
