@@ -472,6 +472,32 @@ test("output panel opens for user commands and streams cleaned output", async ()
     assert.match(text.textContent, /done\n[\s\S]*Exit code 1/);
 });
 
+test("live command output keeps only the configured tail", async () => {
+    const renderer = await boot();
+    const text = renderer.document.getElementById("output-text");
+    const base = {
+        id: "cmd-1",
+        source: "resource",
+        label: "Restart api",
+        appHostId: "host-a",
+        appHostName: "Host A",
+        commandLine: "aspire resource api restart",
+        status: "running",
+        startedAt: 0,
+    };
+    await renderer.push({ type: "command-log", command: base });
+    await renderer.push({
+        type: "command-output",
+        id: base.id,
+        text: `first-marker\n${"x".repeat(64 * 1024)}\nlast-marker`,
+    });
+
+    assert.doesNotMatch(text.textContent, /first-marker/);
+    assert.match(text.textContent, /^\[Earlier output was trimmed\]/);
+    assert.match(text.textContent, /last-marker$/);
+    assert.ok(text.textContent.length < 65 * 1024);
+});
+
 test("all state transports reject older snapshots after a newer SSE state", async () => {
     const renderer = createRenderer();
     await renderer.push({ type: "state", state: snapshot(3) });

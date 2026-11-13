@@ -33,6 +33,7 @@ import {
     projectDescribePayload,
     publicAppHost,
     redactAbsolutePaths,
+    samePath,
     relativizeWorkspacePaths,
     redactKnownPaths,
     redactText,
@@ -508,6 +509,42 @@ test("detached run log tail follows the child log named by the matching start in
     } finally {
         await rm(logDir, { recursive: true, force: true });
     }
+});
+
+test("detached run log tail bounds a single newline-free entry", async () => {
+    const logDir = await mkdtemp(join(tmpdir(), "aspire-logs-"));
+    try {
+        const since = Date.now();
+        const stamp = new Date(since).toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "");
+        const appHostPath = join(tmpdir(), "Repo", "App.AppHost.csproj");
+        const child = join(logDir, `cli_${stamp}001_detach-child_match.log`);
+        const spawn = `[x] [DBUG] [AppHostLauncher] Spawning child CLI: aspire (isDotnetHost=False) with args: run --non-interactive --apphost ${appHostPath} --log-file ${child}\n`;
+        await writeFile(join(logDir, `cli_${stamp}_aaaa.log`), spawn);
+        await writeFile(child, `[x] [INFO] [Build] ${"x".repeat(256)}\n[x] [INFO] [AppHost] ready\n`);
+
+        let output = "";
+        const tail = createDetachedRunLogTail({
+            appHostPath,
+            since,
+            logDir,
+            intervalMs: 10,
+            maxReadBytes: 16,
+            maxPendingLineChars: 64,
+            onText: (text) => { output += text; },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        await tail.stop();
+
+        assert.ok(output.length < 100);
+        assert.match(output, /^x+\nready\n$/);
+    } finally {
+        await rm(logDir, { recursive: true, force: true });
+    }
+});
+
+test("detached AppHost path matching preserves case off Windows", () => {
+    assert.equal(samePath("/repo/AppHost.csproj", "/repo/apphost.csproj", "linux"), false);
+    assert.equal(samePath("C:\\Repo\\AppHost.csproj", "c:/repo/apphost.csproj", "win32"), true);
 });
 
 test("ps projection never exposes the token-bearing dashboard URL", () => {

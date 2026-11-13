@@ -672,8 +672,11 @@ export function filterDetachedRunLog(text, state = { keep: false }) {
     return kept.length ? `${kept.join("\n")}\n` : "";
 }
 
-function samePath(left, right) {
-    const normalizeForCompare = (value) => String(value ?? "").replace(/[\\/]+/g, "/").toLowerCase();
+export function samePath(left, right, platform = process.platform) {
+    const normalizeForCompare = (value) => {
+        const normalized = String(value ?? "").replace(/[\\/]+/g, "/");
+        return platform === "win32" ? normalized.toLowerCase() : normalized;
+    };
     return normalizeForCompare(left) === normalizeForCompare(right);
 }
 
@@ -685,6 +688,8 @@ export function createDetachedRunLogTail({
     logDir = join(homedir(), ".aspire", "logs"),
     intervalMs = 500,
     maxReadBytes = 256 * 1024,
+    maxPendingLineChars = 64 * 1024,
+    platform = process.platform,
 }) {
     let file = null;
     let offset = 0;
@@ -723,7 +728,7 @@ export function createDetachedRunLogTail({
             const head = (await readChunk(candidate.path, 0, 64 * 1024)).toString("utf8");
             const spawn = /Spawning child CLI: .*? --apphost (.+?) --log-file (.+?\.log)/.exec(head);
             const unquote = (value) => value.replace(/^"(.*)"$/, "$1");
-            if (spawn && samePath(unquote(spawn[1]), appHostPath)) {
+            if (spawn && samePath(unquote(spawn[1]), appHostPath, platform)) {
                 return unquote(spawn[2]);
             }
         }
@@ -758,12 +763,26 @@ export function createDetachedRunLogTail({
             const chunk = await readChunk(file, offset, length);
             if (!chunk.length) return;
             offset += chunk.length;
-            const combined = partial + decoder.write(chunk);
-            const lastBreak = combined.lastIndexOf("\n");
-            partial = lastBreak >= 0 ? combined.slice(lastBreak + 1) : combined;
-            const text = filterDetachedRunLog(lastBreak >= 0 ? combined.slice(0, lastBreak) : "", state);
+            const text = consumeDecodedText(decoder.write(chunk));
             if (text) onText(text);
         }
+    }
+
+    function consumeDecodedText(text) {
+        const kept = [];
+        let remaining = text;
+        while (remaining) {
+            const lineBreak = remaining.indexOf("\n");
+            const segment = lineBreak >= 0 ? remaining.slice(0, lineBreak) : remaining;
+            const available = Math.max(0, maxPendingLineChars - partial.length);
+            partial += segment.slice(0, available);
+            if (lineBreak < 0) break;
+            const filtered = filterDetachedRunLog(`${partial}\n`, state);
+            if (filtered) kept.push(filtered);
+            partial = "";
+            remaining = remaining.slice(lineBreak + 1);
+        }
+        return kept.join("");
     }
 
     function tick() {
@@ -781,7 +800,8 @@ export function createDetachedRunLogTail({
             clearInterval(timer);
             await inFlight;
             await poll().catch(() => {});
-            const text = filterDetachedRunLog(partial + decoder.end(), state);
+            const decoded = consumeDecodedText(decoder.end());
+            const text = decoded + filterDetachedRunLog(partial, state);
             partial = "";
             if (text) onText(text);
         },

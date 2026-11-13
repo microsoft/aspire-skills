@@ -3161,6 +3161,7 @@ async function setViewMode(viewMode) {
 }
 
 const COMMAND_LOG_CLIENT_LIMIT = 60;
+const COMMAND_OUTPUT_CLIENT_TAIL = { user: 64 * 1024, background: 16 * 1024 };
 const OUTPUT_ESCAPES = /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b[@-Z\\-_]/g;
 
 function cleanCommandOutput(text) {
@@ -3196,13 +3197,22 @@ function formatCommandDuration(item) {
     return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
 }
 
+function trimCommandOutput(item) {
+    const tail = COMMAND_OUTPUT_CLIENT_TAIL[item.source === "background" ? "background" : "user"];
+    if (item.output.length > tail) {
+        item.output = item.output.slice(item.output.length - tail);
+        item.truncated = true;
+    }
+    return item;
+}
+
 function upsertCommand(command) {
     const existing = commandLog.find((item) => item.id === command.id);
     if (existing) {
         Object.assign(existing, command, { output: command.output ?? existing.output });
-        return existing;
+        return trimCommandOutput(existing);
     }
-    const item = { ...command, output: command.output ?? "" };
+    const item = trimCommandOutput({ ...command, output: command.output ?? "" });
     commandLog.push(item);
     let excess = commandLog.length - COMMAND_LOG_CLIENT_LIMIT;
     for (let index = 0; excess > 0 && index < commandLog.length;) {
@@ -3218,7 +3228,8 @@ function upsertCommand(command) {
 
 function acceptCommandLogMessage(message) {
     if (message.type === "command-log-snapshot") {
-        commandLog = (message.commands ?? []).map((command) => ({ ...command, output: command.output ?? "" }));
+        commandLog = (message.commands ?? [])
+            .map((command) => trimCommandOutput({ ...command, output: command.output ?? "" }));
         if (!commandLog.some((item) => item.id === selectedOutputId)) {
             selectedOutputId = null;
         }
@@ -3239,6 +3250,7 @@ function acceptCommandLogMessage(message) {
         const item = commandLog.find((candidate) => candidate.id === message.id);
         if (item) {
             item.output += message.text ?? "";
+            trimCommandOutput(item);
             if (item.id === selectedCommand()?.id) {
                 renderOutputText();
             }
