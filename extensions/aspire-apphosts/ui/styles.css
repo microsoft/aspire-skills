@@ -1812,11 +1812,19 @@ body.is-loading .canvas-footer .footer-count:empty {
     background: var(--surface-inset);
 }
 
-.output-command-line {
-    margin: 0;
+.output-command-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
     padding: 6px var(--gutter);
-    overflow: hidden;
     border-bottom: 1px solid var(--border);
+}
+
+.output-command-line {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
     color: var(--muted);
     font-family: var(--font-code);
     font-size: var(--text-compact);
@@ -1828,6 +1836,16 @@ body.is-loading .canvas-footer .footer-count:empty {
 .output-command-line::before {
     content: "$ ";
     color: var(--brand-strong);
+}
+
+.output-sanitized {
+    flex: none;
+    padding: 1px 5px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: var(--text-meta);
+    line-height: 1.4;
 }
 
 .output-text {

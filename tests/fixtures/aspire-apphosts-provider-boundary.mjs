@@ -462,7 +462,16 @@ test("machine-readable stdout stays provider-side", async (t) => {
     let failLoader = false;
     const h = await harness(t, {
         cliOverride: async (args, options) => {
-            if (args[0] === "ps") {
+            if (args[0] === "ls") {
+                const stdout = JSON.stringify(paths.map((path) => ({
+                    path,
+                    status: "buildable",
+                    language: "C#",
+                    privateValue,
+                })));
+                options.onOutput?.("stdout", stdout);
+                return { ok: true, code: 0, stdout, stderr: "", error: "" };
+            } else if (args[0] === "ps") {
                 const stdout = JSON.stringify({ privateValue });
                 options.onOutput?.("stdout", stdout);
                 if (failPs) {
@@ -474,7 +483,7 @@ test("machine-readable stdout stays provider-side", async (t) => {
             return undefined;
         },
     });
-    const open = await h.open();
+    const open = await h.open("test", { viewMode: "workspace" });
     h.controls.loader = async (_args, options) => {
         const stdout = JSON.stringify([...baseInputs, {
             name: "token",
@@ -494,6 +503,7 @@ test("machine-readable stdout stays provider-side", async (t) => {
     await h.action("refresh_model");
     await stream.waitFor((event) => event.type === "command-output" && /"appHosts"/.test(event.text));
     await stream.waitFor((event) => event.type === "command-output" && /"resources"/.test(event.text));
+    await stream.waitFor((event) => event.type === "command-output" && /"workspaceLocation"/.test(event.text));
     const reconnected = await sse(h, open);
     t.after(() => reconnected.close());
     const projectedSnapshot = await reconnected.waitFor((event) => event.type === "command-log-snapshot");
@@ -503,8 +513,15 @@ test("machine-readable stdout stays provider-side", async (t) => {
     const describeOutputs = projectedSnapshot.commands
         .filter((command) => command.label.startsWith("Describe "))
         .map((command) => command.output);
+    const findCommands = projectedSnapshot.commands
+        .filter((command) => command.label === "Find AppHosts");
     assert.ok(listOutputs.some((output) => /"appHosts"/.test(output)));
     assert.ok(describeOutputs.some((output) => /"resources"/.test(output)));
+    assert.ok(findCommands.some((command) => command.sanitizedOutput
+        && /"workspaceLocation"/.test(command.output)));
+    assert.ok(projectedSnapshot.commands
+        .filter((command) => /^(Find AppHosts|List running AppHosts|Describe )/.test(command.label))
+        .every((command) => command.sanitizedOutput === true));
     assert.doesNotMatch(
         JSON.stringify(describeOutputs),
         /not-for-composer|dummy-dashboard-token|private-endpoint-token/,

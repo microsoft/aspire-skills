@@ -47,6 +47,7 @@ const els = {
     outputToggleBadge: document.getElementById("output-toggle-badge"),
     outputList: document.getElementById("output-list"),
     outputCommandLine: document.getElementById("output-command-line"),
+    outputSanitized: document.getElementById("output-sanitized"),
     outputText: document.getElementById("output-text"),
     outputBackground: document.getElementById("output-background"),
     outputCopy: document.getElementById("output-copy"),
@@ -3312,7 +3313,12 @@ function renderOutputPanel() {
                 element("span", { class: "output-item-label", text: item.label }),
                 element("span", {
                     class: "output-item-meta",
-                    text: [item.appHostName, commandStatusLabel(item), formatCommandDuration(item)].filter(Boolean).join(" · "),
+                    text: [
+                        item.appHostName,
+                        commandStatusLabel(item),
+                        formatCommandDuration(item),
+                        item.sanitizedOutput ? "Sanitized output" : null,
+                    ].filter(Boolean).join(" · "),
                 }),
             ]),
         ]),
@@ -3339,6 +3345,9 @@ function renderOutputText() {
     renderedOutputId = selected?.id ?? null;
     els.outputCommandLine.textContent = selected?.commandLine ?? "";
     els.outputCommandLine.hidden = !selected;
+    if (els.outputSanitized) {
+        els.outputSanitized.hidden = !selected?.sanitizedOutput;
+    }
     if (!selected) {
         text.textContent = "Commands the canvas runs, like start, stop, and resource commands, show their output here.";
         text.classList.add("is-placeholder");
@@ -3375,7 +3384,12 @@ function renderOutputListMeta() {
     const metas = els.outputList?.querySelectorAll?.(".output-item-meta") ?? [];
     items.forEach((item, index) => {
         if (metas[index] && item.status === "running") {
-            metas[index].textContent = [item.appHostName, commandStatusLabel(item), formatCommandDuration(item)].filter(Boolean).join(" · ");
+            metas[index].textContent = [
+                item.appHostName,
+                commandStatusLabel(item),
+                formatCommandDuration(item),
+                item.sanitizedOutput ? "Sanitized output" : null,
+            ].filter(Boolean).join(" · ");
         }
     });
 }

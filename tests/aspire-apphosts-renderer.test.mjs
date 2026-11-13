@@ -472,6 +472,26 @@ test("output panel opens for user commands and streams cleaned output", async ()
     assert.match(text.textContent, /done\n[\s\S]*Exit code 1/);
 });
 
+test("output panel identifies sanitized command output", async () => {
+    const renderer = await boot();
+    const sanitized = renderer.document.getElementById("output-sanitized");
+    await renderer.push({
+        type: "command-log",
+        command: {
+            id: "cmd-1",
+            source: "user",
+            label: "Find AppHosts",
+            commandLine: "aspire ls --format Json",
+            status: "running",
+            sanitizedOutput: true,
+            startedAt: 0,
+        },
+    });
+    assert.equal(sanitized.hidden, false);
+    assert.equal(sanitized.textContent, "Sanitized output");
+    assert.match(renderer.document.getElementById("output-list").textContent, /Sanitized output/);
+});
+
 test("live command output keeps only the configured tail", async () => {
     const renderer = await boot();
     const text = renderer.document.getElementById("output-text");

@@ -307,6 +307,7 @@ function publicCommandLogItem(item, includeOutput) {
         startedAt: item.startedAt,
         endedAt: item.endedAt,
         truncated: item.truncated,
+        sanitizedOutput: item.sanitizedOutput,
         ...(includeOutput ? { output: item.output } : {}),
     };
 }
@@ -344,6 +345,7 @@ function beginCommandLog(entry, args, meta, sensitiveValues = []) {
         startedAt: new Date().toISOString(),
         endedAt: null,
         truncated: false,
+        sanitizedOutput: meta.sanitizedOutput === true,
         output: "",
         record,
         sensitiveValues,
@@ -620,7 +622,11 @@ async function runJsonWithCompatibility(args, options = {}) {
     const result = await runPreparedWithCompatibility(prepared, {
         ...options,
         commandLog: options.commandLog
-            ? { ...options.commandLog, publishStdout: false }
+            ? {
+                ...options.commandLog,
+                publishStdout: false,
+                sanitizedOutput: Boolean(options.commandLog.projectStdout),
+            }
             : undefined,
     });
     return {
@@ -692,6 +698,19 @@ function localTargetRecords(payload, pathProperty) {
     };
 }
 
+function projectWorkspaceCandidates(entry, payload) {
+    const localTargets = localTargetRecords(Array.isArray(payload) ? payload : [], "path");
+    return {
+        appHosts: normalizeLsPayload(localTargets.records).map((record) => ({
+            displayName: record.displayName,
+            language: record.language,
+            discoveryStatus: record.discoveryStatus,
+            buildable: record.buildable,
+            workspaceLocation: relativeWorkspacePath(entry, record.appHostPath),
+        })),
+    };
+}
+
 async function discoverWorkspaceCandidates(entry) {
     if (entry.requestedAppHostPath) {
         return {
@@ -705,7 +724,12 @@ async function discoverWorkspaceCandidates(entry) {
         {
             cwd: entry.workingDirectory,
             timeoutMs: CLI_TIMEOUT_MS,
-            commandLog: { entry, source: "background", label: "Find AppHosts" },
+            commandLog: {
+                entry,
+                source: "background",
+                label: "Find AppHosts",
+                projectStdout: sanitizedJsonOutput((payload) => projectWorkspaceCandidates(entry, payload)),
+            },
         },
     );
     if (result.ok && Array.isArray(result.data)) {
