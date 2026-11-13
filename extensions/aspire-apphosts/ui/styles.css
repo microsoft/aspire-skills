@@ -2373,7 +2373,7 @@ body.is-loading .canvas-footer .footer-count:empty {
     width: min(100%, 1120px);
     min-height: 0;
     flex-direction: column;
-    gap: 16px;
+    gap: 10px;
     margin: 0 auto;
 }
 
@@ -2391,9 +2391,10 @@ body.is-loading .canvas-footer .footer-count:empty {
 }
 
 .relationship-toolbar > select {
-    min-width: min(320px, 55%);
-    min-height: 32px;
-    padding: 5px 30px 5px 9px;
+    min-width: min(260px, 55%);
+    min-height: 28px;
+    padding: 3px 28px 3px 8px;
+    font-size: var(--text-body);
     border: 1px solid var(--control-border);
     border-radius: var(--radius-control);
     background: var(--control-background);
@@ -2420,8 +2421,8 @@ body.is-loading .canvas-footer .footer-count:empty {
     position: relative;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 12px 20px;
-    padding: 18px 20px;
+    gap: 6px 16px;
+    padding: 10px 14px;
     border: 1px solid var(--border);
     border-radius: var(--radius-panel);
     background: color-mix(in srgb, var(--accent) 4%, var(--surface));
@@ -2443,7 +2444,7 @@ body.is-loading .canvas-footer .footer-count:empty {
     grid-column: 1 / -1;
     align-items: center;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 8px;
 }
 
 .relationship-focus-heading > div {
@@ -2455,16 +2456,16 @@ body.is-loading .canvas-footer .footer-count:empty {
 }
 
 .relationship-focus-heading h2 {
-    margin: 1px 0 0;
-    font-size: var(--text-title);
+    margin: 0;
+    font-size: calc(var(--text-body) + 2px);
     line-height: 1.25;
     overflow-wrap: anywhere;
 }
 
 .relationship-focus-icon {
     display: grid;
-    width: 32px;
-    height: 32px;
+    width: 24px;
+    height: 24px;
     flex: none;
     place-items: center;
     border: 1px solid var(--border);
@@ -2476,9 +2477,9 @@ body.is-loading .canvas-footer .footer-count:empty {
     max-width: 72ch;
     margin: 0;
     align-self: center;
-    color: var(--text);
-    font-size: var(--text-body);
-    line-height: 1.5;
+    color: var(--muted);
+    font-size: var(--text-meta);
+    line-height: 1.45;
 }
 
 .relationship-focus-summary > .button {
@@ -2490,7 +2491,7 @@ body.is-loading .canvas-footer .footer-count:empty {
     display: grid;
     min-height: 0;
     flex: 1 1 auto;
-    grid-template-columns: minmax(300px, 0.8fr) minmax(0, 1.2fr);
+    grid-template-columns: minmax(260px, 0.9fr) minmax(0, 1.1fr);
     overflow: hidden;
     border: 1px solid var(--border);
     border-radius: var(--radius-panel);
@@ -2511,8 +2512,8 @@ body.is-loading .canvas-footer .footer-count:empty {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
-    padding: 16px;
+    gap: 10px;
+    padding: 10px 12px;
     border-bottom: 1px solid var(--border);
 }
 
@@ -2532,8 +2533,8 @@ body.is-loading .canvas-footer .footer-count:empty {
 
 .relationship-count {
     display: grid;
-    min-width: 24px;
-    height: 24px;
+    min-width: 20px;
+    height: 20px;
     flex: none;
     place-items: center;
     border: 1px solid var(--border);
@@ -2564,11 +2565,11 @@ body.is-loading .canvas-footer .footer-count:empty {
 .relationship-browser-row {
     display: grid;
     width: 100%;
-    min-height: 92px;
+    min-height: 52px;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: 7px 12px;
-    padding: 12px 14px;
+    gap: 4px 10px;
+    padding: 8px 12px;
     border: 0;
     background: transparent;
     color: var(--text);
@@ -2594,7 +2595,7 @@ body.is-loading .canvas-footer .footer-count:empty {
 
 .relationship-kind {
     width: fit-content;
-    padding: 2px 7px;
+    padding: 0 6px;
     border: 1px solid var(--border-strong);
     border-radius: 999px;
     color: var(--muted);
@@ -2611,14 +2612,14 @@ body.is-loading .canvas-footer .footer-count:empty {
     display: flex;
     min-width: 0;
     align-items: center;
-    gap: 9px;
+    gap: 8px;
 }
 
 .relationship-row-copy {
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 3px;
+    gap: 1px;
 }
 
 .relationship-row-copy strong {
@@ -2634,7 +2635,7 @@ body.is-loading .canvas-footer .footer-count:empty {
     line-height: 1.35;
     overflow: hidden;
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 1;
 }
 
 .relationship-row-state {
@@ -2649,8 +2650,8 @@ body.is-loading .canvas-footer .footer-count:empty {
     min-width: 0;
     flex-direction: column;
     align-items: flex-start;
-    gap: 18px;
-    padding: 28px;
+    gap: 12px;
+    padding: 14px 18px;
 }
 
 .relationship-inline-detail {
@@ -2671,15 +2672,16 @@ body.is-loading .canvas-footer .footer-count:empty {
 }
 
 .relationship-detail-heading h3 {
-    max-width: 36ch;
-    font-size: calc(var(--text-title) * 1.08);
+    max-width: 48ch;
+    font-size: calc(var(--text-body) + 2px);
 }
 
 .relationship-detail-copy {
     max-width: 66ch;
     margin: 0;
     color: var(--muted);
-    line-height: 1.55;
+    font-size: var(--text-meta);
+    line-height: 1.45;
 }
 
 .relationship-statement {
@@ -2687,8 +2689,8 @@ body.is-loading .canvas-footer .footer-count:empty {
     width: 100%;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
-    gap: 12px;
-    padding: 14px 0;
+    gap: 10px;
+    padding: 8px 0;
     border-top: 1px solid var(--border);
     border-bottom: 1px solid var(--border);
 }

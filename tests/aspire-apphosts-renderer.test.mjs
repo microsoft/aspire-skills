@@ -30,9 +30,16 @@ class TestElement {
         Object.assign(this, {
             id: "", className: "", name: "", value: "", type: "", title: "", htmlFor: "",
             hidden: false, disabled: false, checked: false, required: false, inert: false,
-            open: false, returnValue: "", formNoValidate: false, method: "",
+            open: false, returnValue: "", formNoValidate: false, method: "", selected: false,
             tabIndex: 0, scrollTop: 0, scrollLeft: 0,
         });
+        if (this.tagName === "SELECT") {
+            const options = () => this.children.filter((child) => child.tagName === "OPTION");
+            Object.defineProperty(this, "value", {
+                get: () => (options().find((option) => option.selected) ?? options()[0])?.value ?? "",
+                set: (value) => { for (const option of options()) option.selected = option.value === String(value); },
+            });
+        }
         this.classList = {
             contains: (name) => this.className.split(/\s+/).includes(name),
             add: (...names) => { this.className = [...new Set([...this.className.split(/\s+/).filter(Boolean), ...names])].join(" "); },

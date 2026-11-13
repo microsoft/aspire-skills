@@ -2196,7 +2196,6 @@ function renderResourceGraphPanel(graph, active) {
             element("label", { for: "relationship-focus-select", text: "Focused resource" }),
             element("select", {
                 id: "relationship-focus-select",
-                value: focus.resourceName,
                 on: {
                     change: (event) => focusRelationshipResource(event.currentTarget.value),
                 },
@@ -2205,6 +2204,7 @@ function renderResourceGraphPanel(graph, active) {
                 .map((node) => element("option", {
                     value: node.resourceName,
                     text: node.label,
+                    selected: node.resourceName === focus.resourceName,
                 }))),
             ...(graph.filtered ? [element("div", { class: "relationship-filter-summary" }, [
                 element("span", {
