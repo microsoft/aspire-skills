@@ -163,6 +163,7 @@ let graphDrawFrame = null;
 let retainedGraphEdgeFocusId = null;
 let renderedAppHostId = null;
 let graphRelationshipsExpanded = false;
+let relationshipFocusName = null;
 let eventStreamStatus = "connecting";
 let selectedResourceId = null;
 let inspectorReturnFocusId = null;
@@ -452,6 +453,7 @@ function resetModeScopedState() {
     appModelView = "resources";
     appModelViewStateByAppHost.clear();
     graphRelationshipsExpanded = false;
+    relationshipFocusName = null;
     filterText = "";
     els.searchInput.value = "";
     attentionOnly = false;
@@ -1004,6 +1006,7 @@ function selectResource(resource) {
         clearActiveCommand();
     }
     selectedResourceId = resource.id;
+    relationshipFocusName = resource.resourceName;
     inspectorReturnFocusId = resource.id;
     hideActionMenu();
     recordSelection(resource);
@@ -1527,7 +1530,7 @@ function handleAppModelTabKey(event, view) {
 function renderAppModelTabs(resourceCount, visibleCount) {
     const definitions = [
         { id: "resources", label: "Resources", icon: "layers", count: resourceCount },
-        { id: "graph", label: "Graph", icon: "steps" },
+        { id: "graph", label: "Relationships", icon: "steps" },
     ];
     return element("div", {
         class: "app-model-tabs",
@@ -1846,12 +1849,214 @@ function graphRelationshipSentence(edge, nodeByName) {
     return `${prefix}${meanings.join("; ")}.`;
 }
 
-function renderResourceGraphPanel(graph, active) {
-    if (active) {
-        activeGraphModel = graph;
-    }
+function relationshipNodeNeedsAttention(node) {
+    return node.tone === "error"
+        || node.tone === "danger"
+        || node.tone === "warning"
+        || node.lifecycleTone === "error"
+        || node.lifecycleTone === "danger"
+        || node.lifecycleTone === "warning"
+        || node.healthTone === "error"
+        || node.healthTone === "danger"
+        || node.healthTone === "warning";
+}
+
+function chooseRelationshipFocus(graph) {
     const nodeByName = new Map(graph.nodes.map((node) => [node.resourceName, node]));
-    if (graph.nodes.length === 0) {
+    if (relationshipFocusName && nodeByName.has(relationshipFocusName)) {
+        return nodeByName.get(relationshipFocusName);
+    }
+
+    const selectedResource = graph.nodes.find((node) => node.id === selectedResourceId);
+    if (selectedResource) {
+        relationshipFocusName = selectedResource.resourceName;
+        return selectedResource;
+    }
+
+    const blockedTargets = new Set(graph.edges
+        .filter((edge) => edge.types.includes("WaitFor"))
+        .map((edge) => edge.to));
+    const focus = graph.nodes.find((node) =>
+        blockedTargets.has(node.resourceName) && relationshipNodeNeedsAttention(node))
+        || graph.nodes.find((node) => blockedTargets.has(node.resourceName))
+        || graph.nodes.find(relationshipNodeNeedsAttention)
+        || graph.nodes[0];
+    relationshipFocusName = focus?.resourceName ?? null;
+    return focus;
+}
+
+function focusRelationshipResource(resourceName) {
+    relationshipFocusName = resourceName;
+    renderTree();
+    requestAnimationFrame(() => {
+        document.getElementById("relationship-focus-select")?.focus();
+    });
+}
+
+function relationshipList(items) {
+    const labels = items.map((item) => item.label);
+    if (labels.length <= 1) {
+        return labels[0] ?? "";
+    }
+    if (labels.length === 2) {
+        return `${labels[0]} and ${labels[1]}`;
+    }
+    return `${labels.slice(0, -1).join(", ")}, and ${labels.at(-1)}`;
+}
+
+function relationshipGroups(graph, focus, nodeByName) {
+    const groups = [
+        {
+            id: "blocked-by",
+            title: "Blocked by",
+            description: "Resources this resource waits for before it can proceed.",
+            entries: [],
+        },
+        {
+            id: "references",
+            title: "References",
+            description: "Resources whose values or endpoints this resource uses.",
+            entries: [],
+        },
+        {
+            id: "ownership",
+            title: "Ownership",
+            description: "Resources that contain this resource or belong to it.",
+            entries: [],
+        },
+        {
+            id: "affects",
+            title: "Affects",
+            description: "Resources that depend on this resource.",
+            entries: [],
+        },
+    ];
+    const groupById = new Map(groups.map((group) => [group.id, group]));
+
+    for (const edge of graph.edges) {
+        let groupId = null;
+        let relatedName = null;
+        if (edge.to === focus.resourceName && edge.types.includes("WaitFor")) {
+            groupId = "blocked-by";
+            relatedName = edge.from;
+        } else if (edge.to === focus.resourceName && edge.types.includes("Reference")) {
+            groupId = "references";
+            relatedName = edge.from;
+        } else if (edge.types.includes("Parent")
+            && (edge.from === focus.resourceName || edge.to === focus.resourceName)) {
+            groupId = "ownership";
+            relatedName = edge.from === focus.resourceName ? edge.to : edge.from;
+        } else if (edge.from === focus.resourceName
+            && (edge.types.includes("WaitFor") || edge.types.includes("Reference"))) {
+            groupId = "affects";
+            relatedName = edge.to;
+        }
+        const related = nodeByName.get(relatedName);
+        if (!groupId || !related) {
+            continue;
+        }
+        groupById.get(groupId).entries.push({
+            edge,
+            related,
+            sentence: graphRelationshipSentence(edge, nodeByName),
+        });
+    }
+
+    for (const group of groups) {
+        group.entries.sort((left, right) =>
+            Number(relationshipNodeNeedsAttention(right.related))
+                - Number(relationshipNodeNeedsAttention(left.related))
+            || left.related.label.localeCompare(right.related.label));
+    }
+    return groups;
+}
+
+function relationshipDiagnosis(focus, groups) {
+    const blockers = groups.find((group) => group.id === "blocked-by")?.entries ?? [];
+    if (blockers.length === 0) {
+        return `${focus.label} has no declared wait dependencies.`;
+    }
+    const related = blockers.map(({ related }) => related);
+    const attention = related.filter(relationshipNodeNeedsAttention);
+    const firstSentence = `${focus.label} waits for ${relationshipList(related)}.`;
+    if (attention.length === 0) {
+        return `${firstSentence} No blocker currently needs attention.`;
+    }
+    return `${firstSentence} ${relationshipList(attention)} ${attention.length === 1 ? "needs" : "need"} attention.`;
+}
+
+function renderRelationshipState(node) {
+    const status = node.statusLabel || node.stateLabel || node.state || "Unknown";
+    const health = node.healthLabel || node.health || null;
+    return element("span", { class: "relationship-row-state" }, [
+        element("span", {
+            class: `status-badge tone-${node.lifecycleTone ?? node.tone ?? "inactive"}`,
+            text: status,
+        }),
+        ...(health && health !== status ? [element("span", {
+            class: `status-badge tone-${node.healthTone ?? node.tone ?? "inactive"}`,
+            text: health,
+        })] : []),
+    ]);
+}
+
+function renderRelationshipEntry(entry) {
+    const { edge, related, sentence } = entry;
+    return element("li", { class: "relationship-row" }, [
+        element("button", {
+            class: "relationship-row-main",
+            type: "button",
+            dataset: { relationshipFocus: related.resourceName },
+            "aria-label": `Focus ${related.label}. ${sentence}`,
+            on: { click: () => focusRelationshipResource(related.resourceName) },
+        }, [
+            element("span", { class: "relationship-row-identity" }, [
+                rowIcon(related),
+                element("span", { class: "relationship-row-copy" }, [
+                    element("strong", { text: related.label }),
+                    element("span", { text: sentence }),
+                ]),
+            ]),
+            renderRelationshipState(related),
+            svgIcon("chevron", 14),
+        ]),
+        ...(edge.context ? [element("button", {
+            class: "button button-secondary button-small relationship-chat-action",
+            type: "button",
+            text: "Add to chat",
+            "aria-label": `Add ${related.label} relationship to chat`,
+            on: { click: () => void executeNodeAction("ask", edge.context) },
+        })] : []),
+    ]);
+}
+
+function renderRelationshipGroup(group) {
+    return element("section", {
+        class: `relationship-group${group.entries.length ? "" : " is-empty"}`,
+        "aria-labelledby": `relationship-group-${group.id}`,
+    }, [
+        element("header", { class: "relationship-group-heading" }, [
+            element("div", {}, [
+                element("h3", { id: `relationship-group-${group.id}`, text: group.title }),
+                element("p", { text: group.description }),
+            ]),
+            element("span", {
+                class: "relationship-count",
+                text: String(group.entries.length),
+                "aria-label": `${group.entries.length} ${group.entries.length === 1 ? "relationship" : "relationships"}`,
+            }),
+        ]),
+        group.entries.length
+            ? element("ul", { class: "relationship-list" }, group.entries.map(renderRelationshipEntry))
+            : element("p", { class: "relationship-group-empty", text: "None" }),
+    ]);
+}
+
+function renderResourceGraphPanel(graph, active) {
+    activeGraphModel = null;
+    const nodeByName = new Map(graph.nodes.map((node) => [node.resourceName, node]));
+    const focus = chooseRelationshipFocus(graph);
+    if (!focus) {
         return element("div", {
             class: "app-model-panel",
             id: "graph-view-panel",
@@ -1861,113 +2066,72 @@ function renderResourceGraphPanel(graph, active) {
         }, [
             element("div", { class: "resource-board-empty" }, [
                 svgIcon("steps", 18),
-                element("strong", { text: graph.filtered ? "No resources visible in this graph" : "No resource graph yet" }),
+                element("strong", {
+                    text: graph.filtered ? "No resources match these filters" : "No relationships yet",
+                }),
                 element("span", {
                     text: graph.filtered
-                        ? `0 of ${graph.sourceNodeCount} resources and 0 of ${graph.sourceEdgeCount} relationships visible.`
-                        : "Start this AppHost to load its evaluated relationships.",
+                        ? "Clear the filters to choose a resource and inspect its relationships."
+                        : "Start this AppHost to inspect evaluated resource relationships.",
                 }),
                 ...(graph.filtered ? [clearFilterButton()] : []),
             ]),
         ]);
     }
 
-    const columns = graphLayoutColumns(graph);
-    const selectedEdge = graph.edges.find((edge) => edge.context?.id === selectedNodeId);
-    const routeLanes = graphLongEdgeLanes(graph.edges, nodeByName);
-    const routeLaneCount = routeLanes.size === 0 ? 0 : Math.max(...routeLanes.values()) + 1;
-    const edgeLayer = svgElement("svg", {
-        class: "graph-edge-layer",
-        role: "group",
-        "aria-label": "Resource relationships. Select a line to inspect it.",
-    });
-    const canvas = element("div", { class: "resource-graph-canvas" }, [
-        edgeLayer,
-        element("div", {
-            class: "graph-columns",
-            role: "list",
-            "aria-label": "Resources by dependency layer",
-        }, columns.map((nodes, layer) => renderGraphColumn(nodes, layer, selectedEdge))),
-    ]);
-    canvas.style.setProperty("--graph-columns", String(columns.length));
-    canvas.style.setProperty(
-        "--graph-top-gutter",
-        `${routeLaneCount === 0 ? 16 : 24 + routeLaneCount * GRAPH_ROUTE_LANE_GAP}px`,
-    );
-    canvas.style.setProperty(
-        "--graph-min-width",
-        `${columns.length * GRAPH_NODE_MIN_WIDTH
-            + Math.max(0, columns.length - 1) * GRAPH_COLUMN_GAP
-            + GRAPH_CANVAS_PADDING}px`,
-    );
-
+    const groups = relationshipGroups(graph, focus, nodeByName);
     return element("div", {
-        class: "app-model-panel",
+        class: "app-model-panel relationship-workbench",
         id: "graph-view-panel",
         role: "tabpanel",
         "aria-labelledby": "graph-view-tab",
         hidden: !active,
     }, [
-        element("header", { class: "graph-heading" }, [
-            element("p", {
-                text: graph.edges.length
-                    ? "Arrows point from an owner, referenced resource, or dependency to its child, referencing resource, or waiting resource. Select a line to trace one relationship."
-                    : graph.sourceEdgeCount > 0
-                        ? "No relationships are visible for these resources."
-                        : "This AppHost has no declared resource relationships.",
-            }),
-            renderGraphLegend(graph),
+        element("div", { class: "relationship-toolbar" }, [
+            element("label", { for: "relationship-focus-select", text: "Focused resource" }),
+            element("select", {
+                id: "relationship-focus-select",
+                value: focus.resourceName,
+                on: {
+                    change: (event) => focusRelationshipResource(event.currentTarget.value),
+                },
+            }, [...graph.nodes]
+                .sort((left, right) => left.label.localeCompare(right.label))
+                .map((node) => element("option", {
+                    value: node.resourceName,
+                    text: node.label,
+                }))),
+            ...(graph.filtered ? [element("div", { class: "relationship-filter-summary" }, [
+                element("span", {
+                    text: `${graph.nodes.length} of ${graph.sourceNodeCount} resources visible`,
+                }),
+                clearFilterButton(),
+            ])] : []),
         ]),
-        ...(graph.filtered ? [element("div", { class: "graph-filter-summary" }, [
-            element("p", {
-                text: `${graph.nodes.length} of ${graph.sourceNodeCount} resources and ${graph.edges.length} of ${graph.sourceEdgeCount} relationships visible.`,
+        element("section", {
+            class: `relationship-focus-summary tone-${focus.tone ?? "inactive"}`,
+            "aria-labelledby": "relationship-focus-title",
+        }, [
+            element("div", { class: "relationship-focus-heading" }, [
+                element("span", { class: "relationship-focus-icon" }, [rowIcon(focus)]),
+                element("div", {}, [
+                    element("p", { class: "eyebrow", text: "Relationship diagnosis" }),
+                    element("h2", { id: "relationship-focus-title", text: focus.label }),
+                ]),
+                renderRelationshipState(focus),
+            ]),
+            element("p", { class: "relationship-diagnosis", text: relationshipDiagnosis(focus, groups) }),
+            element("button", {
+                class: "button button-secondary button-small",
+                type: "button",
+                text: "Inspect resource",
+                on: { click: () => showResourceInRoster(focus.resourceName) },
             }),
-            clearFilterButton(),
-        ])] : []),
+        ]),
         element("div", {
-            class: "resource-graph-viewport",
-            role: "region",
-            tabIndex: 0,
-            "aria-label": "Scrollable AppHost resource graph",
-        }, [canvas]),
-        ...(graph.edges.length ? [renderGraphRelationships(graph, nodeByName)] : []),
-    ]);
-}
-
-function renderGraphRelationships(graph, nodeByName) {
-    const selected = graph.edges.find((edge) => edge.context?.id === selectedNodeId)?.context;
-    return element("details", {
-        class: "graph-relationships",
-        open: graphRelationshipsExpanded,
-        on: { toggle: (event) => { graphRelationshipsExpanded = event.currentTarget.open; } },
-    }, [
-        element("summary", { text: `Relationships (${graph.edges.length}) · Select one to inspect` }),
-        element("ul", { "aria-label": "Resource relationships" }, graph.edges.map((edge) => {
-            const sentence = graphRelationshipSentence(edge, nodeByName);
-            return element("li", {}, [
-                edge.context
-                    ? element("button", {
-                        class: `relationship-select${selectedNodeId === edge.context.id ? " is-selected" : ""}`,
-                        type: "button",
-                        "aria-pressed": selectedNodeId === edge.context.id,
-                        dataset: { nodeId: edge.context.id },
-                        text: sentence,
-                        on: {
-                            click: () => {
-                                graphRelationshipsExpanded = true;
-                                setSelected(edge.context);
-                            },
-                        },
-                    })
-                    : element("span", { text: sentence }),
-            ]);
-        })),
-        ...(selected ? [element("button", {
-            class: "button button-secondary button-small",
-            type: "button",
-            text: "Add relationship to chat",
-            on: { click: () => void executeNodeAction("ask", selected) },
-        })] : []),
+            class: "relationship-grid",
+            "aria-label": `Relationships for ${focus.label}`,
+        }, groups.map(renderRelationshipGroup)),
     ]);
 }
 
@@ -2759,6 +2923,7 @@ function renderTree() {
     if (renderedAppHostId && renderedAppHostId !== selectedHost.id) {
         selectedResourceId = null;
         inspectorReturnFocusId = null;
+        relationshipFocusName = null;
     }
     activeAppHostId = selectedHost.id;
     const currentSelection = findNode(selectedNodeId);

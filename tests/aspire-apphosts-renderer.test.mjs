@@ -1223,57 +1223,47 @@ test("the Filters panel anchors under its trigger and stays inside the control r
     assert.equal(panel.style.left, "360px");
 });
 
-test("filtered graph counts are honest and one combined relationship can be selected and added to chat", async () => {
+test("relationship workbench diagnoses blockers, preserves chat context, and refocuses related resources", async () => {
     const renderer = await boot();
     renderer.document.getElementById("graph-view-tab").click();
-    const canvas = renderer.document.querySelector(".resource-graph-canvas");
-    assert.equal(canvas.style["--graph-min-width"], "400px");
-    const graphNode = renderer.context.renderGraphNode({
-        label: "postgres",
-        resourceName: "postgres",
-        resourceType: "Container",
-        statusLabel: "RuntimeUnhealthy",
-        healthLabel: "0/1 healthy",
-    });
-    assert.equal(graphNode.querySelector(".graph-node-header .resource-status"), null);
-    assert.equal(graphNode.querySelector(".graph-node-meta .resource-status").title, "RuntimeUnhealthy");
-    assert.equal(graphNode.querySelector(".graph-node-health span").title, "0/1 healthy");
-    const list = renderer.document.querySelector(".graph-relationships");
-    assert.match(list.querySelector("summary").textContent, /Relationships \(1\)/);
-    assert.equal(list.querySelectorAll("li").length, 1);
-    const relationship = list.querySelector(".relationship-select");
-    assert.equal(
-        relationship.textContent,
-        "From Database to Public API: Public API references and waits for Database.",
-    );
+    assert.equal(renderer.document.getElementById("graph-view-tab").textContent, "Relationships");
+    const focus = renderer.document.getElementById("relationship-focus-select");
+    assert.equal(focus.value, "api");
+    assert.equal(renderer.document.getElementById("relationship-focus-title").textContent, "Public API");
     assert.match(
-        renderer.document.querySelector(".graph-heading").textContent,
-        /Arrows point from an owner, referenced resource, or dependency to its child, referencing resource, or waiting resource/,
+        renderer.document.querySelector(".relationship-diagnosis").textContent,
+        /Public API waits for Database\. No blocker currently needs attention\./,
     );
-    assert.match(
-        renderer.document.querySelector(".graph-legend").textContent,
-        /Reference \+ Wait for \(both relationships\)/,
-    );
-    relationship.click();
-    assert.equal(renderer.evaluate("selectedNodeId"), "host-a:relationship:database-api");
-    assert.equal(renderer.context.findNode("host-a:relationship:database-api").kind, "relationship");
-    assert.equal(renderer.document.querySelector(".relationship-select").getAttribute("aria-pressed"), "true");
-    assert.equal(renderer.document.querySelectorAll(".graph-node.is-connected").length, 2);
-    button(renderer.document.body, "Add relationship to chat").click();
+    const groups = renderer.document.querySelectorAll(".relationship-group");
+    assert.equal(groups.length, 4);
+    const blocked = groups.find((group) => /Blocked by/.test(group.textContent));
+    assert.match(blocked.textContent, /Database/);
+    assert.match(blocked.textContent, /Public API references and waits for Database/);
+    assert.equal(blocked.querySelectorAll(".relationship-row").length, 1);
+    button(blocked, "Add to chat").click();
     assert.deepEqual(renderer.request("/api/copilot-context").body, { nodeId: "host-a:relationship:database-api" });
+    blocked.querySelector(".relationship-row-main").click();
+    renderer.flushFrames();
+    assert.equal(renderer.document.getElementById("relationship-focus-select").value, "database");
+    assert.equal(renderer.document.activeElement, renderer.document.getElementById("relationship-focus-select"));
+    assert.equal(renderer.document.getElementById("relationship-focus-title").textContent, "Database");
+    assert.match(renderer.document.querySelector(".relationship-diagnosis").textContent, /no declared wait dependencies/i);
+
+    focusRelationship("api");
+    assert.equal(renderer.document.getElementById("relationship-focus-title").textContent, "Public API");
     const search = renderer.document.getElementById("search-input");
     search.value = "Public API";
     search.dispatch("input");
     const panel = renderer.document.getElementById("graph-view-panel");
-    assert.match(panel.textContent, /1 of 2 resources and 0 of 1 relationships visible/);
-    assert.doesNotMatch(panel.textContent, /no declared resource relationships/);
+    assert.match(panel.textContent, /1 of 2 resources visible/);
+    assert.match(panel.textContent, /Public API has no declared wait dependencies/);
     button(panel, "Clear filters").click();
     assert.equal(search.value, "");
-    assert.equal(renderer.document.querySelectorAll(".relationship-select").length, 1);
+    assert.equal(renderer.document.querySelectorAll(".relationship-row").length, 1);
     renderer.evaluate('filterText = "commands"');
     const emptyGraph = renderer.context.visibleResourceGraph(snapshot().roots[0], []);
     const emptyPanel = renderer.context.renderResourceGraphPanel(emptyGraph, true);
-    assert.match(emptyPanel.textContent, /0 of 2 resources and 0 of 1 relationships visible/);
+    assert.match(emptyPanel.textContent, /No resources match these filters/);
     assert.ok(button(emptyPanel, "Clear filters"));
 
     const graphWithoutRelationships = renderer.context.renderResourceGraphPanel({
@@ -1283,8 +1273,27 @@ test("filtered graph counts are honest and one combined relationship can be sele
         sourceEdgeCount: 0,
         filtered: false,
     }, true);
-    assert.match(graphWithoutRelationships.textContent, /no declared resource relationships/i);
-    assert.equal(graphWithoutRelationships.querySelector(".graph-relationships"), null);
+    assert.match(graphWithoutRelationships.textContent, /Solo has no declared wait dependencies/i);
+    assert.equal(graphWithoutRelationships.querySelectorAll(".relationship-group-empty").length, 4);
+
+    function focusRelationship(resourceName) {
+        const select = renderer.document.getElementById("relationship-focus-select");
+        select.value = resourceName;
+        select.dispatch("change");
+    }
+});
+
+test("relationship workbench follows the resource selected in the roster", async () => {
+    const renderer = await boot();
+    renderer.document.querySelector(
+        '[data-resource-id="host-a:resource:database"] .resource-row-main',
+    ).click();
+    renderer.document.getElementById("graph-view-tab").click();
+    assert.equal(renderer.document.getElementById("relationship-focus-select").value, "database");
+    assert.equal(renderer.document.getElementById("relationship-focus-title").textContent, "Database");
+    button(renderer.document.getElementById("graph-view-panel"), "Inspect resource").click();
+    assert.equal(renderer.evaluate("appModelView"), "resources");
+    assert.equal(renderer.evaluate("selectedResourceId"), "host-a:resource:database");
 });
 
 test("graph fan-in ports are distinct, bounded, and stable regardless of edge enumeration", async () => {
@@ -1461,71 +1470,73 @@ test("graph arrows approach the target boundary in the correct direction for eve
     assert.notEqual(reciprocalLeft, reciprocalRight, "reciprocal edges route on opposite sides");
 });
 
-test("drawn fan-in connectors retain combined semantics and use separated target ports", async () => {
+test("relationship workbench prioritizes an unhealthy blocked resource and groups ownership and impact", async () => {
     const renderer = await boot();
     const state = snapshot(2);
     const graph = state.roots[0].graph;
-    const cache = { ...graph.nodes[0], id: "host-a:resource:cache", resourceName: "cache", label: "Cache" };
-    graph.nodes.push(cache);
-    state.roots[0].children[0].children.push(cache);
-    graph.edges.push({
-        id: "cache-api",
-        from: "cache",
-        to: "api",
-        types: ["Reference", "WaitFor"],
+    const node = (resourceName, label, tone = "healthy") => ({
+        id: `host-a:resource:${resourceName}`,
+        kind: "resource",
+        resourceName,
+        label,
+        appHostId: "host-a",
+        tone,
+        statusLabel: tone === "healthy" ? "Running" : "Needs attention",
+        children: [],
+    });
+    const cache = node("cache", "Cache", "warning");
+    const vacations = node("vacations", "Vacations", "error");
+    const server = node("server", "Server", "warning");
+    const frontend = node("frontend", "Frontend");
+    const worker = node("worker", "Worker");
+    const child = node("child", "Worker child");
+    graph.nodes = [cache, vacations, server, frontend, worker, child];
+    state.roots[0].children[0].children = graph.nodes;
+    const edge = (id, from, to, types) => ({
+        id,
+        from,
+        to,
+        types,
         context: {
-            id: "host-a:relationship:cache-api",
+            id: `host-a:relationship:${id}`,
             kind: "relationship",
-            label: "Public API uses Cache",
+            label: id,
             appHostId: "host-a",
-            relationship: { from: "cache", to: "api", types: ["Reference", "WaitFor"] },
+            relationship: { from, to, types },
         },
     });
+    graph.edges = [
+        edge("cache-server", "cache", "server", ["Reference", "WaitFor"]),
+        edge("vacations-server", "vacations", "server", ["WaitFor"]),
+        edge("server-frontend", "server", "frontend", ["Reference"]),
+        edge("worker-child", "worker", "child", ["Parent"]),
+    ];
     await renderer.push({ type: "state", state });
     renderer.document.getElementById("graph-view-tab").click();
-    const canvas = renderer.document.querySelector(".resource-graph-canvas");
-    const makeBounds = (left, top) => ({ left, top, right: left + 220, bottom: top + 90, width: 220, height: 90 });
-    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 600, height: 300 });
-    canvas.querySelector('[data-graph-node-id="database"]').getBoundingClientRect = () => makeBounds(20, 20);
-    canvas.querySelector('[data-graph-node-id="cache"]').getBoundingClientRect = () => makeBounds(20, 130);
-    canvas.querySelector('[data-graph-node-id="api"]').getBoundingClientRect = () => makeBounds(296, 20);
-    renderer.flushFrames();
-    const paths = canvas.querySelectorAll("path.graph-edge");
-    const groups = canvas.querySelectorAll(".graph-edge-group");
-    assert.equal(paths.length, 4);
-    assert.equal(groups.length, 2);
-    assert.ok(paths.every((path) => path.classList.contains("is-combined-reference-waitfor")));
-    assert.equal(paths.filter((path) => path.classList.contains("is-reference")).length, 2);
-    assert.equal(paths.filter((path) => path.classList.contains("is-wait-for")).length, 2);
-    assert.equal(
-        paths.filter((path) =>
-            path.getAttribute("marker-end") === "url(#graph-arrow-combined-reference-waitfor)").length,
-        2,
+    assert.equal(renderer.document.getElementById("relationship-focus-select").value, "server");
+    assert.match(
+        renderer.document.querySelector(".relationship-diagnosis").textContent,
+        /Server waits for Cache and Vacations\. Cache and Vacations need attention\./,
     );
-    assert.notEqual(
-        groups[0].querySelector(".graph-edge").getAttribute("d").split(" L ").at(-1),
-        groups[1].querySelector(".graph-edge").getAttribute("d").split(" L ").at(-1),
+    const groups = renderer.document.querySelectorAll(".relationship-group");
+    const blocked = groups.find((group) => /Blocked by/.test(group.textContent));
+    const affects = groups.find((group) => /Affects/.test(group.textContent));
+    assert.equal(blocked.querySelectorAll(".relationship-row").length, 2);
+    assert.match(affects.textContent, /Frontend/);
+
+    const focus = renderer.document.getElementById("relationship-focus-select");
+    focus.value = "worker";
+    focus.dispatch("change");
+    const ownership = renderer.document.querySelectorAll(".relationship-group")
+        .find((group) => /Ownership/.test(group.textContent));
+    assert.match(ownership.textContent, /Worker child/);
+    ownership.querySelector(".relationship-row-main").click();
+    assert.equal(renderer.document.getElementById("relationship-focus-select").value, "child");
+    assert.match(
+        renderer.document.querySelectorAll(".relationship-group")
+            .find((group) => /Ownership/.test(group.textContent)).textContent,
+        /Worker/,
     );
-    assert.ok(groups.every((group) => group.getAttribute("role") === "button"));
-    assert.ok(groups.every((group) =>
-        /^From .+ to .+: .+ references and waits for .+\.$/.test(group.getAttribute("aria-label"))));
-    groups[0].dispatch("keydown", { key: "Enter", preventDefault() {} });
-    assert.match(renderer.evaluate("selectedNodeId"), /^host-a:relationship:/);
-    renderer.flushFrames();
-    let selectedGroup = renderer.document.querySelector(".graph-edge-group.is-selected");
-    assert.equal(selectedGroup.getAttribute("aria-pressed"), "true");
-    assert.equal(renderer.document.activeElement, selectedGroup, "focus follows the replacement edge after rerender");
-    assert.equal(renderer.document.querySelector(".graph-relationships").open, false);
-    const otherGroup = renderer.document.querySelector(".graph-edge-group:not(.is-selected)");
-    let prevented = false;
-    otherGroup.dispatch("keydown", { key: " ", preventDefault() { prevented = true; } });
-    renderer.flushFrames();
-    selectedGroup = renderer.document.querySelector(".graph-edge-group.is-selected");
-    assert.equal(prevented, true);
-    assert.equal(renderer.document.activeElement, selectedGroup);
-    assert.equal(selectedGroup.getAttribute("aria-pressed"), "true");
-    assert.ok(selectedGroup.querySelector(".graph-edge-focus"));
-    assert.ok(selectedGroup.querySelector(".graph-edge-selection"));
 });
 
 test("narrow More reuses confirmations and exposes disabled operations without executing them", async () => {
