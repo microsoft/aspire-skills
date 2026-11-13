@@ -3,10 +3,11 @@
 // Canvas-native Aspire AppHost workbench for GitHub Copilot.
 
 import { createServer } from "node:http";
-import { randomBytes, timingSafeEqual } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
+import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { mkdir, readFile, readdir, rename, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { dirname, extname, isAbsolute, normalize, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
 import { joinSession, createCanvas, CanvasError } from "@github/copilot-sdk/extension";
 import { openSystemBrowser } from "./lib/browser.mjs";
 import {
@@ -18,6 +19,7 @@ import {
     appHostOperationKey,
     assertLocalAppHostPath,
     buildDashboardViewUrl,
+    createDetachedRunLogTail,
     buildGlobalTree,
     buildCommandArgumentTokens,
     buildResourceCommandArgs,
@@ -33,11 +35,13 @@ import {
     mapWithConcurrency,
     normalizeLsPayload,
     normalizePsPayload,
+    optionalFlagIsUnsupported,
     parseLegacyPipelineSteps,
     projectDescribePayload,
     redactAbsolutePaths,
     redactKnownPaths,
     redactText,
+    relativizeWorkspacePaths,
     resolveRequestedAppHostPath,
     runWithOptionalFlagFallback,
     sanitizeCommandArgumentInputs,
@@ -49,7 +53,16 @@ const CANVAS_ID = "aspire-apphosts";
 const DEFAULT_INSTANCE = "aspire-apphosts-main";
 const UI_DIR = new URL("./ui/", import.meta.url);
 const UI_ROOT = fileURLToPath(UI_DIR);
-const POLL_INTERVAL_MS = 3_000;
+// Discovery polls are cheap safety nets; running AppHosts push changes through describe streams.
+const POLL_INTERVAL_MS = 30_000;
+const VIEWER_IDLE_GRACE_MS = 10_000;
+const STREAM_PUBLISH_DEBOUNCE_MS = 200;
+const STREAM_RESTART_DELAY_MS = 1_000;
+const STREAM_MAX_RESTART_DELAY_MS = 60_000;
+const STREAM_MAX_FAILURES = 3;
+const BACKGROUND_LOG_DIR = join(tmpdir(), "aspire-apphosts-logs");
+const MAX_KEPT_BACKGROUND_LOGS = 10;
+const FAILED_BACKGROUND_LOG_PREFIX = "failed-";
 const CLI_TIMEOUT_MS = 30_000;
 const OPERATION_TIMEOUT_MS = 30 * 60_000;
 const GLOBAL_DESCRIBE_CONCURRENCY = 4;
@@ -68,6 +81,8 @@ const instances = new Map();
 const pendingOpens = new Map();
 const cli = createAspireCliRunner();
 const appHostOperations = new AppHostOperationCoordinator();
+const activeStreams = new Set();
+let backgroundLogFileSupported = true;
 let sessionRef;
 let sessionWorkingDirectory;
 
@@ -213,7 +228,46 @@ function addSseClient(entry, req, res) {
     res.write(": connected\n\n");
     entry.clients.add(res);
     res.write(`data: ${JSON.stringify({ type: "state", state: publicState(entry) })}\n\n`);
-    req.once("close", () => entry.clients.delete(res));
+    res.write(`data: ${JSON.stringify(commandLogSnapshot(entry))}\n\n`);
+    resumeBackgroundWork(entry);
+    req.once("close", () => {
+        entry.clients.delete(res);
+        scheduleIdlePause(entry);
+    });
+}
+
+// Background polling and describe streams only run while a canvas view is connected.
+function startPolling(entry) {
+    if (entry.timer || entry.closed) return;
+    entry.timer = setInterval(() => void requestRefresh(entry), POLL_INTERVAL_MS);
+    entry.timer.unref?.();
+}
+
+function scheduleIdlePause(entry) {
+    if (entry.closed || entry.paused || entry.pauseTimer || entry.clients.size > 0) return;
+    entry.pauseTimer = setTimeout(() => {
+        entry.pauseTimer = null;
+        if (entry.closed || entry.clients.size > 0) return;
+        entry.paused = true;
+        if (entry.timer) {
+            clearInterval(entry.timer);
+            entry.timer = null;
+        }
+        stopDescribeStreams(entry);
+        log(`Aspire AppHosts canvas paused background work (instance '${entry.instanceId}').`);
+    }, VIEWER_IDLE_GRACE_MS);
+    entry.pauseTimer.unref?.();
+}
+
+function resumeBackgroundWork(entry) {
+    if (entry.pauseTimer) {
+        clearTimeout(entry.pauseTimer);
+        entry.pauseTimer = null;
+    }
+    if (!entry.paused || entry.closed) return;
+    entry.paused = false;
+    startPolling(entry);
+    void requestRefresh(entry);
 }
 
 function broadcast(entry, payload) {
@@ -225,6 +279,149 @@ function broadcast(entry, payload) {
             entry.clients.delete(response);
         }
     }
+}
+
+const COMMAND_LOG_LIMITS = { user: 40, background: 20 };
+const COMMAND_OUTPUT_TAIL = { user: 64 * 1024, background: 16 * 1024 };
+const COMMAND_OUTPUT_FLUSH_MS = 120;
+const COMMAND_LINE_HOLD_MAX = 8 * 1024;
+
+function commandLogKind(item) {
+    return item.source === "background" ? "background" : "user";
+}
+
+function publicCommandLogItem(item, includeOutput) {
+    return {
+        id: item.id,
+        source: item.source,
+        label: item.label,
+        appHostId: item.appHostId,
+        appHostName: item.appHostName,
+        commandLine: item.commandLine,
+        status: item.status,
+        exitCode: item.exitCode,
+        error: item.error,
+        startedAt: item.startedAt,
+        endedAt: item.endedAt,
+        truncated: item.truncated,
+        ...(includeOutput ? { output: item.output } : {}),
+    };
+}
+
+function commandLogSnapshot(entry) {
+    return {
+        type: "command-log-snapshot",
+        commands: entry.commandLog.map((item) => publicCommandLogItem(item, true)),
+    };
+}
+
+function trimCommandLog(entry, kind) {
+    const matching = entry.commandLog.filter((item) => commandLogKind(item) === kind);
+    let excess = matching.length - COMMAND_LOG_LIMITS[kind];
+    for (const item of matching) {
+        if (excess <= 0) break;
+        if (item.status === "running") continue;
+        entry.commandLog.splice(entry.commandLog.indexOf(item), 1);
+        excess--;
+    }
+}
+
+function beginCommandLog(entry, args, meta, sensitiveValues = []) {
+    const record = meta.record;
+    const item = {
+        id: `cmd-${++entry.commandSequence}`,
+        source: meta.source ?? "user",
+        label: meta.label,
+        appHostId: record?.id ?? null,
+        appHostName: record?.displayName ?? null,
+        commandLine: publicCommandText(entry, record, `aspire ${args.join(" ")}`, 2000, sensitiveValues),
+        status: "running",
+        exitCode: null,
+        error: null,
+        startedAt: new Date().toISOString(),
+        endedAt: null,
+        truncated: false,
+        output: "",
+        record,
+        sensitiveValues,
+        heldLine: "",
+        unsent: "",
+        flushTimer: null,
+    };
+    entry.commandLog.push(item);
+    trimCommandLog(entry, commandLogKind(item));
+    broadcast(entry, { type: "command-log", command: publicCommandLogItem(item, false) });
+    return item;
+}
+
+function appendCommandLogText(entry, item, text) {
+    if (!text) return;
+    const tail = COMMAND_OUTPUT_TAIL[commandLogKind(item)];
+    item.output += text;
+    if (item.output.length > tail) {
+        item.output = item.output.slice(item.output.length - tail);
+        item.truncated = true;
+    }
+    item.unsent += text;
+    if (!item.flushTimer) {
+        item.flushTimer = setTimeout(() => flushCommandLogOutput(entry, item), COMMAND_OUTPUT_FLUSH_MS);
+        item.flushTimer.unref?.();
+    }
+}
+
+function flushCommandLogOutput(entry, item) {
+    if (item.flushTimer) {
+        clearTimeout(item.flushTimer);
+        item.flushTimer = null;
+    }
+    if (!item.unsent) return;
+    const text = item.unsent;
+    item.unsent = "";
+    broadcast(entry, { type: "command-output", id: item.id, text });
+}
+
+function receiveCommandOutput(entry, item, text) {
+    // Path redaction is line-oriented, so only complete lines are published while a
+    // command runs. A path split across process chunks is therefore never exposed.
+    const combined = item.heldLine + text;
+    const lastBreak = combined.lastIndexOf("\n");
+    let ready = lastBreak >= 0 ? combined.slice(0, lastBreak + 1) : "";
+    item.heldLine = lastBreak >= 0 ? combined.slice(lastBreak + 1) : combined;
+    if (item.heldLine.length > COMMAND_LINE_HOLD_MAX) {
+        ready += item.heldLine;
+        item.heldLine = "";
+    }
+    if (ready) {
+        appendCommandLogText(entry, item, publicCommandText(entry, item.record, ready, Infinity, item.sensitiveValues));
+    }
+}
+
+function finishCommandLog(entry, item, result) {
+    if (item.heldLine) {
+        appendCommandLogText(entry, item, publicCommandText(entry, item.record, item.heldLine, Infinity, item.sensitiveValues));
+        item.heldLine = "";
+    }
+    flushCommandLogOutput(entry, item);
+    item.status = result?.ok ? "succeeded" : "failed";
+    item.exitCode = Number.isInteger(result?.code) ? result.code : null;
+    item.error = result?.ok ? null : publicCommandText(
+        entry,
+        item.record,
+        String(result?.error ?? "The Aspire CLI command failed.").split(/\r?\n/).find((line) => line.trim()) ?? "",
+        400,
+        item.sensitiveValues,
+    );
+    item.endedAt = new Date().toISOString();
+    item.record = undefined;
+    item.sensitiveValues = undefined;
+    broadcast(entry, { type: "command-log", command: publicCommandLogItem(item, false) });
+    trimCommandLog(entry, commandLogKind(item));
+}
+
+function clearCommandLog(entry) {
+    entry.commandLog = entry.commandLog.filter((item) => item.status === "running");
+    broadcast(entry, commandLogSnapshot(entry));
+    return { ok: true, status: 200 };
 }
 
 function initialState(viewMode, includeHidden) {
@@ -291,11 +488,93 @@ function isLsUnsupported(result) {
     return /unrecognized command or argument ['"]?ls|command ['"]?ls['"]?.+(?:unknown|unrecognized)/i.test(output);
 }
 
-async function runPreparedWithCompatibility(args, options = {}) {
-    let result = await cli.run(args, options);
-    if (!result.ok && args.includes("--nologo") && isNoLogoUnsupported(result)) {
-        result = await cli.run(args.filter((argument) => argument !== "--nologo"), options);
+// Background polls and streams write CLI diagnostics to a temp file instead of ~/.aspire/logs.
+// Successful runs delete it; failures keep the newest few for troubleshooting.
+async function createBackgroundLogFile() {
+    if (!backgroundLogFileSupported) return null;
+    try {
+        await mkdir(BACKGROUND_LOG_DIR, { recursive: true });
+        return join(BACKGROUND_LOG_DIR, `${randomUUID()}.log`);
+    } catch {
+        return null;
     }
+}
+
+function withLogFile(args, logFile) {
+    return logFile ? [...args, "--log-file", logFile] : args;
+}
+
+async function discardBackgroundLogFile(logFile) {
+    if (!logFile) return;
+    await rm(logFile, { force: true }).catch(() => {});
+}
+
+async function keepBackgroundLogFile(logFile) {
+    if (!logFile) return;
+    try {
+        // Only renamed failure logs are pruned, so active logs from other runs stay intact.
+        await rename(logFile, join(BACKGROUND_LOG_DIR, `${FAILED_BACKGROUND_LOG_PREFIX}${basename(logFile)}`));
+        const names = (await readdir(BACKGROUND_LOG_DIR))
+            .filter((name) => name.startsWith(FAILED_BACKGROUND_LOG_PREFIX) && name.endsWith(".log"));
+        if (names.length <= MAX_KEPT_BACKGROUND_LOGS) return;
+        const files = await Promise.all(names.map(async (name) => {
+            const path = join(BACKGROUND_LOG_DIR, name);
+            const info = await stat(path).catch(() => null);
+            return { path, mtime: info?.mtimeMs ?? 0 };
+        }));
+        files.sort((a, b) => b.mtime - a.mtime);
+        await Promise.all(files.slice(MAX_KEPT_BACKGROUND_LOGS).map((file) => rm(file.path, { force: true }).catch(() => {})));
+    } catch {
+        // Pruning is best effort.
+    }
+}
+
+async function runBackgroundCli(args, runOptions) {
+    const logFile = await createBackgroundLogFile();
+    let result = await cli.run(withLogFile(args, logFile), runOptions);
+    if (logFile && !result.ok && optionalFlagIsUnsupported(result, "--log-file")) {
+        backgroundLogFileSupported = false;
+        await discardBackgroundLogFile(logFile);
+        return cli.run(args, runOptions);
+    }
+    if (result.ok) {
+        await discardBackgroundLogFile(logFile);
+    } else {
+        await keepBackgroundLogFile(logFile);
+    }
+    return result;
+}
+
+async function runPreparedWithCompatibility(args, options = {}) {
+    const { commandLog, ...runOptions } = options;
+    const run = commandLog?.source === "background"
+        ? (runArgs) => runBackgroundCli(runArgs, runOptions)
+        : (runArgs) => cli.run(runArgs, runOptions);
+    const item = commandLog?.entry && !commandLog.entry.closed
+        ? beginCommandLog(commandLog.entry, args, commandLog, runOptions.sensitiveValues)
+        : undefined;
+    if (item) {
+        runOptions.onOutput = (_stream, text) => receiveCommandOutput(commandLog.entry, item, text);
+    }
+    const tail = item && commandLog.tailAppHostPath
+        ? createDetachedRunLogTail({
+            appHostPath: commandLog.tailAppHostPath,
+            onText: (text) => receiveCommandOutput(commandLog.entry, item, text),
+        })
+        : undefined;
+    let result;
+    try {
+        result = await run(args);
+        if (!result.ok && args.includes("--nologo") && isNoLogoUnsupported(result)) {
+            result = await run(args.filter((argument) => argument !== "--nologo"));
+        }
+    } catch (error) {
+        await tail?.stop();
+        if (item) finishCommandLog(commandLog.entry, item, { ok: false, error: error?.message || error });
+        throw error;
+    }
+    await tail?.stop();
+    if (item) finishCommandLog(commandLog.entry, item, result);
     return result;
 }
 
@@ -378,7 +657,11 @@ async function discoverWorkspaceCandidates(entry) {
 
     const result = await runJsonWithCompatibility(
         ["ls", "--format", "Json"],
-        { cwd: entry.workingDirectory, timeoutMs: CLI_TIMEOUT_MS },
+        {
+            cwd: entry.workingDirectory,
+            timeoutMs: CLI_TIMEOUT_MS,
+            commandLog: { entry, source: "background", label: "Find AppHosts" },
+        },
     );
     if (result.ok && Array.isArray(result.data)) {
         const localTargets = localTargetRecords(result.data, "path");
@@ -446,6 +729,7 @@ async function describeAppHost(entry, record, previousModel) {
     const options = {
         cwd: defaultCwdForAppHost(record.appHostPath, entry.workingDirectory),
         timeoutMs: CLI_TIMEOUT_MS,
+        commandLog: { entry, record, source: "background", label: `Describe ${record.displayName}` },
     };
     const result = await runWithOptionalFlagFallback(
         (args) => runJsonWithCompatibility(args, options),
@@ -487,6 +771,199 @@ async function describeAppHost(entry, record, previousModel) {
     };
 }
 
+let streamCleanupRegistered = false;
+
+function ensureStreamCleanup() {
+    if (streamCleanupRegistered) return;
+    streamCleanupRegistered = true;
+    process.once("exit", () => {
+        for (const handle of activeStreams) handle.kill();
+    });
+}
+
+function describeStreamArgs(entry, record) {
+    const args = ["describe", "--follow", "--apphost", record.appHostPath, "--format", "Json", "--include-disabled-commands"];
+    if (entry.includeHidden) {
+        args.push("--include-hidden");
+    }
+    return [...args, "--non-interactive", "--nologo"];
+}
+
+// `describe --follow` emits one JSON resource per line: a full burst first, then each change.
+function mergeStreamLine(state, line) {
+    let payload;
+    try {
+        payload = JSON.parse(line);
+    } catch {
+        return false;
+    }
+    const snapshot = Array.isArray(payload?.resources);
+    const items = snapshot ? payload.resources : [payload];
+    let changed = false;
+    if (snapshot) {
+        changed = state.resources.size > 0;
+        state.resources.clear();
+        state.raw.clear();
+    }
+    for (const item of items) {
+        if (!item || typeof item !== "object" || typeof item.name !== "string") continue;
+        const serialized = JSON.stringify(item);
+        if (state.raw.get(item.name) === serialized) continue;
+        state.raw.set(item.name, serialized);
+        state.resources.set(item.name, item);
+        changed = true;
+    }
+    return changed;
+}
+
+function scheduleStreamPublish(entry) {
+    if (entry.streamPublishTimer || entry.closed) return;
+    entry.streamPublishTimer = setTimeout(() => {
+        entry.streamPublishTimer = null;
+        if (entry.closed || entry.discoveryStale || entry.refreshPromise) return;
+        const { candidates, runningHosts } = entry.snapshot;
+        publishModels(entry, {
+            candidates,
+            runningHosts,
+            models: overlayStreamModels(entry, runningHosts, entry.hostModels),
+        });
+    }, STREAM_PUBLISH_DEBOUNCE_MS);
+    entry.streamPublishTimer.unref?.();
+}
+
+function overlayStreamModels(entry, runningHosts, models) {
+    const next = new Map(models);
+    for (const record of runningHosts) {
+        const model = entry.describeStreams.get(record.id)?.model;
+        if (model) next.set(record.id, model);
+    }
+    return next;
+}
+
+async function startDescribeStream(entry, state) {
+    state.starting = true;
+    const logFile = await createBackgroundLogFile();
+    state.starting = false;
+    if (entry.closed || entry.describeStreams.get(state.record.id) !== state) {
+        await discardBackgroundLogFile(logFile);
+        return;
+    }
+
+    const run = {};
+    const startedAt = Date.now();
+    state.run = run;
+    state.resources = new Map();
+    state.raw = new Map();
+    let gotData = false;
+    const isCurrent = () => entry.describeStreams.get(state.record.id) === state && state.run === run;
+    const handle = cli.stream(withLogFile(describeStreamArgs(entry, state.record), logFile), {
+        cwd: defaultCwdForAppHost(state.record.appHostPath, entry.workingDirectory),
+        onLine(line) {
+            if (!isCurrent() || !mergeStreamLine(state, line)) return;
+            gotData = true;
+            state.streamed = true;
+            state.model = {
+                ...projectDescribePayload({ resources: [...state.resources.values()] }),
+                stale: false,
+                error: null,
+                compatibilityWarning: null,
+                lastSuccessfulAt: new Date().toISOString(),
+            };
+            scheduleStreamPublish(entry);
+        },
+        onExit({ code, error, stderrTail }) {
+            activeStreams.delete(handle);
+            if (!isCurrent()) {
+                void discardBackgroundLogFile(logFile);
+                return;
+            }
+            state.handle = null;
+            state.run = null;
+            // An exited stream no longer owns resource state; refreshes fall back to one-shot describe.
+            state.model = null;
+            if (logFile && !gotData && optionalFlagIsUnsupported({ error, stderr: stderrTail }, "--log-file")) {
+                backgroundLogFileSupported = false;
+                void discardBackgroundLogFile(logFile);
+                if (!entry.paused) void requestRefresh(entry);
+                return;
+            }
+            const healthy = code === 0 && !error && gotData && Date.now() - startedAt >= 5_000;
+            if (healthy) {
+                state.failures = 0;
+                void discardBackgroundLogFile(logFile);
+            } else {
+                state.failures += 1;
+                void keepBackgroundLogFile(logFile);
+            }
+            if (!state.streamed && state.failures >= STREAM_MAX_FAILURES) {
+                // Older CLIs without --follow fall back to the polled one-shot describe.
+                state.disabled = true;
+                return;
+            }
+            const delay = healthy
+                ? STREAM_RESTART_DELAY_MS
+                : Math.min(STREAM_MAX_RESTART_DELAY_MS, 5_000 * 2 ** (state.failures - 1));
+            // The refresh confirms whether the AppHost is still running before the stream restarts.
+            state.restartTimer = setTimeout(() => {
+                state.restartTimer = null;
+                if (!entry.paused && entry.describeStreams.get(state.record.id) === state) {
+                    void requestRefresh(entry);
+                }
+            }, delay);
+            state.restartTimer.unref?.();
+            // Replace the exited stream's resources now; the pending restart timer keeps the backoff.
+            if (gotData && !healthy && !entry.paused) void requestRefresh(entry);
+        },
+    });
+    if (state.run === run) {
+        state.handle = handle;
+        activeStreams.add(handle);
+        ensureStreamCleanup();
+    } else {
+        handle.kill();
+    }
+}
+
+function stopDescribeStream(entry, id) {
+    const state = entry.describeStreams.get(id);
+    if (!state) return;
+    entry.describeStreams.delete(id);
+    if (state.restartTimer) clearTimeout(state.restartTimer);
+    if (state.handle) {
+        activeStreams.delete(state.handle);
+        state.handle.kill();
+    }
+}
+
+function stopDescribeStreams(entry) {
+    for (const id of [...entry.describeStreams.keys()]) {
+        stopDescribeStream(entry, id);
+    }
+    if (entry.streamPublishTimer) {
+        clearTimeout(entry.streamPublishTimer);
+        entry.streamPublishTimer = null;
+    }
+}
+
+function syncDescribeStreams(entry, runningHosts) {
+    if (typeof cli.stream !== "function" || entry.closed || entry.paused) return;
+    const runningIds = new Set(runningHosts.map((record) => record.id));
+    for (const id of [...entry.describeStreams.keys()]) {
+        if (!runningIds.has(id)) stopDescribeStream(entry, id);
+    }
+    for (const record of runningHosts) {
+        let state = entry.describeStreams.get(record.id);
+        if (!state) {
+            state = { record, handle: null, run: null, starting: false, resources: new Map(), raw: new Map(), model: null, streamed: false, restartTimer: null, failures: 0, disabled: false };
+            entry.describeStreams.set(record.id, state);
+        }
+        state.record = record;
+        if (!state.handle && !state.starting && !state.restartTimer && !state.disabled) {
+            void startDescribeStream(entry, state);
+        }
+    }
+}
+
 function operationMap(entry, records) {
     const operations = new Map();
     for (const record of records) {
@@ -515,6 +992,14 @@ function indexTree(entry, roots) {
     if (entry.selectionId && !entry.nodeIndex.has(entry.selectionId)) {
         entry.selectionId = null;
     }
+}
+
+// A mode switch must not broadcast the previous mode's AppHosts while the new mode loads.
+function clearedTree(entry) {
+    indexTree(entry, []);
+    entry.snapshot = { candidates: [], runningHosts: [] };
+    const { roots, summary } = initialState(entry.viewMode, entry.includeHidden);
+    return { roots, summary, lastSuccessfulAt: null };
 }
 
 function countResources(models) {
@@ -565,7 +1050,11 @@ async function performRefresh(entry, generation, showProgress) {
 
     const psPromise = runJsonWithCompatibility(
         ["ps", "--format", "Json"],
-        { cwd: entry.workingDirectory, timeoutMs: CLI_TIMEOUT_MS },
+        {
+            cwd: entry.workingDirectory,
+            timeoutMs: CLI_TIMEOUT_MS,
+            commandLog: { entry, source: "background", label: "List running AppHosts" },
+        },
     );
     const candidatePromise = viewMode === "workspace"
         ? discoverWorkspaceCandidates(entry)
@@ -596,20 +1085,32 @@ async function performRefresh(entry, generation, showProgress) {
         ? workspaceRunningHosts(entry, candidates, allRunning)
         : allRunning;
 
+    // Live streams own resource state for their AppHosts; one-shot describe covers the rest.
     const modelEntries = await mapWithConcurrency(
         runningHosts,
         GLOBAL_DESCRIBE_CONCURRENCY,
         async (record) => [
             record.id,
-            await describeAppHost(entry, record, entry.hostModels.get(record.id)),
+            entry.describeStreams.get(record.id)?.model
+                ?? await describeAppHost(entry, record, entry.hostModels.get(record.id)),
         ],
     );
     if (!entry.generation.isCurrent(generation) || entry.closed || entry.viewMode !== viewMode) {
         return;
     }
 
-    const models = new Map(modelEntries);
     entry.discoveryStale = false;
+    entry.discoveryWarning = candidateResult.warning || localRunning.warning || null;
+    publishModels(entry, {
+        candidates,
+        runningHosts,
+        models: overlayStreamModels(entry, runningHosts, new Map(modelEntries)),
+    });
+    syncDescribeStreams(entry, runningHosts);
+}
+
+function publishModels(entry, { candidates, runningHosts, models }) {
+    const viewMode = entry.viewMode;
     entry.hostModels = models;
     entry.snapshot = { candidates, runningHosts };
     setHostRecords(entry, candidates, runningHosts);
@@ -623,8 +1124,7 @@ async function performRefresh(entry, generation, showProgress) {
         .map((model) => model.lastSuccessfulAt)
         .filter(Boolean)
         .sort();
-    const error = candidateResult.warning
-        || localRunning.warning
+    const error = entry.discoveryWarning
         || (failedAppHosts > 0 ? `${failedAppHosts} AppHost${failedAppHosts === 1 ? "" : "s"} could not be refreshed.` : null);
     publishState(entry, {
         viewMode,
@@ -726,7 +1226,7 @@ function submittedSecretValues(command, values) {
 }
 
 function publicCommandText(entry, record, value, max, sensitiveValues) {
-    const text = redactText(value, Infinity, sensitiveValues);
+    const text = relativizeWorkspacePaths(redactText(value, Infinity, sensitiveValues), entry.workingDirectory);
     return redactText(redactAbsolutePaths(redactKnownPaths(text, [entry.workingDirectory, record?.appHostPath])), max);
 }
 
@@ -787,14 +1287,18 @@ async function attachCopilotContext(entry, nodeId) {
         return { ok: false, error: "The Copilot composer is not available." };
     }
     const context = nodeContext(entry, node);
-    await sessionRef.rpc.extensions.sendAttachmentsToMessage({
-        instanceId: entry.instanceId,
-        attachments: [{
-            type: "extension_context",
-            title: `Aspire: ${context.label}`,
-            payload: context,
-        }],
-    });
+    try {
+        await sessionRef.rpc.extensions.sendAttachmentsToMessage({
+            instanceId: entry.instanceId,
+            attachments: [{
+                type: "extension_context",
+                title: `Aspire: ${context.label}`,
+                payload: context,
+            }],
+        });
+    } catch (error) {
+        return { ok: false, error: `Could not add to chat: ${clampText(error?.message || error, 500)}` };
+    }
     return { ok: true, title: context.label };
 }
 
@@ -866,6 +1370,12 @@ async function runResourceCommand(entry, request) {
                         timeoutMs: OPERATION_TIMEOUT_MS,
                         maxOutputBytes: 512 * 1024,
                         sensitiveValues,
+                        commandLog: {
+                            entry,
+                            record,
+                            source: "user",
+                            label: `${command.displayName} ${resource.displayName ?? resource.name}`,
+                        },
                     },
                 );
             },
@@ -977,6 +1487,7 @@ async function loadCommandInputsNow(entry, request, options, ticket) {
             cwd: defaultCwdForAppHost(record.appHostPath, entry.workingDirectory),
             timeoutMs: CLI_TIMEOUT_MS,
             sensitiveValues,
+            commandLog: { entry, record, source: "user", label: `Load inputs for ${command.displayName}` },
         });
     } catch (error) {
         result = { ok: false, error: error?.message || String(error) };
@@ -1029,11 +1540,11 @@ async function isLinkedGitWorktree(appHostPath) {
 }
 
 const APPHOST_OPERATIONS = {
-    run: { label: "Starting...", command: "start" },
-    stop: { label: "Stopping...", command: "stop" },
-    deploy: { label: "Deploying...", command: "deploy" },
-    publish: { label: "Publishing...", command: "publish" },
-    "pipeline-step": { label: "Running pipeline step...", command: "do" },
+    run: { label: "Starting...", title: "Start", command: "start" },
+    stop: { label: "Stopping...", title: "Stop", command: "stop" },
+    deploy: { label: "Deploying...", title: "Deploy", command: "deploy" },
+    publish: { label: "Publishing...", title: "Publish", command: "publish" },
+    "pipeline-step": { label: "Running pipeline step...", title: "Run step", command: "do" },
 };
 
 async function runAppHostOperation(entry, request) {
@@ -1079,6 +1590,15 @@ async function runAppHostOperation(entry, request) {
                 cwd: defaultCwdForAppHost(record.appHostPath, entry.workingDirectory),
                 timeoutMs: OPERATION_TIMEOUT_MS,
                 maxOutputBytes: 2 * 1024 * 1024,
+                commandLog: {
+                    entry,
+                    record,
+                    source: "operation",
+                    label: operationName === "pipeline-step"
+                        ? `${definition.title} ${step} on ${record.displayName}`
+                        : `${definition.title} ${record.displayName}`,
+                    tailAppHostPath: operationName === "run" ? record.appHostPath : undefined,
+                },
             });
         });
         if (!result.ok) {
@@ -1111,6 +1631,7 @@ async function listPipelineSteps(entry, appHostId) {
         {
             cwd: defaultCwdForAppHost(record.appHostPath, entry.workingDirectory),
             timeoutMs: OPERATION_TIMEOUT_MS,
+            commandLog: { entry, record, source: "user", label: `List pipeline steps for ${record.displayName}` },
         },
     );
     if (!result.ok) {
@@ -1391,7 +1912,14 @@ async function handleRequest(entry, req, res) {
             entry.viewMode = body.viewMode;
             entry.generation.invalidate();
             entry.selectionId = null;
-            publishState(entry, { viewMode: entry.viewMode, status: "loading", refreshing: true, error: null });
+            stopDescribeStreams(entry);
+            publishState(entry, {
+                viewMode: entry.viewMode,
+                status: "loading",
+                refreshing: true,
+                error: null,
+                ...clearedTree(entry),
+            });
         }
         const state = await requestRefresh(entry, { force: true });
         return sendJson(res, 200, { ok: true, state });
@@ -1402,6 +1930,7 @@ async function handleRequest(entry, req, res) {
         }
         entry.includeHidden = body.includeHidden;
         entry.generation.invalidate();
+        stopDescribeStreams(entry);
         const state = await requestRefresh(entry, { force: true });
         return sendJson(res, 200, { ok: true, state });
     }
@@ -1469,6 +1998,10 @@ async function handleRequest(entry, req, res) {
         const result = await runResourceCommand(entry, body);
         return sendJson(res, result.status, result);
     }
+    if (url.pathname === "/api/command-log/clear") {
+        const result = clearCommandLog(entry);
+        return sendJson(res, result.status, result);
+    }
 
     sendText(res, 404, "Not found");
 }
@@ -1487,8 +2020,10 @@ async function applyEntryInput(entry, input, workingDirectory) {
         || nextRequestedAppHostPath !== entry.requestedAppHostPath;
     entry.workingDirectory = nextWorkingDirectory;
     entry.requestedAppHostPath = nextRequestedAppHostPath;
+    let viewModeChanged = false;
     if (input.viewMode === "workspace" || input.viewMode === "global") {
-        changed ||= input.viewMode !== entry.viewMode;
+        viewModeChanged = input.viewMode !== entry.viewMode;
+        changed ||= viewModeChanged;
         entry.viewMode = input.viewMode;
     }
     if (typeof input.includeHidden === "boolean") {
@@ -1501,12 +2036,14 @@ async function applyEntryInput(entry, input, workingDirectory) {
     }
     entry.generation.invalidate();
     entry.selectionId = null;
+    stopDescribeStreams(entry);
     publishState(entry, {
         viewMode: entry.viewMode,
         includeHidden: entry.includeHidden,
         status: "loading",
         refreshing: true,
         error: null,
+        ...(viewModeChanged ? clearedTree(entry) : {}),
     });
     const state = await requestRefresh(entry, { force: true });
     if (entry.discoveryStale) {
@@ -1546,6 +2083,8 @@ async function startServer(ctx) {
         operationCoordinator: appHostOperations,
         refreshPromise: null,
         refreshQueued: false,
+        commandLog: [],
+        commandSequence: 0,
         clients: new Set(),
         token: createToken(),
         server: null,
@@ -1553,6 +2092,11 @@ async function startServer(ctx) {
         host: "",
         url: "",
         timer: null,
+        pauseTimer: null,
+        paused: false,
+        describeStreams: new Map(),
+        streamPublishTimer: null,
+        discoveryWarning: null,
         closed: false,
     };
 
@@ -1592,8 +2136,8 @@ async function startServer(ctx) {
     entry.origin = `http://127.0.0.1:${port}`;
     entry.host = `127.0.0.1:${port}`;
     entry.url = `${entry.origin}/?token=${encodeURIComponent(entry.token)}`;
-    entry.timer = setInterval(() => void requestRefresh(entry), POLL_INTERVAL_MS);
-    entry.timer.unref?.();
+    startPolling(entry);
+    scheduleIdlePause(entry);
     void requestRefresh(entry);
     return entry;
 }
@@ -1603,6 +2147,15 @@ async function closeEntry(entry) {
     entry.generation.invalidate();
     if (entry.timer) {
         clearInterval(entry.timer);
+        entry.timer = null;
+    }
+    if (entry.pauseTimer) {
+        clearTimeout(entry.pauseTimer);
+        entry.pauseTimer = null;
+    }
+    stopDescribeStreams(entry);
+    for (const item of entry.commandLog) {
+        if (item.flushTimer) clearTimeout(item.flushTimer);
     }
     for (const client of entry.clients) {
         try {
@@ -1673,9 +2226,19 @@ const appHostsCanvas = createCanvas({
                 if (viewMode !== "workspace" && viewMode !== "global") {
                     throw new CanvasError("view_mode_required", "The set_view_mode action requires 'workspace' or 'global'.");
                 }
-                entry.viewMode = viewMode;
-                entry.generation.invalidate();
-                entry.selectionId = null;
+                if (viewMode !== entry.viewMode) {
+                    entry.viewMode = viewMode;
+                    entry.generation.invalidate();
+                    entry.selectionId = null;
+                    stopDescribeStreams(entry);
+                    publishState(entry, {
+                        viewMode,
+                        status: "loading",
+                        refreshing: true,
+                        error: null,
+                        ...clearedTree(entry),
+                    });
+                }
                 const state = await requestRefresh(entry, { force: true });
                 return { viewMode: state.viewMode, status: state.status, summary: state.summary };
             },

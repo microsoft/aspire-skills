@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import * as http from "node:http";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setImmediate as nextTurn } from "node:timers/promises";
@@ -27,6 +27,13 @@ const deferred = () => {
 const ok = (data) => ({ ok: true, code: 0, stdout: JSON.stringify(data), stderr: "" });
 const fail = (error = "Synthetic CLI failure") => ({ ok: false, code: 1, stdout: "", stderr: error, error });
 const clone = (value) => JSON.parse(JSON.stringify(value));
+const waitUntil = async (predicate, timeoutMs = 2000) => {
+    const deadline = Date.now() + timeoutMs;
+    while (!(await predicate())) {
+        if (Date.now() > deadline) throw new Error("Timed out waiting for condition");
+        await new Promise((done) => setTimeout(done, 10));
+    }
+};
 
 test("shared canvas assets are served locally with their correct MIME types", async (t) => {
     const h = await harness(t);
@@ -148,6 +155,7 @@ test("AppHosts rejects network targets before stat, readdir, or target-file read
     await module.link(async (specifier) => {
         const exports = specifier === "node:fs/promises"
             ? {
+                open: async () => { filesystemCalls.push("open"); throw new Error("unexpected open"); },
                 stat: async () => { filesystemCalls.push("stat"); throw new Error("unexpected stat"); },
                 readdir: async () => { filesystemCalls.push("readdir"); throw new Error("unexpected readdir"); },
                 readFile: async () => {
@@ -191,7 +199,7 @@ function describe(inputs = baseInputs, state = "Running") {
 }
 
 async function harness(t, {
-    listenGate, failListen = false, cliOverride,
+    listenGate, failListen = false, cliOverride, stream, tmpDirectory,
     workingDirectory = process.cwd(),
     browserCanvases = [{ canvasId: "browser", extensionId: "host:builtins" }],
     browserListAvailable = true, browserListError, browserOpenError, systemBrowserError,
@@ -250,8 +258,18 @@ async function harness(t, {
         servers.push(server);
         return server;
     };
+    const idleTimers = new Set();
     const context = createContext({
-        URL, Buffer, process, console, setTimeout, clearTimeout,
+        URL, Buffer, process, console,
+        setTimeout(callback, delay, ...args) {
+            if (delay !== 10_000) return setTimeout(callback, delay, ...args);
+            const timer = { callback, unref() {} };
+            idleTimers.add(timer);
+            return timer;
+        },
+        clearTimeout(timer) {
+            if (!idleTimers.delete(timer)) clearTimeout(timer);
+        },
         setInterval(callback) {
             const timer = { callback, unref() {} };
             intervals.add(timer);
@@ -267,7 +285,10 @@ async function harness(t, {
             return {
                 log: (message) => logs.push(message),
                 rpc: {
-                    extensions: { sendAttachmentsToMessage: async (payload) => attachments.push(clone(payload)) },
+                    extensions: { sendAttachmentsToMessage: async (payload) => {
+                        if (controls.attachError) throw controls.attachError;
+                        attachments.push(clone(payload));
+                    } },
                     canvas: {
                         ...(browserListAvailable ? { list: async () => {
                             if (browserListError) throw browserListError;
@@ -288,13 +309,15 @@ async function harness(t, {
     });
     await module.link(async (specifier) => {
         const exports = specifier === "@github/copilot-sdk/extension" ? sdk
-            : specifier === "./lib/app-model.mjs" ? { ...model, createAspireCliRunner: () => ({ run }) }
+            : specifier === "./lib/app-model.mjs" ? { ...model, createAspireCliRunner: () => (stream ? { run, stream } : { run }) }
                 : specifier === "./lib/browser.mjs" ? { ...browser, openSystemBrowser: async (url, options) => {
                     if (systemBrowserError) throw systemBrowserError;
                     systemBrowserUrls.push(url);
                     controls.reportBrowserError = options.onError;
                 } }
-                : specifier === "node:http" ? { ...http, createServer } : await import(specifier);
+                : specifier === "node:http" ? { ...http, createServer }
+                    : specifier === "node:os" && tmpDirectory ? { ...await import(specifier), tmpdir: () => tmpDirectory }
+                        : await import(specifier);
         return new SyntheticModule(Object.keys(exports), function () {
             for (const [name, value] of Object.entries(exports)) this.setExport(name, value);
         }, { context });
@@ -302,7 +325,12 @@ async function harness(t, {
     await module.evaluate();
     const opened = new Set();
     const h = {
-        controls, calls, servers, intervals, attachments, canvasOpens, systemBrowserUrls, logs,
+        controls, calls, servers, intervals, idleTimers, attachments, canvasOpens, systemBrowserUrls, logs,
+        fireIdleTimers() {
+            const due = [...idleTimers];
+            idleTimers.clear();
+            for (const timer of due) timer.callback();
+        },
         async open(instanceId = "test", input = { viewMode: "global" }) {
             opened.add(instanceId);
             return declaration.open({ instanceId, input, session: { workingDirectory } });
@@ -379,6 +407,20 @@ test("dot-prefixed workspace AppHosts remain visible and open source without adm
     assert.equal(rejected.status, 400);
     assert.match(rejected.error, /outside the current workspace/);
     assert.equal(h.canvasOpens.length, 1, "outside source must not open an editor");
+});
+
+test("switching view mode publishes an empty tree before the new mode loads", async (t) => {
+    const h = await harness(t);
+    const open = await h.open();
+    const { state } = await h.request(open, "/api/state");
+    assert.ok(state.roots.length > 0);
+    const stream = await sse(h, open);
+    t.after(() => stream.close());
+    await h.request(open, "/api/mode", { viewMode: "workspace" });
+    const cleared = (await stream.waitFor((event) => event.type === "state"
+        && event.state.viewMode === "workspace" && event.state.status === "loading")).state;
+    assert.deepEqual(cleared.roots, []);
+    assert.equal(cleared.selectionId ?? null, null);
 });
 
 async function sse(h, open) {
@@ -462,6 +504,11 @@ test("context is owner-specific, fresh/stale-aware, and relationship-selectable 
         assert.deepEqual(clone(await h.action("get_selected_context")).relationship, edge.context.relationship);
         assert.equal((await h.request(open, "/api/copilot-context", { nodeId: edge.context.id })).ok, true);
     }
+    h.controls.attachError = new Error("Composer unavailable");
+    const failedAttach = await h.request(open, "/api/copilot-context", { nodeId: contexts[0].nodeId });
+    assert.equal(failedAttach.status, 400);
+    assert.equal(failedAttach.error, "Could not add to chat: Composer unavailable");
+    h.controls.attachError = null;
     assert.notDeepEqual(contexts[0], contexts[1], "identical APIs under distinct AppHosts retain owner identity");
     assert.doesNotMatch(JSON.stringify(h.attachments), /not-for-composer|dummy-dashboard-token|private-host-token|private-endpoint-token|appHostPath|"environment":\{/);
     for (const path of paths) assert.ok(!JSON.stringify(h.attachments).includes(path));
@@ -890,6 +937,78 @@ test("listen errors reject opens, clean error/listening handlers, and permit ret
     const retry = await h.open();
     assert.equal((await h.request(retry, "/api/state")).ok, true);
     assert.equal(h.servers.length, 2);
+});
+
+test("background polling pauses without a connected view and resumes when one reconnects", async (t) => {
+    const h = await harness(t);
+    const open = await h.open();
+    assert.equal(h.intervals.size, 1);
+    const stream = await sse(h, open);
+    assert.equal(h.idleTimers.size, 0, "a connected view cancels the idle pause");
+    stream.close();
+    await waitUntil(() => h.idleTimers.size === 1);
+    h.fireIdleTimers();
+    assert.equal(h.intervals.size, 0, "polling stops while no view is connected");
+    const callsWhilePaused = h.calls.length;
+    const resumed = await sse(h, open);
+    t.after(() => resumed.close());
+    assert.equal(h.intervals.size, 1, "polling restarts when a view reconnects");
+    await waitUntil(() => h.calls.slice(callsWhilePaused).some(({ args }) => args[0] === "ps"));
+});
+
+test("a describe stream that fails after data falls back to one-shot describe", async (t) => {
+    const streams = [];
+    const h = await harness(t, {
+        stream: (args, options) => {
+            streams.push({ args, ...options });
+            return { kill() {} };
+        },
+    });
+    const open = await h.open();
+    await waitUntil(() => streams.length > 0);
+    const [first] = streams;
+    first.onLine(JSON.stringify(describe(baseInputs, "Running")));
+    h.controls.state = "Stopped";
+    const callsBeforeExit = h.calls.length;
+    first.onExit({ code: 1 });
+    await waitUntil(() => h.calls.slice(callsBeforeExit).some(({ args }) => args[0] === "describe"));
+    await waitUntil(async () => {
+        const { state } = await h.request(open, "/api/state");
+        return allNodes(state.roots).find((node) => node.resourceName === "api")?.resource.state === "Stopped";
+    });
+});
+
+test("failed background logs are kept under a bounded prefix without touching active logs", async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "aspire-logs-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const logDirectory = join(root, "aspire-apphosts-logs");
+    await mkdir(logDirectory);
+    const seeded = [];
+    for (let index = 0; index < 11; index++) {
+        const path = join(logDirectory, `failed-old-${index}.log`);
+        await writeFile(path, "old failure");
+        const time = new Date(Date.UTC(2020, 0, 1, 0, index));
+        await utimes(path, time, time);
+        seeded.push(`failed-old-${index}.log`);
+    }
+    await writeFile(join(logDirectory, "active.log"), "in progress");
+    const h = await harness(t, {
+        tmpDirectory: root,
+        cliOverride: async (args) => {
+            if (args[0] !== "ps" || !args.includes("--log-file")) return undefined;
+            await writeFile(args[args.indexOf("--log-file") + 1], "ps failure");
+            return fail("ps unavailable");
+        },
+    });
+    await h.open();
+    let names = [];
+    await waitUntil(async () => {
+        names = await readdir(logDirectory);
+        return names.some((name) => name.startsWith("failed-") && !seeded.includes(name))
+            && names.filter((name) => name.startsWith("failed-")).length === 10;
+    });
+    assert.ok(names.includes("active.log"), "pruning must not delete a log that is still being written");
+    assert.ok(!names.includes("failed-old-0.log"), "the oldest failed log is pruned first");
 });
 
 test("closing a panel does not cancel its already-started explicit operation", async (t) => {

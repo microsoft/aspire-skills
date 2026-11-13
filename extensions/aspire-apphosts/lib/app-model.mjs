@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
 import { createHash, createHmac, randomBytes } from "node:crypto";
-import { readFile, readdir, stat } from "node:fs/promises";
+import { open, readFile, readdir, stat } from "node:fs/promises";
+import { StringDecoder } from "node:string_decoder";
+import { homedir } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, normalize, relative, resolve, sep, win32 } from "node:path";
 import { performance } from "node:perf_hooks";
 
@@ -392,6 +394,7 @@ function sanitizeArgumentInput(raw) {
         name,
         label: optionalText(raw.label, 240) ?? name,
         description: optionalText(raw.description, 1000),
+        enableDescriptionMarkdown: raw.enableDescriptionMarkdown === true,
         inputType,
         required: raw.required === true,
         placeholder: optionalText(raw.placeholder, 500),
@@ -524,6 +527,10 @@ function classifyResource(resource) {
     if (["exited", "stopped", "notstarted", "finished"].includes(state)) {
         return state === "finished" && resource.stateStyle === "success" ? "healthy" : "inactive";
     }
+    // No reported state yet (for example, a container not created); the dashboard shows it as Unknown.
+    if (state === "unknown" && !hasUnhealthyReport) {
+        return "inactive";
+    }
     // The aggregate stays Unhealthy until pending checks return, so it is not a failure yet.
     if ((health === "unhealthy" && !hasPendingReport) || hasUnhealthyReport) {
         return "error";
@@ -608,6 +615,17 @@ export function redactKnownPaths(value, privatePaths = []) {
     return text;
 }
 
+export function relativizeWorkspacePaths(value, workspaceRoot) {
+    const text = String(value ?? "");
+    const root = String(workspaceRoot ?? "").replace(/[\\/]+$/, "");
+    if (!root) return text;
+    const flags = process.platform === "win32" ? "gi" : "g";
+    const rootPattern = root.split(/[\\/]+/).map(escapeRegExp).join("[\\\\/]");
+    return text
+        .replace(new RegExp(`${rootPattern}[\\\\/]+`, flags), "")
+        .replace(new RegExp(`${rootPattern}(?![A-Za-z0-9._-])`, flags), ".");
+}
+
 export function redactAbsolutePaths(value) {
     return String(value ?? "")
         .replace(/(["'`])[A-Za-z]:\\[^"'`\r\n]+\1/g, "$1[path withheld]$1")
@@ -627,6 +645,147 @@ export function redactAbsolutePaths(value) {
             ),
             "[path withheld]",
         );
+}
+
+const DETACHED_LOG_LINE = /^\[[^\]]*\] \[([A-Z]+)\] \[([^\]]+)\] ?(.*)$/;
+const DETACHED_LOG_CATEGORIES = new Set(["Stdout", "Build", "AppHost"]);
+const DETACHED_LOG_LEVELS = new Set(["WARN", "FAIL", "EROR", "CRIT"]);
+
+// `aspire start` detaches and writes the real build and AppHost output to a child CLI
+// log. Keep the user-facing lines and drop CLI diagnostics. `state.keep` carries
+// whether multi-line continuations belong to a kept entry across chunks.
+export function filterDetachedRunLog(text, state = { keep: false }) {
+    const kept = [];
+    for (const line of String(text ?? "").split(/\r?\n/)) {
+        const match = DETACHED_LOG_LINE.exec(line);
+        if (!match) {
+            if (state.keep && line) kept.push(line);
+            continue;
+        }
+        const [, level, category, message] = match;
+        state.keep = level !== "DBUG" && level !== "TRCE"
+            && (DETACHED_LOG_CATEGORIES.has(category) || DETACHED_LOG_LEVELS.has(level));
+        if (state.keep) {
+            kept.push(category === "Stdout" ? message.replace(/^:[a-z0-9_+-]+:\s*/i, "") : message);
+        }
+    }
+    return kept.length ? `${kept.join("\n")}\n` : "";
+}
+
+function samePath(left, right) {
+    const normalizeForCompare = (value) => String(value ?? "").replace(/[\\/]+/g, "/").toLowerCase();
+    return normalizeForCompare(left) === normalizeForCompare(right);
+}
+
+// Follows the detached child log for one `aspire start --apphost <path>` invocation.
+export function createDetachedRunLogTail({
+    appHostPath,
+    onText,
+    since = Date.now(),
+    logDir = join(homedir(), ".aspire", "logs"),
+    intervalMs = 500,
+    maxReadBytes = 256 * 1024,
+}) {
+    let file = null;
+    let offset = 0;
+    let partial = "";
+    let inFlight = null;
+    let stopped = false;
+    const state = { keep: false };
+    const decoder = new StringDecoder("utf8");
+
+    async function findLog() {
+        let names;
+        try {
+            names = await readdir(logDir);
+        } catch {
+            return null;
+        }
+        const candidates = [];
+        for (const name of names) {
+            if (/_detach-child_/i.test(name)) continue;
+            const stamp = /^cli_(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/i.exec(name);
+            if (!stamp) continue;
+            const [, y, mo, d, h, mi, s] = stamp.map(Number);
+            if (Date.UTC(y, mo - 1, d, h, mi, s) < since - 5000) continue;
+            const path = join(logDir, name);
+            try {
+                const info = await stat(path);
+                if (Math.max(info.birthtimeMs || 0, info.mtimeMs) >= since - 2000) {
+                    candidates.push({ path, time: info.birthtimeMs || info.mtimeMs });
+                }
+            } catch {
+                // The CLI may rotate logs while we scan.
+            }
+        }
+        candidates.sort((a, b) => b.time - a.time);
+        for (const candidate of candidates) {
+            const head = (await readChunk(candidate.path, 0, 64 * 1024)).toString("utf8");
+            const spawn = /Spawning child CLI: .*? --apphost (.+?) --log-file (.+?\.log)/.exec(head);
+            const unquote = (value) => value.replace(/^"(.*)"$/, "$1");
+            if (spawn && samePath(unquote(spawn[1]), appHostPath)) {
+                return unquote(spawn[2]);
+            }
+        }
+        return null;
+    }
+
+    async function readChunk(path, start, length) {
+        let handle;
+        try {
+            handle = await open(path, "r");
+            const buffer = Buffer.alloc(length);
+            const { bytesRead } = await handle.read(buffer, 0, length, start);
+            return buffer.subarray(0, bytesRead);
+        } catch {
+            return Buffer.alloc(0);
+        } finally {
+            await handle?.close().catch(() => {});
+        }
+    }
+
+    async function poll() {
+        file ??= await findLog();
+        if (!file) return;
+        let size;
+        try {
+            size = (await stat(file)).size;
+        } catch {
+            return;
+        }
+        while (offset < size) {
+            const length = Math.min(maxReadBytes, size - offset);
+            const chunk = await readChunk(file, offset, length);
+            if (!chunk.length) return;
+            offset += chunk.length;
+            const combined = partial + decoder.write(chunk);
+            const lastBreak = combined.lastIndexOf("\n");
+            partial = lastBreak >= 0 ? combined.slice(lastBreak + 1) : combined;
+            const text = filterDetachedRunLog(lastBreak >= 0 ? combined.slice(0, lastBreak) : "", state);
+            if (text) onText(text);
+        }
+    }
+
+    function tick() {
+        if (inFlight || stopped) return;
+        inFlight = poll().catch(() => {}).finally(() => { inFlight = null; });
+    }
+
+    const timer = setInterval(tick, intervalMs);
+    timer.unref?.();
+
+    return {
+        async stop() {
+            if (stopped) return;
+            stopped = true;
+            clearInterval(timer);
+            await inFlight;
+            await poll().catch(() => {});
+            const text = filterDetachedRunLog(partial + decoder.end(), state);
+            partial = "";
+            if (text) onText(text);
+        },
+    };
 }
 
 export function parseLegacyPipelineSteps(output) {
@@ -663,6 +822,93 @@ export function appHostIdentityHint(record) {
     const safeHint = redactAbsolutePaths(redactText(hint.replace(/[\u0000-\u001f\u007f-\u009f]/g, ""), Infinity))
         .trim().slice(0, 88);
     return `${safeHint || "AppHost"} · ${String(record.id || stableId(record.appHostPath)).slice(0, 8)}`;
+}
+
+function safeLocationText(value, maxLength) {
+    const text = redactAbsolutePaths(redactText(String(value).replace(/[\u0000-\u001f\u007f-\u009f]/g, ""), Infinity))
+        .trim();
+    return text.length > maxLength ? `…${text.slice(-(maxLength - 1))}` : text;
+}
+
+function pathSegments(directory) {
+    return resolve(directory).split(/[\\/]+/).filter(Boolean);
+}
+
+function commonSegmentCount(segmentLists) {
+    const key = (segment) => (process.platform === "win32" ? segment.toLowerCase() : segment);
+    let count = 0;
+    while (segmentLists.every((segments) =>
+        count < segments.length && key(segments[count]) === key(segmentLists[0][count]))) {
+        count += 1;
+    }
+    return count;
+}
+
+function homeRelativeLocation(directory) {
+    let home;
+    try {
+        home = homedir();
+    } catch {
+        return undefined;
+    }
+    if (!home || !isPathWithin(directory, home)) {
+        return undefined;
+    }
+    const rest = relative(home, directory).split(sep).filter(Boolean).join("/");
+    return rest ? `~/${rest}` : "~";
+}
+
+// Duplicate AppHost names get a UI-only relative location that distinguishes them.
+function applyLocationHints(pairs) {
+    const groups = new Map();
+    for (const pair of pairs.filter(({ record }) => record.appHostPath)) {
+        const key = pair.node.label.toLowerCase();
+        groups.set(key, [...(groups.get(key) ?? []), pair]);
+    }
+    for (const group of groups.values()) {
+        if (group.length < 2) {
+            continue;
+        }
+        const directories = group.map(({ record }) => defaultCwdForAppHost(record.appHostPath));
+        const segmentLists = directories.map(pathSegments);
+        const shared = Math.min(commonSegmentCount(segmentLists), ...segmentLists.map((segments) => segments.length - 1));
+        const seen = new Map();
+        group.forEach(({ node, record }, index) => {
+            const segments = segmentLists[index];
+            const relativeSegments = shared > 0 ? segments.slice(shared) : segments.slice(-3);
+            let hint = safeLocationText(relativeSegments.join("/"), 72) || "AppHost";
+            const duplicates = seen.get(hint) ?? 0;
+            seen.set(hint, duplicates + 1);
+            if (duplicates > 0) {
+                hint = `${hint} · ${String(record.id || stableId(record.appHostPath)).slice(0, 8)}`;
+            }
+            node.locationHint = hint;
+            node.locationTitle = safeLocationText(homeRelativeLocation(directories[index]) ?? hint, 400) || hint;
+        });
+    }
+}
+
+// Workspace AppHosts always show their folder relative to the workspace root.
+function applyWorkspaceLocations(pairs) {
+    const located = pairs
+        .filter(({ record }) => typeof record.relativePath === "string" && record.relativePath)
+        .map((pair) => {
+            const slash = pair.record.relativePath.lastIndexOf("/");
+            return { ...pair, folder: slash > 0 ? pair.record.relativePath.slice(0, slash) : "" };
+        });
+    const folderCounts = new Map();
+    for (const { folder } of located) {
+        folderCounts.set(folder.toLowerCase(), (folderCounts.get(folder.toLowerCase()) ?? 0) + 1);
+    }
+    for (const { node, record, folder } of located) {
+        const shared = !folder || folderCounts.get(folder.toLowerCase()) > 1;
+        const location = safeLocationText(shared ? record.relativePath : folder, 72);
+        if (!location) {
+            continue;
+        }
+        node.workspaceLocation = location;
+        node.locationTitle = safeLocationText(record.relativePath, 400) || location;
+    }
 }
 
 export function normalizePsPayload(payload) {
@@ -752,6 +998,10 @@ function resourceStatusLabel(resource) {
         : resource.state || undefined;
 }
 
+function resourceLifecycleTransitioning(resource) {
+    return ["starting", "waiting", "stopping", "building"].includes(resource.state.toLowerCase());
+}
+
 function resourceLifecycleTone(resource) {
     const state = resource.state.toLowerCase();
     if (
@@ -762,7 +1012,7 @@ function resourceLifecycleTone(resource) {
     ) {
         return "error";
     }
-    if (["starting", "waiting", "stopping", "building"].includes(state)) {
+    if (resourceLifecycleTransitioning(resource) || resource.stateStyle === "warning") {
         return "warning";
     }
     if (state === "running" || (state === "finished" && resource.stateStyle === "success")) {
@@ -790,6 +1040,10 @@ function resourceHealthSummary(resource) {
         const label = healthy === resource.healthReports.length
             ? "Healthy"
             : `${healthy}/${resource.healthReports.length} healthy`;
+        // Like the dashboard, do not judge aggregate health before the resource reports a state.
+        if (state === "unknown" && !unhealthy && !degraded) {
+            return { label: pending ? "Waiting" : label, tone: "inactive" };
+        }
         return inactive
             ? {
                 label: unhealthy
@@ -1043,7 +1297,8 @@ function endpointNode(appHostId, resource, endpoint, index) {
 
 function healthGroupNode(appHostId, resource) {
     const healthy = resource.healthReports.filter((report) => report.status === "Healthy").length;
-    const inactive = ["exited", "stopped", "notstarted", "finished"].includes(resource.state.toLowerCase());
+    const state = resource.state.toLowerCase();
+    const inactive = ["exited", "stopped", "notstarted", "finished"].includes(state);
     return {
         id: `apphost:${appHostId}:resource:${resource.name}:health`,
         kind: "health-group",
@@ -1061,13 +1316,15 @@ function healthGroupNode(appHostId, resource) {
                     id: `apphost:${appHostId}:resource:${resource.name}:health:${stableId(report.name)}`,
                     kind: "health-check",
                     label: report.name,
-                    statusLabel: pending && inactive
-                        ? "Not checked"
+                    statusLabel: pending
+                        ? inactive ? "Not checked" : "Waiting"
                         : inactive ? `Last ${report.status.toLowerCase()}` : report.status,
                     icon: pending
                         ? inactive ? "record" : "loading"
                         : report.status === "Healthy" ? "pass" : report.status === "Degraded" ? "warning" : "error",
-                    tone: inactive && (pending || report.status === "Healthy") ? "inactive" : healthTone(report.status),
+                    tone: (inactive && (pending || report.status === "Healthy")) || (pending && state === "unknown")
+                        ? "inactive"
+                        : healthTone(report.status),
                     appHostId,
                     resourceName: resource.name,
                     healthCheckName: report.name,
@@ -1157,6 +1414,7 @@ export function buildResourceTree(resources, appHostId) {
             description: resourceDescription(resource),
             statusLabel: resourceStatusLabel(resource),
             lifecycleTone: resourceLifecycleTone(resource),
+            lifecycleTransitioning: resourceLifecycleTransitioning(resource),
             healthLabel: healthSummary?.label,
             healthTone: healthSummary?.tone,
             icon: resourceStateIcon(resource),
@@ -1309,6 +1567,7 @@ export function buildAppHostTreeNode(record, model, {
         identityHint: appHostIdentityHint(record),
         actions,
         unavailableActionReason: appHostUnavailableReason(record),
+        unavailableActionLabel: appHostUnavailableReason(record) ? "Build not confirmed" : undefined,
         operation,
         graph,
         defaultExpanded: record.status === "running",
@@ -1364,6 +1623,12 @@ export function buildWorkspaceTree({
         }));
     const idleNodes = combined.idle.map((record) =>
         buildAppHostTreeNode(record, undefined, { operation: operations.get(record.id) }));
+    const pairs = [
+        ...runningNodes.map((node, index) => ({ node, record: combined.running[index] })),
+        ...idleNodes.map((node, index) => ({ node, record: combined.idle[index] })),
+    ];
+    applyLocationHints(pairs);
+    applyWorkspaceLocations(pairs);
     const byLabel = (left, right) => left.label.localeCompare(right.label);
     return [...runningNodes.sort(byLabel), ...idleNodes.sort(byLabel)];
 }
@@ -1373,12 +1638,12 @@ export function buildGlobalTree({
     models = new Map(),
     operations = new Map(),
 }) {
-    return runningHosts
-        .map((record) => buildAppHostTreeNode(record, modelFor(models, record), {
-            nestedResources: true,
-            operation: operations.get(record.id),
-        }))
-        .sort((left, right) => left.label.localeCompare(right.label));
+    const nodes = runningHosts.map((record) => buildAppHostTreeNode(record, modelFor(models, record), {
+        nestedResources: true,
+        operation: operations.get(record.id),
+    }));
+    applyLocationHints(nodes.map((node, index) => ({ node, record: runningHosts[index] })));
+    return nodes.sort((left, right) => left.label.localeCompare(right.label));
 }
 
 function nodeMatches(node, query) {
@@ -1762,11 +2027,31 @@ export async function runProcess(command, args, {
     maxOutputBytes = DEFAULT_MAX_OUTPUT_BYTES,
     env,
     sensitiveValues = [],
+    onOutput,
 } = {}) {
     const secrets = [...new Set(sensitiveValues.flatMap((value) => {
         const text = String(value ?? "");
         return text ? [text, JSON.stringify(text).slice(1, -1)] : [];
     }))].sort((left, right) => right.length - left.length);
+    const holdback = secrets.length ? secrets[0].length - 1 : 0;
+    const pendingOutput = { stdout: "", stderr: "" };
+    const emitOutput = (stream, flush) => {
+        let text = pendingOutput[stream];
+        for (const secret of secrets) {
+            text = text.replaceAll(secret, "[redacted]");
+        }
+        // Holding back one secret length minus one keeps a secret split across
+        // chunks from being emitted before it can be recognized.
+        const cut = flush ? text.length : Math.max(0, text.length - holdback);
+        pendingOutput[stream] = text.slice(cut);
+        if (cut > 0) {
+            try {
+                onOutput(stream, text.slice(0, cut));
+            } catch {
+                // Output observers must not affect the process result.
+            }
+        }
+    };
     const redactOutput = (value, incomplete) => {
         let text = String(value ?? "");
         for (const secret of secrets) {
@@ -1809,6 +2094,12 @@ export async function runProcess(command, args, {
             settled = true;
             if (timer) {
                 clearTimeout(timer);
+            }
+            if (onOutput) {
+                for (const stream of ["stdout", "stderr"]) {
+                    pendingOutput[stream] = redactOutput(pendingOutput[stream], result.code === null);
+                    emitOutput(stream, true);
+                }
             }
             resolveResult({
                 ...result,
@@ -1878,10 +2169,20 @@ export async function runProcess(command, args, {
             child.stdout?.setEncoding("utf8");
             child.stderr?.setEncoding("utf8");
             child.stdout?.on("data", (chunk) => {
+                const before = stdout;
                 stdout = append(stdout, chunk);
+                if (onOutput && stdout !== before) {
+                    pendingOutput.stdout += stdout.slice(before.length);
+                    emitOutput("stdout", false);
+                }
             });
             child.stderr?.on("data", (chunk) => {
+                const before = stderr;
                 stderr = append(stderr, chunk);
+                if (onOutput && stderr !== before) {
+                    pendingOutput.stderr += stderr.slice(before.length);
+                    emitOutput("stderr", false);
+                }
             });
             child.once("error", (error) => {
                 finish({ ok: false, code: null, stdout, stderr, error: `Failed to run Aspire CLI: ${error.message}` });
@@ -1908,13 +2209,100 @@ export async function runProcess(command, args, {
     });
 }
 
+const STREAM_STDERR_TAIL_BYTES = 4096;
+const STREAM_MAX_LINE_BYTES = 1024 * 1024;
+
+// Runs a long-lived CLI process and reports complete stdout lines. stderr is
+// kept only as a bounded tail for diagnostics when the process exits.
+export function streamProcess(command, args, {
+    cwd,
+    env,
+    onLine,
+    onExit,
+    maxLineBytes = STREAM_MAX_LINE_BYTES,
+} = {}) {
+    let child = null;
+    let killed = false;
+    let exited = false;
+    let pending = "";
+    let stderrTail = "";
+    const exit = (result) => {
+        if (exited) return;
+        exited = true;
+        try {
+            onExit?.({ ...result, stderrTail: redactText(stderrTail, STREAM_STDERR_TAIL_BYTES) });
+        } catch {
+            // Exit observers must not throw into the process event loop.
+        }
+    };
+    const emit = (line) => {
+        const text = line.trim();
+        if (!text) return;
+        try {
+            onLine?.(text);
+        } catch {
+            // Line observers must not stop the stream.
+        }
+    };
+    resolveCliExecutable(command, env).then((executable) => {
+        if (killed) {
+            exit({ code: null, error: undefined });
+            return;
+        }
+        try {
+            child = spawn(executable, args, { cwd, env, shell: false, windowsHide: true });
+        } catch (error) {
+            exit({ code: null, error: redactText(`Failed to launch Aspire CLI: ${error.message}`, 8000) });
+            return;
+        }
+        child.stdout?.setEncoding("utf8");
+        child.stderr?.setEncoding("utf8");
+        child.stdout?.on("data", (chunk) => {
+            pending += chunk;
+            let index;
+            while ((index = pending.indexOf("\n")) >= 0) {
+                emit(pending.slice(0, index));
+                pending = pending.slice(index + 1);
+            }
+            if (Buffer.byteLength(pending, "utf8") > maxLineBytes) {
+                pending = "";
+                try { child.kill(); } catch { /* already exited */ }
+            }
+        });
+        child.stderr?.on("data", (chunk) => {
+            stderrTail = (stderrTail + chunk).slice(-STREAM_STDERR_TAIL_BYTES);
+        });
+        child.once("error", (error) => {
+            exit({ code: null, error: redactText(`Failed to run Aspire CLI: ${error.message}`, 8000) });
+        });
+        child.once("close", (code) => {
+            if (pending) emit(pending);
+            pending = "";
+            exit({ code, error: undefined });
+        });
+    }, (error) => {
+        exit({ code: null, error: redactText(`Failed to launch Aspire CLI: ${error.message}`, 8000) });
+    });
+    return {
+        kill() {
+            if (killed) return;
+            killed = true;
+            try { child?.kill(); } catch { /* already exited */ }
+        },
+    };
+}
+
 export function createAspireCliRunner({
     command = process.env.ASPIRE_CLI?.trim() || (process.platform === "win32" ? "aspire.exe" : "aspire"),
     run = runProcess,
+    stream = streamProcess,
 } = {}) {
     return {
         async run(args, options = {}) {
             return run(command, args, options);
+        },
+        stream(args, options = {}) {
+            return stream(command, args, options);
         },
         async runJson(args, options = {}) {
             const result = await run(command, args, options);

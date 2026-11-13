@@ -10,10 +10,22 @@ const els = {
     connectionStatus: document.getElementById("connection-status"),
     workspaceMode: document.getElementById("workspace-mode"),
     globalMode: document.getElementById("global-mode"),
+    modeTrigger: document.getElementById("mode-trigger"),
+    modeLabel: document.getElementById("mode-label"),
+    modeSwitch: document.getElementById("mode-switch"),
+    hostBar: document.getElementById("host-bar"),
+    viewTabs: document.getElementById("view-tabs"),
+    rosterControls: document.getElementById("roster-controls"),
+    filtersPanel: document.getElementById("filters-panel"),
+    filterSelects: document.getElementById("filter-selects"),
+    footerConnectionLabel: document.getElementById("footer-connection-label"),
+    footerCount: document.getElementById("footer-count"),
     refreshButton: document.getElementById("refresh-button"),
     searchInput: document.getElementById("search-input"),
     hiddenCheckbox: document.getElementById("hidden-checkbox"),
+    filtersClear: document.getElementById("filters-clear"),
     freshness: document.getElementById("freshness"),
+    footerConnection: document.getElementById("footer-connection"),
     statusBanner: document.getElementById("status-banner"),
     statusTitle: document.getElementById("status-title"),
     statusMessage: document.getElementById("status-message"),
@@ -30,6 +42,16 @@ const els = {
     pipelineStepInput: document.getElementById("pipeline-step-input"),
     pipelineStepOptions: document.getElementById("pipeline-step-options"),
     pipelineError: document.getElementById("pipeline-error"),
+    outputPanel: document.getElementById("output-panel"),
+    outputToggle: document.getElementById("output-toggle"),
+    outputToggleBadge: document.getElementById("output-toggle-badge"),
+    outputList: document.getElementById("output-list"),
+    outputCommandLine: document.getElementById("output-command-line"),
+    outputText: document.getElementById("output-text"),
+    outputBackground: document.getElementById("output-background"),
+    outputCopy: document.getElementById("output-copy"),
+    outputClear: document.getElementById("output-clear"),
+    outputClose: document.getElementById("output-close"),
 };
 
 const ICONS = new Set([
@@ -64,11 +86,16 @@ const ICONS = new Set([
     "copy",
     "info",
     "pulse",
+    "search",
+    "close",
+    "add",
+    "dot",
+    "send",
 ]);
 
 const ACTIONS = {
     source: { label: "Open AppHost source", shortLabel: "Source", icon: "source" },
-    dashboard: { label: "View dashboard", shortLabel: "View dashboard", icon: "dashboard" },
+    dashboard: { label: "Open dashboard", shortLabel: "Open dashboard", icon: "link" },
     run: { label: "Run AppHost", shortLabel: "Run", icon: "play" },
     stop: { label: "Stop AppHost", shortLabel: "Stop", icon: "stop" },
     deploy: { label: "Deploy AppHost", shortLabel: "Deploy", icon: "deploy" },
@@ -80,7 +107,8 @@ const ACTIONS = {
     traces: { label: "Traces", shortLabel: "Traces", icon: "steps" },
     metrics: { label: "Metrics", shortLabel: "Metrics", icon: "pulse" },
     terminal: { label: "Open terminal", shortLabel: "Terminal", icon: "terminal" },
-    ask: { label: "Add to Copilot chat", shortLabel: "Add to chat", icon: "ask" },
+    ask: { label: "Add to chat", shortLabel: "Add to chat", icon: "ask" },
+    refresh: { label: "Refresh AppHosts", shortLabel: "Refresh", icon: "restart" },
 };
 
 const DASHBOARD_VIEW_ACTIONS = {
@@ -97,11 +125,6 @@ const APPHOST_ACTION_ORDER = {
 };
 
 const CONFIRMATIONS = {
-    stop: {
-        title: (label) => `Stop ${label}?`,
-        detail: "This will stop the AppHost and its resources.",
-        confirmLabel: "Stop AppHost",
-    },
     deploy: {
         title: (label) => `Deploy ${label}?`,
         detail: "This may update the AppHost's target environment.",
@@ -120,6 +143,7 @@ let selectedNodeId = null;
 let activeCommandId = null;
 let requestCount = 0;
 let commandRunning = false;
+let runningCommandId = null;
 let actionMenuNodeId = null;
 let actionMenuTrigger = null;
 let pipelineAppHostId = null;
@@ -138,6 +162,19 @@ let graphDrawFrame = null;
 let renderedAppHostId = null;
 let graphRelationshipsExpanded = false;
 let eventStreamStatus = "connecting";
+let selectedResourceId = null;
+let inspectorReturnFocusId = null;
+let inspectorEntering = false;
+let attentionOnly = false;
+let stateFilter = "all";
+let healthFilter = "all";
+let filtersOpen = false;
+let commandLog = [];
+let selectedOutputId = null;
+let outputOpen = false;
+let showBackgroundCommands = false;
+let outputTimer = null;
+const narrowLayout = window.matchMedia?.("(max-width: 719px)") ?? { matches: false };
 const commandDrafts = new Map();
 const commandInputs = new Map();
 const commandResults = new Map();
@@ -255,9 +292,11 @@ async function api(path, { method = "GET", body } = {}) {
 }
 
 function updateBusy() {
-    const busy = requestCount > 0 || commandRunning || modelState?.refreshing === true;
+    const switching = pendingViewMode !== null;
+    const busy = requestCount > 0 || commandRunning || modelState?.refreshing === true || switching;
     els.body.classList.toggle("is-busy", busy);
-    els.refreshButton.disabled = requestCount > 0;
+    els.refreshButton.disabled = requestCount > 0 || switching;
+    els.refreshButton.classList.toggle("is-refreshing", requestCount > 0 || modelState?.refreshing === true);
 }
 
 function formatAge(value) {
@@ -365,23 +404,80 @@ function setModeButtons() {
     els.globalMode.classList.toggle("is-active", !workspace);
     els.globalMode.setAttribute("aria-pressed", String(!workspace));
     els.globalMode.disabled = switching;
+    els.modeLabel.textContent = workspace ? "Workspace" : "Global";
+    els.modeTrigger.setAttribute("aria-label", `View mode: ${workspace ? "Workspace" : "Global"}`);
+}
+
+function setModePickerOpen(open, { restoreFocus = false } = {}) {
+    els.modeSwitch.hidden = !open;
+    els.modeTrigger.setAttribute("aria-expanded", String(open));
+    if (open) {
+        hideActionMenu();
+        (els.modeSwitch.querySelector(".mode-button.is-active") ?? els.workspaceMode).focus();
+    } else if (restoreFocus) {
+        els.modeTrigger.focus();
+    }
+}
+
+function modeScopedControls() {
+    return [els.surface, els.hostBar, els.viewTabs, document.querySelector(".control-row")].filter(Boolean);
 }
 
 function beginModeSwitch(viewMode) {
     pendingViewMode = viewMode;
     els.body.classList.add("is-mode-switching");
     els.surface.setAttribute("aria-busy", "true");
-    els.surface.inert = true;
+    if (filtersOpen) {
+        setFiltersOpen(false);
+    }
+    for (const control of modeScopedControls()) {
+        control.inert = true;
+    }
     document.documentElement.dataset.modeDirection = viewMode === "global" ? "forward" : "back";
     setModeButtons();
+    updateBusy();
+}
+
+function resetModeScopedState() {
+    hideActionMenu();
+    clearActiveCommand();
+    selectedNodeId = null;
+    selectedResourceId = null;
+    activeAppHostId = null;
+    renderedAppHostId = null;
+    inspectorReturnFocusId = null;
+    pendingConfirmation = null;
+    appModelView = "resources";
+    appModelViewStateByAppHost.clear();
+    graphRelationshipsExpanded = false;
+    filterText = "";
+    els.searchInput.value = "";
+    attentionOnly = false;
+    stateFilter = "all";
+    healthFilter = "all";
+    filtersOpen = false;
+    if (els.pipelineDialog.open) {
+        els.pipelineDialog.close("cancel");
+    }
+    clearResourceGraphDrawing();
+}
+
+function showModeSwitchLoading() {
+    els.tree.replaceChildren();
+    els.tree.hidden = true;
+    els.emptyState.hidden = true;
+    els.loadingTree.hidden = false;
 }
 
 function finishModeSwitch() {
     pendingViewMode = null;
     els.body.classList.remove("is-mode-switching");
     els.surface.removeAttribute("aria-busy");
-    els.surface.inert = false;
+    for (const control of modeScopedControls()) {
+        control.inert = false;
+    }
     setModeButtons();
+    updateBusy();
 }
 
 function withModeTransition(viewMode, mutate) {
@@ -404,22 +500,6 @@ function withModeTransition(viewMode, mutate) {
         });
 }
 
-function nodeMatchesFilter(node, query) {
-    return [node.label, node.description, node.statusLabel]
-        .some((value) => String(value ?? "").toLowerCase().includes(query));
-}
-
-function filterMatchCount(nodes, query) {
-    let count = 0;
-    for (const node of nodes) {
-        if (nodeMatchesFilter(node, query)) {
-            count++;
-        }
-        count += filterMatchCount(node.children ?? [], query);
-    }
-    return count;
-}
-
 function updateHeader() {
     const summary = modelState?.summary;
     const mode = (pendingViewMode ?? modelState?.viewMode) === "global" ? "Global" : "Workspace";
@@ -427,9 +507,9 @@ function updateHeader() {
     const query = filterText.trim().toLowerCase();
     if (pendingViewMode) {
         parts.push("Updating…");
-    } else if (query) {
-        const count = filterMatchCount(modelState?.roots ?? [], query);
-        parts.push(`${count} match${count === 1 ? "" : "es"}`);
+    } else if (query || rosterFiltersActive()) {
+        const { matched, total } = activeRosterCounts();
+        parts.push(`${matched} of ${total} resource${total === 1 ? "" : "s"}`);
     } else {
         if (summary?.running) {
             parts.push(`${summary.running} running`);
@@ -464,6 +544,24 @@ function updateHeader() {
     } else {
         els.connectionStatus.textContent = "Connecting to AppHost data";
     }
+    if (els.footerConnectionLabel) {
+        els.footerConnectionLabel.textContent = eventStreamStatus !== "connected"
+            ? eventStreamStatus === "disconnected" ? "Reconnecting" : "Connecting"
+            : modelState?.status === "error"
+                ? "Updates unavailable"
+                : modelState?.stale ? "Updates may be stale" : "Live updates";
+    }
+    els.freshness.hidden = eventStreamStatus === "connected" && !modelState?.stale;
+    updateFooterCount();
+}
+
+function updateFooterCount() {
+    if (!els.footerCount) {
+        return;
+    }
+    const host = findNode(activeAppHostId) ?? (modelState?.roots ?? []).find(isAppHostNode);
+    const total = host ? flattenResources(appHostResources(host)).length : 0;
+    els.footerCount.textContent = host ? `${total} resource${total === 1 ? "" : "s"}` : "";
 }
 
 function updateStatus() {
@@ -504,23 +602,6 @@ function updateEmptyAndLoading() {
     }
 }
 
-function filteredTree(nodes, query) {
-    const normalized = query.trim().toLowerCase();
-    if (!normalized) {
-        return nodes;
-    }
-    return nodes
-        .map((node) => {
-            const children = filteredTree(node.children ?? [], normalized);
-            const matches = nodeMatchesFilter(node, normalized);
-            if (matches) {
-                return { ...node, filterMatch: true };
-            }
-            return children.length > 0 ? { ...node, children } : null;
-        })
-        .filter(Boolean);
-}
-
 function findNode(nodeId, nodes = modelState?.roots ?? []) {
     for (const node of nodes) {
         if (node.id === nodeId) {
@@ -550,7 +631,7 @@ function recordSelection(node) {
 }
 
 function focusNodeControl(nodeId) {
-    const control = els.tree.querySelector(`[data-node-id="${CSS.escape(nodeId)}"]`);
+    const control = document.querySelector(`[data-node-id="${CSS.escape(nodeId)}"]`);
     control?.focus();
 }
 
@@ -558,21 +639,6 @@ function setSelected(node) {
     recordSelection(node);
     renderTree();
     requestAnimationFrame(() => focusNodeControl(node.id));
-}
-
-function actionButton(label, iconName, handler) {
-    return element("button", {
-        class: "resource-menu-trigger",
-        type: "button",
-        title: label,
-        "aria-label": label,
-        on: {
-            click: (event) => {
-                event.stopPropagation();
-                handler(event);
-            },
-        },
-    }, [svgIcon(iconName, 14)]);
 }
 
 function isAppHostNode(node) {
@@ -589,11 +655,18 @@ function requestNodeAction(action, node) {
     void executeNodeAction(action, node);
 }
 
+function dashboardUnavailableReason(node) {
+    return node.actions?.includes("stop")
+        ? "The AppHost hasn't reported a dashboard URL. The dashboard may have failed to start; check the aspire-dashboard logs."
+        : "The dashboard is available while this AppHost is running.";
+}
+
 function trayAction(action, node) {
     const definition = ACTIONS[action];
     const targetLabel = node.presentationLabel || node.label;
     const enabled = action === "ask" || node.actions?.includes(action);
-    const unavailableReason = node.unavailableActionReason || "This action is not available in the current context.";
+    const unavailableReason = node.unavailableActionReason
+        || (action === "dashboard" ? dashboardUnavailableReason(node) : "This action is not available in the current context.");
     const accessibleLabel = enabled
         ? `${definition.label} for ${targetLabel}`
         : `${definition.label} for ${targetLabel}. Unavailable: ${unavailableReason}`;
@@ -616,24 +689,6 @@ function trayAction(action, node) {
     ]);
 }
 
-function endpointChip(endpoint) {
-    const copyLabel = endpoint.statusLabel
-        ? `Copy ${endpoint.label} endpoint at ${endpoint.statusLabel}`
-        : `Copy ${endpoint.label} endpoint`;
-    return element("span", {
-        class: `endpoint-actions${endpoint.href ? " has-copy" : ""}`,
-    }, [
-        detailChip(endpoint, { open: Boolean(endpoint.href) }),
-        ...(endpoint.href ? [element("button", {
-            class: "endpoint-copy",
-            type: "button",
-            title: copyLabel,
-            "aria-label": copyLabel,
-            on: { click: () => void copyEndpointUrl(endpoint) },
-        }, [svgIcon("copy", 12)])] : []),
-    ]);
-}
-
 function actionGroup(label, actions, node) {
     if (actions.length === 0) {
         return null;
@@ -649,37 +704,36 @@ function cancelConfirmation(node) {
     pendingConfirmation = null;
     renderTree();
     requestAnimationFrame(() => {
-        const target = els.tree.querySelector("[data-apphost-primary]:not([disabled])")
-            || els.tree.querySelector(".host-action-bar .tray-action:not([disabled])")
-            || els.tree.querySelector('[role="tab"][aria-selected="true"]');
+        const target = document.querySelector("[data-apphost-primary]:not([disabled])")
+            || document.querySelector(".host-action-bar .tray-action:not([disabled])")
+            || document.querySelector('[role="tab"][aria-selected="true"]');
         target?.focus();
     });
 }
 
 function renderAppHostConfirmation(node, action) {
     const confirmation = CONFIRMATIONS[action];
-    const danger = action === "stop";
     const targetLabel = node.presentationLabel || node.label;
     return element("div", {
-        class: `apphost-confirmation${danger ? " is-danger" : ""}`,
+        class: "apphost-confirmation",
         role: "group",
         "aria-label": confirmation.title(targetLabel),
     }, [
-        element("span", { class: "confirmation-icon" }, [svgIcon(danger ? "warning" : ACTIONS[action].icon, 15)]),
+        element("span", { class: "confirmation-icon" }, [svgIcon(ACTIONS[action].icon, 15)]),
         element("span", { class: "confirmation-copy" }, [
             element("strong", { text: confirmation.title(targetLabel) }),
             element("span", { text: confirmation.detail }),
         ]),
         element("span", { class: "confirmation-actions" }, [
             element("button", {
-                class: "button button-secondary button-small",
+                class: "button button-secondary",
                 type: "button",
                 text: "Cancel",
                 dataset: { confirmationCancel: action },
                 on: { click: () => cancelConfirmation(node) },
             }),
             element("button", {
-                class: `button button-small${danger ? " button-danger" : " button-primary"}`,
+                class: "button button-primary",
                 type: "button",
                 text: confirmation.confirmLabel,
                 dataset: { confirmAction: action },
@@ -706,32 +760,45 @@ function renderAppHostActionTray(node) {
             renderAppHostConfirmation(node, pendingConfirmation.action),
         ]);
     }
-    const ordered = (APPHOST_ACTION_ORDER[node.kind] ?? [])
-        .filter((action) => action !== "source" || node.actions?.includes("source"));
-    const primaryActions = ordered.filter((action) => ["run", "dashboard", "source"].includes(action));
-    const operationalActions = ordered.filter((action) => !primaryActions.includes(action));
+    const availableActions = ["stop", "run", "dashboard"]
+        .filter((action) => APPHOST_ACTION_ORDER[node.kind]?.includes(action));
+    const stopInOverflow = narrowLayout.matches && availableActions.includes("stop");
+    const primaryActions = stopInOverflow
+        ? availableActions.filter((action) => action !== "stop")
+        : availableActions;
+    const overflow = [
+        ...(stopInOverflow ? ["stop", "separator"] : []),
+        "deploy",
+        "publish",
+        "pipeline-step",
+        ...(node.actions?.includes("source") ? ["source"] : []),
+        "separator",
+        "ask",
+    ];
     return element("div", {
         class: "host-action-bar",
         "aria-label": `${node.label} actions`,
     }, [
-        ...(node.unavailableActionReason ? [element("p", {
+        ...(node.unavailableActionReason ? [element("span", {
             class: "tray-notice",
-            text: node.unavailableActionReason,
-        })] : []),
-        actionGroup("Open and run", primaryActions, node),
-        actionGroup("Lifecycle and deployment", operationalActions, node),
+            role: "note",
+            tabindex: "0",
+            title: node.unavailableActionReason,
+            "aria-label": node.unavailableActionReason,
+        }, [
+            svgIcon("warning", 13),
+            element("span", { text: node.unavailableActionLabel || "Unavailable" }),
+        ])] : []),
+        actionGroup("AppHost actions", primaryActions, node),
         element("button", {
             class: "tray-action host-more-actions resource-menu-trigger",
             type: "button",
+            title: `More operations for ${node.presentationLabel || node.label}`,
             "aria-label": `More operations for ${node.presentationLabel || node.label}`,
             "aria-haspopup": "menu",
             "aria-expanded": "false",
-            on: {
-                click: (event) => openActionMenu(node, event.currentTarget, [
-                    "deploy", "publish", "pipeline-step", ...(node.actions?.includes("source") ? ["source"] : []),
-                ]),
-            },
-        }, [svgIcon("more", 14), element("span", { text: "More" })]),
+            on: { click: (event) => openActionMenu(node, event.currentTarget, overflow) },
+        }, [svgIcon("more", 14)]),
     ]);
 }
 
@@ -772,6 +839,7 @@ function detailChip(node, { open = false, command = false, combineStatus = false
     const unavailable = command && node.disabled;
     const interactive = open || (command && !unavailable);
     const selected = command && selectedNodeId === node.id;
+    const running = command && runningCommandId === node.id;
     const label = node.statusLabel
         ? `${node.label}: ${node.statusLabel}`
         : node.description
@@ -780,10 +848,12 @@ function detailChip(node, { open = false, command = false, combineStatus = false
     const properties = {
         class:
             `detail-chip${interactive && selected ? " is-selected" : ""}${unavailable ? " is-unavailable" : ""}`
-            + `${node.tone ? ` tone-${node.tone}` : ""}${open ? " is-link" : ""}${command ? " is-command" : ""}`,
+            + `${node.tone ? ` tone-${node.tone}` : ""}${open ? " is-link" : ""}${command ? " is-command" : ""}`
+            + `${running ? " is-running" : ""}`,
         title: label,
         "aria-label": label,
         ...(unavailable ? { "aria-disabled": "true" } : {}),
+        ...(running ? { "aria-busy": "true" } : {}),
         ...(interactive ? {
             type: "button",
             ...(command ? { "aria-pressed": selected } : {}),
@@ -792,6 +862,13 @@ function detailChip(node, { open = false, command = false, combineStatus = false
                 click: () => {
                     if (open) {
                         void executeNodeAction("endpoint", node);
+                        return;
+                    }
+                    if (command && !commandNeedsPanel(node)) {
+                        if (activeCommandId) {
+                            clearActiveCommand();
+                        }
+                        void submitResourceCommand(node);
                         return;
                     }
                     recordSelection(node);
@@ -806,7 +883,9 @@ function detailChip(node, { open = false, command = false, combineStatus = false
         } : {}),
     };
     return element(interactive ? "button" : "span", properties, [
-        svgIcon(command ? node.icon || "run" : open ? "link" : node.icon || "record", 13),
+        running
+            ? element("span", { class: "chip-spinner", "aria-hidden": "true" })
+            : svgIcon(command ? node.icon || "run" : open ? "link" : node.icon || "record", 13),
         element("span", {
             text: combineStatus && node.statusLabel
                 ? `${node.label} · ${node.statusLabel}`
@@ -818,134 +897,557 @@ function detailChip(node, { open = false, command = false, combineStatus = false
     ]);
 }
 
-function renderResourceAttributeGroup(label, iconName, items, variant) {
-    if (items.length === 0) {
-        return null;
+const STATE_FILTERS = [
+    { id: "all", label: "Any state" },
+    { id: "running", label: "Running" },
+    { id: "transitioning", label: "Starting or stopping" },
+    { id: "stopped", label: "Not running" },
+    { id: "failed", label: "Failed" },
+];
+
+const HEALTH_FILTERS = [
+    { id: "all", label: "Any health" },
+    { id: "healthy", label: "Healthy" },
+    { id: "unhealthy", label: "Unhealthy or degraded" },
+    { id: "not-reported", label: "Not reported" },
+];
+
+function resourceStateGroup(resource) {
+    if (resource.lifecycleTone === "error") {
+        return "failed";
     }
-    return element("div", {
-        class: `resource-attribute-group is-${variant}`,
-        role: "group",
-        "aria-label": label,
-    }, [
-        element("span", { class: "resource-attribute-label" }, [
-            svgIcon(iconName, 12),
-            element("span", { text: label }),
+    if (resource.lifecycleTransitioning) {
+        return "transitioning";
+    }
+    return resource.lifecycleTone === "healthy" ? "running" : "stopped";
+}
+
+function resourceHealthGroup(resource) {
+    if (!resource.healthLabel) {
+        return "not-reported";
+    }
+    if (resource.healthTone === "healthy") {
+        return "healthy";
+    }
+    return resource.healthTone === "error" || resource.healthTone === "warning" ? "unhealthy" : "last-known";
+}
+
+// Transitional lifecycle states and intentionally stopped resources are not attention.
+function resourceNeedsAttention(resource) {
+    return resource.lifecycleTone === "error"
+        || (resource.lifecycleTone === "warning" && !resource.lifecycleTransitioning)
+        || (resource.lifecycleTone === "healthy"
+            && (resource.healthTone === "error" || resource.healthTone === "warning"));
+}
+
+function rosterFiltersActive() {
+    return Boolean(filterText.trim()) || attentionOnly || stateFilter !== "all" || healthFilter !== "all";
+}
+
+function resourceSearchText(resource) {
+    const details = (resource.children ?? [])
+        .filter((child) => child.kind !== "resource")
+        .flatMap((child) => [
+            child.label,
+            child.description,
+            child.statusLabel,
+            ...(child.children ?? []).map((item) => item.label),
+        ]);
+    return [
+        resource.label,
+        resource.resourceName,
+        resource.description,
+        resource.statusLabel,
+        resource.healthLabel,
+        ...details,
+    ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function resourceMatches({ resource }) {
+    const query = filterText.trim().toLowerCase();
+    return (!query || resourceSearchText(resource).includes(query))
+        && (!attentionOnly || resourceNeedsAttention(resource))
+        && (stateFilter === "all" || resourceStateGroup(resource) === stateFilter)
+        && (healthFilter === "all" || resourceHealthGroup(resource) === healthFilter);
+}
+
+function activeRosterCounts() {
+    const host = findNode(activeAppHostId) ?? (modelState?.roots ?? []).find(isAppHostNode);
+    const entries = host ? flattenResources(appHostResources(host)) : [];
+    return { matched: entries.filter(resourceMatches).length, total: entries.length };
+}
+
+function rosterRowSelector(resourceId) {
+    return `[data-focus-key="${CSS.escape(`row:${resourceId}`)}"]`;
+}
+
+function rosterVisible() {
+    const roster = els.tree.querySelector(".roster-pane");
+    return Boolean(roster)
+        && (typeof roster.getClientRects !== "function" || roster.getClientRects().length > 0);
+}
+
+function selectResource(resource) {
+    const changed = selectedResourceId !== resource.id;
+    if (changed) {
+        clearActiveCommand();
+    }
+    selectedResourceId = resource.id;
+    inspectorReturnFocusId = resource.id;
+    hideActionMenu();
+    recordSelection(resource);
+    // Only a new selection animates; model refreshes re-render without motion.
+    inspectorEntering = changed;
+    renderTree();
+    inspectorEntering = false;
+    requestAnimationFrame(() => {
+        const target = rosterVisible()
+            ? els.tree.querySelector(rosterRowSelector(resource.id))
+            : els.tree.querySelector("#inspector-title");
+        target?.focus();
+    });
+}
+
+function closeInspector() {
+    const returnId = inspectorReturnFocusId ?? selectedResourceId;
+    selectedResourceId = null;
+    inspectorReturnFocusId = null;
+    clearActiveCommand();
+    hideActionMenu();
+    renderTree();
+    requestAnimationFrame(() => {
+        const target = (returnId && els.tree.querySelector(rosterRowSelector(returnId)))
+            || els.tree.querySelector(".resource-row-main")
+            || els.searchInput;
+        target?.focus();
+    });
+}
+
+function showResourceInRoster(resourceName) {
+    const host = findNode(activeAppHostId);
+    const entry = host
+        ? flattenResources(appHostResources(host)).find(({ resource }) => resource.resourceName === resourceName)
+        : null;
+    if (!entry) {
+        return;
+    }
+    appModelView = "resources";
+    selectResource(entry.resource);
+}
+
+function handleRosterKey(event) {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+        return;
+    }
+    const rows = [...els.tree.querySelectorAll(".resource-row-main")];
+    const index = rows.indexOf(event.currentTarget);
+    if (index < 0) {
+        return;
+    }
+    event.preventDefault();
+    const next = event.key === "Home"
+        ? 0
+        : event.key === "End"
+            ? rows.length - 1
+            : Math.min(rows.length - 1, Math.max(0, index + (event.key === "ArrowDown" ? 1 : -1)));
+    rows[next]?.focus();
+}
+
+function handleInspectorKey(event) {
+    if (event.key !== "Escape" || !selectedResourceId || event.target?.closest?.(".command-form")) {
+        return;
+    }
+    event.preventDefault();
+    closeInspector();
+}
+
+function setRosterFilter(update) {
+    update();
+    updateHeader();
+    renderTree();
+}
+
+function rosterSelect(label, options, value, focusKey, apply) {
+    return element("label", { class: `roster-select${value !== "all" ? " is-active" : ""}` }, [
+        element("span", { class: "sr-only", text: label }),
+        element("select", {
+            dataset: { focusKey },
+            on: { change: (event) => setRosterFilter(() => apply(event.target.value)) },
+        }, options.map((option) => element("option", {
+            value: option.id,
+            text: option.label,
+            selected: option.id === value,
+        }))),
+    ]);
+}
+
+function attentionCount(entries) {
+    return entries.filter(({ resource }) => resourceNeedsAttention(resource)).length;
+}
+
+function popoverFilterCount() {
+    return Number(stateFilter !== "all")
+        + Number(healthFilter !== "all")
+        + Number(modelState?.includeHidden === true);
+}
+
+async function clearPopoverFilters() {
+    setRosterFilter(() => {
+        stateFilter = "all";
+        healthFilter = "all";
+    });
+    if (modelState?.includeHidden === true) {
+        els.hiddenCheckbox.checked = false;
+        try {
+            const result = await api("/api/preferences", { method: "POST", body: { includeHidden: false } });
+            acceptState(result.state);
+        } catch (error) {
+            els.hiddenCheckbox.checked = modelState?.includeHidden === true;
+            showToast(error.message, true);
+        }
+    }
+    if (filtersOpen) {
+        els.filterSelects.querySelector("select")?.focus();
+    }
+}
+
+function renderRosterControls(entries) {
+    const attention = attentionCount(entries);
+    const advanced = popoverFilterCount();
+    els.filtersClear.disabled = advanced === 0;
+    return [
+        element("button", {
+            class: `roster-attention${attentionOnly ? " is-active" : ""}${attention ? " has-attention" : ""}`,
+            type: "button",
+            "aria-pressed": attentionOnly,
+            dataset: { focusKey: "attention" },
+            on: { click: () => setRosterFilter(() => { attentionOnly = !attentionOnly; }) },
+        }, [
+            svgIcon("warning", 13),
+            element("span", { class: "roster-attention-label", text: "Needs attention" }),
+            element("span", { class: "roster-attention-count", text: String(attention) }),
         ]),
-        element("div", { class: "resource-attribute-values" }, items),
-    ]);
+        element("button", {
+            class: `roster-filters-trigger${advanced ? " is-active" : ""}`,
+            type: "button",
+            "aria-expanded": filtersOpen,
+            "aria-controls": "filters-panel",
+            "aria-label": advanced ? `Filters, ${advanced} active` : "Filters",
+            dataset: { focusKey: "filters" },
+            on: { click: () => setFiltersOpen(!filtersOpen) },
+        }, [
+            element("span", { text: "Filters" }),
+            ...(advanced ? [element("span", {
+                class: "roster-filters-count",
+                text: String(advanced),
+                "aria-hidden": "true",
+            })] : []),
+            svgIcon("chevron", 11),
+        ]),
+    ];
 }
 
-function renderResourceAttributes(endpoints, healthItems) {
-    if (endpoints.length === 0 && healthItems.length === 0) {
-        return null;
+function setFiltersOpen(open, { restoreFocus = false } = {}) {
+    filtersOpen = open;
+    els.filtersPanel.hidden = !open;
+    const trigger = document.querySelector('[data-focus-key="filters"]');
+    trigger?.setAttribute("aria-expanded", String(open));
+    if (open) {
+        hideActionMenu();
+        positionFiltersPanel();
+        els.filterSelects.querySelector("select")?.focus();
+    } else if (restoreFocus) {
+        trigger?.focus();
     }
-    return element("div", {
-        class: "resource-attributes",
+}
+
+function positionFiltersPanel() {
+    const panel = els.filtersPanel;
+    const trigger = document.querySelector('[data-focus-key="filters"]');
+    const row = panel.offsetParent;
+    if (!trigger || !row) {
+        return;
+    }
+    const rowRect = row.getBoundingClientRect();
+    const triggerLeft = trigger.getBoundingClientRect().left - rowRect.left;
+    const maxLeft = Math.max(0, rowRect.width - panel.offsetWidth);
+    panel.style.left = `${Math.round(Math.min(Math.max(0, triggerLeft), maxLeft))}px`;
+}
+
+const MAX_ROW_DEPTH = 3;
+
+// Tree guides only connect rows whose parent is also visible and within the indent cap.
+function rowTreeGuides(visible, index, visibleLabels) {
+    const { depth, parentLabel } = visible[index];
+    const connected = Boolean(parentLabel) && visibleLabels.has(parentLabel) && depth <= MAX_ROW_DEPTH;
+    const next = visible[index + 1];
+    const hasChildren = Boolean(next) && next.depth === depth + 1 && next.depth <= MAX_ROW_DEPTH;
+    let hasNextSibling = false;
+    for (const later of visible.slice(index + 1)) {
+        if (later.depth <= depth) {
+            hasNextSibling = later.depth === depth && later.parentLabel === parentLabel;
+            break;
+        }
+    }
+    return [
+        ...(connected ? [element("span", { class: "tree-elbow", "aria-hidden": "true" })] : []),
+        ...(connected && hasNextSibling ? [element("span", { class: "tree-rail", "aria-hidden": "true" })] : []),
+        ...(hasChildren ? [element("span", { class: "tree-stem", "aria-hidden": "true" })] : []),
+    ];
+}
+
+function renderResourceRow({ resource, parentLabel, depth }, dashboardAvailable, visibleLabels, guides = []) {
+    const selected = resource.id === selectedResourceId;
+    const parentVisible = Boolean(parentLabel) && visibleLabels.has(parentLabel);
+    return element("li", {
+        class: `resource-row${selected ? " is-selected" : ""}${resourceNeedsAttention(resource) ? " needs-attention" : ""}`,
+        dataset: { resourceId: resource.id, depth: String(Math.min(depth, MAX_ROW_DEPTH)) },
     }, [
-        renderResourceAttributeGroup("Endpoints", "link", endpoints.map(endpointChip), "endpoints"),
-        renderResourceAttributeGroup("Health", "heart", healthItems, "health"),
-    ]);
-}
-
-function renderResourceActions(commands) {
-    if (commands.length === 0) {
-        return null;
-    }
-    return element("div", {
-        class: "resource-card-actions",
-        role: "group",
-        "aria-label": "Resource commands",
-    }, commands.map((command) => detailChip(command, { command: true })));
-}
-
-function aggregateHealthChip(resource) {
-    return element("span", {
-        class: `detail-chip${resource.healthTone ? ` tone-${resource.healthTone}` : ""}`,
-        title: `Health: ${resource.healthLabel}`,
-        "aria-label": `Health for ${resource.label}: ${resource.healthLabel}`,
-    }, [
-        svgIcon("heart", 13),
-        element("span", { text: resource.healthLabel }),
-    ]);
-}
-
-function resourceMenuActions(resource, dashboardAvailable) {
-    const actions = dashboardAvailable
-        ? ["details", "console-logs", "structured-logs", "traces", "metrics"]
-        : [];
-    if (resource.terminalEnabled) {
-        actions.push("terminal");
-    }
-    if (actions.length > 0) {
-        actions.push("separator");
-    }
-    actions.push("ask");
-    return actions;
-}
-
-function renderResourceCard({ resource, parentLabel, dashboardAvailable }) {
-    const endpoints = childrenOfKind(resource, "endpoint");
-    const healthGroup = firstChildOfKind(resource, "health-group");
-    const healthItems = healthGroup?.children?.length
-        ? healthGroup.children.map((health) => detailChip(health, { combineStatus: true }))
-        : resource.healthLabel
-            ? [aggregateHealthChip(resource)]
-            : [];
-    const commandsGroup = firstChildOfKind(resource, "commands-group");
-    const commands = commandsGroup?.children ?? [];
-    const activeCommand = commands.find((command) => command.id === activeCommandId);
-    return element("article", {
-        class:
-            `resource-card${activeCommand ? " has-command-panel" : ""}`
-            + `${resource.tone ? ` tone-${resource.tone}` : ""}`,
-        role: "listitem",
-        dataset: { resourceId: resource.id },
-    }, [
-        element("header", { class: "resource-card-header" }, [
-            element("div", {
-                class: "resource-card-identity",
-            }, [
-                rowIcon(resource),
-                element("span", { class: "resource-identity" }, [
-                    element("span", { class: "resource-name-actions" }, [
-                        element(dashboardAvailable ? "button" : "strong", {
-                            class: "resource-name",
-                            ...(dashboardAvailable ? {
-                                type: "button",
-                                title: `View details for ${resource.label}`,
-                                "aria-label": `View details for ${resource.label}`,
-                                on: { click: () => void executeNodeAction("details", resource) },
-                            } : { title: resource.label }),
-                            text: resource.label,
-                        }),
-                        element("button", {
-                            class: "resource-name-copy",
-                            type: "button",
-                            title: `Copy resource name: ${resourceCopyName(resource)}`,
-                            "aria-label": `Copy resource name ${resourceCopyName(resource)}`,
-                            on: { click: () => void copyResourceName(resource) },
-                        }, [svgIcon("copy", 12)]),
-                    ]),
-                    element("span", { text: resource.description, title: resource.description }),
-                ]),
-                ...(resource.statusLabel ? [element("span", {
-                    class: `resource-status${resource.lifecycleTone ? ` tone-${resource.lifecycleTone}` : ""}`,
-                    text: resource.statusLabel,
-                })] : []),
+        ...guides,
+        element("button", {
+            class: "resource-row-main",
+            type: "button",
+            "aria-current": selected ? "true" : undefined,
+            dataset: { focusKey: `row:${resource.id}` },
+            on: { click: () => selectResource(resource), keydown: handleRosterKey },
+        }, [
+            rowIcon(resource),
+            element("span", { class: "resource-row-text" }, [
+                element("span", { class: "resource-row-name", text: resource.label, title: resource.label }),
+                element("span", { class: "resource-row-type", text: resource.description, title: resource.description }),
+                ...(parentVisible ? [element("span", { class: "sr-only", text: `Part of ${parentLabel}` })] : []),
             ]),
-            actionButton(`More actions for ${resource.label}`, "more", (event) =>
-                openActionMenu(resource, event.currentTarget, resourceMenuActions(resource, dashboardAvailable))),
+            element("span", { class: "resource-row-state" }, [
+                element("span", {
+                    class: `resource-status tone-${resource.lifecycleTone || "inactive"}`,
+                    text: resource.statusLabel || "Unknown",
+                }),
+                element("span", {
+                    class: `resource-row-health tone-${resource.healthLabel ? resource.healthTone || "inactive" : "inactive"}`,
+                    text: resource.healthLabel || "Not reported",
+                }),
+            ]),
         ]),
-        ...(parentLabel ? [element("p", {
+        ...(parentLabel && !parentVisible ? [element("p", {
             class: "resource-parent",
             text: `Part of ${parentLabel}`,
             title: `Part of ${parentLabel}`,
         })] : []),
-        element("div", { class: "resource-card-details" }, [
-            renderResourceAttributes(endpoints, healthItems),
-            renderResourceActions(commands),
+    ]);
+}
+
+function inspectorBackBar(attention = 0) {
+    return element("div", { class: "inspector-backbar" }, [
+        element("button", {
+            class: "inspector-back",
+            type: "button",
+            "aria-label": "Back to resources",
+            dataset: { focusKey: "inspector-back" },
+            on: { click: closeInspector },
+        }, [svgIcon("chevron", 12), element("span", { text: "Resources" })]),
+        ...(attention ? [element("span", {
+            class: "inspector-backbar-note",
+            text: `${attention} need${attention === 1 ? "s" : ""} attention`,
+        })] : []),
+    ]);
+}
+
+function inspectorPill(tone, text) {
+    return element("span", { class: `inspector-pill tone-${tone}` }, [
+        element("span", { class: "status-dot", "aria-hidden": "true" }),
+        element("span", { text }),
+    ]);
+}
+
+function inspectorFact(term, content) {
+    return element("div", { class: "inspector-fact" }, [
+        element("dt", { class: "sr-only", text: term }),
+        element("dd", {}, [content]),
+    ]);
+}
+
+function inspectorButton(action, resource) {
+    const definition = ACTIONS[action];
+    return element("button", {
+        class: "button button-secondary button-small inspector-button",
+        type: "button",
+        "aria-label": `${definition.label} for ${resource.label}`,
+        dataset: { focusKey: `inspector:${action}` },
+        on: { click: () => requestNodeAction(action, resource) },
+    }, [svgIcon(definition.icon, 13), element("span", { text: definition.shortLabel })]);
+}
+
+function inspectorSection(title, children) {
+    if (children.length === 0) {
+        return null;
+    }
+    return element("section", { class: "inspector-section" }, [
+        element("h4", { text: title }),
+        ...children,
+    ]);
+}
+
+function endpointRow(endpoint) {
+    const url = endpoint.description || endpoint.statusLabel || "";
+    const copyLabel = url
+        ? `Copy ${endpoint.label} endpoint at ${url}`
+        : `Copy ${endpoint.label} endpoint`;
+    return element("li", { class: "inspector-row endpoint-row" }, [
+        element("span", { class: "inspector-row-name", text: endpoint.label, title: endpoint.label }),
+        endpoint.href
+            ? element("button", {
+                class: "endpoint-url",
+                type: "button",
+                text: url || endpoint.label,
+                title: `Open ${url || endpoint.label}`,
+                on: { click: () => void executeNodeAction("endpoint", endpoint) },
+            })
+            : element("span", {
+                class: "endpoint-url is-static",
+                text: url || "Not allocated",
+                title: url || undefined,
+            }),
+        ...(endpoint.href ? [element("span", { class: "endpoint-actions" }, [
+            element("button", {
+                class: "icon-button endpoint-open",
+                type: "button",
+                title: `Open ${endpoint.label} endpoint`,
+                "aria-label": `Open ${endpoint.label} endpoint${url ? ` at ${url}` : ""}`,
+                dataset: { nodeId: endpoint.id },
+                on: { click: () => void executeNodeAction("endpoint", endpoint) },
+            }, [svgIcon("link", 13)]),
+            element("button", {
+                class: "icon-button endpoint-copy",
+                type: "button",
+                title: copyLabel,
+                "aria-label": copyLabel,
+                on: { click: () => void copyEndpointUrl(endpoint) },
+            }, [svgIcon("copy", 13)]),
+        ])] : []),
+    ]);
+}
+
+function healthRow(health) {
+    const tone = health.tone || "inactive";
+    return element("li", { class: "inspector-row health-row" }, [
+        element("span", {
+            class: `state-icon tone-${tone}${health.icon === "loading" ? " is-spinning" : ""}`,
+        }, [svgIcon(health.icon || "heart", 13)]),
+        element("span", { class: "inspector-row-name", text: health.label, title: health.label }),
+        element("span", { class: `health-status tone-${tone}`, text: health.statusLabel || "Unknown" }),
+    ]);
+}
+
+function renderInspector({ resource, parentLabel }, dashboardAvailable, attention = 0, appHostNode = {}) {
+    const endpoints = childrenOfKind(resource, "endpoint");
+    const healthChecks = firstChildOfKind(resource, "health-group")?.children ?? [];
+    const commands = firstChildOfKind(resource, "commands-group")?.children ?? [];
+    const activeCommand = commands.find((command) => command.id === activeCommandId);
+    const copyName = resourceCopyName(resource);
+    const investigate = [
+        ...(dashboardAvailable ? [
+            inspectorButton("details", resource),
+            inspectorButton("console-logs", resource),
+            inspectorButton("structured-logs", resource),
+            inspectorButton("traces", resource),
+            inspectorButton("metrics", resource),
+        ] : []),
+        ...(resource.terminalEnabled ? [inspectorButton("terminal", resource)] : []),
+    ];
+    return element("div", {
+        class: `inspector${inspectorEntering ? " is-entering" : ""}`,
+        dataset: { inspectorResource: resource.id },
+    }, [
+        inspectorBackBar(attention),
+        element("header", { class: "inspector-header" }, [
+            element("div", { class: "inspector-title" }, [
+                element("div", { class: "inspector-name-line" }, [
+                    element("h3", { id: "inspector-title", tabIndex: -1, text: resource.label, title: resource.label }),
+                    element("button", {
+                        class: "icon-button inspector-copy",
+                        type: "button",
+                        title: `Copy resource name: ${copyName}`,
+                        "aria-label": `Copy resource name ${copyName}`,
+                        dataset: { focusKey: "inspector:copy" },
+                        on: { click: () => void copyResourceName(resource) },
+                    }, [svgIcon("copy", 13)]),
+                ]),
+                ...(resource.description ? [element("p", { text: resource.description, title: resource.description })] : []),
+            ]),
+            element("button", {
+                class: "inspector-ask",
+                type: "button",
+                "aria-label": `Add ${resource.label} to chat`,
+                dataset: { focusKey: "inspector:ask" },
+                on: { click: () => requestNodeAction("ask", resource) },
+            }, [svgIcon("ask", 13), element("span", { text: "Add to chat" })]),
+            element("dl", { class: "inspector-facts" }, [
+                inspectorFact("State", inspectorPill(resource.lifecycleTone || "inactive", resource.statusLabel || "Unknown")),
+                inspectorFact("Health", inspectorPill(
+                    resource.healthLabel ? resource.healthTone || "inactive" : "inactive",
+                    resource.healthLabel || "Not reported",
+                )),
+                ...(parentLabel ? [inspectorFact("Parent", element("span", {
+                    class: "inspector-parent",
+                    text: `Part of ${parentLabel}`,
+                }))] : []),
+            ]),
         ]),
-        ...(activeCommand ? [renderCommandPanel(activeCommand)] : []),
+        inspectorSection("Endpoints", endpoints.length
+            ? [element("ul", { class: "inspector-list endpoint-list" }, endpoints.map(endpointRow))]
+            : []),
+        inspectorSection("Health checks", healthChecks.length
+            ? [element("ul", { class: "inspector-list" }, healthChecks.map(healthRow))]
+            : []),
+        inspectorSection("Commands", commands.length ? [
+            element("div", { class: "resource-commands", role: "group", "aria-label": `Commands for ${resource.label}` },
+                commands.map((command) => detailChip(command, { command: true }))),
+            ...(activeCommand ? [renderCommandPanel(activeCommand)] : []),
+        ] : []),
+        inspectorSection("Investigate in dashboard", [
+            ...(investigate.length ? [element("div", {
+                class: "inspector-buttons",
+                role: "group",
+                "aria-label": `Dashboard views for ${resource.label}`,
+            }, investigate)] : []),
+            ...(dashboardAvailable ? [] : [element("p", {
+                class: "inspector-note",
+                text: dashboardUnavailableReason(appHostNode),
+            })]),
+        ]),
+    ]);
+}
+
+function renderMissingResource(attention = 0) {
+    return element("div", { class: "inspector inspector-missing" }, [
+        inspectorBackBar(attention),
+        element("h3", { id: "inspector-title", tabIndex: -1, text: "Resource no longer available" }),
+        element("p", {
+            class: "inspector-note",
+            role: "status",
+            text: "It was removed from this AppHost's model, so its actions are no longer available.",
+        }),
+    ]);
+}
+
+function renderHostOverview(entries) {
+    const attention = attentionCount(entries);
+    return element("div", { class: "inspector host-summary" }, [
+        element("span", { class: "host-summary-icon", "aria-hidden": "true" }, [svgIcon("resource", 18)]),
+        element("p", { class: "host-summary-title", id: "inspector-title", text: "No resource selected" }),
+        element("p", {
+            class: "inspector-note",
+            text: "Select a resource to see its endpoints, health, and commands.",
+        }),
+        ...(attention && !attentionOnly ? [element("button", {
+            class: "button button-secondary button-small",
+            type: "button",
+            dataset: { focusKey: "overview-attention" },
+            on: { click: () => setRosterFilter(() => { attentionOnly = true; }) },
+        }, [
+            svgIcon("warning", 13),
+            element("span", { text: `Show ${attention} that need${attention === 1 ? "s" : ""} attention` }),
+        ])] : []),
     ]);
 }
 
@@ -962,13 +1464,16 @@ function visibleResourceGraph(appHost, resources) {
         edges,
         sourceNodeCount: source.nodes.length,
         sourceEdgeCount: source.edges.length,
-        filtered: Boolean(filterText.trim()),
+        filtered: rosterFiltersActive(),
     };
 }
 
 function clearFilter() {
     filterText = "";
     els.searchInput.value = "";
+    attentionOnly = false;
+    stateFilter = "all";
+    healthFilter = "all";
     updateHeader();
     renderTree();
     els.searchInput.focus();
@@ -978,7 +1483,7 @@ function clearFilterButton() {
     return element("button", {
         class: "button button-secondary button-small",
         type: "button",
-        text: "Clear filter",
+        text: "Clear filters",
         on: { click: clearFilter },
     });
 }
@@ -991,7 +1496,7 @@ function setAppModelView(view) {
     hideActionMenu();
     renderTree();
     requestAnimationFrame(() => {
-        els.tree.querySelector(`#${view}-view-tab`)?.focus();
+        document.querySelector(`#${view}-view-tab`)?.focus();
     });
 }
 
@@ -1008,7 +1513,7 @@ function handleAppModelTabKey(event, view) {
     setAppModelView(nextView);
 }
 
-function renderAppModelTabs(resourceCount) {
+function renderAppModelTabs(resourceCount, visibleCount) {
     const definitions = [
         { id: "resources", label: "Resources", icon: "layers", count: resourceCount },
         { id: "graph", label: "Graph", icon: "steps" },
@@ -1029,17 +1534,18 @@ function renderAppModelTabs(resourceCount) {
             "aria-controls": `${definition.id}-view-panel`,
             "aria-label": definition.count === undefined
                 ? definition.label
-                : `${definition.label}, ${definition.count}`,
+                : rosterFiltersActive()
+                    ? `${definition.label}, ${visibleCount} of ${definition.count}`
+                    : `${definition.label}, ${definition.count}`,
             on: {
                 click: () => setAppModelView(definition.id),
                 keydown: (event) => handleAppModelTabKey(event, definition.id),
             },
         }, [
-            svgIcon(definition.icon, 14),
             element("span", { text: definition.label }),
             ...(definition.count === undefined ? [] : [element("span", {
-                class: "app-model-tab-count",
-                text: String(definition.count),
+                class: "roster-count",
+                text: rosterFiltersActive() ? `${visibleCount} of ${definition.count}` : String(definition.count),
                 "aria-hidden": "true",
             })]),
         ]);
@@ -1122,6 +1628,12 @@ function renderGraphNode(node) {
             svgIcon("heart", 12),
             element("span", { text: node.healthLabel }),
         ])] : []),
+        element("button", {
+            class: "graph-node-inspect",
+            type: "button",
+            "aria-label": `Inspect ${node.label} in Resources`,
+            on: { click: () => showResourceInRoster(node.resourceName) },
+        }, [element("span", { text: "Inspect" })]),
     ]);
 }
 
@@ -1228,7 +1740,7 @@ function renderGraphRelationships(graph, nodeByName) {
         open: graphRelationshipsExpanded,
         on: { toggle: (event) => { graphRelationshipsExpanded = event.currentTarget.open; } },
     }, [
-        element("summary", { text: `Relationships (${graph.edges.length}) · Select to add to Copilot` }),
+        element("summary", { text: `Relationships (${graph.edges.length}) · Select to add to chat` }),
         element("ul", { "aria-label": "Resource relationships" }, graph.edges.map((edge) => {
             const sentence = edge.types.map((type) => graphRelationshipSentence(edge, type, nodeByName)).join(" ");
             return element("li", {}, [
@@ -1252,13 +1764,17 @@ function renderGraphRelationships(graph, nodeByName) {
         ...(selected ? [element("button", {
             class: "button button-secondary button-small",
             type: "button",
-            text: "Add relationship to Copilot",
+            text: "Add relationship to chat",
             on: { click: () => void executeNodeAction("ask", selected) },
         })] : []),
     ]);
 }
 
-function renderResourceBoardPanel(appHost, resources, dashboardAvailable, active) {
+function renderResourceBoardPanel(appHost, entries, visible, dashboardAvailable, active) {
+    const selectedEntry = selectedResourceId
+        ? entries.find(({ resource }) => resource.id === selectedResourceId)
+        : null;
+    const visibleLabels = new Set(visible.map(({ resource }) => resource.label));
     return element("div", {
         class: "app-model-panel",
         id: "resources-view-panel",
@@ -1266,26 +1782,57 @@ function renderResourceBoardPanel(appHost, resources, dashboardAvailable, active
         "aria-labelledby": "resources-view-tab",
         hidden: !active,
     }, [
-        element("p", {
-            class: "app-model-view-description",
-            text: resources.length
-                ? "Endpoint addresses, health, and commands stay with the resource that owns them."
-                : "Start this AppHost to load its evaluated resource model.",
-        }),
-        resources.length
-            ? element("div", {
-                class: `resource-board${activeCommandId ? " has-open-command" : ""}`,
-                role: "list",
-            },
-                resources.map((resource) => renderResourceCard({ ...resource, dashboardAvailable })))
-            : element("div", { class: "resource-board-empty" }, [
-                rowIcon(appHost),
-                element("strong", { text: "No live resources yet" }),
-                element("span", {
-                    text: appHost.unavailableActionReason
-                        || "Use the AppHost actions above when you're ready to run it.",
-                }),
-            ]),
+        entries.length
+            ? element("div", { class: `resource-board${selectedResourceId ? " is-inspecting" : ""}` }, [
+                element("section", { class: "roster-pane", "aria-label": "Resources" }, [
+                    element("div", { class: "roster-header", "aria-hidden": "true" }, [
+                        element("span", { text: "Resource" }),
+                        element("span", { text: "State / health" }),
+                    ]),
+                    visible.length
+                        ? element("ul", { class: "resource-roster", role: "list" },
+                            visible.map((entry, index) => renderResourceRow(
+                                entry,
+                                dashboardAvailable,
+                                visibleLabels,
+                                rowTreeGuides(visible, index, visibleLabels),
+                            )))
+                        : element("div", { class: "roster-empty", role: "status" }, [
+                            element("p", { text: "No resources match these filters." }),
+                            clearFilterButton(),
+                        ]),
+                ]),
+                element("section", {
+                    class: "inspector-pane",
+                    "aria-labelledby": "inspector-title",
+                    dataset: { resourceId: selectedResourceId ?? "" },
+                    on: { keydown: handleInspectorKey },
+                }, [
+                    selectedEntry
+                        ? renderInspector(selectedEntry, dashboardAvailable, attentionCount(entries), appHost)
+                        : selectedResourceId
+                            ? renderMissingResource(attentionCount(entries))
+                            : renderHostOverview(entries),
+                ]),
+            ])
+            : appHost.operation
+                ? element("div", { class: "resource-board-empty", role: "status" }, [
+                    rowIcon(appHost),
+                    element("strong", { text: `${operationStatusLabel(appHost.operation)} AppHost` }),
+                    element("span", {
+                        text: appHost.operation.name === "run"
+                            ? "Resources show up after the build finishes. Follow progress in Output."
+                            : "This can take a moment. Progress shows in the action bar above.",
+                    }),
+                ])
+                : element("div", { class: "resource-board-empty", role: "status" }, [
+                    rowIcon(appHost),
+                    element("strong", { text: "No live resources yet" }),
+                    element("span", {
+                        text: appHost.unavailableActionReason
+                            || "Use the AppHost actions above when you're ready to run it.",
+                    }),
+                ]),
     ]);
 }
 
@@ -1523,13 +2070,47 @@ function restoreAppModelViewState(hostId) {
         viewport.scrollTop = state.scrollTop;
     }
     if (state.focusId) {
-        els.tree.querySelector(`#${state.focusId}`)?.focus();
+        document.querySelector(`#${state.focusId}`)?.focus();
     } else if (state.viewportFocused && appModelView === "graph") {
         viewport?.focus();
     }
 }
 
+function capturePaneScroll() {
+    const roster = els.tree.querySelector(".roster-pane");
+    const inspector = els.tree.querySelector(".inspector-pane");
+    if (!roster && !inspector) {
+        return null;
+    }
+    return {
+        rosterTop: roster?.scrollTop ?? 0,
+        inspectorTop: inspector?.scrollTop ?? 0,
+        inspectorResourceId: inspector?.dataset.resourceId ?? null,
+    };
+}
+
+function restorePaneScroll(state) {
+    if (!state) {
+        return;
+    }
+    const roster = els.tree.querySelector(".roster-pane");
+    if (roster) {
+        roster.scrollTop = state.rosterTop;
+    }
+    const inspector = els.tree.querySelector(".inspector-pane");
+    if (inspector && inspector.dataset.resourceId === state.inspectorResourceId) {
+        inspector.scrollTop = state.inspectorTop;
+    }
+}
+
+function operationStatusLabel(operation) {
+    return String(operation?.label || "Working").replace(/\.{3}$|…$/, "");
+}
+
 function hostStatus(appHost) {
+    if (appHost.operation) {
+        return { label: operationStatusLabel(appHost.operation), tone: "pending" };
+    }
     if (appHost.kind === "apphost-running") {
         return { label: "Running", tone: appHost.tone || "healthy" };
     }
@@ -1539,74 +2120,109 @@ function hostStatus(appHost) {
     return { label: "Ready to run", tone: "inactive" };
 }
 
-function duplicateHostLabel(appHost, hosts) {
-    const matches = hosts.filter((host) => host.label === appHost.label);
-    if (matches.length < 2) {
-        return appHost.label;
+function duplicateHostHint(appHost, hosts) {
+    if (appHost.workspaceLocation) {
+        return appHost.workspaceLocation;
     }
-    const identity = appHost.identityHint || String(appHost.appHostId || "").slice(0, 8) || "unknown";
-    return `${appHost.label} (${identity})`;
+    if (hosts.filter((host) => host.label === appHost.label).length < 2) {
+        return "";
+    }
+    return appHost.locationHint || appHost.identityHint || String(appHost.appHostId || "").slice(0, 8) || "unknown";
 }
 
-function appHostTabId(appHost) {
-    return `apphost-tab-${appHost.id.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+function duplicateHostTitle(appHost, hint) {
+    return appHost.locationTitle || hint;
+}
+
+function duplicateHostLabel(appHost, hosts) {
+    const hint = duplicateHostHint(appHost, hosts);
+    return hint ? `${appHost.label} (${hint})` : appHost.label;
 }
 
 function selectAppHost(appHost) {
     clearActiveCommand();
+    selectedResourceId = null;
+    inspectorReturnFocusId = null;
     activeAppHostId = appHost.id;
     setSelected(appHost);
 }
 
-function handleAppHostTabKey(event, hosts, index) {
-    let nextIndex;
-    if (event.key === "ArrowRight") {
-        nextIndex = (index + 1) % hosts.length;
-    } else if (event.key === "ArrowLeft") {
-        nextIndex = (index - 1 + hosts.length) % hosts.length;
-    } else if (event.key === "Home") {
-        nextIndex = 0;
-    } else if (event.key === "End") {
-        nextIndex = hosts.length - 1;
-    } else {
-        return;
-    }
-    event.preventDefault();
-    selectAppHost(hosts[nextIndex]);
+function orderAppHosts(hosts) {
+    return [...hosts].sort((left, right) =>
+        Number(right.kind === "apphost-running") - Number(left.kind === "apphost-running"));
 }
 
 function renderAppHostSwitcher(hosts, activeHost) {
+    const roots = modelState?.roots ?? hosts;
+    const label = duplicateHostLabel(activeHost, roots);
+    const hint = duplicateHostHint(activeHost, roots);
+    const heading = element("span", { class: "apphost-heading", title: label }, [
+        element("h2", { text: activeHost.label }),
+        ...(hint ? [element("span", { class: "apphost-hint", text: hint, title: duplicateHostTitle(activeHost, hint) })] : []),
+        ...(hosts.length > 1 ? [svgIcon("chevron", 11)] : []),
+    ]);
     if (hosts.length < 2) {
-        return null;
+        return element("div", { class: "apphost-switcher" }, [heading]);
     }
-    return element("nav", { class: "apphost-switcher", "aria-label": "Choose an AppHost" }, [
-        element("div", { class: "apphost-tabs", role: "tablist", "aria-label": "AppHosts" },
-            hosts.map((host, index) => {
-                const active = host.id === activeHost.id;
-                const status = hostStatus(host);
-                return element("button", {
-                    class: `apphost-tab${active ? " is-active" : ""}`,
-                    type: "button",
-                    role: "tab",
-                    id: appHostTabId(host),
-                    tabIndex: active ? 0 : -1,
-                    "aria-selected": active,
-                    "aria-controls": "active-apphost",
-                    "aria-label":
-                        `${duplicateHostLabel(host, modelState?.roots ?? hosts)}, ${status.label}, ${index + 1} of ${hosts.length}`,
-                    dataset: { nodeId: host.id },
-                    on: {
-                        click: () => selectAppHost(host),
-                        keydown: (event) => handleAppHostTabKey(event, hosts, index),
-                    },
-                }, [
-                    rowIcon(host),
-                    element("span", { class: "apphost-tab-copy" }, [
-                        element("strong", { text: duplicateHostLabel(host, modelState?.roots ?? hosts) }),
-                        element("span", { text: status.label }),
-                    ]),
-                ]);
-            })),
+    return element("div", { class: "apphost-switcher" }, [
+        element("button", {
+            class: "apphost-trigger resource-menu-trigger",
+            type: "button",
+            "aria-haspopup": "menu",
+            "aria-expanded": "false",
+            "aria-label": `AppHost: ${label}. Choose from ${hosts.length} AppHosts`,
+            dataset: { focusKey: "apphost-picker" },
+            on: { click: (event) => openAppHostMenu(hosts, activeHost, event.currentTarget) },
+        }, [heading]),
+    ]);
+}
+
+function openAppHostMenu(hosts, activeHost, anchor) {
+    const menuId = "apphost-picker";
+    if (actionMenuNodeId === menuId && !els.actionMenu.hidden) {
+        hideActionMenu();
+        return;
+    }
+    actionMenuNodeId = menuId;
+    actionMenuTrigger = anchor;
+    anchor.setAttribute("aria-expanded", "true");
+    els.actionMenu.classList.add("is-apphost-picker");
+    const roots = modelState?.roots ?? hosts;
+    els.actionMenu.replaceChildren(...hosts.map((host) => {
+        const status = hostStatus(host);
+        const active = host.id === activeHost.id;
+        const hint = duplicateHostHint(host, roots);
+        return element("button", {
+            class: `menu-action apphost-menu-item${active ? " is-current" : ""}`,
+            type: "button",
+            role: "menuitemradio",
+            "aria-checked": active,
+            title: [host.label, hint && duplicateHostTitle(host, hint), status.label].filter(Boolean).join(" · "),
+            "aria-label": [host.label, hint, status.label].filter(Boolean).join(", "),
+            dataset: { nodeId: host.id },
+            on: {
+                click: () => {
+                    hideActionMenu();
+                    selectAppHost(host);
+                    requestAnimationFrame(() => document.querySelector('[data-focus-key="apphost-picker"]')?.focus());
+                },
+            },
+        }, [
+            element("span", { class: `status-dot apphost-menu-dot tone-${status.tone}`, "aria-hidden": "true" }),
+            element("span", { class: "apphost-menu-text" }, [
+                element("span", { class: "apphost-menu-label", text: host.label }),
+                ...(hint ? [element("span", { class: "apphost-menu-hint", text: hint })] : []),
+            ]),
+        ]);
+    }));
+    positionActionMenu(anchor, "left");
+}
+
+function renderHostStatus(appHost) {
+    const status = hostStatus(appHost);
+    return element("span", { class: `host-status tone-${status.tone}` }, [
+        element("span", { class: "status-dot", "aria-hidden": "true" }),
+        element("span", { text: status.label }),
     ]);
 }
 
@@ -1628,73 +2244,49 @@ function renderHostStage(appHost, hosts) {
         ...appHost,
         presentationLabel: duplicateHostLabel(appHost, modelState?.roots ?? hosts),
     };
-    const resources = flattenResources(appHostResources(appHost));
-    const status = hostStatus(appHost);
+    const entries = flattenResources(appHostResources(appHost));
+    const visible = entries.filter(resourceMatches);
     const notices = (appHost.children ?? [])
         .filter((child) => child.kind === "error" || child.kind === "warning");
-    const healthy = resources.filter(({ resource }) => resource.tone === "healthy").length;
-    const attention = resources.filter(({ resource }) =>
-        resource.tone === "error" || resource.tone === "warning").length;
     const dashboardAvailable = appHost.actions?.includes("dashboard") === true;
-    const graph = visibleResourceGraph(appHost, resources);
+    els.hostBar.replaceChildren(
+        renderAppHostSwitcher(hosts, appHost),
+        renderHostStatus(appHost),
+        renderAppHostActionTray(presentationHost),
+    );
+    els.viewTabs.replaceChildren(renderAppModelTabs(entries.length, visible.length));
+    els.rosterControls.replaceChildren(...renderRosterControls(entries));
+    els.filterSelects.replaceChildren(
+        rosterSelect("State", STATE_FILTERS, stateFilter, "state-filter", (value) => { stateFilter = value; }),
+        rosterSelect("Health", HEALTH_FILTERS, healthFilter, "health-filter", (value) => { healthFilter = value; }),
+    );
     return element("article", {
         class: "active-apphost",
         id: "active-apphost",
-        role: hosts.length > 1 ? "tabpanel" : undefined,
-        "aria-labelledby": hosts.length > 1 ? appHostTabId(appHost) : undefined,
+        "aria-label": presentationHost.presentationLabel,
     }, [
-        element("header", { class: "apphost-overview" }, [
-            element("div", { class: "apphost-heading" }, [
-                element("span", { class: "apphost-mark" }, [svgIcon(appHost.icon || "apphost-running", 20)]),
-                element("span", { class: "apphost-heading-copy" }, [
-                    element("span", { class: "apphost-title-line" }, [
-                        element("h2", { text: presentationHost.presentationLabel, title: presentationHost.presentationLabel }),
-                        actionButton(`More actions for ${presentationHost.presentationLabel}`, "more", (event) =>
-                            openActionMenu(presentationHost, event.currentTarget, ["ask"])),
-                    ]),
-                    element("p", { text: appHost.description }),
-                ]),
-            ]),
-            element("div", { class: "apphost-facts", "aria-label": "AppHost summary" }, [
-                element("span", { class: `summary-chip tone-${status.tone}`, text: status.label }),
-                element("span", { class: "summary-chip is-secondary-fact", text: `${resources.length} resource${resources.length === 1 ? "" : "s"}` }),
-                ...(healthy ? [element("span", { class: "summary-chip tone-healthy is-secondary-fact", text: `${healthy} healthy` })] : []),
-                ...(attention ? [element("span", { class: "summary-chip tone-warning", text: `${attention} need attention` })] : []),
-            ]),
-        ]),
-        renderAppHostActionTray(presentationHost),
         ...notices.map(renderHostNotice),
         element("section", { class: "resource-workspace", "aria-label": "App model" }, [
-            renderAppModelTabs(resources.length),
-            renderResourceBoardPanel(
-                appHost,
-                resources,
-                dashboardAvailable,
-                appModelView === "resources",
-            ),
-            renderResourceGraphPanel(graph, appModelView === "graph"),
+            renderResourceBoardPanel(appHost, entries, visible, dashboardAvailable, appModelView === "resources"),
+            renderResourceGraphPanel(visibleResourceGraph(appHost, visible), appModelView === "graph"),
         ]),
     ]);
+}
+
+const FOCUS_SCOPES = "#model-view, #host-bar, #view-tabs, #roster-controls, #filters-panel";
+
+function captureFocusKey() {
+    const active = document.activeElement;
+    return active?.closest?.(FOCUS_SCOPES) ? active.dataset?.focusKey ?? null : null;
 }
 
 function renderTree() {
     rememberAppModelViewState();
     clearResourceGraphDrawing();
-    const source = filteredTree(modelState?.roots ?? [], filterText);
-    const hosts = source.filter(isAppHostNode);
+    const source = modelState?.roots ?? [];
+    const hosts = orderAppHosts(source.filter(isAppHostNode));
     if (activeCommandId && !treeContains(source, activeCommandId)) {
         clearActiveCommand();
-    }
-    if (hosts.length === 0 && filterText) {
-        renderedAppHostId = null;
-        els.tree.setAttribute("role", "status");
-        els.tree.replaceChildren(element("div", { class: "filter-empty" }, [
-            element("p", {
-                text: "No AppHosts, resources, endpoints, health checks, or commands match this filter.",
-            }),
-            clearFilterButton(),
-        ]));
-        return;
     }
     els.tree.setAttribute("role", "region");
     const selectedHost = hosts.find((host) => host.id === activeAppHostId)
@@ -1702,8 +2294,17 @@ function renderTree() {
         || hosts[0];
     if (!selectedHost) {
         renderedAppHostId = null;
+        document.body.classList.remove("has-host", "is-inspecting");
+        els.hostBar.replaceChildren();
+        els.viewTabs.replaceChildren();
+        els.rosterControls.replaceChildren();
         els.tree.replaceChildren();
+        updateFooterCount();
         return;
+    }
+    if (renderedAppHostId && renderedAppHostId !== selectedHost.id) {
+        selectedResourceId = null;
+        inspectorReturnFocusId = null;
     }
     activeAppHostId = selectedHost.id;
     const currentSelection = findNode(selectedNodeId);
@@ -1711,17 +2312,23 @@ function renderTree() {
         recordSelection(selectedHost);
     }
     const focusState = captureCommandFocus();
-    els.tree.replaceChildren(...[
-        renderAppHostSwitcher(hosts, selectedHost),
-        renderHostStage(selectedHost, hosts),
-    ].filter(Boolean));
+    const focusKey = focusState ? null : captureFocusKey();
+    const paneScroll = renderedAppHostId === selectedHost.id ? capturePaneScroll() : null;
+    els.tree.replaceChildren(renderHostStage(selectedHost, hosts));
+    document.body.classList.add("has-host");
+    document.body.classList.toggle("is-inspecting", Boolean(selectedResourceId) && appModelView === "resources");
+    updateFooterCount();
     renderedAppHostId = selectedHost.id;
     mountResourceGraph();
     restoreAppModelViewState(selectedHost.id);
+    restorePaneScroll(paneScroll);
     restoreCommandFocus(focusState);
+    if (focusKey) {
+        document.querySelector(`[data-focus-key="${CSS.escape(focusKey)}"]`)?.focus();
+    }
     if (confirmationNeedsFocus) {
         confirmationNeedsFocus = false;
-        requestAnimationFrame(() => els.tree.querySelector("[data-confirmation-cancel]")?.focus());
+        requestAnimationFrame(() => document.querySelector("[data-confirmation-cancel]")?.focus());
     }
 }
 
@@ -1764,6 +2371,7 @@ function hideActionMenu({ restoreFocus = false } = {}) {
     actionMenuNodeId = null;
     actionMenuTrigger = null;
     els.actionMenu.hidden = true;
+    els.actionMenu.classList.remove("is-apphost-picker");
     els.actionMenu.replaceChildren();
     if (restoreFocus && trigger?.isConnected) {
         trigger.focus();
@@ -1779,7 +2387,7 @@ function menuAction(action, node) {
         class: "menu-action",
         type: "button",
         role: "menuitem",
-        disabled: isAppHostNode(node) && action !== "ask" && !node.actions?.includes(action),
+        disabled: isAppHostNode(node) && action !== "ask" && action !== "refresh" && !node.actions?.includes(action),
         on: {
             click: () => {
                 hideActionMenu({ restoreFocus: true });
@@ -1798,25 +2406,44 @@ function openActionMenu(node, anchor, actions) {
     actionMenuTrigger = anchor;
     anchor.setAttribute("aria-haspopup", "menu");
     anchor.setAttribute("aria-expanded", "true");
+    els.actionMenu.classList.remove("is-apphost-picker");
     const actionNames = actions ?? [...(node.actions ?? []), "ask"];
     els.actionMenu.replaceChildren(...actionNames.map((action) =>
         action === "separator"
             ? element("div", { class: "menu-separator", role: "separator" })
             : menuAction(action, node)));
+    positionActionMenu(anchor);
+}
+
+function positionActionMenu(anchor, align = "right") {
     els.actionMenu.hidden = false;
+    els.actionMenu.style.maxHeight = "";
+    els.actionMenu.scrollTop = 0;
     const bounds = anchor.getBoundingClientRect();
-    const menuWidth = 228;
-    const left = Math.max(8, Math.min(window.innerWidth - menuWidth - 8, bounds.right - menuWidth));
+    const menuWidth = els.actionMenu.offsetWidth || 228;
+    const preferred = align === "left" ? bounds.left : bounds.right - menuWidth;
+    const left = Math.max(8, Math.min(window.innerWidth - menuWidth - 8, preferred));
     els.actionMenu.style.left = `${left}px`;
-    els.actionMenu.style.top = `${Math.max(
-        8,
-        Math.min(window.innerHeight - els.actionMenu.offsetHeight - 8, bounds.bottom + 3),
-    )}px`;
-    els.actionMenu.querySelector("button:not([disabled])")?.focus();
+    const gap = 3;
+    const margin = 8;
+    const spaceBelow = window.innerHeight - bounds.bottom - gap - margin;
+    const spaceAbove = bounds.top - gap - margin;
+    const menuHeight = els.actionMenu.offsetHeight;
+    const placeAbove = menuHeight > spaceBelow && spaceAbove > spaceBelow;
+    const available = Math.max(0, placeAbove ? spaceAbove : spaceBelow);
+    const height = Math.min(menuHeight, available);
+    els.actionMenu.style.maxHeight = `${available}px`;
+    els.actionMenu.style.top = `${placeAbove ? bounds.top - gap - height : bounds.bottom + gap}px`;
+    (els.actionMenu.querySelector('[aria-checked="true"]')
+        ?? els.actionMenu.querySelector("button:not([disabled])"))?.focus();
 }
 
 async function executeNodeAction(action, node) {
     pendingConfirmation = null;
+    if (action === "refresh") {
+        await refresh();
+        return;
+    }
     if (action === "ask") {
         try {
             const result = await api("/api/copilot-context", { method: "POST", body: { nodeId: node.id } });
@@ -1953,6 +2580,11 @@ function commandDraft(node) {
         commandDrafts.set(node.id, draft);
     }
     return draft;
+}
+
+function commandNeedsPanel(node) {
+    const inputs = [...(node.command.argumentInputs ?? []), ...commandInputList(node)];
+    return inputs.some((input) => !input.disabled || input.dynamicLoading);
 }
 
 function commandInputList(node) {
@@ -2164,7 +2796,9 @@ function commandField(node, input) {
     const label = element("span", { text: `${input.label}${input.required ? " *" : ""}` });
     return element("label", { class: `command-field${checkbox ? " checkbox-field" : ""}`, htmlFor: id }, [
         ...(checkbox ? [control, label] : [label, control]),
-        ...(input.description ? [element("small", { id: hintId, text: input.description })] : []),
+        ...(input.description
+            ? [element("small", { id: hintId }, descriptionContent(input.description, input.enableDescriptionMarkdown))]
+            : []),
         element("span", {
             class: "field-error",
             id: errorId,
@@ -2173,6 +2807,22 @@ function commandField(node, input) {
             hidden: !validationMessage,
         }),
     ]);
+}
+
+// Markdown descriptions only render inline links; everything else stays literal text.
+function descriptionContent(text, markdown) {
+    if (!markdown) {
+        return [text];
+    }
+    const parts = [];
+    let index = 0;
+    for (const match of text.matchAll(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g)) {
+        parts.push(text.slice(index, match.index));
+        parts.push(element("a", { href: match[2], target: "_blank", rel: "noopener noreferrer", text: match[1] }));
+        index = match.index + match[0].length;
+    }
+    parts.push(text.slice(index));
+    return parts.filter((part) => part !== "");
 }
 
 function updateCommandDraft(node, input, value) {
@@ -2369,14 +3019,16 @@ async function submitResourceCommand(node, form) {
         const value = normalizeCommandValue(input.inputType, draft[input.name]);
         if (value !== draft[input.name]) {
             draft[input.name] = value;
-            const control = form.querySelector(`[name="${CSS.escape(input.name)}"]`);
+            const control = form?.querySelector(`[name="${CSS.escape(input.name)}"]`);
             if (control) {
                 control.value = value;
             }
         }
     }
     commandRunning = true;
+    runningCommandId = node.id;
     updateBusy();
+    renderTree();
     try {
         const result = await api("/api/command", {
             method: "POST",
@@ -2416,6 +3068,7 @@ async function submitResourceCommand(node, form) {
         showToast(error.message, true);
     } finally {
         commandRunning = false;
+        runningCommandId = null;
         updateBusy();
         renderTree();
     }
@@ -2429,6 +3082,8 @@ function render() {
         if (pendingViewMode !== nextViewMode) {
             beginModeSwitch(nextViewMode);
         }
+        resetModeScopedState();
+        showModeSwitchLoading();
         updateHeader();
         updateStatus();
         updateBusy();
@@ -2441,9 +3096,7 @@ function render() {
             return;
         }
         if (viewModeChanged) {
-            clearActiveCommand();
-            selectedNodeId = null;
-            activeAppHostId = null;
+            resetModeScopedState();
         }
         renderedViewMode = nextViewMode;
         if (selectedNodeId && !findNode(selectedNodeId)) {
@@ -2489,12 +3142,9 @@ async function setViewMode(viewMode) {
     if (modelState?.viewMode === viewMode || pendingViewMode) {
         return;
     }
-    hideActionMenu();
-    selectedNodeId = null;
-    activeAppHostId = null;
-    clearActiveCommand();
-    pendingConfirmation = null;
+    resetModeScopedState();
     beginModeSwitch(viewMode);
+    showModeSwitchLoading();
     updateHeader();
     try {
         const result = await api("/api/mode", { method: "POST", body: { viewMode } });
@@ -2505,13 +3155,248 @@ async function setViewMode(viewMode) {
         }
     } catch (error) {
         finishModeSwitch();
-        updateHeader();
+        render();
         showToast(error.message, true);
     }
 }
 
+const COMMAND_LOG_CLIENT_LIMIT = 60;
+const OUTPUT_ESCAPES = /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b[@-Z\\-_]/g;
+
+function cleanCommandOutput(text) {
+    return String(text ?? "")
+        .replace(OUTPUT_ESCAPES, "")
+        .replace(/\r\n/g, "\n")
+        .split("\n")
+        .map((line) => line.slice(line.lastIndexOf("\r") + 1))
+        .join("\n");
+}
+
+function visibleCommands() {
+    return showBackgroundCommands ? commandLog : commandLog.filter((item) => item.source !== "background");
+}
+
+function commandTone(item) {
+    if (item.status === "running") return "tone-pending";
+    return item.status === "succeeded" ? "tone-healthy" : "tone-error";
+}
+
+function commandStatusLabel(item) {
+    if (item.status === "running") return "Running";
+    if (item.status === "succeeded") return "Succeeded";
+    return Number.isInteger(item.exitCode) ? `Failed (exit ${item.exitCode})` : "Failed";
+}
+
+function formatCommandDuration(item) {
+    const start = new Date(item.startedAt).getTime();
+    const end = item.endedAt ? new Date(item.endedAt).getTime() : Date.now();
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return "";
+    const seconds = Math.max(0, Math.round((end - start) / 1000));
+    if (seconds < 60) return `${seconds}s`;
+    return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
+}
+
+function upsertCommand(command) {
+    const existing = commandLog.find((item) => item.id === command.id);
+    if (existing) {
+        Object.assign(existing, command, { output: command.output ?? existing.output });
+        return existing;
+    }
+    const item = { ...command, output: command.output ?? "" };
+    commandLog.push(item);
+    let excess = commandLog.length - COMMAND_LOG_CLIENT_LIMIT;
+    for (let index = 0; excess > 0 && index < commandLog.length;) {
+        if (commandLog[index].status === "running") {
+            index++;
+        } else {
+            commandLog.splice(index, 1);
+            excess--;
+        }
+    }
+    return item;
+}
+
+function acceptCommandLogMessage(message) {
+    if (message.type === "command-log-snapshot") {
+        commandLog = (message.commands ?? []).map((command) => ({ ...command, output: command.output ?? "" }));
+        if (!commandLog.some((item) => item.id === selectedOutputId)) {
+            selectedOutputId = null;
+        }
+        renderOutputPanel();
+        return true;
+    }
+    if (message.type === "command-log" && message.command) {
+        const isNew = !commandLog.some((item) => item.id === message.command.id);
+        const item = upsertCommand(message.command);
+        if (isNew && item.status === "running" && item.source !== "background") {
+            selectedOutputId = item.id;
+            setOutputOpen(true);
+        }
+        renderOutputPanel();
+        return true;
+    }
+    if (message.type === "command-output" && message.id) {
+        const item = commandLog.find((candidate) => candidate.id === message.id);
+        if (item) {
+            item.output += message.text ?? "";
+            if (item.id === selectedCommand()?.id) {
+                renderOutputText();
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
+function selectedCommand() {
+    const visible = visibleCommands();
+    return visible.find((item) => item.id === selectedOutputId) ?? visible.at(-1) ?? null;
+}
+
+function setOutputOpen(open, { focus = false } = {}) {
+    if (!els.outputPanel) return;
+    outputOpen = open;
+    els.outputPanel.hidden = !open;
+    els.outputToggle?.setAttribute("aria-expanded", String(open));
+    els.outputToggle?.classList.toggle("is-active", open);
+    renderOutputPanel();
+    if (open && focus) {
+        els.outputText?.focus({ preventScroll: true });
+    } else if (!open && focus) {
+        els.outputToggle?.focus();
+    }
+}
+
+function renderOutputPanel() {
+    if (!els.outputPanel) return;
+    const running = commandLog.filter((item) => item.status === "running" && (showBackgroundCommands || item.source !== "background")).length;
+    if (els.outputToggleBadge) {
+        els.outputToggleBadge.hidden = running === 0;
+        els.outputToggleBadge.textContent = running ? String(running) : "";
+    }
+    els.outputToggle?.setAttribute("aria-label", running ? `Output, ${running} running` : "Output");
+    syncOutputTimer();
+    if (!outputOpen) return;
+
+    const visible = visibleCommands();
+    const selected = selectedCommand();
+    const focusedOutputId = document.activeElement?.dataset?.outputId;
+    els.outputList.replaceChildren(...(visible.length ? [...visible].reverse().map((item) => element("li", {}, [
+        element("button", {
+            class: `output-item${item.id === selected?.id ? " is-selected" : ""}`,
+            type: "button",
+            "data-output-id": item.id,
+            "aria-current": item.id === selected?.id ? "true" : undefined,
+            title: `${item.label} · ${commandStatusLabel(item)}`,
+            on: {
+                click: () => {
+                    selectedOutputId = item.id;
+                    renderOutputPanel();
+                },
+            },
+        }, [
+            element("span", { class: `status-dot ${commandTone(item)}`, "aria-hidden": "true" }),
+            element("span", { class: "output-item-text" }, [
+                element("span", { class: "output-item-label", text: item.label }),
+                element("span", {
+                    class: "output-item-meta",
+                    text: [item.appHostName, commandStatusLabel(item), formatCommandDuration(item)].filter(Boolean).join(" · "),
+                }),
+            ]),
+        ]),
+    ])) : [element("li", { class: "output-empty", text: "No commands yet." })]));
+    if (focusedOutputId) {
+        [...els.outputList.querySelectorAll(".output-item")]
+            .find((button) => button.dataset.outputId === focusedOutputId)
+            ?.focus({ preventScroll: true });
+    }
+
+    els.outputCopy.disabled = !selected;
+    els.outputClear.disabled = commandLog.every((item) => item.status === "running");
+    renderOutputText();
+}
+
+let renderedOutputId = null;
+
+function renderOutputText() {
+    if (!outputOpen || !els.outputText) return;
+    const selected = selectedCommand();
+    const text = els.outputText;
+    const switched = renderedOutputId !== (selected?.id ?? null);
+    const nearBottom = text.scrollHeight - text.scrollTop - text.clientHeight < 24;
+    renderedOutputId = selected?.id ?? null;
+    els.outputCommandLine.textContent = selected?.commandLine ?? "";
+    els.outputCommandLine.hidden = !selected;
+    if (!selected) {
+        text.textContent = "Commands the canvas runs, like start, stop, and resource commands, show their output here.";
+        text.classList.add("is-placeholder");
+        return;
+    }
+    text.classList.remove("is-placeholder");
+    let body = cleanCommandOutput(selected.output);
+    if (selected.truncated) {
+        body = `[Earlier output was trimmed]\n${body}`;
+    }
+    if (selected.status === "running" && !body.trim()) {
+        body = "Waiting for output…";
+    } else if (selected.status === "failed" && selected.error && !body.includes(selected.error)) {
+        body = `${body}${body && !body.endsWith("\n") ? "\n" : ""}${selected.error}`;
+    }
+    text.textContent = body;
+    if (switched || nearBottom) {
+        text.scrollTop = text.scrollHeight;
+    }
+}
+
+function syncOutputTimer() {
+    const needsTimer = outputOpen && commandLog.some((item) => item.status === "running");
+    if (needsTimer && !outputTimer) {
+        outputTimer = setInterval(renderOutputListMeta, 1000);
+    } else if (!needsTimer && outputTimer) {
+        clearInterval(outputTimer);
+        outputTimer = null;
+    }
+}
+
+function renderOutputListMeta() {
+    const items = [...visibleCommands()].reverse();
+    const metas = els.outputList?.querySelectorAll?.(".output-item-meta") ?? [];
+    items.forEach((item, index) => {
+        if (metas[index] && item.status === "running") {
+            metas[index].textContent = [item.appHostName, commandStatusLabel(item), formatCommandDuration(item)].filter(Boolean).join(" · ");
+        }
+    });
+}
+
+async function copyCommandOutput() {
+    const selected = selectedCommand();
+    if (!selected) return;
+    if (typeof navigator.clipboard?.writeText !== "function") {
+        showToast("Clipboard access is unavailable in this canvas.", true);
+        return;
+    }
+    try {
+        await navigator.clipboard.writeText(`$ ${selected.commandLine}\n${cleanCommandOutput(selected.output)}`);
+        showToast(`Copied ${selected.label} output.`);
+    } catch {
+        showToast(`Couldn't copy ${selected.label} output.`, true);
+    }
+}
+
+async function clearCommandOutput() {
+    try {
+        await api("/api/command-log/clear", { method: "POST" });
+    } catch (error) {
+        showToast(error.message, true);
+    }
+}
+
+let eventSource = null;
+
 function connectEvents() {
+    if (eventSource) return;
     const source = new EventSource(`/events?token=${encodeURIComponent(apiToken)}`);
+    eventSource = source;
     source.addEventListener("open", () => {
         eventStreamStatus = "connecting";
         updateHeader();
@@ -2538,6 +3423,9 @@ function connectEvents() {
             showToast(message.error, true);
             return;
         }
+        if (acceptCommandLogMessage(message)) {
+            return;
+        }
         if (message.type === "command") {
             commandRunning = message.phase === "started";
             if (message.phase === "completed" && message.result) {
@@ -2560,6 +3448,20 @@ function connectEvents() {
     });
 }
 
+function disconnectEvents() {
+    eventSource?.close();
+    eventSource = null;
+}
+
+// The provider pauses polling and describe streams once no view is connected.
+document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+        disconnectEvents();
+    } else {
+        connectEvents();
+    }
+});
+
 function findCommandNode(appHostId, resourceName, commandName, nodes = modelState?.roots ?? []) {
     for (const node of nodes) {
         if (
@@ -2578,9 +3480,24 @@ function findCommandNode(appHostId, resourceName, commandName, nodes = modelStat
     return null;
 }
 
-els.workspaceMode.addEventListener("click", () => void setViewMode("workspace"));
-els.globalMode.addEventListener("click", () => void setViewMode("global"));
+els.modeTrigger.addEventListener("click", () => setModePickerOpen(els.modeSwitch.hidden));
+els.workspaceMode.addEventListener("click", () => {
+    setModePickerOpen(false, { restoreFocus: true });
+    void setViewMode("workspace");
+});
+els.globalMode.addEventListener("click", () => {
+    setModePickerOpen(false, { restoreFocus: true });
+    void setViewMode("global");
+});
 els.refreshButton.addEventListener("click", () => void refresh());
+els.outputToggle?.addEventListener("click", () => setOutputOpen(!outputOpen, { focus: !outputOpen }));
+els.outputClose?.addEventListener("click", () => setOutputOpen(false, { focus: true }));
+els.outputCopy?.addEventListener("click", () => void copyCommandOutput());
+els.outputClear?.addEventListener("click", () => void clearCommandOutput());
+els.outputBackground?.addEventListener("change", () => {
+    showBackgroundCommands = els.outputBackground.checked;
+    renderOutputPanel();
+});
 els.statusAction.addEventListener("click", () => void refresh());
 els.emptyAction.addEventListener("click", () => void refresh());
 els.searchInput.addEventListener("input", () => {
@@ -2600,10 +3517,17 @@ els.hiddenCheckbox.addEventListener("change", async () => {
         showToast(error.message, true);
     }
 });
+els.filtersClear.addEventListener("click", () => void clearPopoverFilters());
 
 document.addEventListener("pointerdown", (event) => {
     if (!els.actionMenu.hidden && !event.target.closest("#action-menu, .resource-menu-trigger")) {
         hideActionMenu();
+    }
+    if (!els.modeSwitch.hidden && !event.target.closest(".mode-picker")) {
+        setModePickerOpen(false);
+    }
+    if (filtersOpen && !event.target.closest("#filters-panel, .roster-filters-trigger")) {
+        setFiltersOpen(false);
     }
 });
 document.addEventListener("keydown", (event) => {
@@ -2613,6 +3537,15 @@ document.addEventListener("keydown", (event) => {
         } else if (!els.actionMenu.hidden) {
             event.preventDefault();
             hideActionMenu({ restoreFocus: true });
+        } else if (!els.modeSwitch.hidden) {
+            event.preventDefault();
+            setModePickerOpen(false, { restoreFocus: true });
+        } else if (filtersOpen) {
+            event.preventDefault();
+            setFiltersOpen(false, { restoreFocus: true });
+        } else if (outputOpen && els.outputPanel?.contains(document.activeElement)) {
+            event.preventDefault();
+            setOutputOpen(false, { focus: true });
         } else if (activeCommandId) {
             const command = findNode(activeCommandId);
             if (command) {
@@ -2622,7 +3555,16 @@ document.addEventListener("keydown", (event) => {
         }
     }
 });
-document.addEventListener("scroll", hideActionMenu, true);
+document.addEventListener("scroll", (event) => {
+    if (event.target !== els.actionMenu) {
+        hideActionMenu();
+    }
+}, true);
+window.addEventListener("resize", () => {
+    if (filtersOpen) {
+        positionFiltersPanel();
+    }
+});
 els.actionMenu.addEventListener("keydown", (event) => {
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
         return;
@@ -2649,7 +3591,7 @@ els.pipelineDialog.addEventListener("close", () => {
     const appHostId = pipelineAppHostId;
     pipelineAppHostId = null;
     const focusTarget = pipelineReturnFocus?.isConnected ? pipelineReturnFocus
-        : els.tree.querySelector("[data-apphost-primary]:not([disabled])");
+        : document.querySelector("[data-apphost-primary]:not([disabled])");
     pipelineReturnFocus = null;
     focusTarget?.focus();
     const step = els.pipelineStepInput.value.trim();
@@ -2664,6 +3606,12 @@ setInterval(() => {
         els.freshness.textContent = formatAge(modelState.lastSuccessfulAt);
     }
 }, 5_000);
+
+narrowLayout.addEventListener?.("change", () => {
+    if (modelState) {
+        render();
+    }
+});
 
 connectEvents();
 void api("/api/state")

@@ -253,6 +253,7 @@ function createRenderer({ transitions = false } = {}) {
         window: {
             location: { search: "?token=test-renderer" }, innerWidth: 480, innerHeight: 720,
             matchMedia: () => ({ matches: false }),
+            addEventListener() {},
         },
         CSS: { escape: (value) => value },
         navigator: { clipboard: { writeText: async (value) => { copied.push(value); } } },
@@ -387,10 +388,89 @@ function enterField(renderer, name, value, event = "input") {
     control.dispatch(event);
 }
 
-async function openCommand(renderer) {
+function selectApi(renderer) {
+    const row = renderer.document.querySelector('[data-resource-id="host-a:resource:api"] .resource-row-main');
+    assert.ok(row, "Expected the Public API roster row");
+    row.click();
+}
+
+function clickCommand(renderer) {
+    if (!renderer.document.querySelector(`[data-node-id="${commandId}"]`)) selectApi(renderer);
     renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+}
+
+async function openCommand(renderer) {
+    clickCommand(renderer);
     await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: inputs() });
 }
+
+test("commands without inputs run directly from the chip without opening the command panel", async () => {
+    const renderer = createRenderer();
+    await renderer.respond(renderer.request("/api/state"), { state: commandSnapshot(1, []) });
+    clickCommand(renderer);
+    await settle();
+    assert.equal(renderer.document.querySelector("[data-command-panel]"), null);
+    assert.equal(renderer.requests.filter((request) => request.path === "/api/command-inputs").length, 0);
+    const run = renderer.request("/api/command");
+    assert.deepEqual([run.body.resourceName, run.body.commandName, run.body.arguments], ["api", "inspect", {}]);
+    const chip = renderer.document.querySelector(`[data-node-id="${commandId}"]`);
+    assert.ok(chip.classList.contains("is-running"));
+    assert.equal(chip.getAttribute("aria-busy"), "true");
+    await renderer.respond(run, { ok: true });
+    const settled = renderer.document.querySelector(`[data-node-id="${commandId}"]`);
+    assert.equal(settled.classList.contains("is-running"), false);
+});
+
+test("a running AppHost without a dashboard URL explains why Open dashboard is unavailable", async () => {
+    const renderer = createRenderer();
+    const state = snapshot();
+    state.roots[0].actions = state.roots[0].actions.filter((action) => action !== "dashboard");
+    await renderer.respond(renderer.request("/api/state"), { state });
+    const dashboard = button(renderer.document, "Open dashboard");
+    assert.equal(dashboard.disabled, true);
+    assert.match(dashboard.getAttribute("title"), /hasn't reported a dashboard URL/);
+    selectApi(renderer);
+    assert.match(renderer.document.querySelector(".inspector-note").textContent, /hasn't reported a dashboard URL/);
+});
+
+test("command input descriptions render Markdown links only when the input opts in", async () => {
+    const renderer = createRenderer();
+    const description = "Save to [user secrets](https://aka.ms/aspire/user-secrets) for **later**.";
+    await renderer.respond(renderer.request("/api/state"), { state: commandSnapshot(1, [
+        { name: "save", label: "Save", inputType: "Boolean", description, enableDescriptionMarkdown: true },
+        { name: "note", label: "Note", inputType: "Text", description: "See [docs](https://aspire.dev)." },
+    ]) });
+    clickCommand(renderer);
+    const hints = renderer.document.querySelectorAll(".command-field small");
+    assert.equal(hints[0].textContent, "Save to user secrets for **later**.");
+    const link = hints[0].querySelector("a");
+    assert.equal(link.getAttribute("href") ?? link.href, "https://aka.ms/aspire/user-secrets");
+    assert.equal(link.getAttribute("target") ?? link.target, "_blank");
+    assert.equal(hints[1].textContent, "See [docs](https://aspire.dev).");
+    assert.equal(hints[1].querySelector("a"), null);
+});
+
+test("output panel opens for user commands and streams cleaned output", async () => {
+    const renderer = await boot();
+    const panel = renderer.document.getElementById("output-panel");
+    const text = renderer.document.getElementById("output-text");
+    const base = { source: "resource", appHostId: "host-a", appHostName: "Host A", startedAt: 0 };
+    await renderer.push({ type: "command-log-snapshot", commands: [
+        { ...base, id: "bg-1", source: "background", label: "List AppHosts", commandLine: "aspire ps", status: "succeeded", output: "quiet" },
+    ] });
+    assert.equal(panel.hidden, true);
+
+    await renderer.push({ type: "command-log", command: { ...base, id: "cmd-1", label: "Restart api", commandLine: "aspire resource api restart", status: "running" } });
+    assert.equal(panel.hidden, false);
+    assert.equal(renderer.document.getElementById("output-command-line").textContent, "aspire resource api restart");
+
+    await renderer.push({ type: "command-output", id: "cmd-1", text: "\u001b[32mBuilding\u001b[0m\n10%\r50%\r\ndone\r\n" });
+    assert.equal(text.textContent, "Building\n50%\ndone\n");
+    assert.doesNotMatch(renderer.document.getElementById("output-list").textContent, /List AppHosts/);
+
+    await renderer.push({ type: "command-log", command: { ...base, id: "cmd-1", label: "Restart api", commandLine: "aspire resource api restart", status: "failed", error: "Exit code 1" } });
+    assert.match(text.textContent, /done\n[\s\S]*Exit code 1/);
+});
 
 test("all state transports reject older snapshots after a newer SSE state", async () => {
     const renderer = createRenderer();
@@ -423,10 +503,13 @@ test("freshness must match the current revision and timestamps never regress at 
     assert.equal(renderer.state().lastSuccessfulAt, newer);
     await renderer.push({ type: "freshness", revision: 1, lastSuccessfulAt: "2026-09-10T09:00:00Z" });
     await renderer.push({ type: "freshness", revision: 1, lastSuccessfulAt: "not-a-date" });
-    renderer.document.getElementById("refresh-button").click();
+    const refreshButton = renderer.document.getElementById("refresh-button");
+    refreshButton.click();
+    assert.equal(refreshButton.classList.contains("is-refreshing"), true);
     await renderer.respond(renderer.request("/api/refresh"), {
         state: snapshot(1, { generatedAt: "2026-09-10T10:00:00Z" }),
     });
+    assert.equal(refreshButton.classList.contains("is-refreshing"), false);
     assert.equal(renderer.state().lastSuccessfulAt, newer);
     assert.equal(renderer.state().generatedAt, snapshot().generatedAt);
 });
@@ -507,7 +590,7 @@ test("dependency edits block Run throughout debounce, failure, and an explicit s
 
 test("dependency edits immediately invalidate a pending load before the next debounce fires", async () => {
     const renderer = await boot();
-    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    clickCommand(renderer);
     const oldLoad = renderer.request("/api/command-inputs");
     enterField(renderer, "environment", "new-environment");
     await renderer.respond(oldLoad, { ok: true, inputs: [{ name: "stale", label: "Stale", inputType: "Text" }] });
@@ -544,7 +627,7 @@ test("whitespace edits to secret dependencies still invalidate metadata", async 
     const fields = inputs();
     fields[0] = { ...fields[0], inputType: "SecretText" };
     await renderer.push({ type: "state", state: commandSnapshot(2, fields) });
-    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    clickCommand(renderer);
     await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
     button(renderer.document.body, "Continue").click();
     enterField(renderer, "environment", "  token  ");
@@ -563,7 +646,7 @@ test("secret-gated forms load effective non-secret defaults before Continue", as
     const renderer = await boot();
     const fields = [...inputs(), { name: "token", label: "Token", inputType: "SecretText", value: "never-use-default" }];
     await renderer.push({ type: "state", state: commandSnapshot(2, fields) });
-    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    clickCommand(renderer);
     assert.equal(renderer.document.querySelector(".command-form"), null);
     const load = renderer.request("/api/command-inputs");
     assert.deepEqual(load.body.arguments, { environment: "dev", target: "east" });
@@ -582,7 +665,7 @@ test("text defaults match Hosting in command forms without shortening overlength
         { name: "message", inputType: "Text", value: "  hello world  ", maxLength: 5 },
     ]);
     await renderer.push({ type: "state", state: commandSnapshot(2, fields) });
-    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    clickCommand(renderer);
     assert.equal(renderer.document.querySelector('[name="message"]').value, "hello world");
     assert.equal(renderer.document.querySelector('[name="message"]').getAttribute("maxLength"), null);
     button(renderer.document.body, "Run command").click();
@@ -595,7 +678,7 @@ test("number defaults remain visible and submit without browser-only normalizati
     await renderer.push({ type: "state", state: commandSnapshot(2, [
         { name: "count", label: "Count", inputType: "Number", value },
     ]) });
-    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    clickCommand(renderer);
     const control = renderer.document.querySelector('[name="count"]');
     assert.equal(control.type, "text");
     assert.equal(control.getAttribute("inputmode"), "decimal");
@@ -669,7 +752,7 @@ test("committing a text edit normalizes it without trimming spaces while typing"
     await renderer.push({ type: "state", state: commandSnapshot(2, [
         { name: "message", label: "Message", inputType: "Text" },
     ]) });
-    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    clickCommand(renderer);
     enterField(renderer, "message", "  hello ");
     assert.equal(renderer.document.querySelector('[name="message"]').value, "  hello ");
     enterField(renderer, "message", "\u0085  hello world  \u0085", "change");
@@ -683,7 +766,7 @@ test("long interior whitespace does not block command editing or submission", as
     await renderer.push({ type: "state", state: commandSnapshot(2, [
         { name: "message", label: "Message", inputType: "Text" },
     ]) });
-    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    clickCommand(renderer);
     renderer.evaluate(`(() => {
         const control = document.querySelector('[name="message"]');
         control.value = "\\u0085a" + " ".repeat(64000) + "b\\u0085";
@@ -703,7 +786,7 @@ test("submission normalizes uncommitted text and custom choices while preserving
         { name: "region", label: "Region", inputType: "Choice", allowCustomChoice: true, options: [{ value: "west", label: "West" }] },
         { name: "token", label: "Token", inputType: "SecretText" },
     ]) });
-    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    clickCommand(renderer);
     button(renderer.document.body, "Continue").click();
     enterField(renderer, "message", "\u0085  edited message  \u0085");
     enterField(renderer, "region", "  \uFEFFcustom region\uFEFF  ");
@@ -742,7 +825,7 @@ test("live base schema changes reload an open form and supersede pending old-sch
 
 test("live schemas that remove dynamic inputs cancel pending metadata without blocking ordinary commands", async () => {
     const renderer = await boot();
-    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    clickCommand(renderer);
     const oldLoad = renderer.request("/api/command-inputs");
     const fields = [{ name: "label", label: "Label", inputType: "Text", value: "ordinary" }];
     await renderer.push({ type: "state", state: commandSnapshot(2, fields) });
@@ -755,7 +838,7 @@ test("live schemas that remove dynamic inputs cancel pending metadata without bl
 
 test("loaded dependency defaults reconcile once and bound unstable metadata behind explicit retry", async () => {
     const renderer = await boot();
-    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    clickCommand(renderer);
     const prod = inputs();
     prod[0] = { ...prod[0], value: "prod", options: [{ value: "prod", label: "Production" }] };
     await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: prod });
@@ -794,7 +877,7 @@ test("metadata-invalidating command conflicts expose Retry inputs without retryi
 
 test("base dependencies still trigger reload when loaded inputs omit their dynamic descriptor", async () => {
     const renderer = await boot();
-    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    clickCommand(renderer);
     const fields = inputs().map(({ dynamicLoading, ...input }) => input);
     await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
     enterField(renderer, "environment", "production");
@@ -811,7 +894,7 @@ test("discarding secrets after success reloads metadata for the cleared dependen
     const fields = [...inputs(), { name: "token", label: "Token", inputType: "SecretText" }];
     fields[1].dynamicLoading.dependsOnInputs = ["token"];
     await renderer.push({ type: "state", state: commandSnapshot(2, fields) });
-    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    clickCommand(renderer);
     await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
     button(renderer.document.body, "Continue").click();
     enterField(renderer, "token", "temporary-secret");
@@ -829,7 +912,7 @@ test("discarding secrets after success reloads metadata for the cleared dependen
 
 test("failed metadata payloads stay blocked; closing cleans up timers and ignores pending responses", async () => {
     const renderer = await boot();
-    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    clickCommand(renderer);
     await renderer.respond(renderer.request("/api/command-inputs"), { ok: false, error: "Invalid metadata" });
     assert.equal(button(renderer.document.body, "Run command").disabled, true);
     button(renderer.document.body, "Retry inputs").click();
@@ -866,7 +949,7 @@ test("reloaded choices preserve valid drafts and discard removed or no-longer-va
 
 test("text, select, and checkbox server errors have unique IDs and clear both live DOM and rerendered ARIA", async () => {
     const renderer = await boot();
-    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    clickCommand(renderer);
     const fields = [
         ...inputs(),
         { name: "agree", label: "Agree", inputType: "Checkbox", description: "Confirm agreement." },
@@ -903,7 +986,7 @@ test("text, select, and checkbox server errors have unique IDs and clear both li
 
 test("sensitive drafts are discarded on close without introducing a separate value store", async () => {
     const renderer = await boot();
-    renderer.document.querySelector(`[data-node-id="${commandId}"]`).click();
+    clickCommand(renderer);
     await renderer.respond(renderer.request("/api/command-inputs"), {
         ok: true, inputs: [...inputs(), { name: "token", label: "Token", inputType: "SecretText" }],
     });
@@ -918,22 +1001,36 @@ test("duplicate host labels use stable public hints in tabs, heading, and confir
     const renderer = await boot();
     const state = snapshot(2);
     const other = {
-        ...structuredClone(state.roots[0]), id: "host-b", appHostId: "host-b", identityHint: "shop-feature · d4e5f6", children: [],
+        ...structuredClone(state.roots[0]),
+        id: "host-b",
+        appHostId: "host-b",
+        identityHint: "shop-feature · d4e5f6",
+        locationHint: "feature/Shop.AppHost",
+        locationTitle: "~/src/feature/Shop.AppHost",
+        children: [],
     };
     state.roots.push(other);
     await renderer.push({ type: "state", state });
-    assert.match(renderer.document.querySelector(".apphost-heading h2").textContent, /Shop\.AppHost \(shop-main · a1b2c3\)/);
+    assert.equal(renderer.document.querySelector(".apphost-heading h2").textContent, "Shop.AppHost");
+    assert.equal(renderer.document.querySelector(".apphost-heading .apphost-hint").textContent, "shop-main · a1b2c3");
+    assert.equal(renderer.context.duplicateHostHint(other, state.roots), "feature/Shop.AppHost");
+    assert.equal(renderer.context.duplicateHostTitle(other, "feature/Shop.AppHost"), "~/src/feature/Shop.AppHost");
     const before = renderer.context.duplicateHostLabel(state.roots[0], state.roots);
+    assert.equal(renderer.document.querySelector(".apphost-heading").getAttribute("title"), before);
     assert.equal(before, renderer.context.duplicateHostLabel(state.roots[0], [...state.roots].reverse()));
-    assert.match(renderer.context.duplicateHostLabel({ ...other, identityHint: undefined }, state.roots), /\(host-b\)/);
-    button(renderer.document.body, "Stop").click();
-    assert.equal(renderer.document.querySelector(".confirmation-copy strong").textContent, `Stop ${before}?`);
+    assert.match(renderer.context.duplicateHostLabel({ ...other, identityHint: undefined, locationHint: undefined }, state.roots), /\(host-b\)/);
+    renderer.document.querySelector(".host-more-actions").click();
+    button(renderer.document.getElementById("action-menu"), "Deploy AppHost").click();
+    assert.equal(renderer.document.querySelector(".confirmation-copy strong").textContent, `Deploy ${before}?`);
     assert.equal(renderer.requests.some((request) => request.path === "/api/apphost-operation"), false);
     button(renderer.document.body, "Cancel").click();
+    button(renderer.document.body, "Stop").click();
+    assert.equal(renderer.document.querySelector(".apphost-confirmation"), null, "Stop runs without a confirmation");
+    assert.equal(renderer.request("/api/apphost-operation").body.operation, "stop");
     const search = renderer.document.getElementById("search-input");
     search.value = "Public API";
     search.dispatch("input");
-    assert.equal(renderer.document.querySelector(".apphost-heading h2").textContent, before);
+    assert.equal(renderer.document.querySelector(".apphost-heading").getAttribute("title"), before);
 });
 
 for (const failureFirst of [true, false]) {
@@ -951,29 +1048,136 @@ for (const failureFirst of [true, false]) {
     });
 }
 
-test("resource details and copying are separate native buttons and copying uses the canonical name", async () => {
+test("the inspector opens dashboard views and copies the canonical resource name", async () => {
     const renderer = await boot();
-    const card = renderer.document.querySelector('[data-resource-id="host-a:resource:api"]');
-    const details = card.querySelector("button.resource-name");
+    assert.equal(renderer.document.querySelector(".inspector[data-inspector-resource]"), null, "Nothing is selected on load");
+    selectApi(renderer);
+    const inspector = renderer.document.querySelector('[data-inspector-resource="host-a:resource:api"]');
+    const details = inspector.querySelector('[data-focus-key="inspector:details"]');
     assert.equal(details.getAttribute("aria-label"), "View details for Public API");
+    assert.ok(inspector.querySelector('[data-focus-key="inspector:metrics"]'), "Dashboard views render as direct buttons");
     details.click();
     assert.deepEqual(renderer.request("/api/open-dashboard-view").body, { nodeId: "host-a:resource:api", view: "details" });
-    const copy = card.querySelector(".resource-name-copy");
+    const copy = renderer.document.querySelector('[data-focus-key="inspector:copy"]');
     assert.equal(copy.getAttribute("aria-label"), "Copy resource name api");
     copy.click();
     await settle();
     assert.deepEqual(renderer.copied, ["api"]);
-    assert.ok(card.querySelector(`[data-node-id="${commandId}"]`), "Resource commands are preserved");
-    const offline = renderer.context.renderResourceCard({
-        resource: { id: "offline", label: "Display only", children: [] }, dashboardAvailable: false,
-    });
-    assert.equal(offline.querySelector("button.resource-name"), null);
-    offline.querySelector(".resource-name-copy").click();
+    assert.ok(renderer.document.querySelector(`[data-node-id="${commandId}"]`), "Resource commands are preserved");
+    const offline = renderer.context.renderInspector({ resource: { id: "offline", label: "Display only", children: [] } }, false);
+    assert.equal(offline.querySelector('[data-focus-key="inspector:details"]'), null);
+    assert.match(offline.querySelector(".inspector-note").textContent, /while this AppHost is running/);
+    assert.match(offline.querySelector(".inspector-facts").textContent, /Not reported/);
+    offline.querySelector('[data-focus-key="inspector:copy"]').click();
     await settle();
     assert.deepEqual(renderer.copied, ["api", "Display only"]);
+    const waiting = renderer.context.renderInspector({ resource: { id: "cache", label: "cache", children: [
+        { id: "health", kind: "health-group", children: [
+            { id: "check", label: "cache_check", statusLabel: "Waiting", icon: "loading", tone: "inactive" },
+        ] },
+    ] } }, false);
+    assert.ok(waiting.querySelector(".health-row .state-icon.is-spinning"), "Waiting health checks spin like the dashboard");
 });
 
-test("filtered graph counts are honest and one combined relationship can be selected and added to Copilot", async () => {
+test("selection animates once, survives refreshes, and Back or Escape returns focus to the row", async () => {
+    const renderer = await boot();
+    assert.ok(renderer.document.querySelector(".host-summary"), "The host overview shows until a resource is selected");
+    selectApi(renderer);
+    renderer.flushFrames();
+    const row = '[data-focus-key="row:host-a:resource:api"]';
+    assert.equal(renderer.document.querySelector(row).getAttribute("aria-current"), "true");
+    assert.ok(renderer.document.querySelector(".inspector.is-entering"));
+    await renderer.push({ type: "state", state: snapshot(2) });
+    assert.ok(renderer.document.querySelector('[data-inspector-resource="host-a:resource:api"]'));
+    assert.equal(renderer.document.querySelector(".inspector.is-entering"), null, "Refreshes never replay motion");
+    renderer.document.querySelector('.inspector-back[aria-label="Back to resources"]').click();
+    renderer.flushFrames();
+    assert.ok(renderer.document.querySelector(".host-summary"));
+    assert.equal(renderer.document.activeElement, renderer.document.querySelector(row));
+    selectApi(renderer);
+    renderer.document.querySelector(".inspector-pane").dispatch("keydown", { key: "Escape", target: renderer.document.querySelector("#inspector-title") });
+    renderer.flushFrames();
+    assert.ok(renderer.document.querySelector(".host-summary"));
+    assert.equal(renderer.document.activeElement, renderer.document.querySelector(row));
+    selectApi(renderer);
+    const removed = snapshot(3);
+    removed.roots[0].children[0].children = removed.roots[0].children[0].children.filter((resource) => resource.id !== "host-a:resource:api");
+    await renderer.push({ type: "state", state: removed });
+    assert.equal(renderer.document.getElementById("inspector-title").textContent, "Resource no longer available");
+});
+
+test("roster filters combine attention, state, and health and Clear filters resets every filter", async () => {
+    const renderer = await boot();
+    const state = snapshot(2);
+    const [database, api] = state.roots[0].children[0].children;
+    Object.assign(database, { statusLabel: "Failed", lifecycleTone: "error", healthLabel: undefined, healthTone: undefined });
+    Object.assign(api, { statusLabel: "Running", lifecycleTone: "healthy", healthLabel: "Healthy", healthTone: "healthy" });
+    await renderer.push({ type: "state", state });
+    const count = () => renderer.document.querySelector(".roster-count").textContent;
+    const rows = () => renderer.document.querySelectorAll(".resource-row").map((row) => row.getAttribute("data-resource-id"));
+    assert.equal(count(), "2");
+    assert.equal(renderer.document.querySelector(".roster-attention-count").textContent, "1");
+    renderer.document.querySelector(".roster-attention").click();
+    assert.equal(renderer.document.querySelector(".roster-attention").getAttribute("aria-pressed"), "true");
+    assert.deepEqual(rows(), [database.id]);
+    assert.equal(count(), "1 of 2");
+    const health = renderer.document.querySelector('[data-focus-key="health-filter"]');
+    health.value = "healthy";
+    health.dispatch("change");
+    assert.equal(renderer.document.querySelectorAll(".resource-row").length, 0);
+    assert.match(renderer.document.querySelector(".roster-empty").textContent, /No resources match these filters/);
+    const search = renderer.document.getElementById("search-input");
+    search.value = "Public";
+    search.dispatch("input");
+    button(renderer.document.querySelector(".roster-empty"), "Clear filters").click();
+    assert.equal(search.value, "");
+    assert.equal(renderer.evaluate("attentionOnly"), false);
+    assert.equal(renderer.evaluate("healthFilter"), "all");
+    assert.equal(renderer.evaluate("stateFilter"), "all");
+    assert.equal(count(), "2");
+    const notReported = renderer.document.querySelector('[data-focus-key="health-filter"]');
+    notReported.value = "not-reported";
+    notReported.dispatch("change");
+    assert.deepEqual(rows(), [database.id]);
+    const popoverClear = renderer.document.getElementById("filters-clear");
+    assert.equal(popoverClear.disabled, false);
+    renderer.document.querySelector('[data-focus-key="attention"]').click();
+    popoverClear.click();
+    assert.equal(renderer.evaluate("healthFilter"), "all");
+    assert.equal(renderer.evaluate("attentionOnly"), true);
+    assert.equal(popoverClear.disabled, true);
+    assert.equal(renderer.document.querySelector(".roster-filters-count"), null);
+});
+
+test("the Filters panel Clear filters turns off hidden resources too", async () => {
+    const renderer = createRenderer();
+    await renderer.push({ type: "state", state: snapshot(1, { includeHidden: true }) });
+    const clear = renderer.document.getElementById("filters-clear");
+    assert.equal(clear.disabled, false);
+    clear.click();
+    assert.equal(renderer.document.getElementById("hidden-checkbox").checked, false);
+    assert.deepEqual(renderer.request("/api/preferences").body, { includeHidden: false });
+    await renderer.respond(renderer.request("/api/preferences"), { state: snapshot(2, { includeHidden: false }) });
+    assert.equal(clear.disabled, true);
+});
+
+test("the Filters panel anchors under its trigger and stays inside the control row", async () => {
+    const renderer = await boot();
+    const panel = renderer.document.getElementById("filters-panel");
+    const trigger = renderer.document.querySelector(".roster-filters-trigger");
+    const row = { getBoundingClientRect: () => ({ left: 10, width: 600 }) };
+    Object.defineProperties(panel, { offsetParent: { value: row }, offsetWidth: { value: 240 } });
+    trigger.getBoundingClientRect = () => ({ left: 330 });
+    trigger.click();
+    assert.equal(panel.hidden, false);
+    assert.equal(panel.style.left, "320px");
+    trigger.click();
+    trigger.getBoundingClientRect = () => ({ left: 500 });
+    trigger.click();
+    assert.equal(panel.style.left, "360px");
+});
+
+test("filtered graph counts are honest and one combined relationship can be selected and added to chat", async () => {
     const renderer = await boot();
     renderer.document.getElementById("graph-view-tab").click();
     const list = renderer.document.querySelector(".graph-relationships");
@@ -985,7 +1189,7 @@ test("filtered graph counts are honest and one combined relationship can be sele
     assert.equal(renderer.evaluate("selectedNodeId"), "host-a:relationship:database-api");
     assert.equal(renderer.context.findNode("host-a:relationship:database-api").kind, "relationship");
     assert.equal(renderer.document.querySelector(".relationship-select").getAttribute("aria-pressed"), "true");
-    button(renderer.document.body, "Add relationship to Copilot").click();
+    button(renderer.document.body, "Add relationship to chat").click();
     assert.deepEqual(renderer.request("/api/copilot-context").body, { nodeId: "host-a:relationship:database-api" });
     const search = renderer.document.getElementById("search-input");
     search.value = "Public API";
@@ -993,14 +1197,14 @@ test("filtered graph counts are honest and one combined relationship can be sele
     const panel = renderer.document.getElementById("graph-view-panel");
     assert.match(panel.textContent, /1 of 2 resources and 0 of 1 relationships visible/);
     assert.doesNotMatch(panel.textContent, /no declared resource relationships/);
-    button(panel, "Clear filter").click();
+    button(panel, "Clear filters").click();
     assert.equal(search.value, "");
     assert.equal(renderer.document.querySelectorAll(".relationship-select").length, 1);
     renderer.evaluate('filterText = "commands"');
     const emptyGraph = renderer.context.visibleResourceGraph(snapshot().roots[0], []);
     const emptyPanel = renderer.context.renderResourceGraphPanel(emptyGraph, true);
     assert.match(emptyPanel.textContent, /0 of 2 resources and 0 of 1 relationships visible/);
-    assert.ok(button(emptyPanel, "Clear filter"));
+    assert.ok(button(emptyPanel, "Clear filters"));
 });
 
 test("graph fan-in ports are distinct, bounded, and stable regardless of edge enumeration", async () => {
@@ -1086,7 +1290,7 @@ test("narrow More reuses confirmations and exposes disabled operations without e
     const menu = renderer.document.getElementById("action-menu");
     assert.equal(renderer.document.activeElement.textContent, "Deploy AppHost");
     menu.dispatch("keydown", { key: "End" });
-    assert.equal(renderer.document.activeElement.textContent, "Open AppHost source");
+    assert.equal(renderer.document.activeElement.textContent, "Add Shop.AppHost to chat");
     menu.dispatch("keydown", { key: "Home" });
     assert.equal(renderer.document.activeElement.textContent, "Deploy AppHost");
     button(menu, "Deploy AppHost").click();
@@ -1104,10 +1308,29 @@ test("narrow More reuses confirmations and exposes disabled operations without e
     assert.match(renderer.document.querySelector(".host-action-bar").textContent, /Deploying AppHost/);
 });
 
+test("unavailable AppHost notice stays short and exposes the full reason on hover and focus", async () => {
+    const renderer = await boot();
+    const state = snapshot(2);
+    state.roots[0].unavailableActionReason = "Aspire could not confirm that this AppHost is buildable. Check the project, then refresh.";
+    state.roots[0].unavailableActionLabel = "Build not confirmed";
+    await renderer.push({ type: "state", state });
+    const notice = renderer.document.querySelector(".tray-notice");
+    assert.equal(notice.textContent, "Build not confirmed");
+    assert.equal(notice.getAttribute("title"), state.roots[0].unavailableActionReason);
+    assert.equal(notice.getAttribute("aria-label"), state.roots[0].unavailableActionReason);
+    assert.equal(notice.getAttribute("tabindex"), "0");
+});
+
+function openPipelineStep(renderer) {
+    const trigger = renderer.document.querySelector(".host-more-actions");
+    trigger.click();
+    button(renderer.document.getElementById("action-menu"), "Run pipeline step").click();
+    return trigger;
+}
+
 test("pipeline cancellation bypasses required validation, Enter runs once, and Escape never runs", async () => {
     const renderer = await boot();
-    const trigger = button(renderer.document.body, "Pipeline step");
-    trigger.click();
+    const trigger = openPipelineStep(renderer);
     const dialog = renderer.document.getElementById("pipeline-dialog");
     const input = renderer.document.getElementById("pipeline-step-input");
     const cancel = renderer.document.getElementById("pipeline-cancel");
@@ -1119,13 +1342,13 @@ test("pipeline cancellation bypasses required validation, Enter runs once, and E
     assert.equal(dialog.open, false);
     assert.equal(renderer.document.activeElement, trigger);
     assert.equal(renderer.requests.some((request) => request.path === "/api/apphost-operation"), false);
-    trigger.click();
+    openPipelineStep(renderer);
     input.value = "build";
     dialog.querySelector("form").requestSubmit();
     assert.equal(renderer.request("/api/apphost-operation").body.step, "build");
     dialog.dispatch("close");
     assert.equal(renderer.requests.filter((request) => request.path === "/api/apphost-operation").length, 1);
-    trigger.click();
+    openPipelineStep(renderer);
     assert.equal(dialog.returnValue, "");
     dialog.dispatch("cancel");
     dialog.close();
@@ -1136,13 +1359,13 @@ test("pipeline cancellation bypasses required validation, Enter runs once, and E
 
 test("pipeline focus returns to a live control after the board rerenders, and old loads cannot change a new dialog", async () => {
     const renderer = await boot();
-    button(renderer.document.body, "Pipeline step").click();
+    openPipelineStep(renderer);
     const oldLoad = renderer.request("/api/pipeline-steps?appHostId=host-a");
     await renderer.push({ type: "state", state: snapshot(2) });
     renderer.document.getElementById("pipeline-cancel").click();
     assert.equal(renderer.document.activeElement.isConnected, true);
     assert.equal(renderer.document.activeElement.getAttribute("data-apphost-primary"), "true");
-    button(renderer.document.body, "Pipeline step").click();
+    openPipelineStep(renderer);
     await renderer.respond(oldLoad, { steps: [{ name: "stale-step" }] });
     assert.equal(renderer.document.getElementById("pipeline-step-options").children.length, 0);
     await renderer.respond(renderer.request("/api/pipeline-steps?appHostId=host-a"), { steps: [{ name: "current-step" }] });
@@ -1154,12 +1377,16 @@ test("responsive and theme selectors preserve host priority, the official mark, 
     assert.match(sharedStyles, /--surface: var\(--background-color-default, light-dark\(#ffffff, #0d1117\)\)/);
     assert.match(sharedStyles, /--text: var\(--text-color-default, light-dark\(#1f2328, #f0f6fc\)\)/);
     assert.match(styles, /\.resource-parent\s*\{[^}]*min-width: 0;[^}]*overflow-wrap: anywhere;/);
-    assert.match(styles, /\.apphost-heading\s*\{[^}]*max-width: 100%;/);
-    assert.match(styles, /\.apphost-heading h2\s*\{[^}]*overflow-wrap: anywhere;[^}]*white-space: normal;/);
-    assert.match(styles, /@media \(max-width: 520px\)[\s\S]*?\.host-action-bar \.is-secondary-operation\s*\{\s*display: none;/);
-    assert.match(styles, /\.host-more-actions\s*\{\s*display: none;/);
-    assert.match(styles, /@media \(max-width: 520px\)[\s\S]*?\.host-more-actions\s*\{\s*display: inline-flex;/);
-    assert.match(styles, /@media \(max-width: 520px\)[\s\S]*?\.title-row\s*\{[^}]*grid-template-columns: 40px minmax\(0, 1fr\) auto;/);
+    assert.match(styles, /\.apphost-heading\s*\{[^}]*min-width: 0;/);
+    assert.match(styles, /\.apphost-heading h2\s*\{[^}]*min-width: 6ch;[^}]*flex: 0 1 auto;[^}]*text-overflow: ellipsis;[^}]*white-space: nowrap;/);
+    assert.match(styles, /\.apphost-heading \.apphost-hint\s*\{[^}]*min-width: 0;[^}]*flex: 0 1000 auto;[^}]*text-overflow: ellipsis;/);
+    assert.doesNotMatch(styles, /\.apphost-switcher\s*\{[^}]*margin-left/);
+    assert.match(styles, /\.apphost-switcher > \.apphost-heading\s*\{[^}]*padding: 0 8px;/);
+    assert.doesNotMatch(styles, /\.apphost-trigger\.resource-menu-trigger\s*\{[^}]*margin-left/);
+    assert.match(styles, /\.host-more-actions\s*\{\s*display: inline-flex;/);
+    assert.match(styles, /@container \(min-width: 720px\)[\s\S]*?\.resource-board\s*\{[^}]*grid-template-columns:/);
+    assert.match(styles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.inspector\.is-entering/);
+    assert.match(styles, /@media \(max-width: 520px\)[\s\S]*?#mode-label,\s*\.host-action-bar \.is-secondary-operation\s*\{\s*display: none;/);
     assert.match(markup, /class="brand-mark canvas-brand"[\s\S]*?width="22"\s+height="22"/);
     const renderer = await boot();
     const icon = renderer.context.svgIcon("warning");
@@ -1167,9 +1394,33 @@ test("responsive and theme selectors preserve host priority, the official mark, 
     assert.equal(icon.getAttribute("focusable"), "false");
     assert.equal(icon.children[0].getAttribute("href"), "/canvas-icons.svg#warning");
     const longParent = "LongParent".repeat(80);
-    const card = renderer.context.renderResourceCard({
-        resource: { id: "child", label: "Child", children: [] }, parentLabel: longParent, dashboardAvailable: false,
-    });
+    const card = renderer.context.renderResourceRow({
+        resource: { id: "child", label: "Child", children: [] }, parentLabel: longParent, depth: 1,
+    }, false, new Set());
     assert.equal(card.querySelector(".resource-parent").textContent, `Part of ${longParent}`);
     assert.equal(card.querySelector(".resource-parent").title, `Part of ${longParent}`);
+});
+
+test("warning-styled settled resources need attention and connected children draw tree guides", async () => {
+    const renderer = await boot();
+    const { resourceNeedsAttention, resourceStateGroup, rowTreeGuides } = renderer.context;
+    const valueMissing = { lifecycleTone: "warning", lifecycleTransitioning: false };
+    const starting = { lifecycleTone: "warning", lifecycleTransitioning: true };
+    assert.equal(resourceNeedsAttention(valueMissing), true);
+    assert.equal(resourceStateGroup(valueMissing), "stopped");
+    assert.equal(resourceNeedsAttention(starting), false);
+    assert.equal(resourceStateGroup(starting), "transitioning");
+
+    const visible = [
+        { resource: { label: "postgres" }, depth: 0 },
+        { resource: { label: "catalogdb" }, parentLabel: "postgres", depth: 1 },
+        { resource: { label: "ordersdb" }, parentLabel: "postgres", depth: 1 },
+        { resource: { label: "orphan" }, parentLabel: "hidden", depth: 1 },
+    ];
+    const labels = new Set(["postgres", "catalogdb", "ordersdb", "orphan"]);
+    const classes = (index) => Array.from(rowTreeGuides(visible, index, labels), (guide) => guide.getAttribute("class"));
+    assert.deepEqual(classes(0), ["tree-stem"]);
+    assert.deepEqual(classes(1), ["tree-elbow", "tree-rail"]);
+    assert.deepEqual(classes(2), ["tree-elbow"]);
+    assert.deepEqual(classes(3), []);
 });
