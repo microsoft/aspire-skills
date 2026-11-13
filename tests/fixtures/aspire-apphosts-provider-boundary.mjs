@@ -459,6 +459,7 @@ test("switching view mode publishes an empty tree before the new mode loads", as
 test("machine-readable stdout stays provider-side", async (t) => {
     const privateValue = "private-machine-json-value";
     let failPs = false;
+    let failLoader = false;
     const h = await harness(t, {
         cliOverride: async (args, options) => {
             if (args[0] === "ps") {
@@ -474,11 +475,32 @@ test("machine-readable stdout stays provider-side", async (t) => {
         },
     });
     const open = await h.open();
+    h.controls.loader = async (_args, options) => {
+        const stdout = JSON.stringify([...baseInputs, {
+            name: "token",
+            inputType: "SecretText",
+            defaultValue: privateValue,
+        }]);
+        options.onOutput?.("stdout", stdout);
+        return failLoader
+            ? { ok: false, code: 1, stdout, stderr: "", error: stdout }
+            : { ok: true, code: 0, stdout, stderr: "", error: "" };
+    };
     const stream = await sse(h, open);
     t.after(() => stream.close());
     const snapshot = await stream.waitFor((event) => event.type === "command-log-snapshot");
     assert.ok(snapshot.commands.length > 0);
     assert.doesNotMatch(JSON.stringify(snapshot), new RegExp(privateValue));
+    const commandRequest = await requestFor(h, open);
+    assert.equal((await h.request(open, "/api/command-inputs", {
+        ...commandRequest,
+        arguments: { environment: "prod" },
+    })).ok, true);
+    failLoader = true;
+    assert.equal((await h.request(open, "/api/command-inputs", {
+        ...commandRequest,
+        arguments: { environment: "prod" },
+    })).status, 500);
     failPs = true;
     await h.action("refresh_model");
     await stream.waitFor((event) => event.type === "command-log" && event.command.status === "failed");

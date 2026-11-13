@@ -1499,13 +1499,11 @@ async function loadCommandInputsNow(entry, request, options, ticket) {
         "--apphost",
         record.appHostPath,
         "--load-arguments",
-        "--non-interactive",
-        "--nologo",
         ...buildCommandArgumentTokens(loadValues),
     ];
     let result;
     try {
-        result = await runPreparedWithCompatibility(args, {
+        result = await runJsonWithCompatibility(args, {
             cwd: defaultCwdForAppHost(record.appHostPath, entry.workingDirectory),
             timeoutMs: CLI_TIMEOUT_MS,
             sensitiveValues,
@@ -1514,7 +1512,7 @@ async function loadCommandInputsNow(entry, request, options, ticket) {
     } catch (error) {
         result = { ok: false, error: error?.message || String(error) };
     }
-    const payload = result.ok ? extractJsonPayload(result.stdout) : undefined;
+    const payload = result.data;
     if (!result.ok || !Array.isArray(payload)) {
         return {
             ok: false,
