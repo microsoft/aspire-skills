@@ -618,7 +618,11 @@ async function runPreparedWithCompatibility(args, options = {}) {
 }
 
 async function runJsonWithCompatibility(args, options = {}) {
-    const prepared = [...args, "--non-interactive", "--nologo"];
+    // CLI options must precede `--`; anything after it is forwarded to the resource command.
+    const separator = args.indexOf("--");
+    const prepared = separator === -1
+        ? [...args, "--non-interactive", "--nologo"]
+        : [...args.slice(0, separator), "--non-interactive", "--nologo", ...args.slice(separator)];
     const result = await runPreparedWithCompatibility(prepared, {
         ...options,
         commandLog: options.commandLog

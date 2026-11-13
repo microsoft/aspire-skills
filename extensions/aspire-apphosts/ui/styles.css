@@ -1007,7 +1007,8 @@ body.is-mode-switching .empty-state {
     gap: 12px;
     padding: 0 var(--gutter);
     border-bottom: 1px solid var(--border-soft);
-    background: var(--surface-inset);
+    /* Opaque match for the inset tint layered on the inset pane, so scrolled rows never show through. */
+    background: color-mix(in srgb, var(--text) 10%, var(--surface));
     color: var(--muted);
     font-size: var(--text-compact);
     font-weight: var(--weight-semibold);

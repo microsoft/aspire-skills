@@ -72,7 +72,7 @@ bounded request bodies.
 
 - Workspace mode with a compact AppHost switcher and running hosts first.
 - When CLI discovery is unavailable, the bounded filesystem fallback recognizes
-  `apphost.cs`, `apphost.ts`, and `apphost.mts` case-insensitively in the workspace
+  `apphost.cs`, `apphost.ts`, `apphost.mts`, and `apphost.go` case-insensitively in the workspace
   root and its immediate child directories, preserving the actual file spelling.
 - Global mode with every running machine AppHost available from the same
   switcher and a bounded describe fanout of four.

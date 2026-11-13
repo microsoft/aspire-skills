@@ -1514,7 +1514,7 @@ function renderRosterSection({ key, title, entries, visible, collapsed }, dashbo
     const listId = `roster-section-${key}`;
     const visibleLabels = new Set(visible.map(({ resource }) => resource.label));
     const count = rosterFiltersActive() ? `(${visible.length} of ${entries.length})` : `(${entries.length})`;
-    return [
+    return element("div", { class: "roster-section" }, [
         element("div", { class: "roster-header roster-section-header" }, [
             element("button", {
                 class: "roster-section-toggle",
@@ -1537,7 +1537,7 @@ function renderRosterSection({ key, title, entries, visible, collapsed }, dashbo
                 visibleLabels,
                 rowTreeGuides(visible, index, visibleLabels),
             ))),
-    ];
+    ]);
 }
 
 function renderRosterSections(entries, visible, dashboardAvailable) {
@@ -1564,7 +1564,7 @@ function renderRosterSections(entries, visible, dashboardAvailable) {
             collapsed: parametersSectionCollapsed,
         });
     }
-    return sections.flatMap((section) => renderRosterSection(section, dashboardAvailable));
+    return sections.map((section) => renderRosterSection(section, dashboardAvailable));
 }
 
 function renderResourceBoardPanel(appHost, entries, visible, dashboardAvailable) {

@@ -886,6 +886,7 @@ test("loader and execution bind the same normalized number, boolean, and omitted
     assert.ok(loadedArgs.includes("--count=1"));
     assert.ok(loadedArgs.includes("--flag=false"));
     assert.ok(!loadedArgs.some((arg) => arg.startsWith("--optional=")));
+    assert.deepEqual([...loadedArgs.slice(loadedArgs.indexOf("--") + 1)], ["--count=1", "--flag=false"]);
     assert.equal((await h.request(open, "/api/command", body)).ok, true);
     const executedArgs = h.commandCalls()[0].args;
     assert.deepEqual(executedArgs.slice(executedArgs.indexOf("--") + 1), ["--count=1", "--flag=false"]);

@@ -19,6 +19,7 @@ import {
     buildWorkspaceTree,
     combineWorkspaceAppHosts,
     createDetachedRunLogTail,
+    defaultCwdForAppHost,
     filterDetachedRunLog,
     filterTree,
     discoverConfiguredAppHosts,
@@ -862,7 +863,7 @@ test("workspace fallback discovers file-based TypeScript AppHosts with mts exten
 });
 
 test("workspace fallback recognizes source AppHost casing at either scan depth", async (t) => {
-    for (const fileName of ["AppHost.cs", "AppHost.ts", "AppHost.mts", "APPHOST.MTS"]) {
+    for (const fileName of ["AppHost.cs", "AppHost.ts", "AppHost.mts", "APPHOST.MTS", "apphost.go"]) {
         await t.test(fileName, async () => {
             const fixtureRoot = await mkdtemp(join(tmpdir(), "aspire-cased-apphost-"));
             try {
@@ -911,13 +912,17 @@ test("normalizeLsPayload preserves buildability without exposing candidate paths
     const candidates = normalizeLsPayload([
         { path: repoPath("First.AppHost", "First.AppHost.csproj"), language: "csharp", status: "buildable" },
         { path: repoPath("apphost.ts"), language: "typescript/nodejs", status: "possibly-unbuildable" },
+        { path: repoPath("go-apphost", "apphost.go"), language: "go", status: "buildable" },
     ]);
 
     assert.equal(candidates[0].displayName, "First");
     assert.equal(candidates[0].buildable, true);
     assert.equal(candidates[1].buildable, false);
     assert.equal(candidates[1].displayName, "repo");
+    assert.equal(candidates[2].displayName, "go-apphost");
     assert.notEqual(candidates[0].id, candidates[1].id);
+    assert.equal(defaultCwdForAppHost(repoPath("go-apphost", "apphost.go")), repoPath("go-apphost"),
+        "Go AppHost operations run from its directory, not the file");
 });
 
 test("buildResourceTree follows VS Code child ordering and command visibility", () => {
