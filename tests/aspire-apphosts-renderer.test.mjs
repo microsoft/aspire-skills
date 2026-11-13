@@ -1223,7 +1223,7 @@ test("the Filters panel anchors under its trigger and stays inside the control r
     assert.equal(panel.style.left, "360px");
 });
 
-test("relationship workbench diagnoses blockers, preserves chat context, and refocuses related resources", async () => {
+test("relationship browser diagnoses blockers, explains selection, and requires an explicit refocus", async () => {
     const renderer = await boot();
     renderer.document.getElementById("graph-view-tab").click();
     assert.equal(renderer.document.getElementById("graph-view-tab").textContent, "Relationships");
@@ -1234,15 +1234,21 @@ test("relationship workbench diagnoses blockers, preserves chat context, and ref
         renderer.document.querySelector(".relationship-diagnosis").textContent,
         /Public API waits for Database\. No blocker currently needs attention\./,
     );
-    const groups = renderer.document.querySelectorAll(".relationship-group");
-    assert.equal(groups.length, 4);
-    const blocked = groups.find((group) => /Blocked by/.test(group.textContent));
-    assert.match(blocked.textContent, /Database/);
-    assert.match(blocked.textContent, /Public API references and waits for Database/);
-    assert.equal(blocked.querySelectorAll(".relationship-row").length, 1);
-    button(blocked, "Add to chat").click();
+    const rows = renderer.document.querySelectorAll(".relationship-browser-row");
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].getAttribute("aria-pressed"), "true");
+    assert.match(rows[0].textContent, /Waits for \+ references/);
+    assert.match(rows[0].textContent, /Database/);
+    assert.match(
+        renderer.document.querySelector(".relationship-inline-detail").textContent,
+        /Public API waits for and references Database/,
+    );
+    const detail = renderer.document.querySelector(".relationship-browser > .relationship-detail");
+    assert.match(detail.textContent, /Public API waits for and references Database/);
+    assert.match(detail.textContent, /startup dependency and a source of values or endpoints/);
+    button(detail, "Add relationship to chat").click();
     assert.deepEqual(renderer.request("/api/copilot-context").body, { nodeId: "host-a:relationship:database-api" });
-    blocked.querySelector(".relationship-row-main").click();
+    button(detail, "Focus Database").click();
     renderer.flushFrames();
     assert.equal(renderer.document.getElementById("relationship-focus-select").value, "database");
     assert.equal(renderer.document.activeElement, renderer.document.getElementById("relationship-focus-select"));
@@ -1259,7 +1265,7 @@ test("relationship workbench diagnoses blockers, preserves chat context, and ref
     assert.match(panel.textContent, /Public API has no declared wait dependencies/);
     button(panel, "Clear filters").click();
     assert.equal(search.value, "");
-    assert.equal(renderer.document.querySelectorAll(".relationship-row").length, 1);
+    assert.equal(renderer.document.querySelectorAll(".relationship-browser-row").length, 1);
     renderer.evaluate('filterText = "commands"');
     const emptyGraph = renderer.context.visibleResourceGraph(snapshot().roots[0], []);
     const emptyPanel = renderer.context.renderResourceGraphPanel(emptyGraph, true);
@@ -1274,7 +1280,8 @@ test("relationship workbench diagnoses blockers, preserves chat context, and ref
         filtered: false,
     }, true);
     assert.match(graphWithoutRelationships.textContent, /Solo has no declared wait dependencies/i);
-    assert.equal(graphWithoutRelationships.querySelectorAll(".relationship-group-empty").length, 4);
+    assert.match(graphWithoutRelationships.querySelector(".relationship-browser-empty").textContent, /No direct relationships/);
+    assert.match(graphWithoutRelationships.querySelector(".relationship-detail.is-empty").textContent, /No direct relationships/);
 
     function focusRelationship(resourceName) {
         const select = renderer.document.getElementById("relationship-focus-select");
@@ -1470,7 +1477,7 @@ test("graph arrows approach the target boundary in the correct direction for eve
     assert.notEqual(reciprocalLeft, reciprocalRight, "reciprocal edges route on opposite sides");
 });
 
-test("relationship workbench prioritizes an unhealthy blocked resource and groups ownership and impact", async () => {
+test("relationship browser orders blockers first and selection does not change focus", async () => {
     const renderer = await boot();
     const state = snapshot(2);
     const graph = state.roots[0].graph;
@@ -1518,25 +1525,35 @@ test("relationship workbench prioritizes an unhealthy blocked resource and group
         renderer.document.querySelector(".relationship-diagnosis").textContent,
         /Server waits for Cache and Vacations\. Cache and Vacations need attention\./,
     );
-    const groups = renderer.document.querySelectorAll(".relationship-group");
-    const blocked = groups.find((group) => /Blocked by/.test(group.textContent));
-    const affects = groups.find((group) => /Affects/.test(group.textContent));
-    assert.equal(blocked.querySelectorAll(".relationship-row").length, 2);
-    assert.match(affects.textContent, /Frontend/);
+    let rows = renderer.document.querySelectorAll(".relationship-browser-row");
+    assert.equal(rows.length, 3);
+    assert.match(rows[0].textContent, /Waits for \+ references/);
+    assert.match(rows[0].textContent, /Cache/);
+    assert.match(rows[1].textContent, /Waits for/);
+    assert.match(rows[1].textContent, /Vacations/);
+    const frontendRow = rows.find((row) => /Frontend/.test(row.textContent));
+    frontendRow.click();
+    renderer.flushFrames();
+    assert.equal(renderer.document.getElementById("relationship-focus-select").value, "server");
+    assert.equal(frontendRow.getAttribute("aria-pressed"), "false");
+    assert.match(renderer.document.querySelector(".relationship-browser > .relationship-detail").textContent, /Frontend references Server/);
+    assert.equal(renderer.document.querySelector(".relationship-browser-row.is-selected").textContent.includes("Frontend"), true);
+    button(renderer.document.querySelector(".relationship-browser > .relationship-detail"), "Focus Frontend").click();
+    assert.equal(renderer.document.getElementById("relationship-focus-select").value, "frontend");
 
     const focus = renderer.document.getElementById("relationship-focus-select");
     focus.value = "worker";
     focus.dispatch("change");
-    const ownership = renderer.document.querySelectorAll(".relationship-group")
-        .find((group) => /Ownership/.test(group.textContent));
-    assert.match(ownership.textContent, /Worker child/);
-    ownership.querySelector(".relationship-row-main").click();
+    rows = renderer.document.querySelectorAll(".relationship-browser-row");
+    assert.equal(rows.length, 1);
+    assert.match(rows[0].textContent, /Contains/);
+    assert.match(rows[0].textContent, /Worker child/);
+    rows[0].click();
+    assert.equal(renderer.document.getElementById("relationship-focus-select").value, "worker");
+    button(renderer.document.querySelector(".relationship-browser > .relationship-detail"), "Focus Worker child").click();
     assert.equal(renderer.document.getElementById("relationship-focus-select").value, "child");
-    assert.match(
-        renderer.document.querySelectorAll(".relationship-group")
-            .find((group) => /Ownership/.test(group.textContent)).textContent,
-        /Worker/,
-    );
+    assert.match(renderer.document.querySelector(".relationship-browser-row").textContent, /Part of/);
+    assert.match(renderer.document.querySelector(".relationship-browser-row").textContent, /Worker/);
 });
 
 test("narrow More reuses confirmations and exposes disabled operations without executing them", async () => {

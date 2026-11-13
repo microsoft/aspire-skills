@@ -164,6 +164,7 @@ let retainedGraphEdgeFocusId = null;
 let renderedAppHostId = null;
 let graphRelationshipsExpanded = false;
 let relationshipFocusName = null;
+let selectedRelationshipId = null;
 let eventStreamStatus = "connecting";
 let selectedResourceId = null;
 let inspectorReturnFocusId = null;
@@ -454,6 +455,7 @@ function resetModeScopedState() {
     appModelViewStateByAppHost.clear();
     graphRelationshipsExpanded = false;
     relationshipFocusName = null;
+    selectedRelationshipId = null;
     filterText = "";
     els.searchInput.value = "";
     attentionOnly = false;
@@ -1007,6 +1009,7 @@ function selectResource(resource) {
     }
     selectedResourceId = resource.id;
     relationshipFocusName = resource.resourceName;
+    selectedRelationshipId = null;
     inspectorReturnFocusId = resource.id;
     hideActionMenu();
     recordSelection(resource);
@@ -1887,6 +1890,7 @@ function chooseRelationshipFocus(graph) {
 
 function focusRelationshipResource(resourceName) {
     relationshipFocusName = resourceName;
+    selectedRelationshipId = null;
     renderTree();
     requestAnimationFrame(() => {
         document.getElementById("relationship-focus-select")?.focus();
@@ -1904,75 +1908,101 @@ function relationshipList(items) {
     return `${labels.slice(0, -1).join(", ")}, and ${labels.at(-1)}`;
 }
 
-function relationshipGroups(graph, focus, nodeByName) {
-    const groups = [
-        {
-            id: "blocked-by",
-            title: "Blocked by",
-            description: "Resources this resource waits for before it can proceed.",
-            entries: [],
-        },
-        {
-            id: "references",
-            title: "References",
-            description: "Resources whose values or endpoints this resource uses.",
-            entries: [],
-        },
-        {
-            id: "ownership",
-            title: "Ownership",
-            description: "Resources that contain this resource or belong to it.",
-            entries: [],
-        },
-        {
-            id: "affects",
-            title: "Affects",
-            description: "Resources that depend on this resource.",
-            entries: [],
-        },
-    ];
-    const groupById = new Map(groups.map((group) => [group.id, group]));
+function relationshipEntryDescriptor(edge, focus, related) {
+    const incoming = edge.to === focus.resourceName;
+    const waits = edge.types.includes("WaitFor");
+    const references = edge.types.includes("Reference");
+    if (edge.types.includes("Parent")) {
+        return edge.from === focus.resourceName
+            ? {
+                kind: "ownership",
+                label: "Contains",
+                title: `${focus.label} contains ${related.label}`,
+                explanation: `${related.label} is a child resource owned by ${focus.label}.`,
+                order: 2,
+            }
+            : {
+                kind: "ownership",
+                label: "Part of",
+                title: `${focus.label} is part of ${related.label}`,
+                explanation: `${related.label} owns and contains ${focus.label}.`,
+                order: 2,
+            };
+    }
+    if (incoming && waits) {
+        return {
+            kind: "blocked-by",
+            label: references ? "Waits for + references" : "Waits for",
+            title: references
+                ? `${focus.label} waits for and references ${related.label}`
+                : `${focus.label} waits for ${related.label}`,
+            explanation: references
+                ? `${focus.label} declares ${related.label} as both a startup dependency and a source of values or endpoints.`
+                : `${focus.label} declares ${related.label} as a startup dependency.`,
+            order: 0,
+        };
+    }
+    if (incoming && references) {
+        return {
+            kind: "references",
+            label: "References",
+            title: `${focus.label} references ${related.label}`,
+            explanation: `${focus.label} uses values or endpoints exposed by ${related.label}.`,
+            order: 1,
+        };
+    }
+    if (!incoming && waits) {
+        return {
+            kind: "affects",
+            label: references ? "Referenced + awaited by" : "Required by",
+            title: references
+                ? `${related.label} waits for and references ${focus.label}`
+                : `${related.label} waits for ${focus.label}`,
+            explanation: references
+                ? `${related.label} declares ${focus.label} as both a startup dependency and a source of values or endpoints.`
+                : `${related.label} declares ${focus.label} as a startup dependency.`,
+            order: 3,
+        };
+    }
+    return {
+        kind: "affects",
+        label: "Referenced by",
+        title: `${related.label} references ${focus.label}`,
+        explanation: `${related.label} uses values or endpoints exposed by ${focus.label}.`,
+        order: 3,
+    };
+}
 
+function relationshipEntries(graph, focus, nodeByName) {
+    const entries = [];
     for (const edge of graph.edges) {
-        let groupId = null;
         let relatedName = null;
-        if (edge.to === focus.resourceName && edge.types.includes("WaitFor")) {
-            groupId = "blocked-by";
+        if (edge.to === focus.resourceName) {
             relatedName = edge.from;
-        } else if (edge.to === focus.resourceName && edge.types.includes("Reference")) {
-            groupId = "references";
-            relatedName = edge.from;
-        } else if (edge.types.includes("Parent")
-            && (edge.from === focus.resourceName || edge.to === focus.resourceName)) {
-            groupId = "ownership";
-            relatedName = edge.from === focus.resourceName ? edge.to : edge.from;
-        } else if (edge.from === focus.resourceName
-            && (edge.types.includes("WaitFor") || edge.types.includes("Reference"))) {
-            groupId = "affects";
+        } else if (edge.from === focus.resourceName) {
             relatedName = edge.to;
         }
         const related = nodeByName.get(relatedName);
-        if (!groupId || !related) {
+        if (!related) {
             continue;
         }
-        groupById.get(groupId).entries.push({
+        entries.push({
             edge,
             related,
+            ...relationshipEntryDescriptor(edge, focus, related),
             sentence: graphRelationshipSentence(edge, nodeByName),
         });
     }
 
-    for (const group of groups) {
-        group.entries.sort((left, right) =>
-            Number(relationshipNodeNeedsAttention(right.related))
-                - Number(relationshipNodeNeedsAttention(left.related))
-            || left.related.label.localeCompare(right.related.label));
-    }
-    return groups;
+    return entries.sort((left, right) =>
+        left.order - right.order
+        || Number(relationshipNodeNeedsAttention(right.related))
+            - Number(relationshipNodeNeedsAttention(left.related))
+        || left.related.label.localeCompare(right.related.label));
 }
 
-function relationshipDiagnosis(focus, groups) {
-    const blockers = groups.find((group) => group.id === "blocked-by")?.entries ?? [];
+function relationshipDiagnosis(focus, entries) {
+    const blockers = entries.filter((entry) => entry.kind === "blocked-by");
     if (blockers.length === 0) {
         return `${focus.label} has no declared wait dependencies.`;
     }
@@ -2000,55 +2030,130 @@ function renderRelationshipState(node) {
     ]);
 }
 
-function renderRelationshipEntry(entry) {
-    const { edge, related, sentence } = entry;
-    return element("li", { class: "relationship-row" }, [
+function selectRelationshipEntry(entry) {
+    selectedRelationshipId = entry.edge.id;
+    renderTree();
+    requestAnimationFrame(() => {
+        document.querySelector(`[data-relationship-id="${CSS.escape(entry.edge.id)}"]`)?.focus();
+    });
+}
+
+function chooseSelectedRelationship(entries) {
+    const selected = entries.find((entry) => entry.edge.id === selectedRelationshipId) ?? entries[0] ?? null;
+    selectedRelationshipId = selected?.edge.id ?? null;
+    return selected;
+}
+
+function renderRelationshipEntry(focus, entry, selected) {
+    return element("li", { class: "relationship-browser-item" }, [
         element("button", {
-            class: "relationship-row-main",
+            class: `relationship-browser-row${selected ? " is-selected" : ""}`,
             type: "button",
-            dataset: { relationshipFocus: related.resourceName },
-            "aria-label": `Focus ${related.label}. ${sentence}`,
-            on: { click: () => focusRelationshipResource(related.resourceName) },
+            dataset: { relationshipId: entry.edge.id },
+            "aria-pressed": selected,
+            "aria-label": `${entry.label}. ${entry.title}. Select for details.`,
+            on: { click: () => selectRelationshipEntry(entry) },
         }, [
+            element("span", { class: "relationship-kind", text: entry.label }),
             element("span", { class: "relationship-row-identity" }, [
-                rowIcon(related),
+                rowIcon(entry.related),
                 element("span", { class: "relationship-row-copy" }, [
-                    element("strong", { text: related.label }),
-                    element("span", { text: sentence }),
+                    element("strong", { text: entry.related.label }),
+                    element("span", { text: entry.explanation }),
                 ]),
             ]),
-            renderRelationshipState(related),
-            svgIcon("chevron", 14),
+            renderRelationshipState(entry.related),
         ]),
-        ...(edge.context ? [element("button", {
-            class: "button button-secondary button-small relationship-chat-action",
-            type: "button",
-            text: "Add to chat",
-            "aria-label": `Add ${related.label} relationship to chat`,
-            on: { click: () => void executeNodeAction("ask", edge.context) },
-        })] : []),
+        ...(selected ? [renderRelationshipDetail(focus, entry, "relationship-inline-detail")] : []),
     ]);
 }
 
-function renderRelationshipGroup(group) {
-    return element("section", {
-        class: `relationship-group${group.entries.length ? "" : " is-empty"}`,
-        "aria-labelledby": `relationship-group-${group.id}`,
-    }, [
-        element("header", { class: "relationship-group-heading" }, [
-            element("div", {}, [
-                element("h3", { id: `relationship-group-${group.id}`, text: group.title }),
-                element("p", { text: group.description }),
-            ]),
-            element("span", {
-                class: "relationship-count",
-                text: String(group.entries.length),
-                "aria-label": `${group.entries.length} ${group.entries.length === 1 ? "relationship" : "relationships"}`,
+function renderRelationshipDetail(focus, entry, variant = "") {
+    const titleId = variant ? `${variant}-title` : "relationship-detail-title";
+    if (!entry) {
+        return element("section", {
+            class: `relationship-detail is-empty${variant ? ` ${variant}` : ""}`,
+            "aria-labelledby": titleId,
+        }, [
+            element("h3", { id: titleId, text: "No direct relationships" }),
+            element("p", {
+                text: `${focus.label} has no declared references, wait dependencies, ownership links, or dependents.`,
             }),
+        ]);
+    }
+
+    return element("section", {
+        class: `relationship-detail${variant ? ` ${variant}` : ""}`,
+        "aria-labelledby": titleId,
+        "aria-live": "polite",
+    }, [
+        element("div", { class: "relationship-detail-heading" }, [
+            element("h3", { id: titleId, text: entry.title }),
+            element("span", { class: "relationship-kind", text: entry.label }),
         ]),
-        group.entries.length
-            ? element("ul", { class: "relationship-list" }, group.entries.map(renderRelationshipEntry))
-            : element("p", { class: "relationship-group-empty", text: "None" }),
+        element("p", { class: "relationship-detail-copy", text: entry.explanation }),
+        element("div", {
+            class: "relationship-statement",
+            "aria-label": entry.sentence,
+        }, [
+            element("span", { class: "relationship-statement-resource" }, [
+                rowIcon(focus),
+                element("strong", { text: focus.label }),
+            ]),
+            element("span", { class: "relationship-statement-verb", text: entry.label }),
+            element("span", { class: "relationship-statement-resource" }, [
+                rowIcon(entry.related),
+                element("strong", { text: entry.related.label }),
+            ]),
+        ]),
+        element("div", { class: "relationship-detail-state" }, [
+            element("span", { text: `${entry.related.label} status` }),
+            renderRelationshipState(entry.related),
+        ]),
+        element("div", { class: "relationship-detail-actions" }, [
+            element("button", {
+                class: "button button-primary button-small",
+                type: "button",
+                text: `Focus ${entry.related.label}`,
+                on: { click: () => focusRelationshipResource(entry.related.resourceName) },
+            }),
+            ...(entry.edge.context ? [element("button", {
+                class: "button button-secondary button-small",
+                type: "button",
+                text: "Add relationship to chat",
+                on: { click: () => void executeNodeAction("ask", entry.edge.context) },
+            })] : []),
+        ]),
+    ]);
+}
+
+function renderRelationshipBrowser(focus, entries) {
+    const selected = chooseSelectedRelationship(entries);
+    return element("div", {
+        class: "relationship-browser",
+        "aria-label": `Direct relationships for ${focus.label}`,
+    }, [
+        element("section", {
+            class: "relationship-browser-index",
+            "aria-labelledby": "relationship-browser-title",
+        }, [
+            element("header", { class: "relationship-browser-heading" }, [
+                element("div", {}, [
+                    element("h3", { id: "relationship-browser-title", text: "Direct relationships" }),
+                    element("p", { text: "Select for details. Use Focus to change resources." }),
+                ]),
+                element("span", {
+                    class: "relationship-count",
+                    text: String(entries.length),
+                    "aria-label": `${entries.length} ${entries.length === 1 ? "relationship" : "relationships"}`,
+                }),
+            ]),
+            entries.length
+                ? element("ul", { class: "relationship-browser-list" },
+                    entries.map((entry) => renderRelationshipEntry(focus, entry, entry === selected)))
+                : element("p", { class: "relationship-browser-empty", text: "No direct relationships" }),
+        ]),
+        renderRelationshipDetail(focus, selected),
     ]);
 }
 
@@ -2079,7 +2184,7 @@ function renderResourceGraphPanel(graph, active) {
         ]);
     }
 
-    const groups = relationshipGroups(graph, focus, nodeByName);
+    const entries = relationshipEntries(graph, focus, nodeByName);
     return element("div", {
         class: "app-model-panel relationship-workbench",
         id: "graph-view-panel",
@@ -2115,12 +2220,11 @@ function renderResourceGraphPanel(graph, active) {
             element("div", { class: "relationship-focus-heading" }, [
                 element("span", { class: "relationship-focus-icon" }, [rowIcon(focus)]),
                 element("div", {}, [
-                    element("p", { class: "eyebrow", text: "Relationship diagnosis" }),
                     element("h2", { id: "relationship-focus-title", text: focus.label }),
                 ]),
                 renderRelationshipState(focus),
             ]),
-            element("p", { class: "relationship-diagnosis", text: relationshipDiagnosis(focus, groups) }),
+            element("p", { class: "relationship-diagnosis", text: relationshipDiagnosis(focus, entries) }),
             element("button", {
                 class: "button button-secondary button-small",
                 type: "button",
@@ -2128,10 +2232,7 @@ function renderResourceGraphPanel(graph, active) {
                 on: { click: () => showResourceInRoster(focus.resourceName) },
             }),
         ]),
-        element("div", {
-            class: "relationship-grid",
-            "aria-label": `Relationships for ${focus.label}`,
-        }, groups.map(renderRelationshipGroup)),
+        renderRelationshipBrowser(focus, entries),
     ]);
 }
 
@@ -2924,6 +3025,7 @@ function renderTree() {
         selectedResourceId = null;
         inspectorReturnFocusId = null;
         relationshipFocusName = null;
+        selectedRelationshipId = null;
     }
     activeAppHostId = selectedHost.id;
     const currentSelection = findNode(selectedNodeId);
