@@ -10,13 +10,13 @@
     <body class="is-loading">
         <!--
         THESIS: Aspire's operational model becomes a canvas-native workspace, not a transplanted explorer tree.
-        OWN-WORLD: A compact AppHost switcher, one focused work surface, and paired operational/relationship views of the same model.
-        STORY: A developer chooses scope and AppHost once, operates resources through cards, then switches to a read-only graph when relationships matter.
-        FIRST VIEWPORT: The selected AppHost and its highest-value actions lead directly into the default resource-card view.
-        FORM: The AppHost Workbench, preserving VS Code capability while replacing its stacked tree presentation.
+        OWN-WORLD: A dashboard-shaped roster and inspector, scaled down to a side panel and handing deep telemetry back to the Dashboard.
+        STORY: A developer picks an AppHost, scans a dense resource roster for anything that needs attention, then inspects one resource to act on it.
+        FIRST VIEWPORT: The selected AppHost with Run or Stop, a filterable resource roster, and an inspector that waits for a deliberate selection.
+        FORM: Roster plus inspector side by side when wide; the inspector replaces the roster when narrow, with a clear way back.
         -->
         <header class="toolbar canvas-toolbar">
-            <div class="title-row">
+            <div class="title-row context-bar">
                 <a
                     class="brand-mark canvas-brand"
                     href="https://aspire.dev/"
@@ -27,18 +27,24 @@
                     <!-- Official Aspire mark from microsoft/aspire.dev. -->
                     <svg class="canvas-icon" width="22" height="22" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><use href="/canvas-icons.svg#aspire"></use></svg>
                 </a>
-                <div class="title-copy">
-                    <div class="title-line">
-                        <h1 class="canvas-heading">Aspire AppHosts</h1>
-                        <span class="connection-dot" id="connection-dot" aria-hidden="true"></span>
-                        <span class="sr-only" id="connection-status">Connecting to AppHost data</span>
-                    </div>
+                <div class="title-copy sr-only">
+                    <h1 class="canvas-heading">Aspire AppHosts</h1>
+                    <span id="connection-status">Connecting to AppHost data</span>
                     <p class="canvas-subtitle" id="app-subtitle">Discovering workspace AppHosts...</p>
                 </div>
-                <div class="mode-switch" role="group" aria-label="AppHost view mode">
-                    <button class="mode-button is-active" id="workspace-mode" type="button" aria-pressed="true">Workspace</button>
-                    <button class="mode-button" id="global-mode" type="button" aria-pressed="false">Global</button>
+                <div class="mode-picker">
+                    <button class="mode-trigger" id="mode-trigger" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="mode-switch">
+                        <svg class="canvas-icon" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><use href="/canvas-icons.svg#folder"></use></svg>
+                        <span class="mode-trigger-label" id="mode-label">Workspace</span>
+                        <svg class="canvas-icon mode-trigger-chevron" width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><use href="/canvas-icons.svg#chevron"></use></svg>
+                    </button>
+                    <div class="mode-switch" id="mode-switch" role="group" aria-label="AppHost view mode" hidden>
+                        <button class="mode-button is-active" id="workspace-mode" type="button" aria-pressed="true">Workspace</button>
+                        <button class="mode-button" id="global-mode" type="button" aria-pressed="false">Global</button>
+                    </div>
                 </div>
+                <span class="bar-divider" aria-hidden="true"></span>
+                <div class="host-bar" id="host-bar"></div>
                 <button class="icon-button" id="refresh-button" type="button" aria-label="Refresh AppHosts" title="Refresh AppHosts">
                     <svg class="canvas-icon" width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><use href="/canvas-icons.svg#restart"></use></svg>
                 </button>
@@ -46,14 +52,20 @@
             <div class="control-row">
                 <label class="search-field">
                     <svg class="canvas-icon" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><use href="/canvas-icons.svg#search"></use></svg>
-                    <span class="sr-only">Filter AppHosts and resources</span>
-                    <input id="search-input" type="search" placeholder="Filter AppHosts and resources" autocomplete="off" />
+                    <span class="sr-only">Filter resources</span>
+                    <input id="search-input" type="search" placeholder="Filter resources" autocomplete="off" />
                 </label>
-                <label class="hidden-toggle" title="Include resources hidden by the AppHost">
-                    <input id="hidden-checkbox" type="checkbox" />
-                    <span>Hidden resources</span>
-                </label>
-                <span class="freshness" id="freshness"></span>
+                <div class="roster-controls" id="roster-controls"></div>
+                <div class="filters-panel" id="filters-panel" role="group" aria-label="Resource filters" hidden>
+                    <div class="filter-selects" id="filter-selects"></div>
+                    <label class="hidden-toggle" title="Include resources hidden by the AppHost">
+                        <input id="hidden-checkbox" type="checkbox" />
+                        <span>Show hidden resources</span>
+                    </label>
+                    <div class="filters-footer">
+                        <button class="button button-secondary button-small" id="filters-clear" type="button" disabled>Clear filters</button>
+                    </div>
+                </div>
             </div>
             <div class="progress-track" aria-hidden="true"><span></span></div>
         </header>
@@ -70,9 +82,10 @@
             <section class="loading-tree" id="loading-tree" aria-label="Loading AppHosts">
                 <div class="skeleton skeleton-host"></div>
                 <div class="skeleton-board">
-                    <div class="skeleton skeleton-card"></div>
-                    <div class="skeleton skeleton-card"></div>
-                    <div class="skeleton skeleton-card"></div>
+                    <div class="skeleton skeleton-row"></div>
+                    <div class="skeleton skeleton-row"></div>
+                    <div class="skeleton skeleton-row"></div>
+                    <div class="skeleton skeleton-row"></div>
                 </div>
             </section>
 
@@ -87,6 +100,46 @@
 
             <section class="model-view" id="model-view" aria-label="Aspire AppHosts" hidden></section>
         </main>
+
+        <section class="output-panel" id="output-panel" aria-labelledby="output-title" hidden>
+            <header class="output-header">
+                <h2 class="output-title" id="output-title">Output</h2>
+                <label class="output-background">
+                    <input type="checkbox" id="output-background" />
+                    <span>Show background</span>
+                </label>
+                <div class="output-actions">
+                    <button class="icon-button output-action" id="output-copy" type="button" aria-label="Copy output" title="Copy output">
+                        <svg class="canvas-icon" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><use href="/canvas-icons.svg#copy"></use></svg>
+                    </button>
+                    <button class="button button-secondary button-small" id="output-clear" type="button">Clear</button>
+                    <button class="icon-button output-action" id="output-close" type="button" aria-label="Close output" title="Close output">
+                        <svg class="canvas-icon" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><use href="/canvas-icons.svg#close"></use></svg>
+                    </button>
+                </div>
+            </header>
+            <div class="output-body">
+                <ol class="output-list" id="output-list" aria-label="Commands"></ol>
+                <div class="output-view">
+                    <div class="output-command-header">
+                        <p class="output-command-line" id="output-command-line"></p>
+                        <span class="output-sanitized" id="output-sanitized" hidden>Sanitized output</span>
+                    </div>
+                    <pre class="output-text" id="output-text" tabindex="0" aria-label="Command output"></pre>
+                </div>
+            </div>
+        </section>
+
+        <footer class="canvas-footer">
+            <span class="footer-connection" id="footer-connection" aria-hidden="true"><span class="connection-dot" id="connection-dot"></span><span id="footer-connection-label">Connecting</span></span>
+            <span class="freshness" id="freshness" hidden></span>
+            <span class="footer-count" id="footer-count"></span>
+            <button class="output-toggle" id="output-toggle" type="button" aria-controls="output-panel" aria-expanded="false">
+                <svg class="canvas-icon" width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><use href="/canvas-icons.svg#terminal"></use></svg>
+                <span>Output</span>
+                <span class="output-toggle-badge" id="output-toggle-badge" hidden></span>
+            </button>
+        </footer>
 
         <div class="action-menu" id="action-menu" role="menu" hidden></div>
         <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>

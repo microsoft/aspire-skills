@@ -13,12 +13,14 @@ import {
     buildCommandArgumentTokens,
     buildDashboardViewUrl,
     buildGlobalTree,
-    buildResourceGraph,
     buildResourceTree,
     buildResourceCommandArgs,
     buildTerminalAttachCommand,
     buildWorkspaceTree,
     combineWorkspaceAppHosts,
+    createDetachedRunLogTail,
+    defaultCwdForAppHost,
+    filterDetachedRunLog,
     filterTree,
     discoverConfiguredAppHosts,
     extractJsonPayload,
@@ -31,6 +33,8 @@ import {
     projectDescribePayload,
     publicAppHost,
     redactAbsolutePaths,
+    samePath,
+    relativizeWorkspacePaths,
     redactKnownPaths,
     redactText,
     resolveRequestedAppHostPath,
@@ -252,6 +256,20 @@ test("resource status prefers lifecycle and current health checks over stale agg
     });
 });
 
+test("warning-styled settled states like ValueMissing get a warning tone without transitioning", () => {
+    const projected = projectDescribePayload({
+        resources: [
+            { name: "password", resourceType: "Parameter", state: "ValueMissing", stateStyle: "warning" },
+            { name: "api", resourceType: "Project", state: "Starting" },
+        ],
+    });
+    const byName = new Map(buildResourceTree(projected.resources, "host").map((node) => [node.label, node]));
+    assert.equal(byName.get("password").lifecycleTone, "warning");
+    assert.equal(byName.get("password").lifecycleTransitioning, false);
+    assert.equal(byName.get("api").lifecycleTone, "warning");
+    assert.equal(byName.get("api").lifecycleTransitioning, true);
+});
+
 test("pending health checks keep a running resource in a warning state", () => {
     const projected = projectDescribePayload({
         resources: [
@@ -282,6 +300,11 @@ test("pending health checks keep a running resource in a warning state", () => {
                 state: "Exited",
                 healthReports: { live: { status: "Healthy" }, ready: { status: null } },
             },
+            {
+                name: "cache",
+                resourceType: "Container",
+                healthReports: { cache_check: {} },
+            },
         ],
     });
     const nodes = buildResourceTree(projected.resources, "host");
@@ -297,7 +320,7 @@ test("pending health checks keep a running resource in a warning state", () => {
     assert.equal(byName.get("api").healthTone, "warning");
     assert.deepEqual(
         healthChecks(byName.get("api")).map(({ statusLabel, icon, tone }) => ({ statusLabel, icon, tone })),
-        [{ statusLabel: "Pending", icon: "loading", tone: "warning" }],
+        [{ statusLabel: "Waiting", icon: "loading", tone: "warning" }],
     );
     assert.equal(byName.get("web").tone, "error");
     assert.equal(byName.get("web").healthTone, "error");
@@ -310,16 +333,24 @@ test("pending health checks keep a running resource in a warning state", () => {
     );
     assert.equal(byName.get("worker").healthLabel, "Not checked");
     assert.equal(byName.get("worker").healthTone, "inactive");
+    assert.equal(byName.get("cache").statusLabel, "Unknown");
+    assert.equal(byName.get("cache").tone, "inactive");
+    assert.equal(byName.get("cache").healthLabel, "Waiting");
+    assert.equal(byName.get("cache").healthTone, "inactive");
+    assert.deepEqual(
+        healthChecks(byName.get("cache")).map(({ statusLabel, icon, tone }) => ({ statusLabel, icon, tone })),
+        [{ statusLabel: "Waiting", icon: "loading", tone: "inactive" }],
+    );
     assert.deepEqual(projected.summary, {
-        total: 4,
+        total: 5,
         healthy: 0,
         warning: 1,
         error: 1,
-        inactive: 2,
+        inactive: 3,
     });
 });
 
-test("resource graph layers dependencies before dependents and preserves relationship semantics", () => {
+test("resource nodes list merged dependencies both ways without Parent edges", () => {
     const resources = projectDescribePayload({
         resources: [
             { name: "cache", resourceType: "Container", state: "Running" },
@@ -333,7 +364,7 @@ test("resource graph layers dependencies before dependents and preserves relatio
             {
                 name: "api",
                 resourceType: "Project",
-                state: "Running",
+                state: "Waiting",
                 relationships: [
                     { type: "Reference", resourceName: "cache" },
                     { type: "Reference", resourceName: "catalog" },
@@ -341,95 +372,133 @@ test("resource graph layers dependencies before dependents and preserves relatio
                 ],
                 waitingFor: ["cache", "catalog"],
             },
-            {
-                name: "web",
-                resourceType: "Project",
-                state: "Running",
-                relationships: [{ type: "Reference", resourceName: "api" }],
-                waitingFor: ["api"],
-            },
-            { name: "worker", resourceType: "Project", state: "Running" },
+            { name: "web", resourceType: "Project", state: "Running", relationships: [{ type: "Reference", resourceName: "api" }] },
+            { name: "password", resourceType: "Parameter", state: "ValueMissing", stateStyle: "warning" },
         ],
     }).resources;
+    const nodes = new Map();
+    const visit = (node) => {
+        nodes.set(node.resourceName, node);
+        for (const child of node.children ?? []) if (child.kind === "resource") visit(child);
+    };
+    buildResourceTree(resources, "host").forEach(visit);
 
-    const graph = buildResourceGraph(resources);
-    const nodeByName = new Map(graph.nodes.map((node) => [node.resourceName, node]));
-    const edgeByPair = new Map(graph.edges.map((edge) => [`${edge.from}->${edge.to}`, edge]));
-
-    assert.equal(nodeByName.get("cache").layer, 0);
-    assert.equal(nodeByName.get("postgres").layer, 0);
-    assert.equal(nodeByName.get("worker").layer, 0);
-    assert.equal(nodeByName.get("catalog").layer, 1);
-    assert.equal(nodeByName.get("api").layer, 2);
-    assert.equal(nodeByName.get("web").layer, 3);
-    assert.deepEqual(edgeByPair.get("cache->api").types, ["Reference", "WaitFor"]);
-    assert.deepEqual(edgeByPair.get("catalog->api").types, ["Reference", "WaitFor"]);
-    assert.deepEqual(edgeByPair.get("postgres->catalog").types, ["Parent"]);
-    assert.deepEqual(edgeByPair.get("api->web").types, ["Reference", "WaitFor"]);
-    assert.equal(graph.edges.length, 4);
+    assert.deepEqual(nodes.get("api").dependsOn, [
+        { resourceName: "cache", types: ["Reference", "WaitFor"] },
+        { resourceName: "catalog", types: ["Reference", "WaitFor"] },
+    ]);
+    assert.deepEqual(nodes.get("api").usedBy, [{ resourceName: "web", types: ["Reference"] }]);
+    assert.deepEqual(nodes.get("cache").usedBy, [{ resourceName: "api", types: ["Reference", "WaitFor"] }]);
+    assert.deepEqual(nodes.get("catalog").dependsOn, [], "Parent is shown by nesting instead");
+    assert.deepEqual(nodes.get("postgres").usedBy, []);
+    assert.deepEqual(nodes.get("api").waitingForLabels, ["cache", "catalog"]);
+    assert.deepEqual(nodes.get("web").waitingForLabels, []);
+    assert.equal(nodes.get("password").isParameter, true);
+    assert.equal(nodes.get("api").isParameter, false);
+    assert.equal(nodes.get("password").lifecycleTone, "warning");
 });
 
-test("resource graph keeps cycles stable without inventing dependency depth", () => {
-    const resources = projectDescribePayload({
-        resources: [
-            { name: "x", resourceType: "Project", state: "Running" },
-            {
-                name: "a",
-                resourceType: "Project",
-                state: "Running",
-                relationships: [
-                    { type: "Reference", resourceName: "x" },
-                    { type: "Reference", resourceName: "b" },
-                ],
-            },
-            {
-                name: "b",
-                resourceType: "Project",
-                state: "Running",
-                relationships: [{ type: "Reference", resourceName: "a" }],
-            },
-            {
-                name: "c",
-                resourceType: "Project",
-                state: "Running",
-                relationships: [{ type: "Reference", resourceName: "b" }],
-            },
-        ],
-    }).resources;
+test("dependencies resolve unique display names without guessing ambiguous names", () => {
+    const node = (resources, name) => buildResourceTree(projectDescribePayload({ resources }).resources, "host")
+        .find((candidate) => candidate.resourceName === name);
+    const api = node([
+        { name: "messaging-abcxyz", displayName: "messaging", resourceType: "Container", state: "Running" },
+        { name: "api", resourceType: "Project", state: "Waiting", waitingFor: ["Messaging"] },
+    ], "api");
+    assert.deepEqual(api.dependsOn, [{ resourceName: "messaging-abcxyz", types: ["WaitFor"] }]);
+    assert.deepEqual(api.waitingForLabels, ["messaging"]);
 
-    const graph = buildResourceGraph(resources);
-    assert.deepEqual(graph.nodes.map((node) => [node.resourceName, node.layer]), [
-        ["x", 0],
-        ["a", 1],
-        ["b", 1],
-        ["c", 2],
-    ]);
-    assert.equal(graph.edges.length, 4);
+    const ambiguous = node([
+        { name: "worker-one", displayName: "worker", resourceType: "Project", state: "Running" },
+        { name: "worker-two", displayName: "worker", resourceType: "Project", state: "Running" },
+        { name: "api", resourceType: "Project", state: "Waiting", waitingFor: ["worker"] },
+    ], "api");
+    assert.deepEqual(ambiguous.dependsOn, []);
+    assert.deepEqual(ambiguous.waitingForLabels, []);
 });
 
-test("resource graph resolves unique waitingFor display names without guessing ambiguous names", () => {
-    const graph = buildResourceGraph(projectDescribePayload({
-        resources: [
-            { name: "messaging-abcxyz", displayName: "messaging", resourceType: "Container", state: "Running" },
-            { name: "api", resourceType: "Project", state: "Running", waitingFor: ["messaging"] },
-        ],
-    }).resources);
-    assert.deepEqual(graph.edges.map((edge) => [edge.from, edge.to, edge.types]), [
-        ["messaging-abcxyz", "api", ["WaitFor"]],
-    ]);
+test("detached run log filter keeps build and AppHost output and drops CLI diagnostics", () => {
+    const state = { keep: false };
+    const text = [
+        "[2026-01-01 00:00:00.000] [INFO] [Cli] Working directory: /repo",
+        "[2026-01-01 00:00:00.010] [INFO] [Stdout] :hammer_and_wrench: Building AppHost... App.csproj",
+        "[2026-01-01 00:00:00.020] [INFO] [Build]   App -> /repo/bin/App.dll",
+        "[2026-01-01 00:00:00.030] [DBUG] [Build] hidden diagnostic",
+        "[2026-01-01 00:00:00.040] [EROR] [Backchannel] Connection failed",
+        "   at Stack.Frame()",
+        "[2026-01-01 00:00:00.050] [INFO] [AppHost] Distributed application started.",
+    ].join("\r\n");
 
-    const ambiguous = buildResourceGraph(projectDescribePayload({
-        resources: [
-            { name: "worker-one", displayName: "worker", resourceType: "Project", state: "Running" },
-            { name: "worker-two", displayName: "worker", resourceType: "Project", state: "Running" },
-            { name: "api", resourceType: "Project", state: "Running", waitingFor: ["worker"] },
-        ],
-    }).resources);
-    assert.equal(ambiguous.edges.length, 0);
-    assert.deepEqual(
-        ambiguous.nodes.filter((node) => node.resourceName.startsWith("worker-")).map((node) => node.label),
-        ["worker-one", "worker-two"],
-    );
+    assert.equal(filterDetachedRunLog(text, state), [
+        "Building AppHost... App.csproj",
+        "  App -> /repo/bin/App.dll",
+        "Connection failed",
+        "   at Stack.Frame()",
+        "Distributed application started.",
+        "",
+    ].join("\n"));
+    assert.equal(filterDetachedRunLog("   continuation of the AppHost entry", state), "   continuation of the AppHost entry\n");
+});
+
+test("detached run log tail follows the child log named by the matching start invocation", async () => {
+    const logDir = await mkdtemp(join(tmpdir(), "aspire-logs-"));
+    try {
+        const since = Date.now();
+        const stamp = new Date(since).toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "");
+        const appHostPath = join(tmpdir(), "Repo", "App.AppHost.csproj");
+        const otherChild = join(logDir, `cli_${stamp}000_detach-child_other.log`);
+        const child = join(logDir, `cli_${stamp}001_detach-child_match.log`);
+        const spawn = (target, log) => `[x] [DBUG] [AppHostLauncher] Spawning child CLI: aspire (isDotnetHost=False) with args: run --non-interactive --apphost "${target}" --log-file "${log}"\n`;
+        await writeFile(join(logDir, `cli_${stamp}_aaaa.log`), spawn(join(tmpdir(), "Other", "Other.csproj"), otherChild));
+        await writeFile(join(logDir, `cli_${stamp}_bbbb.log`), spawn(appHostPath, child));
+        await writeFile(otherChild, "[x] [INFO] [Build] wrong AppHost\n");
+        await writeFile(child, "[x] [INFO] [Build] first line\n[x] [INFO] [AppHost] partial");
+
+        let output = "";
+        const tail = createDetachedRunLogTail({ appHostPath, since, logDir, intervalMs: 10, onText: (text) => { output += text; } });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        await tail.stop();
+
+        assert.equal(output, "first line\npartial\n");
+    } finally {
+        await rm(logDir, { recursive: true, force: true });
+    }
+});
+
+test("detached run log tail bounds a single newline-free entry", async () => {
+    const logDir = await mkdtemp(join(tmpdir(), "aspire-logs-"));
+    try {
+        const since = Date.now();
+        const stamp = new Date(since).toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "");
+        const appHostPath = join(tmpdir(), "Repo", "App.AppHost.csproj");
+        const child = join(logDir, `cli_${stamp}001_detach-child_match.log`);
+        const spawn = `[x] [DBUG] [AppHostLauncher] Spawning child CLI: aspire (isDotnetHost=False) with args: run --non-interactive --apphost ${appHostPath} --log-file ${child}\n`;
+        await writeFile(join(logDir, `cli_${stamp}_aaaa.log`), spawn);
+        await writeFile(child, `[x] [INFO] [Build] ${"x".repeat(256)}\n[x] [INFO] [AppHost] ready\n`);
+
+        let output = "";
+        const tail = createDetachedRunLogTail({
+            appHostPath,
+            since,
+            logDir,
+            intervalMs: 10,
+            maxReadBytes: 16,
+            maxPendingLineChars: 64,
+            onText: (text) => { output += text; },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        await tail.stop();
+
+        assert.ok(output.length < 100);
+        assert.match(output, /^x+\nready\n$/);
+    } finally {
+        await rm(logDir, { recursive: true, force: true });
+    }
+});
+
+test("detached AppHost path matching preserves case off Windows", () => {
+    assert.equal(samePath("/repo/AppHost.csproj", "/repo/apphost.csproj", "linux"), false);
+    assert.equal(samePath("C:\\Repo\\AppHost.csproj", "c:/repo/apphost.csproj", "win32"), true);
 });
 
 test("ps projection never exposes the token-bearing dashboard URL", () => {
@@ -726,6 +795,19 @@ test("redactKnownPaths consumes private path suffixes", () => {
     );
 });
 
+test("relativizeWorkspacePaths shows workspace paths relative to the workspace", () => {
+    const workspace = "C:\\repo";
+    assert.equal(
+        relativizeWorkspacePaths("aspire start --apphost C:\\repo\\src\\App.AppHost\\App.AppHost.csproj --format Json", workspace),
+        "aspire start --apphost src\\App.AppHost\\App.AppHost.csproj --format Json",
+    );
+    assert.equal(relativizeWorkspacePaths("cwd C:\\repo", workspace), "cwd .");
+    assert.equal(
+        relativizeWorkspacePaths("C:\\repo-other\\App.csproj and C:\\other\\App.csproj", workspace),
+        "C:\\repo-other\\App.csproj and C:\\other\\App.csproj",
+    );
+});
+
 test("parseLegacyPipelineSteps supports Aspire 13.5 available-step output", () => {
     assert.deepEqual(
         parseLegacyPipelineSteps(
@@ -781,7 +863,7 @@ test("workspace fallback discovers file-based TypeScript AppHosts with mts exten
 });
 
 test("workspace fallback recognizes source AppHost casing at either scan depth", async (t) => {
-    for (const fileName of ["AppHost.cs", "AppHost.ts", "AppHost.mts", "APPHOST.MTS"]) {
+    for (const fileName of ["AppHost.cs", "AppHost.ts", "AppHost.mts", "APPHOST.MTS", "apphost.go"]) {
         await t.test(fileName, async () => {
             const fixtureRoot = await mkdtemp(join(tmpdir(), "aspire-cased-apphost-"));
             try {
@@ -830,13 +912,17 @@ test("normalizeLsPayload preserves buildability without exposing candidate paths
     const candidates = normalizeLsPayload([
         { path: repoPath("First.AppHost", "First.AppHost.csproj"), language: "csharp", status: "buildable" },
         { path: repoPath("apphost.ts"), language: "typescript/nodejs", status: "possibly-unbuildable" },
+        { path: repoPath("go-apphost", "apphost.go"), language: "go", status: "buildable" },
     ]);
 
     assert.equal(candidates[0].displayName, "First");
     assert.equal(candidates[0].buildable, true);
     assert.equal(candidates[1].buildable, false);
     assert.equal(candidates[1].displayName, "repo");
+    assert.equal(candidates[2].displayName, "go-apphost");
     assert.notEqual(candidates[0].id, candidates[1].id);
+    assert.equal(defaultCwdForAppHost(repoPath("go-apphost", "apphost.go")), repoPath("go-apphost"),
+        "Go AppHost operations run from its directory, not the file");
 });
 
 test("buildResourceTree follows VS Code child ordering and command visibility", () => {
@@ -943,7 +1029,10 @@ test("unbuildable Workspace AppHosts retain source and explain disabled operatio
     assert.deepEqual(node.actions, ["source"]);
     assert.equal(node.description, "C# · Needs attention");
     assert.match(node.unavailableActionReason, /could not confirm.*buildable/i);
+    assert.equal(node.unavailableActionLabel, "Build not confirmed");
     assert.equal("relativePath" in node, false);
+    assert.equal(node.workspaceLocation, "Broken.AppHost");
+    assert.equal(node.locationTitle, "Broken.AppHost/Broken.AppHost.csproj");
 });
 
 test("combineWorkspaceAppHosts excludes stopped ps records from the running tree", () => {
@@ -1012,40 +1101,13 @@ test("duplicate AppHosts expose stable recognizable hints without their full pat
     const roots = buildGlobalTree({ runningHosts: records, models: new Map() });
     for (const root of roots) {
         assert.equal(root.identityHint, first.find((record) => record.id === root.appHostId).identityHint);
+        const checkout = root.appHostId === records[0].id ? "checkout-one" : "checkout-two";
+        assert.equal(root.locationHint, `${checkout}/Commerce.AppHost`);
+        assert.ok(root.locationTitle.endsWith(root.locationHint));
+        assert.equal(root.locationTitle.includes(syntheticRepoRoot), false);
     }
-});
-
-test("relationship context retains every edge semantic and belongs to its AppHost", () => {
-    const resources = projectDescribePayload({ resources: [
-        { name: "cache", resourceType: "Container", state: "Running" },
-        {
-            name: "api", resourceType: "Project", state: "Running",
-            relationships: [
-                { type: "Reference", resourceName: "cache" },
-                { type: "WaitFor", resourceName: "cache" },
-            ],
-        },
-    ] }).resources;
-    const records = normalizePsPayload(["first", "second"].map((checkout) => ({
-        appHostPath: repoPath(checkout, "Commerce.AppHost", "Commerce.AppHost.csproj"),
-        status: "running",
-    })));
-    const models = new Map(records.map((record) => [record.id, { resources }]));
-    const roots = buildGlobalTree({ runningHosts: records, models });
-    const contextIds = [];
-    for (const root of roots) {
-        assert.equal(root.graph.edges.length, 1);
-        const edge = root.graph.edges[0];
-        assert.equal(edge.context.kind, "relationship");
-        assert.equal(edge.context.appHostId, root.appHostId);
-        assert.equal(edge.context.id, `${root.id}:relationship:${edge.id}`);
-        assert.deepEqual(edge.context.relationship, {
-            from: edge.from, to: edge.to, types: edge.types,
-        });
-        assert.deepEqual(new Set(edge.context.relationship.types), new Set(["Reference", "WaitFor"]));
-        contextIds.push(edge.context.id);
-    }
-    assert.equal(new Set(contextIds).size, roots.length);
+    const [single] = buildGlobalTree({ runningHosts: records.slice(0, 1), models: new Map() });
+    assert.equal(single.locationHint, undefined);
 });
 
 test("mapWithConcurrency never exceeds the configured fanout", async () => {
@@ -1261,21 +1323,13 @@ test("canvas source carries the confirmed direction and protected data routes", 
     assert.match(client, /\/api\/open-terminal/);
     assert.match(client, /\/api\/command/);
     assert.match(client, /host-action-bar/);
-    assert.match(client, /Add to Copilot chat/);
+    assert.match(client, /Add to chat/);
     assert.match(client, /resource-board/);
-    assert.match(client, /app-model-tabs/);
-    assert.match(client, /resource-graph/);
-    assert.match(client, /drawResourceGraphEdges/);
-    assert.match(client, /graphEdgePresentation/);
-    assert.match(client, /is-combined/);
-    assert.match(client, /rememberAppModelViewState/);
-    assert.match(client, /restoreAppModelViewState/);
     assert.match(client, /renderedAppHostId/);
     assert.match(client, /actionMenuTrigger/);
     assert.match(client, /hideActionMenu\(\{ restoreFocus: true \}\)/);
     assert.doesNotMatch(client, /dashboardActionChip/);
     assert.doesNotMatch(client, /"Diagnostics"/);
-    assert.match(client, /role: "tablist"/);
     assert.match(client, /shortLabel/);
     assert.match(client, /CONFIRMATIONS/);
     assert.match(client, /unavailableActionReason/);
@@ -1288,59 +1342,33 @@ test("canvas source carries the confirmed direction and protected data routes", 
     assert.match(client, /confirmationCancel/);
     assert.match(client, /document\.startViewTransition/);
     assert.match(client, /is-mode-switching/);
-    assert.match(client, /class: "resource-card-identity"/);
-    assert.doesNotMatch(client, /class: "resource-card-main"/);
+    assert.doesNotMatch(client, /class: "resource-card/);
     assert.match(client, /navigator\.clipboard\?\.writeText/);
-    assert.match(client, /class: "resource-name-copy"/);
+    assert.match(client, /class: "resource-row-main"/);
+    assert.match(client, /class: "inspector-facts"/);
+    assert.match(client, /Not reported/);
     assert.match(client, /Console logs/);
     assert.match(client, /Structured logs/);
     assert.match(client, /Traces/);
     assert.match(client, /Metrics/);
     assert.match(sharedStyles, /--border-strong:/);
     assert.match(styles, /view-transition-name: app-model-surface/);
-    assert.doesNotMatch(styles, /\.resource-card:hover/);
+    assert.doesNotMatch(styles, /\.resource-card/);
     const resourceBoardStyles = styles.slice(
         styles.indexOf(".resource-board {"),
-        styles.indexOf(".resource-card {"),
+        styles.indexOf(".resource-board.is-inspecting"),
     );
-    const resourceCardStyles = styles.slice(
-        styles.indexOf(".resource-card {"),
-        styles.indexOf(".resource-card.has-command-panel"),
-    );
+    assert.match(resourceBoardStyles, /grid-template-rows:\s*minmax\(0, 1fr\)/);
     assert.doesNotMatch(resourceBoardStyles, /grid-auto-rows:\s*1fr/);
-    assert.match(resourceBoardStyles, /align-items:\s*start/);
-    assert.doesNotMatch(resourceCardStyles, /height:\s*100%/);
-    assert.match(resourceCardStyles, /min-height:\s*0/);
-    assert.match(resourceCardStyles, /border-radius:\s*var\(--radius-card\)/);
-    assert.match(resourceCardStyles, /background:\s*var\(--card-surface\)/);
-    assert.match(client, /class: "resource-attributes"/);
-    assert.match(client, /class: "resource-attribute-label"/);
-    assert.match(client, /class: "resource-attribute-values"/);
-    assert.match(client, /class: `resource-attribute-group is-\$\{variant\}`/);
-    assert.match(client, /class: "resource-card-actions"/);
-    assert.match(client, /healthGroup\.children\.map\(\(health\) => detailChip\(health, \{ combineStatus: true \}\)\)/);
-    assert.match(client, /\`\$\{node\.label\} · \$\{node\.statusLabel\}\`/);
-    assert.doesNotMatch(client, /renderDetailGroup/);
-    const resourceAttributeStyles = styles.slice(
-        styles.indexOf(".resource-attributes {"),
-        styles.indexOf(".detail-chip {"),
-    );
-    assert.match(resourceAttributeStyles, /display:\s*flex/);
-    assert.match(resourceAttributeStyles, /flex-wrap:\s*wrap/);
-    assert.match(styles, /\.resource-attribute-values > \.detail-chip[\s\S]*flex:\s*0 1 auto/);
-    assert.match(styles, /\.resource-attribute-values > \.detail-chip[\s\S]*border-radius:\s*999px/);
-    assert.match(styles, /\.resource-card-actions[\s\S]*border-top:\s*1px solid var\(--border-soft\)/);
-    assert.match(styles, /\.resource-card-actions > \.detail-chip > span:not\(\.chip-status\)[\s\S]*white-space:\s*normal/);
-    assert.match(styles, /\.resource-attribute-group\.is-endpoints \.resource-attribute-values[\s\S]*flex-direction:\s*column/);
     assert.match(styles, /\.endpoint-actions[\s\S]*flex:\s*0 1 auto/);
     assert.match(styles, /\.endpoint-actions \.chip-status[\s\S]*color:\s*var\(--muted\)/);
-    assert.match(styles, /@container \(max-width:\s*340px\)[\s\S]*flex-direction:\s*column/);
     assert.match(styles, /\.detail-chip > span:not\(\.chip-status\)[\s\S]*text-overflow:\s*ellipsis/);
     assert.match(model, /statusLabel:\s*address/);
-    assert.match(client, /\{ id: "graph", label: "Graph", icon: "steps" \}/);
-    assert.doesNotMatch(client, /graph\.edges\.reduce\(\(total, edge\) => total \+ edge\.types\.length, 0\)/);
-    assert.match(client, /class: `graph-edge \$\{presentation\.className\}`/);
-    assert.match(styles, /\.graph-legend-swatch[\s\S]*width:\s*24px/);
+    assert.doesNotMatch(client, /graph|appModelView|role: "tablist"/i);
+    assert.doesNotMatch(styles, /graph-|relationship-|app-model-tab|view-tabs/);
+    assert.match(client, /class: "roster-header roster-section-header"/);
+    assert.match(client, /"Depends on"/);
+    assert.match(client, /"Used by"/);
     assert.match(provider, /CommandInputMetadataStore/);
     assert.match(provider, /sendAttachmentsToMessage/);
     assert.match(provider, /type: "extension_context"/);

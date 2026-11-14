@@ -19,6 +19,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   toolchain now stay in chat. The canvas still opens to wire an unwired AppHost, or
   when you ask to aspireify, re-scan, or re-propose the whole resource graph.
 - AppHosts now reports an error when it cannot switch to the requested AppHost.
+- Redesigned the AppHosts canvas as a compact companion to the Aspire Dashboard.
+- AppHosts no longer has a Relationships tab. The resource inspector now lists
+  **Depends on** and **Used by**, waiting resources name what they are waiting for,
+  and parameters appear in their own collapsible section without showing values.
 - Aspireify now prompts you in Copilot to approve the AppHost plan you reviewed.
   Starting over requires separate approval and preserves the previous review.
 - Aspireify marks the agent's findings and recommendations as unverified.
