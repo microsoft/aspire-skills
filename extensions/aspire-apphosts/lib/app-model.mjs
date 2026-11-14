@@ -1942,17 +1942,30 @@ export async function runProcess(command, args, {
     const holdback = secrets.length ? secrets[0].length - 1 : 0;
     const pendingOutput = { stdout: "", stderr: "" };
     const emitOutput = (stream, flush) => {
-        let text = pendingOutput[stream];
+        const raw = pendingOutput[stream];
+        // Holding back one secret length minus one keeps a secret split across
+        // chunks from being emitted before it can be recognized. Held text stays
+        // raw, and the cut moves before any secret that straddles it, so redacting
+        // a shorter overlapping secret never hides a longer one that is still arriving.
+        let cut = flush ? raw.length : Math.max(0, raw.length - holdback);
+        for (let moved = true; moved && cut > 0;) {
+            moved = false;
+            for (const secret of secrets) {
+                const start = raw.indexOf(secret, Math.max(0, cut - secret.length + 1));
+                if (start >= 0 && start < cut) {
+                    cut = start;
+                    moved = true;
+                }
+            }
+        }
+        pendingOutput[stream] = raw.slice(cut);
+        let text = raw.slice(0, cut);
         for (const secret of secrets) {
             text = text.replaceAll(secret, "[redacted]");
         }
-        // Holding back one secret length minus one keeps a secret split across
-        // chunks from being emitted before it can be recognized.
-        const cut = flush ? text.length : Math.max(0, text.length - holdback);
-        pendingOutput[stream] = text.slice(cut);
         if (cut > 0) {
             try {
-                onOutput(stream, text.slice(0, cut));
+                onOutput(stream, text);
             } catch {
                 // Output observers must not affect the process result.
             }

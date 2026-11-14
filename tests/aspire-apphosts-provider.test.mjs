@@ -210,6 +210,21 @@ test("interrupted output redacts a complete self-overlapping secret before consi
     assert.equal(result.stdout, "before [redacted]");
 });
 
+test("live output keeps a longer secret whole when a shorter overlapping secret arrives first", async () => {
+    const chunks = [];
+    const result = await runProcess(process.execPath, [
+        "-e", "process.stdout.write('DUMMY-super-');setTimeout(()=>process.stdout.write('secret-value\\nafter DUMMY- done\\n'),80);",
+    ], {
+        sensitiveValues: ["DUMMY-", "DUMMY-super-secret-value"],
+        timeoutMs: 10_000,
+        onOutput: (stream, text) => chunks.push(text),
+    });
+    assert.equal(result.ok, true);
+    const live = chunks.join("");
+    assert.doesNotMatch(live, /super|secret-value/);
+    assert.equal(live, "[redacted]\nafter [redacted] done\n");
+});
+
 test("launch failures redact submitted values without hiding useful diagnostics", async () => {
     const result = await runProcess("missing-DUMMY-PRIVATE-executable", [], { sensitiveValues: ["DUMMY-PRIVATE"] });
     assert.equal(result.ok, false);
