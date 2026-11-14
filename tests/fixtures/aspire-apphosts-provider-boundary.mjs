@@ -1207,6 +1207,47 @@ test("explicit refresh removes resources that a live describe stream never repor
     assert.equal(dbCount(state), paths.length - 1, "later stream upserts must not resurrect removed resources");
 });
 
+test("explicit refresh keeps stream updates that arrive while other hosts reconcile", async (t) => {
+    const streams = [];
+    const heldStarted = deferred();
+    const releaseHeld = deferred();
+    let reconcile = false;
+    const h = await harness(t, {
+        cliOverride: async (args) => {
+            if (!reconcile || args[0] !== "describe") return undefined;
+            if (args[args.indexOf("--apphost") + 1] === paths[0]) {
+                return ok({ resources: [describe(baseInputs, "Running").resources[0]] });
+            }
+            heldStarted.resolve();
+            await releaseHeld.promise;
+            return undefined;
+        },
+        stream: (args, options) => {
+            streams.push({ args, ...options });
+            return { kill() {} };
+        },
+    });
+    const open = await h.open();
+    await waitUntil(() => streams.length === paths.length);
+    for (const stream of streams) stream.onLine(JSON.stringify(describe()));
+    const first = streams.find(({ args }) => args[args.indexOf("--apphost") + 1] === paths[0]);
+    await waitUntil(async () => allNodes((await h.request(open, "/api/state")).state.roots)
+        .filter((node) => node.resourceName === "db").length === paths.length);
+
+    reconcile = true;
+    const refresh = h.request(open, "/api/refresh", {});
+    await heldStarted.promise;
+    await waitUntil(() => h.calls.some(({ args }) => args[0] === "describe" && args.includes(paths[0])));
+    first.onLine(JSON.stringify(describe(baseInputs, "Stopped").resources[0]));
+    releaseHeld.resolve();
+    const { state } = await refresh;
+
+    const nodes = allNodes([state.roots.find((root) => /checkouts-one/.test(root.identityHint))]);
+    assert.equal(nodes.find((node) => node.resourceName === "api")?.resource?.state, "Stopped",
+        "a stream update received during reconciliation must not be overwritten by the older snapshot");
+    assert.equal(nodes.some((node) => node.resourceName === "db"), false, "the snapshot still drops removed resources");
+});
+
 test("a describe stream that fails after data falls back to one-shot describe", async (t) => {
     const streams = [];
     const h = await harness(t, {

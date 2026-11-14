@@ -939,18 +939,22 @@ function overlayStreamModels(entry, runningHosts, models) {
     return next;
 }
 
-function publishStreamModel(entry, state) {
-    if (state.initialSyncTimer) {
-        clearTimeout(state.initialSyncTimer);
-        state.initialSyncTimer = null;
-    }
-    state.model = {
+function projectStreamModel(state) {
+    return {
         ...projectDescribePayload({ resources: [...state.resources.values()] }),
         stale: false,
         error: null,
         compatibilityWarning: null,
         lastSuccessfulAt: new Date().toISOString(),
     };
+}
+
+function publishStreamModel(entry, state) {
+    if (state.initialSyncTimer) {
+        clearTimeout(state.initialSyncTimer);
+        state.initialSyncTimer = null;
+    }
+    state.model = projectStreamModel(state);
     scheduleStreamPublish(entry);
 }
 
@@ -998,7 +1002,9 @@ async function startDescribeStream(entry, state) {
     const handle = cli.stream(withLogFile(describeStreamArgs(entry, state.record), logFile), {
         cwd: defaultCwdForAppHost(state.record.appHostPath, entry.workingDirectory),
         onLine(line) {
-            if (!isCurrent() || !mergeStreamLine(state, line)) return;
+            if (!isCurrent()) return;
+            state.reconcileLines?.push(line);
+            if (!mergeStreamLine(state, line)) return;
             gotData = true;
             state.streamed = true;
             if (state.initialPending.size > 0) {
@@ -1251,31 +1257,43 @@ async function performRefresh(entry, generation, showProgress, authoritative) {
 
     // Live streams own resource state for their AppHosts; one-shot describe covers the rest.
     // Streams only upsert, so an explicit refresh re-describes them to drop removed resources.
+    // Lines streamed during that describe are replayed over its snapshot so newer state wins.
     const streamSnapshots = new Map();
-    const modelEntries = await mapWithConcurrency(
-        runningHosts,
-        GLOBAL_DESCRIBE_CONCURRENCY,
-        async (record) => {
-            const streamModel = entry.describeStreams.get(record.id)?.model;
-            if (streamModel && !authoritative) return [record.id, streamModel];
-            const model = await describeAppHost(
-                entry,
-                record,
-                entry.hostModels.get(record.id),
-                streamModel ? (payload) => streamSnapshots.set(record.id, payload) : undefined,
-            );
-            return [record.id, model.error && streamModel ? streamModel : model];
-        },
-    );
-    if (!entry.generation.isCurrent(generation) || entry.closed || entry.viewMode !== viewMode) {
-        return;
-    }
-    const models = new Map(modelEntries);
-    for (const [id, payload] of streamSnapshots) {
-        const state = entry.describeStreams.get(id);
-        if (!state?.model) continue;
-        mergeStreamResources(state, Array.isArray(payload) ? payload : payload?.resources ?? [], true);
-        state.model = models.get(id);
+    const reconciling = new Map();
+    let modelEntries;
+    try {
+        modelEntries = await mapWithConcurrency(
+            runningHosts,
+            GLOBAL_DESCRIBE_CONCURRENCY,
+            async (record) => {
+                const stream = entry.describeStreams.get(record.id);
+                const streamModel = stream?.model;
+                if (streamModel && !authoritative) return [record.id, streamModel];
+                if (streamModel) {
+                    stream.reconcileLines = [];
+                    reconciling.set(record.id, stream);
+                }
+                const model = await describeAppHost(
+                    entry,
+                    record,
+                    entry.hostModels.get(record.id),
+                    streamModel ? (payload) => streamSnapshots.set(record.id, payload) : undefined,
+                );
+                return [record.id, model.error && streamModel ? streamModel : model];
+            },
+        );
+        if (!entry.generation.isCurrent(generation) || entry.closed || entry.viewMode !== viewMode) {
+            return;
+        }
+        for (const [id, payload] of streamSnapshots) {
+            const state = reconciling.get(id);
+            if (!state?.model || entry.describeStreams.get(id) !== state) continue;
+            mergeStreamResources(state, Array.isArray(payload) ? payload : payload?.resources ?? [], true);
+            for (const line of state.reconcileLines) mergeStreamLine(state, line);
+            state.model = projectStreamModel(state);
+        }
+    } finally {
+        for (const state of reconciling.values()) state.reconcileLines = null;
     }
 
     entry.discoveryStale = false;
