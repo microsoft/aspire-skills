@@ -349,8 +349,7 @@ function beginCommandLog(entry, args, meta, sensitiveValues = []) {
         output: "",
         record,
         sensitiveValues,
-        heldLine: "",
-        discardingLine: false,
+        lineBuffers: new Map(),
         unsent: "",
         flushTimer: null,
     };
@@ -386,16 +385,23 @@ function flushCommandLogOutput(entry, item) {
     broadcast(entry, { type: "command-output", id: item.id, text });
 }
 
-function receiveCommandOutput(entry, item, text) {
+function receiveCommandOutput(entry, item, text, source) {
     // Path redaction is line-oriented, so only complete lines are published while a
     // command runs. A path split across process chunks is therefore never exposed.
-    let combined = item.heldLine + text;
+    // Each source keeps its own partial line so another stream's newline cannot
+    // complete it early.
+    let buffer = item.lineBuffers.get(source);
+    if (!buffer) {
+        buffer = { held: "", discarding: false };
+        item.lineBuffers.set(source, buffer);
+    }
+    let combined = buffer.held + text;
     let ready = "";
-    item.heldLine = "";
-    if (item.discardingLine) {
+    buffer.held = "";
+    if (buffer.discarding) {
         const nextBreak = combined.indexOf("\n");
         if (nextBreak < 0) return;
-        item.discardingLine = false;
+        buffer.discarding = false;
         combined = combined.slice(nextBreak + 1);
     }
     let nextBreak;
@@ -407,9 +413,9 @@ function receiveCommandOutput(entry, item, text) {
         }
     }
     if (combined.length > COMMAND_LINE_HOLD_MAX) {
-        item.discardingLine = true;
+        buffer.discarding = true;
     } else {
-        item.heldLine = combined;
+        buffer.held = combined;
     }
     if (ready) {
         appendCommandLogText(entry, item, publicCommandText(entry, item.record, ready, Infinity, item.sensitiveValues));
@@ -417,11 +423,12 @@ function receiveCommandOutput(entry, item, text) {
 }
 
 function finishCommandLog(entry, item, result) {
-    if (!item.discardingLine && item.heldLine) {
-        appendCommandLogText(entry, item, publicCommandText(entry, item.record, item.heldLine, Infinity, item.sensitiveValues));
-        item.heldLine = "";
+    for (const buffer of item.lineBuffers.values()) {
+        if (!buffer.discarding && buffer.held) {
+            appendCommandLogText(entry, item, publicCommandText(entry, item.record, buffer.held, Infinity, item.sensitiveValues));
+        }
     }
-    item.discardingLine = false;
+    item.lineBuffers.clear();
     flushCommandLogOutput(entry, item);
     item.status = result?.ok ? "succeeded" : "failed";
     item.exitCode = Number.isInteger(result?.code) ? result.code : null;
@@ -577,14 +584,14 @@ async function runPreparedWithCompatibility(args, options = {}) {
     if (item) {
         runOptions.onOutput = (stream, text) => {
             if (stream !== "stdout" || commandLog.publishStdout !== false) {
-                receiveCommandOutput(commandLog.entry, item, text);
+                receiveCommandOutput(commandLog.entry, item, text, stream);
             }
         };
     }
     const tail = item && commandLog.tailAppHostPath
         ? createDetachedRunLogTail({
             appHostPath: commandLog.tailAppHostPath,
-            onText: (text) => receiveCommandOutput(commandLog.entry, item, text),
+            onText: (text) => receiveCommandOutput(commandLog.entry, item, text, "log"),
         })
         : undefined;
     let result;
@@ -604,7 +611,7 @@ async function runPreparedWithCompatibility(args, options = {}) {
             ? commandLog.projectStdout(result.stdout)
             : "";
         if (projectedOutput) {
-            receiveCommandOutput(commandLog.entry, item, `${projectedOutput}\n`);
+            receiveCommandOutput(commandLog.entry, item, `${projectedOutput}\n`, "projection");
         }
         const loggedResult = commandLog.publishStdout === false && !result.ok && result.stdout
             ? {

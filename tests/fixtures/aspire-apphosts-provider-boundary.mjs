@@ -1122,6 +1122,27 @@ test("oversized command lines are discarded through newline without leaking spli
     assert.match(JSON.stringify(stream.events), /safe output/);
 });
 
+test("another stream's newline does not complete a held partial command line", async (t) => {
+    const h = await harness(t);
+    h.controls.inputs = [];
+    const open = await h.open();
+    const stream = await sse(h, open);
+    t.after(() => stream.close());
+    const request = await requestFor(h, open);
+    h.controls.executor = async (_args, options) => {
+        options.onOutput("stdout", "Login: https://localhost/login?t=private-");
+        options.onOutput("stderr", "warning: still starting\n");
+        options.onOutput("stdout", "token-tail\nsafe output\n");
+        return ok({ completed: true });
+    };
+    assert.equal((await h.request(open, "/api/command", request)).ok, true);
+    await stream.waitFor((event) => event.type === "command-log" && event.command.status === "succeeded");
+    const events = JSON.stringify(stream.events);
+    assert.doesNotMatch(events, /token-tail/);
+    assert.match(events, /warning: still starting/);
+    assert.match(events, /safe output/);
+});
+
 test("initial describe stream reconciliation removes resources missing from a fresh snapshot", async (t) => {
     const streams = [];
     let missingPath = null;
