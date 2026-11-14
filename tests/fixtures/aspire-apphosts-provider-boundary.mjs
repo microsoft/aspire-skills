@@ -1262,7 +1262,7 @@ test("failed background logs are kept under a bounded prefix without touching ac
     assert.ok(!names.includes("failed-old-0.log"), "the oldest failed log is pruned first");
 });
 
-test("closing a panel does not cancel its already-started explicit operation", async (t) => {
+test("closing a panel does not cancel its already-started explicit operation", { timeout: 10_000 }, async (t) => {
     const h = await harness(t);
     h.controls.inputs = [];
     const open = await h.open();

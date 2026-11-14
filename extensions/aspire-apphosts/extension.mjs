@@ -2249,6 +2249,10 @@ async function startServer(ctx) {
     };
 
     const server = createServer((req, res) => {
+        // Responses that finish after close must not keep server.close() waiting on keep-alive sockets.
+        res.once("finish", () => {
+            if (entry.closed) setTimeout(() => server.closeIdleConnections(), 0);
+        });
         Promise.resolve(handleRequest(entry, req, res)).catch((error) => {
             log(`Aspire AppHosts request failed: ${error?.message ?? error}`, "error");
             if (!res.headersSent) {
