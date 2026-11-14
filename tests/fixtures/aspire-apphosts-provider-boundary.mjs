@@ -1248,6 +1248,47 @@ test("explicit refresh keeps stream updates that arrive while other hosts reconc
     assert.equal(nodes.some((node) => node.resourceName === "db"), false, "the snapshot still drops removed resources");
 });
 
+test("explicit refresh that overlaps a poll still reconciles streamed hosts", async (t) => {
+    const streams = [];
+    const psHeld = deferred();
+    const releasePs = deferred();
+    let holdPs = false;
+    let shrink = false;
+    const h = await harness(t, {
+        cliOverride: async (args) => {
+            if (args[0] === "ps" && holdPs) {
+                holdPs = false;
+                psHeld.resolve();
+                await releasePs.promise;
+            }
+            if (shrink && args[0] === "describe") return ok({ resources: [describe().resources[0]] });
+            return undefined;
+        },
+        stream: (args, options) => {
+            streams.push({ args, ...options });
+            return { kill() {} };
+        },
+    });
+    const open = await h.open();
+    await waitUntil(() => streams.length === paths.length);
+    for (const stream of streams) stream.onLine(JSON.stringify(describe()));
+    const dbCount = (state) => allNodes(state.roots).filter((node) => node.resourceName === "db").length;
+    await waitUntil(async () => dbCount((await h.request(open, "/api/state")).state) === paths.length);
+
+    holdPs = true;
+    [...h.intervals][0].callback();
+    await psHeld.promise;
+    shrink = true;
+    const refreshArrived = deferred();
+    h.controls.requestEnded = (url) => { if (url === "/api/refresh") refreshArrived.resolve(); };
+    const refresh = h.request(open, "/api/refresh", {});
+    await refreshArrived.promise;
+    await new Promise((resolveTick) => setTimeout(resolveTick, 0));
+    releasePs.resolve();
+
+    assert.equal(dbCount((await refresh).state), 0, "Refresh must re-describe streamed hosts even after a queued poll");
+});
+
 test("a describe stream that fails after data falls back to one-shot describe", async (t) => {
     const streams = [];
     const h = await harness(t, {

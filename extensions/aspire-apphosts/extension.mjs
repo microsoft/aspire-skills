@@ -1347,12 +1347,15 @@ async function requestRefresh(entry, { force = false, authoritative = false } = 
         return publicState(entry);
     }
     if (entry.refreshPromise) {
-        entry.refreshQueued ||= force;
-        await entry.refreshPromise;
-        if (force) {
-            return requestRefresh(entry, { authoritative });
+        if (!force) {
+            await entry.refreshPromise;
+            return publicState(entry);
         }
-        return publicState(entry);
+        // A finishing refresh may start a queued one before this resumes; wait for all of them.
+        while (entry.refreshPromise && !entry.closed) {
+            await entry.refreshPromise;
+        }
+        return requestRefresh(entry, { force, authoritative });
     }
 
     const generation = entry.generation.next();
