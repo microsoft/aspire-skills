@@ -1883,7 +1883,7 @@ export async function discoverConfiguredAppHosts(workingDirectory) {
 }
 
 // Doctor keeps the same policy in its helpers because extensions install independently.
-async function resolveCliExecutable(command, env = process.env) {
+export async function resolveCliExecutable(command, env = process.env) {
     if (process.platform !== "win32") {
         return command;
     }
