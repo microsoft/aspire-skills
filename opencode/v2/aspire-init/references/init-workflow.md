@@ -60,15 +60,17 @@ to the solution instead of creating a single-file AppHost.
 
 ### `aspireify` Skill
 
-- A Markdown skill file is installed into the AI agent's skill directory — the same
-  directory chosen by `aspire agent init` (e.g., `.agents/skills/aspireify/`,
-  `.github/skills/aspireify/`, `.claude/skills/aspireify/`, or `.opencode/skill/aspireify/`).
-- The skill instructs the agent to scan the repo, propose a resource graph, edit the
-  AppHost, and validate via `aspire start`.
-- In 13.6+, the chained agent setup preselects the recommended repository-local skills
-  (including `aspireify`) and does **not** offer Aspire MCP server configuration. No MCP
-  config after a successful init is expected. Configure MCP only when the user explicitly
-  asks, via standalone `aspire agent init --mcp` (13.6+).
+- **Aspire 13.6:** The chained setup installs selected bundled skills, including
+  `aspireify`, into a detected agent skill directory.
+- **Aspire 17.0 and later:** The chained setup registers the selected Aspire skill source
+  in agent settings. The agent client fetches the plugin content; Aspire does not copy an
+  `aspireify/SKILL.md` into the project. Verify the source registration and agent-client
+  availability instead of requiring a local file.
+- In both versions, `aspireify` guides the agent to scan the repo, propose a resource graph,
+  edit the AppHost, and validate via `aspire start`.
+- Chained setup does not configure Aspire MCP. Missing MCP config after a successful init
+  is expected. Configure MCP only when the user explicitly asks, through standalone
+  `aspire agent init --mcp` on Aspire 13.6 or later.
 
 ## `aspire.config.json` Layout
 
@@ -95,11 +97,14 @@ C# has two sub-modes the agent may encounter:
    `appHost.path` relative to that file, and confirm the selected `apphost.cs`, AppHost
    project, or TypeScript `apphost.mts` exists there. For TypeScript, also confirm the
    adjacent generated `.aspire/modules/`; do not assume the AppHost is at the repo root.
-4. **Confirm `aspireify` skill installed** — the agent's skill directory contains
-   `aspireify/SKILL.md`. If missing, run
-   `aspire agent init --non-interactive --skills aspireify` to install it. If the user
-   already chose an explicit `--skills` list, append `aspireify` to it. Keep any
-   `--skill-locations` selection, and don't add `--mcp`.
+4. **Confirm Aspire agent guidance is available**:
+   - On Aspire 17.0 or later, confirm the selected agent has the Aspire source registered
+     and can load its plugin. A project-local `aspireify/SKILL.md` is not expected. If setup
+     omitted the Aspire skill, rerun `aspire agent init --non-interactive --skills aspire`
+     with the intended agent and scope.
+   - On Aspire 13.6, confirm the selected agent's skill directory contains the bundled
+     `aspireify/SKILL.md`. If it is missing, run `aspire agent init` interactively and select
+     the Aspire skill and a detected location.
 5. **Hand off to `aspireify`** for wiring:
    - Scan repo and discover existing projects, services, containers
    - Ask the user clarifying questions (which services to orchestrate, hardcoded ports,
@@ -114,10 +119,12 @@ C# has two sub-modes the agent may encounter:
 
 ## Project-Local Skill Precedence
 
-`aspire init` installs `aspireify` into the project's skill directory when an agent skill location is detected.
-When a project-local `.agents/skills/aspireify/SKILL.md` (or equivalent location) is
-present, **defer to it and warn the user** — the project-local copy may carry repo-specific
-guidance.
+Aspire 13.6 installs the selected bundled `aspireify` skill into a detected agent skill
+directory. Aspire 17.0 and later register a remote source instead, so a local
+`.agents/skills/aspireify/SKILL.md` is not expected. An older local Aspire skill copy may
+still take precedence over the remote plugin. **Defer to that copy and warn the user** if it
+exists. If the Aspire 17.0 CLI supports `--remove-skill-copies`, it can remove replaced
+copies only after the user opts in.
 
 The same precedence applies to a legacy `.agents/skills/aspire-init/SKILL.md` from older
 `aspire init` runs: warn and defer.
@@ -128,7 +135,8 @@ The same precedence applies to a legacy `.agents/skills/aspire-init/SKILL.md` fr
 |---------|-------|----------|
 | `aspire init` reports an AppHost already exists | Repo is already an Aspire app | Stop. Route to `aspireify` or `aspire-orchestration` |
 | `aspire init` fails without `--language` in `--non-interactive` | CLI needs the language explicitly when prompts are disabled | Re-run with `--language csharp` or `--language typescript` |
-| Skeleton dropped but no `aspireify` skill | Agent skill directory not detected, or `aspireify` not selected (13.5 doesn't preselect it) | Run `aspire agent init --non-interactive --skills aspireify` (append to any explicit `--skills` list, keep `--skill-locations`, no `--mcp`), then continue |
+| Aspire 17.0+ setup succeeds but the agent cannot use `aspireify` | The selected agent has not loaded the registered source, or another source/configuration overrides it | Check the selected agent's source registration and configured `skillSources`; reload the agent client. Do not require a local skill file or pass `--skills aspireify` |
+| Aspire 13.5 setup leaves out the local `aspireify` skill | The skill was not selected, or no agent skill location was detected | Run `aspire agent init` interactively and select the bundled Aspire skill and a detected location |
 | No MCP config after a successful init | Expected in 13.6+ — chained agent setup does not offer MCP | Leave as-is unless the user explicitly asks for MCP; then use `aspire agent init --mcp` (13.6+) |
 | `apphost.cs` references a missing `#:package` | Channel mismatch or transient feed issue | Re-run with `--channel stable` (or `daily` for pre-release) |
 | `aspire start` after wiring fails immediately | Wiring incomplete or wrong AppHost path | Re-invoke `aspireify`; confirm `aspire.config.json` `appHost.path` is correct |

@@ -4,6 +4,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
+### Changed
+- Clarified Aspire 17 agent setup, source updates, version pins, and recovery when
+  the Aspire guidance is remote rather than copied into the project.
+
 ### Added
 - Added OpenCode V1 and V2 catalogs for all eight shipped skills, including
   reference files and SHA-512 content versions.

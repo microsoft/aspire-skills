@@ -47,9 +47,9 @@ including `aspireify`.
 
 In Aspire 17.0 and later, agent setup lets you choose which agent clients,
 skills, and CLI tools to configure. You can choose project-specific settings or
-global settings shared across projects. By default, the CLI configures the
-selected agent clients to fetch and load content directly from the `aspire-skills`
-repository instead of copying bundled skill files.
+global settings shared across projects. The CLI registers the selected sources
+in agent settings; it does not download their content. Agent clients fetch and
+update plugin or catalog content instead of receiving copied skill files.
 
 Standalone `aspire agent init` also offers MCP configuration, which is off by
 default. Non-interactive runs configure MCP only when you pass `--mcp`.
@@ -84,10 +84,19 @@ Use `--scope global` for settings shared across projects. For update options, se
 The official [`microsoft/aspire-skills` repository](https://github.com/microsoft/aspire-skills)
 is the default source. Workspace or global `skillSources` settings can add other
 plugin repositories or skill catalogs, override the default source, or disable it.
-Review every source URL shown by setup before enabling remote skills.
+Review every configured repository and catalog before enabling remote skills.
+Setup may omit details for the built-in `default` source, so check project and
+global `skillSources` settings for overrides.
 
 Existing local Aspire skill files may take precedence over skills loaded from
 remote sources.
+
+Older Aspire CLI versions may have copied Aspire skills into agent skill
+directories. If your Aspire 17.0 CLI supports `--remove-skill-copies`, setup
+offers to remove copies that the selected Aspire source replaces. The prompt
+defaults to keeping them; non-interactive runs also keep them unless you pass
+`--remove-skill-copies`. Pass `--remove-skill-copies=false` to keep them without
+a prompt. The CLI leaves unrelated skills alone.
 
 In Aspire 13.6, run `aspire agent init` interactively to select the bundled
 Aspire skills and installation locations. Aspire 13.6 has no `--agents` or
@@ -277,13 +286,16 @@ In that command, `-a github-copilot` selects the target agent, `-g` installs glo
 
 ## Automatic updates and version pinning
 
-If your agent client supports automatic updates for remote Aspire plugins or
-skill catalogs, we recommend keeping them enabled to receive security and bug
-fixes.
+The Aspire CLI registers skill sources but does not fetch or update their
+content. Agent clients handle acquisition and updates. Aspire preserves matching
+registrations and existing client-side pins when you run `aspire agent init`;
+re-running the command does not move a pin to a newer version.
 
-If your client supports pinning, you can instead pin a release tag or specific
-version. In this mode, you must monitor security notices and manually update your
-pinned version to receive fixes.
+If your agent client supports automatic updates, keep them enabled to receive
+security and bug fixes.
+
+If your client supports pinning, you can pin a release tag or specific version
+instead. Monitor security notices and update the pin manually to receive fixes.
 
 ## Repository layout
 
