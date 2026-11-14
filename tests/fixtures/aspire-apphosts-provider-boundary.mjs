@@ -1175,6 +1175,38 @@ test("initial describe stream reconciliation removes resources missing from a fr
     assert.equal(allNodes(state.roots).filter((node) => node.resourceName === "db").length, paths.length - 1);
 });
 
+test("explicit refresh removes resources that a live describe stream never reports as gone", async (t) => {
+    const streams = [];
+    let shrunkPath = null;
+    const h = await harness(t, {
+        cliOverride: (args) => {
+            if (args[0] === "describe" && args[args.indexOf("--apphost") + 1] === shrunkPath) {
+                return ok({ resources: [describe().resources[0]] });
+            }
+            return undefined;
+        },
+        stream: (args, options) => {
+            streams.push({ args, ...options });
+            return { kill() {} };
+        },
+    });
+    const open = await h.open();
+    await waitUntil(() => streams.length > 0);
+    const [stream] = streams;
+    stream.onLine(JSON.stringify(describe()));
+    shrunkPath = stream.args[stream.args.indexOf("--apphost") + 1];
+    const dbCount = (state) => allNodes(state.roots).filter((node) => node.resourceName === "db").length;
+
+    assert.equal(dbCount((await h.request(open, "/api/refresh", {})).state), paths.length - 1);
+    stream.onLine(JSON.stringify({ ...describe().resources[0], state: "Starting" }));
+    let state;
+    await waitUntil(async () => {
+        state = (await h.request(open, "/api/state")).state;
+        return allNodes(state.roots).some((node) => node.resourceName === "api" && node.resource?.state === "Starting");
+    });
+    assert.equal(dbCount(state), paths.length - 1, "later stream upserts must not resurrect removed resources");
+});
+
 test("a describe stream that fails after data falls back to one-shot describe", async (t) => {
     const streams = [];
     const h = await harness(t, {

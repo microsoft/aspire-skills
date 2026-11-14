@@ -800,7 +800,7 @@ function sanitizedJsonOutput(project) {
     };
 }
 
-async function describeAppHost(entry, record, previousModel) {
+async function describeAppHost(entry, record, previousModel, onPayload) {
     const baseArgs = [
         "describe",
         "--apphost",
@@ -853,6 +853,7 @@ async function describeAppHost(entry, record, previousModel) {
     }
 
     const projected = projectDescribePayload(result.data);
+    onPayload?.(result.data);
     return {
         ...projected,
         stale: false,
@@ -891,7 +892,10 @@ function mergeStreamLine(state, line) {
         return false;
     }
     const snapshot = Array.isArray(payload?.resources);
-    const items = snapshot ? payload.resources : [payload];
+    return mergeStreamResources(state, snapshot ? payload.resources : [payload], snapshot);
+}
+
+function mergeStreamResources(state, items, snapshot) {
     let changed = false;
     if (snapshot) {
         changed = state.resources.size > 0 || state.initialPending.size > 0;
@@ -1188,7 +1192,7 @@ function reconcileCommandInputMetadata(entry) {
     });
 }
 
-async function performRefresh(entry, generation, showProgress) {
+async function performRefresh(entry, generation, showProgress, authoritative) {
     const viewMode = entry.viewMode;
     if (showProgress) {
         publishState(entry, {
@@ -1246,17 +1250,32 @@ async function performRefresh(entry, generation, showProgress) {
         : allRunning;
 
     // Live streams own resource state for their AppHosts; one-shot describe covers the rest.
+    // Streams only upsert, so an explicit refresh re-describes them to drop removed resources.
+    const streamSnapshots = new Map();
     const modelEntries = await mapWithConcurrency(
         runningHosts,
         GLOBAL_DESCRIBE_CONCURRENCY,
-        async (record) => [
-            record.id,
-            entry.describeStreams.get(record.id)?.model
-                ?? await describeAppHost(entry, record, entry.hostModels.get(record.id)),
-        ],
+        async (record) => {
+            const streamModel = entry.describeStreams.get(record.id)?.model;
+            if (streamModel && !authoritative) return [record.id, streamModel];
+            const model = await describeAppHost(
+                entry,
+                record,
+                entry.hostModels.get(record.id),
+                streamModel ? (payload) => streamSnapshots.set(record.id, payload) : undefined,
+            );
+            return [record.id, model.error && streamModel ? streamModel : model];
+        },
     );
     if (!entry.generation.isCurrent(generation) || entry.closed || entry.viewMode !== viewMode) {
         return;
+    }
+    const models = new Map(modelEntries);
+    for (const [id, payload] of streamSnapshots) {
+        const state = entry.describeStreams.get(id);
+        if (!state?.model) continue;
+        mergeStreamResources(state, Array.isArray(payload) ? payload : payload?.resources ?? [], true);
+        state.model = models.get(id);
     }
 
     entry.discoveryStale = false;
@@ -1305,7 +1324,7 @@ function publishModels(entry, { candidates, runningHosts, models }) {
     });
 }
 
-async function requestRefresh(entry, { force = false } = {}) {
+async function requestRefresh(entry, { force = false, authoritative = false } = {}) {
     if (entry.closed) {
         return publicState(entry);
     }
@@ -1313,14 +1332,14 @@ async function requestRefresh(entry, { force = false } = {}) {
         entry.refreshQueued ||= force;
         await entry.refreshPromise;
         if (force) {
-            return requestRefresh(entry);
+            return requestRefresh(entry, { authoritative });
         }
         return publicState(entry);
     }
 
     const generation = entry.generation.next();
     const showProgress = force || entry.state.status === "loading";
-    const refreshPromise = performRefresh(entry, generation, showProgress);
+    const refreshPromise = performRefresh(entry, generation, showProgress, authoritative);
     entry.refreshPromise = refreshPromise;
     try {
         await refreshPromise;
@@ -2056,7 +2075,7 @@ async function handleRequest(entry, req, res) {
     }
 
     if (url.pathname === "/api/refresh") {
-        const state = await requestRefresh(entry, { force: true });
+        const state = await requestRefresh(entry, { force: true, authoritative: true });
         return sendJson(res, 200, { ok: true, state });
     }
     if (url.pathname === "/api/mode") {
@@ -2361,7 +2380,7 @@ const appHostsCanvas = createCanvas({
                 if (!entry) {
                     throw new CanvasError("canvas_not_open", "The Aspire AppHosts canvas is not open.");
                 }
-                const state = await requestRefresh(entry, { force: true });
+                const state = await requestRefresh(entry, { force: true, authoritative: true });
                 return { viewMode: state.viewMode, status: state.status, summary: state.summary, stale: state.stale };
             },
         },
