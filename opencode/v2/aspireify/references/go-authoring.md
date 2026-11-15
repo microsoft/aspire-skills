@@ -157,6 +157,20 @@ release family or channel implicitly. Go AppHosts themselves need 17.0.
   on a Redis resource injects `ConnectionStrings__cache`, and `Env: aspire.StringPtr("PORT")`
   on `WithHttpEndpoint` puts the assigned port in `PORT`.
 
+### Private modules and Delve
+
+- `WithGoPrivate(privatePatterns, authHost, usernameArgName?, tokenSecretId?)` sets
+  `GOPRIVATE` and wires credentials for private module hosts. Pass the token through a
+  secret parameter; never hard-code it.
+- `WithDelveServer(&aspire.DelveServerOptions{...})` runs the app under
+  `dlv --headless --listen=127.0.0.1:<port> --api-version=2 debug .` for remote debugging.
+  Defaults: `Port` 2345, `AcceptMultiClient` false, `ContinueOnStart` false, `Log` false.
+  It needs `dlv` on `PATH`. Inspect the generated SDK for the exact field types.
+- VS Code debugging of Go services is automatic through the Go extension (dlv-dap). Local
+  launches keep symbols so breakpoints work.
+- Go 1.26 and earlier on macOS and Windows ignore `SSL_CERT_FILE` / `SSL_CERT_DIR`, so
+  custom certificate trust for the service relies on the system store there.
+
 ## Packages and the Generated SDK
 
 `AddGoApp`, `AddRedis`, and every other integration method exist in `.aspire/modules/` only
@@ -207,8 +221,6 @@ is not sufficient; ordinary CLI execution still uses `go run .` through Aspire.
 2. Check `Err()` on every resource before `Build()`.
 3. Run the AppHost with `aspire start --non-interactive` or `aspire run`, never `go run .`.
 4. Prefer first-party `AddGoApp` (`Aspire.Hosting.Go`): preview from 13.4, stable from 17.0.
-   Never opt a 13.x project into preview packages without approval. The Toolkit
-   `AddGolangApp` is for Aspire older than 13.4 or an AppHost that already uses it; never swap it
-   on your own.
+   Never opt a 13.x project into preview packages without approval.
 5. Pass optional parameters in options structs built with the `aspire.*Ptr` helpers.
 6. Look up any method you have not seen (API search, then the generated SDK); do not guess names.

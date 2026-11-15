@@ -1475,47 +1475,6 @@ stimuli:
         config:
           required:
             - aspireify
-  - name: aspireify-go-toolkit-001
-    prompt: |
-      Use the aspireify skill before answering. My C# AppHost runs on Aspire 13.5.3 and its Program.cs is:
-
-      var builder = DistributedApplication.CreateBuilder(args);
-      var api = builder.AddGolangApp("api", "../api").WithHttpEndpoint(env: "PORT");
-      builder.Build().Run();
-
-      Add a Redis cache and connect the API to it. Show the complete updated Program.cs. Do not run any commands.
-    tags:
-      priority: p1
-      scenario: non-executing-guidance
-      area:
-        - authoring
-        - csharp
-        - go
-    constraints:
-      max_agent_duration: 5m
-    rubric:
-      - The assistant's response keeps the existing AddGolangApp call and does not replace it with AddGoApp or tell the user to migrate as part of this change.
-      - The assistant's response adds the Redis cache with AddRedis and connects the API to it with WithReference(cache) and WaitFor(cache).
-    graders:
-      - type: output-contains
-        name: go-toolkit-call-kept
-        config:
-          substring: AddGolangApp
-      - type: prompt
-        name: go-toolkit-not-migrated
-        config:
-          scoring: binary
-          prompt: >
-            Judge the assistant's response, not the workspace files. AddGolangApp comes from
-            CommunityToolkit.Aspire.Hosting.Golang and remains valid in an existing AppHost.
-            Aspire.Hosting.Go (AddGoApp) is the first-party alternative, but an existing
-            Toolkit-based AppHost is never migrated implicitly; mentioning it as an optional
-            later choice is fine. Answer based on intent.
-      - type: skill-invocation
-        name: invokes-aspireify-19
-        config:
-          required:
-            - aspireify
   - name: aspireify-go-version-gate-001
     prompt: >
       Use the aspireify skill before answering. My project is on Aspire 13.5.3 and I want its

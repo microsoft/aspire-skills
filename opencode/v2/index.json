@@ -46,7 +46,7 @@
     },
     {
       "name": "aspire-orchestration",
-      "version": "sha512-1c80992862bfb4bb175960009199f47254eb489061a6bc8542da0131ce316a47dde479ac8ff0f8040528f9cb9878c4e45e653954c097231659eb5a989258d5a3",
+      "version": "sha512-ec4f537eaf30a368ddacb0f6a5dbdd7928f2f7c77b167e25b2390bbf13659c381be01b5b4c4897b474f5913d816d59da794d30fe5152e49eaacd79399a17f714",
       "files": [
         "aspire-orchestration.md",
         "references/agent-workflows.md",
@@ -78,7 +78,7 @@
     },
     {
       "name": "aspireify",
-      "version": "sha512-b316bba1296063e68b90a05a4b0c4963db1a24e3bfa93922a48c1872bce1aab8891e80d30296b9e80ffc733bf75b608a00525a4f3dd233111d9c75b210df4821",
+      "version": "sha512-7f5f6a35ec805c6199c919d3b41c220753dc8fcdef77de98869c8aff3663e17cf4085ecaa3e835c61d48a9f15c34ded0dcb4da2ac2c9dcabd01b60097d1882ae",
       "files": [
         "aspireify.md",
         "references/apphost-wiring.md",
