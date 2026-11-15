@@ -292,7 +292,7 @@ catalog.
 | Use `WithEndpoint("name", e => ...)` to update endpoints | Endpoint callbacks update existing endpoints rather than throwing on duplicates |
 | Mark admin endpoints with `ExcludeReferenceEndpoint = true` | Prevents consumers from receiving admin URLs via `WithReference()` |
 | Look up unfamiliar API: `aspire docs api search <query> --language csharp\|typescript\|go` (`go` needs the 17.0 CLI) | Don't guess overloads or builder chains |
-| Prefer first-party `AddGoApp` for Go services: preview from 13.4, stable from 17.0 | On 13.x, require approval and an explicit compatible preview version with `aspire add go --version <version>`. Toolkit `AddGolangApp` is for Aspire older than 13.4 or an AppHost that already uses it; never migrate an existing Toolkit AppHost unprompted. Authoring the AppHost itself in Go is a separate gate (Aspire 17.0+) |
+| Prefer first-party `AddGoApp` for Go services: preview from 13.4, stable from 17.0 | On 13.x, require approval and an explicit compatible preview version with `aspire add go --version <version>`. Authoring the AppHost itself in Go is a separate gate (Aspire 17.0+) |
 | Use context `.Services` / `await ctx.services().getInteractionService()` | `.ServiceProvider` is obsolete, and `ctx.services()` alone returns a services accessor |
 | Use `AddConnectionString` for external connection strings | `PublishAsConnectionString` is obsolete |
 | Check `IInteractionService.IsAvailable` before prompting | CLI-invoked commands may be noninteractive; prefer command arguments for dashboard + CLI input |

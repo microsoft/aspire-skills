@@ -22,28 +22,11 @@ Packages named `Aspire.Hosting.*` — maintained by the Aspire team and ship wit
 | `Aspire.Hosting.PostgreSQL` | `AddPostgres()`, `AddDatabase()` |
 | `Aspire.Hosting.Redis` | `AddRedis()` |
 
-#### Tier 2: Community Toolkit packages (use when no first-party exists)
+**Go apps:** use first-party `Aspire.Hosting.Go` (`AddGoApp`). It was introduced as preview in 13.4; its first stable package ships with 17.0. On 13.x, discover a compatible preview and get approval before `aspire add go --version <compatible-preview-version>`; do not imply that `Aspire.Hosting.Go` has a stable 13.x version.
 
-Packages named `CommunityToolkit.Aspire.Hosting.*` — maintained by the community, documented on aspire.dev, and installable via `aspire add`. Examples:
+#### Tier 2: Raw fallbacks (last resort)
 
-| Package | Unlocks |
-|---------|---------|
-| `CommunityToolkit.Aspire.Hosting.Golang` | `AddGolangApp()` — handles `go run .`, working dir, PORT env |
-| `CommunityToolkit.Aspire.Hosting.Rust` | `AddRustApp()` |
-| `CommunityToolkit.Aspire.Hosting.Java` | Java hosting support |
-
-These provide typed APIs with proper endpoint handling, health checks, and dashboard integration — significantly better than raw executables.
-
-**Go apps:** prefer first-party `Aspire.Hosting.Go` (`AddGoApp`, Tier 1). It was introduced
-as preview in 13.4; its first stable package ships with 17.0. On 13.x, discover a compatible
-preview and get approval before `aspire add go --version <compatible-preview-version>`;
-do not imply that `Aspire.Hosting.Go` has a stable 13.x version. Keep the Toolkit on Aspire
-older than 13.4 or when the user deliberately uses it, and never migrate an existing
-Toolkit-based AppHost unprompted.
-
-#### Tier 3: Raw fallbacks (last resort)
-
-`AddExecutable()`, `AddDockerfile()`, `AddContainer()` — use only when no Tier 1 or Tier 2 package exists for the technology, or when the user's setup is too custom for a typed integration.
+`AddExecutable()`, `AddDockerfile()`, `AddContainer()` — use only when no Tier 1 package exists for the technology, or when the user's setup is too custom for a typed integration.
 
 ### How to discover available packages
 
@@ -69,7 +52,7 @@ aspire integration search postgres --format Json
 
 Use `aspire docs search` / `aspire docs get` to find the right builder methods, configuration options, and patterns. Use `aspire docs api search` / `aspire docs api get` when you need the exact reference entry (parameter shapes, return types, overloads) for the API you are about to call. Use `aspire integration list` and `aspire integration search <query>` to discover packages you might not have known about.
 
-**Don't invent APIs** — if docs search and integration list don't return it, it doesn't exist. Fall back to Tier 3 and note the limitation to the user. **API shapes differ between C#, TypeScript, and Go** — always check the correct language docs. For Go, if the API search finds nothing, check the generated SDK (see `go-authoring.md`) before concluding an API is missing.
+**Don't invent APIs** — if docs search and integration list don't return it, it doesn't exist. Fall back to Tier 2 and note the limitation to the user. **API shapes differ between C#, TypeScript, and Go** — always check the correct language docs. For Go, if the API search finds nothing, check the generated SDK (see `go-authoring.md`) before concluding an API is missing.
 
 ## Package compatibility and interaction rules
 
@@ -124,10 +107,6 @@ aspire add redis
 aspire add python
 aspire add javascript
 aspire add go
-
-# Community Toolkit
-aspire add communitytoolkit-golang
-aspire add communitytoolkit-rust
 ```
 
 After adding, run `aspire restore` (TypeScript or Go) or `dotnet restore` (C#) to update available APIs, then check what methods are now available.
@@ -254,7 +233,7 @@ var frontend = builder.AddViteApp("frontend", "../frontend")
 **Port injection**: Many frameworks (Express, Vite, Flask) need to know which port to listen on. Use the `env:` parameter:
 - `withHttpsEndpoint({ env: "PORT" })` (TypeScript)
 - `.WithHttpsEndpoint(env: "PORT")` (C#)
-- `.WithHttpsEndpoint(&aspire.WithHttpsEndpointOptions{Env: aspire.StringPtr("PORT")})` (Go)
+- `.WithHttpsEndpoint(aspire.HttpsEndpointEnv("PORT"))` (Go)
 
 Aspire assigns a port and injects it as the specified environment variable. The service should read it and listen on that port.
 

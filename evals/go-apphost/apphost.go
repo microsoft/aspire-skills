@@ -24,16 +24,9 @@ func main() {
 		WithModTidy().
 		WithReference(cache).
 		WaitFor(cache).
-		WithHttpEndpoint(&aspire.WithHttpEndpointOptions{Env: aspire.StringPtr("PORT")}).
+		WithHttpEndpoint(aspire.HttpEndpointEnv("PORT")).
 		WithExternalHttpEndpoints().
 		WithOtlpExporter()
-
-	// Each call records its failure on the handle that it returns, so check every resource.
-	for _, resource := range []aspire.Resource{cache, api} {
-		if err := resource.Err(); err != nil {
-			log.Fatal(aspire.FormatError(err))
-		}
-	}
 
 	app, err := builder.Build()
 	if err != nil {

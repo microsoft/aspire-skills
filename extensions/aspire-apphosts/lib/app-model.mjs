@@ -646,7 +646,7 @@ export function parseLegacyPipelineSteps(output) {
 export function appHostDisplayName(appHostPath) {
     const fileName = basename(appHostPath);
     const extension = extname(fileName);
-    if (["apphost.cs", "apphost.ts", "apphost.mts"].includes(fileName.toLowerCase())) {
+    if (["apphost.cs", "apphost.ts", "apphost.mts", "apphost.go"].includes(fileName.toLowerCase())) {
         return basename(dirname(appHostPath)) || "AppHost";
     }
 
@@ -1224,6 +1224,9 @@ function displayLanguage(value) {
     if (normalized.includes("typescript")) {
         return "TypeScript";
     }
+    if (normalized === "go") {
+        return "Go";
+    }
     return value;
 }
 
@@ -1657,7 +1660,7 @@ async function scanImmediateAppHosts(directory) {
     }
 
     for (const entry of entries) {
-        const sourceAppHost = /^apphost\.(?:cs|ts|mts)$/i.test(entry.name);
+        const sourceAppHost = /^apphost\.(?:cs|ts|mts|go)$/i.test(entry.name);
         if (
             (entry.isFile() && (/\.apphost\.csproj$/i.test(entry.name) || sourceAppHost))
             || (entry.isSymbolicLink() && sourceAppHost && await pathExists(join(directory, entry.name)))
@@ -1682,6 +1685,7 @@ async function scanImmediateAppHosts(directory) {
                     || child.name.toLowerCase() === "apphost.cs"
                     || child.name.toLowerCase() === "apphost.ts"
                     || child.name.toLowerCase() === "apphost.mts"
+                    || child.name.toLowerCase() === "apphost.go"
                 )
             ) {
                 results.push(join(directory, entry.name, child.name));
@@ -2066,7 +2070,7 @@ export function dedupeAppHosts(records) {
 
 function isAppHostFilePath(value) {
     const fileName = basename(value).toLowerCase();
-    return fileName.endsWith(".csproj") || ["apphost.cs", "apphost.ts", "apphost.mts"].includes(fileName);
+    return fileName.endsWith(".csproj") || ["apphost.cs", "apphost.ts", "apphost.mts", "apphost.go"].includes(fileName);
 }
 
 async function appHostFileFromDirectory(directory) {
@@ -2079,7 +2083,7 @@ async function appHostFileFromDirectory(directory) {
     const fileNames = entries.filter((entry) => entry.isFile()).map((entry) => entry.name);
     const candidateGroups = [
         fileNames.filter((name) => /\.apphost\.csproj$/i.test(name)),
-        fileNames.filter((name) => /^apphost\.(?:ts|mts)$/i.test(name)),
+        fileNames.filter((name) => /^apphost\.(?:ts|mts|go)$/i.test(name)),
         fileNames.filter((name) => /\.csproj$/i.test(name)),
         fileNames.filter((name) => /^apphost\.cs$/i.test(name)),
     ];

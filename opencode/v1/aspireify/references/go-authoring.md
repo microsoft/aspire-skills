@@ -68,16 +68,9 @@ func main() {
 		WithModTidy().
 		WithReference(cache).
 		WaitFor(cache).
-		WithHttpEndpoint(&aspire.WithHttpEndpointOptions{Env: aspire.StringPtr("PORT")}).
+		WithHttpEndpoint(aspire.HttpEndpointEnv("PORT")).
 		WithExternalHttpEndpoints().
 		WithOtlpExporter()
-
-	// Each call records its failure on the handle that it returns, so check every resource.
-	for _, resource := range []aspire.Resource{cache, api} {
-		if err := resource.Err(); err != nil {
-			log.Fatal(aspire.FormatError(err))
-		}
-	}
 
 	app, err := builder.Build()
 	if err != nil {
@@ -95,10 +88,9 @@ func main() {
 failure on it:
 
 - The first error wins and later calls on a failed handle short-circuit. Read it with `Err()`.
-- Checking the last handle of a fluent chain covers every call in that chain.
-- `Build()` returns only the **builder's own** error and never inspects resource handles. Check
-  `Err()` on every resource you declare before calling it, as the skeleton does.
-- `Build()` returns `(app, error)` and `Run()` returns `error`; check both, as above.
+- `Build()` returns `(app, error)` and short-circuits on any error recorded by a handle of its
+  client, so a failed `Add*` or `With*` surfaces there even if you never read its `Err()`. Call
+  `Err()` on a handle only to localize a failure sooner. `Run()` returns `error`; check both.
 - Print errors with `aspire.FormatError(err)`: it expands `*aspire.CapabilityError` (message,
   code, capability, parameter details) and falls back to `err.Error()`. Use `errors.As` for the
   pieces:
@@ -112,21 +104,28 @@ if errors.As(err, &capErr) {
 
 ## Options Structs
 
-Required parameters are positional. Optional ones usually go in a trailing
-`<Method>Options` struct. Scalar fields are pointers: use `aspire.StringPtr`,
-`aspire.BoolPtr`, and `aspire.Float64Ptr`. Numeric fields such as ports are `*float64`,
-not `*int`; slice, map, callback, and `any` fields are not pointers. Some methods take a
-specific DTO instead, such as `*aspire.DelveServerOptions`; inspect its field types.
+Required parameters are positional. Optional parameters are variadic functional options:
+each method takes `options ...<Method>Option`, and each option is a typed value, so ordinary
+calls need no pointers.
 
 ```go
-api := builder.AddGoApp("api", "./api", &aspire.AddGoAppOptions{
-	PackagePath: aspire.StringPtr("./cmd/server"),
-	BuildTags:   []string{"netgo"},
-}).
+api := builder.AddGoApp("api", "./api",
+	aspire.AddGoAppPackagePath("./cmd/server"),
+	aspire.AddGoAppBuildTags([]string{"netgo"}),
+	aspire.AddGoAppRaceDetector(true)).
 	WithModTidy().
-	WithHttpEndpoint(&aspire.WithHttpEndpointOptions{Port: aspire.Float64Ptr(8080)})
+	WithHttpEndpoint(aspire.HttpEndpointPort(8080), aspire.HttpEndpointEnv("PORT")).
+	WithHttpHealthCheck(aspire.HttpHealthCheckPath("/health"))
 ```
 
+- Option value names are generated from the method and parameter, such as
+  `AddGoAppPackagePath`, `HttpEndpointEnv`, and `HttpHealthCheckPath`. Their underlying types
+  are plain `string`, `int`, `bool`, or `[]string`. Some drop the method prefix
+  (`GoPrivateTokenSecretId`), so confirm names in `.aspire/modules/aspire.go`.
+- A pointer to the `<Method>Options` struct (`&aspire.AddGoAppOptions{...}`) is also accepted.
+  Its scalar fields are pointers (`*string`, `*int`, `*bool`); build them with
+  `aspire.StringPtr`, `aspire.IntPtr`, `aspire.BoolPtr`. Prefer option values.
+- Whole DTO parameters stay pointers: see `WithDelveServer` below.
 ## Go Apps: `AddGoApp`
 
 `AddGoApp(name, appDirectory, options...)` comes from `Aspire.Hosting.Go`. It was introduced
@@ -139,8 +138,8 @@ release family or channel implicitly. Go AppHosts themselves need 17.0.
 - `appDirectory` is relative to the AppHost directory. It is the Go module root (where `go.mod`
   lives) and the Docker build context for `aspire publish`, which generates a Dockerfile unless
   `appDirectory` already has one.
-- `PackagePath` (default `.`) selects the main package, for example `./cmd/server`. Other
-  options: `BuildTags`, `LdFlags`, `GcFlags`, `RaceDetector`.
+- `AddGoAppPackagePath` (default `.`) selects the main package, for example `./cmd/server`.
+  Other options: `AddGoAppBuildTags`, `AddGoAppLdFlags`, `AddGoAppGcFlags`, `AddGoAppRaceDetector`.
 - An existing Dockerfile is used unchanged: `PackagePath` does not rewrite its build command
   or entrypoint. Publishing a non-default package with an existing Dockerfile warns; verify
   that file builds and starts the intended package. Generated Dockerfiles honor
@@ -154,8 +153,33 @@ release family or channel implicitly. Go AppHosts themselves need 17.0.
   fail; inspect setup-resource logs and module diffs instead of treating its success as
   proof that dependencies resolved. Preserve the user's existing dependency workflow.
 - The service reads its configuration from the environment. For example, `WithReference(cache)`
-  on a Redis resource injects `ConnectionStrings__cache`, and `Env: aspire.StringPtr("PORT")`
+  on a Redis resource injects `ConnectionStrings__cache`, and `aspire.HttpEndpointEnv("PORT")`
   on `WithHttpEndpoint` puts the assigned port in `PORT`.
+
+### Private modules and Delve
+
+- `WithGoPrivate(privatePatterns, authHost, usernameArgName?, tokenSecretId?)` sets
+  `GOPRIVATE` and wires credentials for private module hosts. Pass the token through a
+  secret parameter; never hard-code it.
+- `WithDelveServer(options...)` runs the app under
+  `dlv --headless --listen=127.0.0.1:<port> --api-version=2 debug .` for remote debugging.
+  With no arguments it uses the defaults. To configure it, wrap a `*DelveServerOptions` in
+  `aspire.DelveServerOptions2`:
+
+  ```go
+  builder.AddGoApp("svc", "./svc").
+  	WithDelveServer(aspire.DelveServerOptions2(&aspire.DelveServerOptions{
+  		Port: aspire.IntPtr(2345),
+  	}))
+  ```
+
+  `DelveServerOptions` fields are all optional pointers: `Port` (`*int`, default 2345),
+  `AcceptMultiClient`, `ContinueOnStart`, `Log` (`*bool`, default false), `LogOutput`
+  (`*string`), and `OnlySameUser` (`*bool`, unset uses Delve's default policy). Repeated calls
+  are idempotent. It replaces the command line and needs `dlv` on `PATH`.- VS Code debugging of Go services is automatic through the Go extension (dlv-dap). Local
+  launches keep symbols so breakpoints work.
+- Go 1.26 and earlier on macOS and Windows ignore `SSL_CERT_FILE` / `SSL_CERT_DIR`, so
+  custom certificate trust for the service relies on the system store there.
 
 ## Packages and the Generated SDK
 
@@ -204,11 +228,9 @@ is not sufficient; ordinary CLI execution still uses `go run .` through Aspire.
 ## Hard Rules
 
 1. Edit `apphost.go` only; never `.aspire/modules/`.
-2. Check `Err()` on every resource before `Build()`.
+2. Always check the errors from `Build()` and `Run()`; use `Err()` on a handle only to localize a failure.
 3. Run the AppHost with `aspire start --non-interactive` or `aspire run`, never `go run .`.
 4. Prefer first-party `AddGoApp` (`Aspire.Hosting.Go`): preview from 13.4, stable from 17.0.
-   Never opt a 13.x project into preview packages without approval. The Toolkit
-   `AddGolangApp` is for Aspire older than 13.4 or an AppHost that already uses it; never swap it
-   on your own.
-5. Pass optional parameters in options structs built with the `aspire.*Ptr` helpers.
+   Never opt a 13.x project into preview packages without approval.
+5. Pass optional parameters as typed option values, such as `aspire.HttpEndpointEnv("PORT")`.
 6. Look up any method you have not seen (API search, then the generated SDK); do not guess names.
