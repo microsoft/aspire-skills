@@ -1282,9 +1282,9 @@ stimuli:
         - src: ../../../evals/go-apphost/go.mod
           dest: go-apphost/go.mod
     rubric:
-      - The assistant's response adds the worker with AddGoApp, using ./worker as the app directory and a PackagePath option built with aspire.StringPtr to select ./cmd/worker as the main package.
+      - The assistant's response adds the worker with AddGoApp, using ./worker as the app directory and a PackagePath option (aspire.StringPtr in an AddGoAppOptions struct) to select ./cmd/worker as the main package.
       - The assistant's response gives the worker the same Redis cache as the API with WithReference(cache) and WaitFor(cache).
-      - The assistant's response adds the worker to the Err() checks that run before Build() instead of relying on Build() alone.
+      - The assistant's response checks the errors returned by Build() and Run(), and does not claim that Build() ignores failures recorded on resource handles.
     graders:
       - type: output-contains
         name: go-worker-sets-package-path
@@ -1296,9 +1296,9 @@ stimuli:
           scoring: binary
           prompt: >
             Judge the assistant's response, not the workspace files. Go AppHosts are new in
-            Aspire 17.0. In a Go AppHost every Add and With call records its failure on the
-            handle it returns, and Build() reports only the builder's own error, so the
-            AppHost checks Err() on each resource it declares. Answer based on intent.
+            Aspire 17.0. In a Go AppHost every Add and With call records its failure on the handle it
+            returns, and Build() short-circuits on any handle error recorded by its client, so the
+            AppHost checks the errors from Build() and Run(). Reading Err() on a handle is optional. Answer based on intent.
       - type: skill-invocation
         name: invokes-aspireify-go-apphost
         config:
