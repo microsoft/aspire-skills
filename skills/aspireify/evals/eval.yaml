@@ -1282,7 +1282,7 @@ stimuli:
         - src: ../../../evals/go-apphost/go.mod
           dest: go-apphost/go.mod
     rubric:
-      - The assistant's response adds the worker with AddGoApp, using ./worker as the app directory and a PackagePath option (aspire.StringPtr in an AddGoAppOptions struct) to select ./cmd/worker as the main package.
+      - The assistant's response adds the worker with AddGoApp, using ./worker as the app directory and an AddGoAppPackagePath option (aspire.AddGoAppPackagePath("./cmd/worker")) to select ./cmd/worker as the main package.
       - The assistant's response gives the worker the same Redis cache as the API with WithReference(cache) and WaitFor(cache).
       - The assistant's response checks the errors returned by Build() and Run(), and does not claim that Build() ignores failures recorded on resource handles.
     graders:

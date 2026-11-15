@@ -233,7 +233,7 @@ var frontend = builder.AddViteApp("frontend", "../frontend")
 **Port injection**: Many frameworks (Express, Vite, Flask) need to know which port to listen on. Use the `env:` parameter:
 - `withHttpsEndpoint({ env: "PORT" })` (TypeScript)
 - `.WithHttpsEndpoint(env: "PORT")` (C#)
-- `.WithHttpsEndpoint(&aspire.WithHttpsEndpointOptions{Env: aspire.StringPtr("PORT")})` (Go)
+- `.WithHttpsEndpoint(aspire.HttpsEndpointEnv("PORT"))` (Go)
 
 Aspire assigns a port and injects it as the specified environment variable. The service should read it and listen on that port.
 
