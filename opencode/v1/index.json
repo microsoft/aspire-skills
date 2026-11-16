@@ -2,7 +2,7 @@
   "skills": [
     {
       "name": "aspire",
-      "version": "sha512-f9c0e5b5f11a0070ae2fef3670dee5540b4c8afb3970ad6e220349308fed00c3e809af0c5124bc2b444a7eaa8d05ee62cfe4c652a81c474969f1d4910575ceeb",
+      "version": "sha512-8e8489723ffb13d4a6f07ac76ebb9eb502165c830f97f31c9b513b35b4b3c99399476d9a76ed19a73e0c9f2168770f17360d1c889915f17aac9c9b3d19298bda",
       "files": [
         "SKILL.md",
         "references/aspire-13-3-breaking-changes.md",
@@ -67,7 +67,7 @@
     },
     {
       "name": "aspire-terminals",
-      "version": "sha512-ff26c0287bd7786bce7de85e7d9b8a650e11572ff30f3fe122f9c3832c3c91dd6ee9773bed2d97b2759d82df968cef85ea9b10226c93632f17657ac446e85ac6",
+      "version": "sha512-955c20278e70f612490401e62f9d8cf1af3f47272a04da5710529c4431f5367a3e5c04e10922a50d9ccc295e9f735693b3ff77331fdf6236bbd593c0a5913e8b",
       "files": [
         "SKILL.md",
         "references/apphost-terminals.md",

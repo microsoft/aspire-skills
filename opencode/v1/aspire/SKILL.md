@@ -246,11 +246,14 @@ copy**. Repo-specific guidance there should not be overridden by the in-plugin s
 | `.agents/skills/aspireify/SKILL.md` | The in-plugin `aspireify` sibling defers to it for AppHost wiring. |
 | `.agents/skills/aspire-init/SKILL.md` | The in-plugin `aspire-init` sibling defers to it for the skeleton/first-run flow. |
 | `.agents/skills/aspire-project-v2-migration/SKILL.md` | The in-plugin migration sibling defers to it for Project v2 assessment and edits. |
-| `.agents/skills/aspire-terminals/SKILL.md` | The in-plugin terminal sibling defers to it for terminal authoring and automation. |
 
 **Aspire 17.0 and later:** A project-local Aspire skill is usually a stale copy. Follow this
 plugin's skills unless the user says they maintain the copy, and see
 [Local Skill Copies](#local-skill-copies).
+
+**All versions:** No Aspire CLI copies `aspire-terminals`. If
+`.agents/skills/aspire-terminals/SKILL.md` exists, the in-plugin terminal sibling defers to
+it for terminal authoring and automation.
 
 **Safety guardrails from this plugin always apply** even when project-local skills are
 active.
@@ -264,8 +267,7 @@ rerun `aspire agent init` to refresh them.
 
 **Aspire 17.0 and later:** Aspire registers this plugin instead of copying skills. Clients
 may load a stale copy instead of the plugin skill with the same name. Tell the user and
-suggest `aspire doctor`, which lists each copy and explains how to remove it. It does not
-detect `aspire-terminals` copies, so offer to delete those folders after the user approves.
+suggest `aspire doctor`, which lists each copy and explains how to remove it.
 
 ## Prerequisites
 
