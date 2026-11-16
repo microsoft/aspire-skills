@@ -996,6 +996,11 @@ function selectResource(resource) {
     });
 }
 
+function visibleRosterRows() {
+    return [...els.tree.querySelectorAll(".resource-row-main")]
+        .filter((row) => !row.closest(".resource-roster")?.hidden);
+}
+
 function closeInspector() {
     const returnId = inspectorReturnFocusId ?? selectedResourceId;
     selectedResourceId = null;
@@ -1004,8 +1009,12 @@ function closeInspector() {
     hideActionMenu();
     renderTree();
     requestAnimationFrame(() => {
-        const target = (returnId && els.tree.querySelector(rosterRowSelector(returnId)))
-            || els.tree.querySelector(".resource-row-main")
+        const row = returnId ? els.tree.querySelector(rosterRowSelector(returnId)) : null;
+        const collapsed = row?.closest(".resource-roster")?.hidden;
+        const target = (collapsed
+            ? row.closest(".roster-section")?.querySelector(".roster-section-toggle")
+            : row)
+            || visibleRosterRows()[0]
             || els.searchInput;
         target?.focus();
     });
@@ -1026,8 +1035,7 @@ function handleRosterKey(event) {
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
         return;
     }
-    const rows = [...els.tree.querySelectorAll(".resource-row-main")]
-        .filter((row) => !row.closest(".resource-roster")?.hidden);
+    const rows = visibleRosterRows();
     const index = rows.indexOf(event.currentTarget);
     if (index < 0) {
         return;

@@ -188,7 +188,13 @@ class TestElement {
         return event;
     }
 
-    focus() { this.ownerDocument.activeElement = this; }
+    focus() {
+        // Browsers ignore focus() on detached or hidden elements.
+        for (let node = this; node; node = node.parentElement) {
+            if (node.hidden) return;
+        }
+        if (this.isConnected) this.ownerDocument.activeElement = this;
+    }
     setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; }
     showModal() { this.open = true; this.querySelector("input")?.focus(); }
     close(value = this.returnValue) { this.open = false; this.returnValue = value; this.dispatch("close"); }
@@ -1340,6 +1346,19 @@ test("roster keyboard navigation skips rows in collapsed sections", async () => 
         assert.equal(event.defaultPrevented, true);
         assert.equal(focusedId(), parameter.id, `${key} stays on the only visible row`);
     }
+});
+
+test("closing the inspector never sends focus into a collapsed section", async () => {
+    const renderer = await boot();
+    selectApi(renderer);
+    renderer.flushFrames();
+    renderer.document.querySelectorAll(".roster-section-toggle")[0].click();
+    assert.equal(renderer.document.getElementById("roster-section-resources").hidden, true);
+    renderer.document.querySelector('.inspector-back[aria-label="Back to resources"]').click();
+    renderer.flushFrames();
+    const active = renderer.document.activeElement;
+    assert.equal(active.isConnected, true, "focus is not left on a removed control");
+    assert.equal(active.getAttribute("aria-controls"), "roster-section-resources", "focus lands on the collapsed section's toggle");
 });
 
 test("narrow More reuses confirmations and exposes disabled operations without executing them", async () => {
