@@ -264,7 +264,8 @@ rerun `aspire agent init` to refresh them.
 
 **Aspire 17.0 and later:** Aspire registers this plugin instead of copying skills. Clients
 may load a stale copy instead of the plugin skill with the same name. Tell the user and
-suggest `aspire doctor`, which lists each copy and explains how to remove it.
+suggest `aspire doctor`, which lists each copy and explains how to remove it. It does not
+detect `aspire-terminals` copies, so offer to delete those folders after the user approves.
 
 ## Prerequisites
 
