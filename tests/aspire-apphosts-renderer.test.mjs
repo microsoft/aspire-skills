@@ -1303,6 +1303,29 @@ test("parameters render in their own collapsible section after resources", async
     assert.equal(renderer.document.getElementById("roster-section-resources").hidden, false, "selecting a related resource reveals its section");
 });
 
+test("roster keyboard navigation skips rows in collapsed sections", async () => {
+    const renderer = await boot();
+    const state = snapshot(2);
+    const parameter = {
+        id: "host-a:resource:password", kind: "resource", label: "password", resourceName: "password",
+        description: "Parameter · Value protected", appHostId: "host-a", isParameter: true,
+        statusLabel: "Value missing", lifecycleTone: "warning", lifecycleTransitioning: false, children: [],
+    };
+    state.roots[0].children[0].children.push(parameter);
+    await renderer.push({ type: "state", state });
+    const parameterRow = () => renderer.document.querySelector(`[data-resource-id="${parameter.id}"] .resource-row-main`);
+    renderer.document.querySelectorAll(".roster-section-toggle")[0].click();
+    assert.equal(renderer.document.getElementById("roster-section-resources").hidden, true);
+
+    const focusedId = () => renderer.document.activeElement.closest(".resource-row")?.getAttribute("data-resource-id");
+    parameterRow().focus();
+    for (const key of ["Home", "ArrowUp", "End", "ArrowDown"]) {
+        const event = parameterRow().dispatch("keydown", { key });
+        assert.equal(event.defaultPrevented, true);
+        assert.equal(focusedId(), parameter.id, `${key} stays on the only visible row`);
+    }
+});
+
 test("narrow More reuses confirmations and exposes disabled operations without executing them", async () => {
     const renderer = await boot();
     const more = renderer.document.querySelector(".host-more-actions");

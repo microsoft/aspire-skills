@@ -1026,7 +1026,8 @@ function handleRosterKey(event) {
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
         return;
     }
-    const rows = [...els.tree.querySelectorAll(".resource-row-main")];
+    const rows = [...els.tree.querySelectorAll(".resource-row-main")]
+        .filter((row) => !row.closest(".resource-roster")?.hidden);
     const index = rows.indexOf(event.currentTarget);
     if (index < 0) {
         return;
