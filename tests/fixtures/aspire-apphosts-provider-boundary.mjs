@@ -1394,8 +1394,8 @@ test("a stream failure during refresh queues a fresh one-shot model", async (t) 
 test("failed background logs are kept under a bounded prefix without touching active logs", async (t) => {
     const root = await mkdtemp(join(tmpdir(), "aspire-logs-"));
     t.after(() => rm(root, { recursive: true, force: true }));
-    const logDirectory = join(root, "aspire-apphosts-logs");
-    await mkdir(logDirectory);
+    const logDirectory = backgroundLogDirectory(root);
+    await mkdir(logDirectory, { mode: 0o700 });
     const seeded = [];
     for (let index = 0; index < 11; index++) {
         const path = join(logDirectory, `failed-old-${index}.log`);
@@ -1427,8 +1427,8 @@ test("failed background logs are kept under a bounded prefix without touching ac
 test("logs orphaned by a dead provider are reclaimed while live providers keep theirs", async (t) => {
     const root = await mkdtemp(join(tmpdir(), "aspire-logs-"));
     t.after(() => rm(root, { recursive: true, force: true }));
-    const logDirectory = join(root, "aspire-apphosts-logs");
-    await mkdir(logDirectory);
+    const logDirectory = backgroundLogDirectory(root);
+    await mkdir(logDirectory, { mode: 0o700 });
     const orphaned = "active-999999999-orphaned.log";
     const live = `active-${process.pid}-live.log`;
     await writeFile(join(logDirectory, orphaned), "crashed run");
