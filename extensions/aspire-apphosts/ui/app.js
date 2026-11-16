@@ -1694,7 +1694,7 @@ function openCommandOutput(item) {
 function renderEmptyBoard(appHost) {
     const failed = failedStart(appHost);
     if (failed) {
-        return element("div", { class: "resource-board-empty is-failed", role: "alert" }, [
+        return element("div", { class: "resource-board-empty is-failed", role: "status" }, [
             rowIcon({ icon: "error", tone: "error" }),
             element("strong", { text: `${appHost.label} didn't start` }),
             element("span", {

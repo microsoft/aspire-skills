@@ -1570,6 +1570,8 @@ test("idle AppHost offers an inline Run and explains a failed start with output 
     assert.ok(renderer.document.querySelector(".host-status").classList.contains("tone-error"));
     assert.match(empty().textContent, /didn't start/);
     assert.match(empty().textContent, /exited with code 1/);
+    // A polite status avoids re-announcing the failure each time the board rerenders.
+    assert.equal(empty().getAttribute("role"), "status");
 
     renderer.document.getElementById("output-panel").hidden = true;
     button(empty(), "View output").click();
