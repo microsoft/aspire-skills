@@ -105,16 +105,14 @@ and need an AppHost added alongside them:
      generated `.aspire/modules/` folder, **or** `apphost.go` with a `go.mod` and the generated
      `.aspire/modules/` Go SDK)
    - AppHost configuration describing language + AppHost path
-   - In Aspire 13.6 and earlier, agent setup, when available, copies selected bundled
-     Aspire skills into skill directories. If it does not offer `aspireify`, continue with
-     the `aspireify` skill from aspire-skills.
-   - In Aspire 17.0 and later, selecting Aspire skills registers configured remote sources
-     with the chosen clients instead of copying skills into the project. The default source
-     includes `aspireify`. See [init-workflow.md](references/init-workflow.md#aspireify-skill)
-     for details.
-   - In Aspire 13.6 and later, chained setup does not offer MCP, so missing MCP config is
-     expected. In Aspire 13.5, MCP can be selected interactively. Configure it only when
-     the user explicitly asks. See the `aspire` router's *Skills vs. MCP* guidance.
+   - The **`aspireify`** agent skill. Aspire 13.6 and earlier install it into the project's
+     skill directory (same one `aspire agent init` uses). Aspire 17.0 and later register the
+     aspire-skills plugin, which includes it. See
+     [init-workflow.md](references/init-workflow.md#aspireify-skill). In 13.6+, the chained
+     agent setup preselects the recommended skills, including `aspireify`, and does **not**
+     offer Aspire MCP server configuration. If MCP config is missing after a successful
+     init, that is expected and isn't a defect. MCP is a separate opt-in; see the `aspire`
+     router's *Skills vs. MCP* guidance.
 4. **Hand off to `aspireify`** — `aspire init` does **not** wire resources, projects, or
    integrations on its own.
 5. After `aspireify` finishes wiring, validate via `aspire start`
@@ -159,9 +157,10 @@ If `.agents/skills/aspire-init/SKILL.md` or a project-local `aspireify` skill ex
   skill may carry repo-specific guidance that should not be overridden by this in-plugin
   skill. The project-local `aspireify` skill, installed by `aspire init`, takes precedence
   over the in-plugin `aspireify` for the same reason. Defer to that copy and warn.
-- **Aspire 17.0 and later:** Aspire registers this plugin instead, so copies are stale
-  unless the user maintains them. If they are stale, use the plugin's skills instead. Tell
-  the user the copies are stale and suggest running `aspire doctor` for an actionable fix.
+- **Aspire 17.0 and later:** Aspire registers this plugin instead, so treat copies as
+  stale unless the user says they maintain them. Use the plugin's skills, tell the user the
+  copies are stale, and suggest `aspire doctor`, which lists each copy and explains how to
+  remove it.
 
 ## Error Handling
 
@@ -173,8 +172,8 @@ If `.agents/skills/aspire-init/SKILL.md` or a project-local `aspireify` skill ex
 | `aspire new` rejects `--output` path | Path exists and is non-empty | Use a different `--output` or empty the directory |
 | `aspire` command not found | CLI not installed | `dotnet tool install -g Aspire.Cli` (.NET 10) or `curl -sSL https://aspire.dev/install.sh \| bash` |
 | `aspire doctor` reports missing .NET 10 | SDK missing | Install .NET 10 SDK before retrying |
-| Aspire 17.0+ setup succeeded but the agent cannot use `aspireify` | The client has not loaded the registered plugin or catalog, or Aspire `skillSources` settings point to another source | Reload the client. See [init-workflow.md](references/init-workflow.md#aspireify-skill). Check project and global Aspire `skillSources` for overrides. Do not look for a project-local `aspireify/SKILL.md` or pass `--skills aspireify` to the 17.0 CLI |
-| Aspire 13.6 or earlier setup did not copy `aspireify` | The skill was not selected, no skill location was chosen, or the CLI version does not offer it | If the CLI has `aspire agent init` and offers `aspireify`, run it and select the skill and a location. Otherwise, continue with the `aspireify` skill from aspire-skills |
+| Aspire 13.6 or earlier: `aspire init` succeeded but no `aspireify` skill installed | Agent skill directory not detected, or `aspireify` not selected (13.5 doesn't preselect it) | Run `aspire agent init --non-interactive --skills aspireify` (append `aspireify` to any explicit `--skills` list, keep any `--skill-locations`, and don't add `--mcp`), then continue wiring |
+| Aspire 17.0+: the agent cannot use `aspireify` | The client has not loaded the plugin, or Aspire `skillSources` settings point elsewhere | [Reload the client](references/init-workflow.md#aspireify-skill) and check Aspire `skillSources`. Don't pass `--skills aspireify` |
 | `aspire init` succeeded but no MCP config was written | Expected in 13.6+ — chained agent setup does not offer MCP | Don't repair it. Configure MCP only when the user explicitly asks for it (`aspire agent init --mcp` on 13.6+) |
 | Skeleton dropped but resources not wired | Expected — `aspire init` does not wire | Hand off to `aspireify` |
 | Existing TypeScript AppHost still uses `apphost.ts` | Legacy entry point and package graph | Hand off to `aspire-orchestration`, which owns approval and `aspire update --migrate --yes --non-interactive`; return to aspireify only for later source authoring |

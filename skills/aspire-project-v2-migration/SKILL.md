@@ -59,9 +59,9 @@ for the merged API baseline and publishing boundaries.
 
 If `.agents/skills/aspire-project-v2-migration/SKILL.md` exists, check `aspire --version`.
 On Aspire 13.6 and earlier, warn the user and defer to that project-local skill while
-retaining these safety gates. On Aspire 17.0 and later, the copy is stale unless the user
-maintains it. If it is stale, use this skill instead. Tell the user the copy is stale and
-suggest running `aspire doctor` for an actionable fix.
+retaining these safety gates. On Aspire 17.0 and later, treat the copy as stale unless the
+user says they maintain it. Use this skill, tell the user the copy is stale, and suggest
+`aspire doctor`, which lists each copy and explains how to remove it.
 
 ## Workflow
 

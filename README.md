@@ -38,16 +38,10 @@ Choose the path that matches your agent host.
 
 ### Aspire CLI
 
-Aspire's first-party agent setup configures detected agent environments with Aspire guidance.
-Aspire MCP server configuration is separate and opt-in.
+Aspire's first-party agent setup installs Aspire skill files and extension files into detected agent environments in Aspire 13.6 and earlier. In Aspire 17.0 and later, it registers the aspire-skills plugin in agent settings instead. Aspire MCP server configuration is separate and opt-in.
 
-In Aspire 13.6 and later, `aspire new` and `aspire init` offer agent setup
-without MCP. Standalone `aspire agent init` offers MCP, off by default, and
-non-interactive runs configure it only when you pass `--mcp`.
-
-Aspire 13.6 preselects the recommended skills, including `aspireify`, and copies
-them into agent skill directories. Aspire 17.0 and later instead register skill
-sources in agent settings for the project or globally.
+- In Aspire 13.6 and later, the agent setup that `aspire new` and `aspire init` run preselects the recommended skills, including `aspireify`. It doesn't offer MCP configuration.
+- Standalone `aspire agent init` keeps an MCP choice that's off by default. It doesn't configure MCP in non-interactive runs unless you pass `--mcp`.
 
 **Create a new Aspire app** and opt into agent guidance when prompted:
 
@@ -67,25 +61,11 @@ aspire init
 aspire agent init
 ```
 
-**Configure remote `aspire-skills` content for this project** (Aspire 17.0+):
-
-```bash
-aspire agent init --scope project
-```
-
-Use `--scope global` to share settings across projects. For update options, see
-[Automatic updates and version pinning](#automatic-updates-and-version-pinning).
-
-The default source is the official
-[`microsoft/aspire-skills` repository](https://github.com/microsoft/aspire-skills).
-Project or global `skillSources` settings can add, override, or disable sources.
-Review each source before you enable it.
-
-Aspire skills copied by older CLIs can take precedence over remote skills. Run
-`aspire doctor` to find these copies and get guidance on removing them.
-
-Aspire 13.6 has no `--scope` or `--agents` flags. Run `aspire agent init`
-interactively to choose bundled skills and locations.
+In Aspire 17.0 and later, pass `--scope project` (default) or `--scope global`. The default
+source is the [`microsoft/aspire-skills` repository](https://github.com/microsoft/aspire-skills).
+Aspire `skillSources` settings can add, override, or disable sources, so review each source
+before you enable it. Skills copied by older CLIs can take precedence. Run `aspire doctor` to
+find them. See also [Automatic updates and version pinning](#automatic-updates-and-version-pinning).
 
 **Configure the Aspire MCP server** only when you want it (Aspire 13.6+):
 

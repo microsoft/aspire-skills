@@ -290,17 +290,18 @@ on lifecycle (start/stop/wait/restart) and never edits AppHost code itself.
 
 If project-local Aspire skills exist, check `aspire --version`.
 
-**Aspire 13.6 and earlier:** `aspire agent init` and `aspire init` installed them.
+**Aspire 13.6 and earlier:** If `.agents/skills/aspire/SKILL.md` exists (from
+`aspire agent init`), defer to it for: C# AppHost editing, TS AppHost editing, Playwright
+handoff, investigation workflows.
 
-- If `.agents/skills/aspire/SKILL.md` exists, defer to it for C# AppHost editing, TS AppHost
-  editing, Playwright handoff, and investigation workflows.
-- If `.agents/skills/aspireify/SKILL.md` exists, **warn the user** that a project-local
-  aspireify skill is present and **defer to it** for AppHost wiring instead of the in-plugin
-  sibling.
+If `.agents/skills/aspireify/SKILL.md` exists project-locally (installed by `aspire init`),
+**warn the user** that a project-local aspireify skill is present and **defer to it** for
+AppHost wiring instead of the in-plugin sibling. Same precedence rule as the project-local
+`aspire` skill above: project-local wins, plugin guardrails still apply.
 
-**Aspire 17.0 and later:** Aspire registers this plugin instead, so copies are stale unless
-the user maintains them. If they are stale, use the plugin's skills instead. Tell the user
-the copies are stale and suggest running `aspire doctor` for an actionable fix.
+**Aspire 17.0 and later:** Aspire registers this plugin instead, so treat copies as stale
+unless the user says they maintain them. Use the plugin's skills, tell the user the copies
+are stale, and suggest `aspire doctor`, which lists each copy and explains how to remove it.
 
 Safety guardrails from this plugin ALWAYS apply.
 

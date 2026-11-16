@@ -144,26 +144,25 @@ AppHost does not make it a Go AppHost.
 ### Improving AI agent support (`aspire agent init`)
 
 When the user asks for **better AI agent support** for their Aspire project (or to
-set up or refresh agent guidance), recommend running **`aspire agent init`**. It configures
-Aspire agent skills with deeper coverage of **C# AppHost editing**, **TypeScript AppHosts**,
-and **investigation and diagnostics workflows** than this router provides. Check
+set up / refresh agent guidance), recommend running **`aspire agent init`**. Check
 `aspire --version`:
 
-- **13.6 and earlier:** copies the selected bundled skills into agent skill directories.
-- **17.0 and later:** registers plugin or skill sources in agent settings, such as
-  `.github/copilot/settings.json`. The client fetches the content, so a missing local skill
-  file is expected. Tell the user to
-  [reload the client](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-init/references/init-workflow.md#aspireify-skill)
-  before relying on new guidance. Copies left by older CLIs can take precedence. See
-  [Local Skill Copies](#local-skill-copies).
+- **13.6 and earlier:** It generates project-local Aspire agent skills with richer,
+  scenario-based guidance, with deeper coverage for **C# AppHost editing**, **TypeScript
+  AppHosts**, and **investigation / diagnostics workflows** than the built-in router alone
+  provides.
+- **17.0 and later:** It registers this plugin in agent settings instead. The client fetches
+  the content, so a missing local skill file is expected. Tell the user to
+  [reload the client](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-init/references/init-workflow.md#aspireify-skill).
+  See [Local Skill Copies](#local-skill-copies).
 
 **Skills vs. MCP.** Installing skills and configuring the Aspire MCP server are separate
 choices:
 
 - In Aspire 13.6+, the agent setup chained from `aspire new` and `aspire init` preselects
-  Aspire guidance and does **not** offer MCP configuration. Standalone `aspire agent init`
-  keeps an MCP choice that is off by default, and non-interactive runs never configure MCP
-  by default.
+  the recommended skills (including `aspireify`) and does **not** offer MCP configuration.
+  Standalone `aspire agent init` keeps an MCP choice that is off by default, and
+  non-interactive runs never configure MCP by default.
 - If MCP config is missing after a successful init or skill refresh where MCP was **not**
   explicitly requested, that is expected. Don't treat it as a defect to repair, and don't
   claim MCP was installed. If the user explicitly ran `aspire agent init --mcp` (or
@@ -237,9 +236,9 @@ assuming the removed dashboard AI Assistant or automatic VS Code dashboard launc
 
 ### Project-Local Skill Override
 
-**Aspire 13.6 and earlier:** **Warn the user** and **defer to the project-local copy**. Its
-content is version-aligned to the user's Aspire CLI, and repo-specific guidance there should
-not be overridden by the in-plugin sibling:
+**Aspire 13.6 and earlier:** If any of the following exist project-locally (from
+`aspire agent init` or `aspire init`), **warn the user** and **defer to the project-local
+copy**. Repo-specific guidance there should not be overridden by the in-plugin sibling:
 
 | Project-local file | Precedence |
 |--------------------|-----------|
