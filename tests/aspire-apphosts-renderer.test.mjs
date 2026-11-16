@@ -474,6 +474,22 @@ test("output panel opens for user commands and streams cleaned output", async ()
     assert.match(text.textContent, /done\n[\s\S]*Exit code 1/);
 });
 
+test("background refreshes never evict completed user commands from the output history", async () => {
+    const renderer = await boot();
+    const base = { appHostId: "host-a", appHostName: "Host A", startedAt: 0, status: "succeeded", output: "" };
+    const first = { ...base, id: "user-first", source: "resource", label: "First user command", commandLine: "aspire resource api restart" };
+    await renderer.push({ type: "command-log", command: { ...first, status: "running" } });
+    await renderer.push({ type: "command-log", command: first });
+    for (let index = 1; index < 40; index++) {
+        await renderer.push({ type: "command-log", command: { ...base, id: `user-${index}`, source: "resource", label: `User ${index}`, commandLine: "aspire resource api restart" } });
+    }
+    for (let index = 0; index < 25; index++) {
+        await renderer.push({ type: "command-log", command: { ...base, id: `bg-${index}`, source: "background", label: "List AppHosts", commandLine: "aspire ps" } });
+    }
+    assert.match(renderer.document.getElementById("output-list").textContent, /First user command/,
+        "the provider keeps 40 user commands regardless of background activity");
+});
+
 test("output panel identifies sanitized command output", async () => {
     const renderer = await boot();
     const sanitized = renderer.document.getElementById("output-sanitized");

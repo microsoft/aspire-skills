@@ -2691,7 +2691,7 @@ async function setViewMode(viewMode) {
     }
 }
 
-const COMMAND_LOG_CLIENT_LIMIT = 60;
+const COMMAND_LOG_CLIENT_LIMITS = { user: 40, background: 20 };
 const COMMAND_OUTPUT_CLIENT_TAIL = { user: 64 * 1024, background: 16 * 1024 };
 const OUTPUT_ESCAPES = /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b[@-Z\\-_]/g;
 
@@ -2728,8 +2728,12 @@ function formatCommandDuration(item) {
     return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
 }
 
+function commandLogKind(item) {
+    return item.source === "background" ? "background" : "user";
+}
+
 function trimCommandOutput(item) {
-    const tail = COMMAND_OUTPUT_CLIENT_TAIL[item.source === "background" ? "background" : "user"];
+    const tail = COMMAND_OUTPUT_CLIENT_TAIL[commandLogKind(item)];
     if (item.output.length > tail) {
         item.output = item.output.slice(item.output.length - tail);
         item.truncated = true;
@@ -2745,9 +2749,11 @@ function upsertCommand(command) {
     }
     const item = trimCommandOutput({ ...command, output: command.output ?? "" });
     commandLog.push(item);
-    let excess = commandLog.length - COMMAND_LOG_CLIENT_LIMIT;
+    // Mirror the provider's per-source retention so background refreshes never evict user commands.
+    const kind = commandLogKind(item);
+    let excess = commandLog.filter((entry) => commandLogKind(entry) === kind).length - COMMAND_LOG_CLIENT_LIMITS[kind];
     for (let index = 0; excess > 0 && index < commandLog.length;) {
-        if (commandLog[index].status === "running") {
+        if (commandLogKind(commandLog[index]) !== kind || commandLog[index].status === "running") {
             index++;
         } else {
             commandLog.splice(index, 1);
