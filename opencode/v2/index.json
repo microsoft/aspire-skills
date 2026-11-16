@@ -2,7 +2,7 @@
   "skills": [
     {
       "name": "aspire",
-      "version": "sha512-66f8b8f6bbef0c0a51f8c7eb17f8f24d1cde547fd17dda42db1b33aaa59c129ba3f96c14e448cfb6e8fc816947a9d84b3545ad1eaa2db8165f536d15977d08b3",
+      "version": "sha512-a2a1c0a122b04b03cb8536c58d275b7ac4dc4b76702e018cbd9a608d384958219eb7e109d0ce68515ec8196ceb995acdbcce316e03352e76125ac450bbd59db1",
       "files": [
         "aspire.md",
         "references/aspire-13-3-breaking-changes.md",

@@ -30,9 +30,10 @@ AppHost or its resources through the Aspire CLI rather than falling back to ad-h
 Three intents are commonly misread — resolve them before doing anything else:
 
 - **"Better / improve AI agent support", "set up agent skills", "make Copilot smarter about
-  my Aspire app"** → recommend running **`aspire agent init`**, which generates project-local
-  Aspire agent skills with richer, scenario-based guidance (deeper coverage for C# AppHost
-  editing, TypeScript AppHosts, and investigation workflows). This is an **Aspire CLI**
+  my Aspire app"** → recommend running **`aspire agent init`**, which configures Aspire agent
+  guidance with richer, scenario-based coverage (C# AppHost editing, TypeScript AppHosts, and
+  investigation workflows). Older CLIs copy skills into the project; Aspire 17.0+ registers
+  plugin/skill sources that the agent client fetches (see below). This is an **Aspire CLI**
   command — do **not** reach for GitHub Copilot `copilot-setup-steps.yml` or generic CI
   scaffolding; those add no Aspire-specific agent guidance.
 - **"Something's wrong", "show me what's happening", "why is my app misbehaving"** → observe
@@ -137,17 +138,30 @@ AppHost does not make it a Go AppHost.
 | Logs, traces, metrics, dashboard, browser logs | → [aspire-monitoring](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/SKILL.md) |
 | WithTerminal/withTerminal, TerminalService, dock/dialog/headless terminals, terminal prompts, WithRepl, terminal CLI or tapes | → [aspire-terminals](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-terminals/SKILL.md); choose owner and lifetime before code |
 | Diagnose a running app — "something's wrong", "show me what's happening", investigate errors / health / unexpected behavior | → [aspire-monitoring](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/SKILL.md) — start with `aspire describe` for resource state, then `aspire logs` / `aspire otel logs` / `aspire otel traces`; **investigate before editing code** |
-| Improve AI agent support / generate project-local Aspire agent skills | → run `aspire agent init` (see below) |
+| Improve AI agent support / set up or refresh Aspire agent skills | → run `aspire agent init` (see below) |
 | Explicitly configure the Aspire MCP server for agents | → `aspire agent init --mcp` on 13.6+ (see [Skills vs. MCP](#improving-ai-agent-support-aspire-agent-init)) |
 | Deployed app monitoring (Azure) | → `azure-diagnostics` skill (azure-skills plugin) |
 
 ### Improving AI agent support (`aspire agent init`)
 
 When the user asks for **better AI agent support** for their Aspire project (or to
-set up / refresh project-local agent guidance), recommend running **`aspire agent
-init`**. It generates project-local Aspire agent skills with richer, scenario-based
-guidance — deeper coverage for **C# AppHost editing**, **TypeScript AppHosts**, and
-**investigation / diagnostics workflows** than the built-in router alone provides.
+set up / refresh agent guidance), recommend running **`aspire agent init`**. It configures
+Aspire agent skills with richer, scenario-based guidance — deeper coverage for **C# AppHost
+editing**, **TypeScript AppHosts**, and **investigation / diagnostics workflows** than the
+built-in router alone provides.
+
+What it changes depends on the CLI version (check `aspire --version`):
+
+- **13.x** — copies the selected bundled skills into project skill directories.
+- **17.0+** — registers the selected plugin/skill sources in agent settings (for example,
+  `.github/copilot/settings.json`). It does **not** download or copy skill content; the agent
+  client fetches and updates it. A missing project-local skill file is not a failed setup.
+- Registration does not prove the **current** agent session loaded refreshed content. Tell
+  the user to restart or reload the agent session (or install/update the plugin through the
+  client) before relying on new guidance.
+- Copies left by older CLIs can shadow the registered plugin (see
+  [Project-Local Skill Override](#project-local-skill-override)). `aspire doctor` warns about
+  them; remove only Aspire-owned copies with the user's approval, then re-run `aspire agent init`.
 
 **Skills vs. MCP.** Installing skills and configuring the Aspire MCP server are separate
 choices:
@@ -226,9 +240,11 @@ assuming the removed dashboard AI Assistant or automatic VS Code dashboard launc
 
 ## Project-Local Skill Override
 
-If any of the following exist project-locally (from `aspire agent init` or Aspire
-`aspire init`), **warn the user** and **defer to the project-local copy** — repo-specific
-guidance there should not be overridden by the in-plugin sibling:
+If any of the following exist project-locally (copied by a 13.x `aspire agent init` or
+`aspire init`, or added by the repo), **warn the user** and **defer to the project-local
+copy** — repo-specific guidance there should not be overridden by the in-plugin sibling. If
+the copy is a stale Aspire-generated file rather than repo-specific guidance, point the user
+to `aspire doctor`'s cleanup recommendation instead of silently following outdated advice:
 
 | Project-local file | Precedence |
 |--------------------|-----------|

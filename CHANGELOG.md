@@ -16,6 +16,11 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   canvas now recognizes `apphost.go` and labels its language as Go.
 
 ### Changed
+- The `aspire` router no longer describes `aspire agent init` as generating
+  project-local skills on every CLI version. It distinguishes 13.x copied skills
+  from Aspire 17.0+ source registration, and explains that registration does
+  not reload the current agent session. It also says stale Aspire-generated
+  copies can shadow the plugin and how to clean them up.
 - Removed Community Toolkit guidance from Aspireify and orchestration. Go services use
   the first-party `Aspire.Hosting.Go` integration (`AddGoApp`); resource wiring now
   prefers first-party packages and falls back to raw executables or containers.
