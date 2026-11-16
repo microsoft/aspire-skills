@@ -49,6 +49,7 @@ const els = {
     outputSanitized: document.getElementById("output-sanitized"),
     outputText: document.getElementById("output-text"),
     outputBackground: document.getElementById("output-background"),
+    outputAllAppHosts: document.getElementById("output-all-apphosts"),
     outputCopy: document.getElementById("output-copy"),
     outputClear: document.getElementById("output-clear"),
     outputClose: document.getElementById("output-close"),
@@ -125,6 +126,12 @@ const APPHOST_ACTION_ORDER = {
 };
 
 const CONFIRMATIONS = {
+    stop: {
+        title: (label) => `Stop ${label}?`,
+        detail: "Its running resources will shut down.",
+        confirmLabel: "Stop",
+        danger: true,
+    },
     deploy: {
         title: (label) => `Deploy ${label}?`,
         detail: "This may update the AppHost's target environment.",
@@ -172,6 +179,7 @@ let commandLog = [];
 let selectedOutputId = null;
 let outputOpen = false;
 let showBackgroundCommands = false;
+let showAllAppHostCommands = false;
 let outputTimer = null;
 const narrowLayout = window.matchMedia?.("(max-width: 719px)") ?? { matches: false };
 const commandDrafts = new Map();
@@ -506,6 +514,7 @@ function updateHeader() {
         }
     }
     els.subtitle.textContent = parts.join(" · ");
+    els.modeTrigger.classList.toggle("is-global", mode === "Global");
     els.freshness.textContent = formatAge(modelState?.lastSuccessfulAt);
     els.hiddenCheckbox.checked = modelState?.includeHidden === true;
     setModeButtons();
@@ -717,7 +726,7 @@ function renderAppHostConfirmation(node, action) {
                 on: { click: () => cancelConfirmation(node) },
             }),
             element("button", {
-                class: "button button-primary",
+                class: `button ${confirmation.danger ? "button-danger" : "button-primary"}`,
                 type: "button",
                 text: confirmation.confirmLabel,
                 dataset: { confirmAction: action },
@@ -734,7 +743,12 @@ function renderAppHostConfirmation(node, action) {
 
 function renderAppHostActionTray(node) {
     if (node.operation) {
-        return element("div", { class: "host-action-bar is-busy" }, [
+        return element("div", {
+            class: "host-action-bar is-busy",
+            role: "status",
+            tabindex: "-1",
+            dataset: { focusKey: "host-busy" },
+        }, [
             element("span", { class: "tray-busy-icon" }, [svgIcon("loading", 14)]),
             element("span", { text: node.operation.label }),
         ]);
@@ -894,7 +908,7 @@ const HEALTH_FILTERS = [
     { id: "all", label: "Any health" },
     { id: "healthy", label: "Healthy" },
     { id: "unhealthy", label: "Unhealthy or degraded" },
-    { id: "not-reported", label: "Not reported" },
+    { id: "not-reported", label: "No health checks" },
 ];
 
 function resourceStateGroup(resource) {
@@ -943,6 +957,7 @@ function resourceSearchText(resource) {
         resource.resourceName,
         resource.description,
         resource.statusLabel,
+        resource.stateValue,
         resource.healthLabel,
         ...details,
     ].filter(Boolean).join(" ").toLowerCase();
@@ -1225,7 +1240,8 @@ function renderResourceRow({ resource, parentLabel, depth }, dashboardAvailable,
                 }),
                 element("span", {
                     class: `resource-row-health tone-${resource.healthLabel ? resource.healthTone || "inactive" : "inactive"}`,
-                    text: resource.healthLabel || "Not reported",
+                    text: resource.healthLabel || "No checks",
+                    title: resource.healthLabel ? undefined : "No health checks",
                 }),
             ]),
         ]),
@@ -1417,6 +1433,17 @@ function renderInspector({ resource, parentLabel }, dashboardAvailable, attentio
                 ]),
                 ...(resource.description ? [element("p", { text: resource.description, title: resource.description })] : []),
             ]),
+            element("dl", { class: "inspector-facts" }, [
+                inspectorFact("State", inspectorPill(resource.lifecycleTone || "inactive", resource.statusLabel || "Unknown")),
+                inspectorFact("Health", inspectorPill(
+                    resource.healthLabel ? resource.healthTone || "inactive" : "inactive",
+                    resource.healthLabel || "No health checks",
+                )),
+                ...(parentLabel ? [inspectorFact("Parent", element("span", {
+                    class: "inspector-parent",
+                    text: `Part of ${parentLabel}`,
+                }))] : []),
+            ]),
             element("button", {
                 class: "inspector-ask",
                 type: "button",
@@ -1424,17 +1451,6 @@ function renderInspector({ resource, parentLabel }, dashboardAvailable, attentio
                 dataset: { focusKey: "inspector:ask" },
                 on: { click: () => requestNodeAction("ask", resource) },
             }, [svgIcon("ask", 13), element("span", { text: "Add to chat" })]),
-            element("dl", { class: "inspector-facts" }, [
-                inspectorFact("State", inspectorPill(resource.lifecycleTone || "inactive", resource.statusLabel || "Unknown")),
-                inspectorFact("Health", inspectorPill(
-                    resource.healthLabel ? resource.healthTone || "inactive" : "inactive",
-                    resource.healthLabel || "Not reported",
-                )),
-                ...(parentLabel ? [inspectorFact("Parent", element("span", {
-                    class: "inspector-parent",
-                    text: `Part of ${parentLabel}`,
-                }))] : []),
-            ]),
         ]),
         inspectorSection("Depends on", dependsOn.length
             ? [element("ul", { class: "inspector-list" }, dependsOn)]
@@ -1626,14 +1642,7 @@ function renderResourceBoardPanel(appHost, entries, visible, dashboardAvailable)
                             : "This can take a moment. Progress shows in the action bar above.",
                     }),
                 ])
-                : element("div", { class: "resource-board-empty", role: "status" }, [
-                    rowIcon(appHost),
-                    element("strong", { text: "No live resources yet" }),
-                    element("span", {
-                        text: appHost.unavailableActionReason
-                            || "Use the AppHost actions above when you're ready to run it.",
-                    }),
-                ]),
+                : renderEmptyBoard(appHost),
     ]);
 }
 
@@ -1668,12 +1677,80 @@ function operationStatusLabel(operation) {
     return String(operation?.label || "Working").replace(/\.{3}$|…$/, "");
 }
 
+// The latest Run for an idle AppHost failed, so the board explains why it is still empty.
+function failedStart(appHost) {
+    if (appHost.operation || appHost.kind === "apphost-running") {
+        return null;
+    }
+    const last = commandLog.findLast((item) => item.operation === "run" && item.appHostId === appHost.appHostId);
+    return last?.status === "failed" ? last : null;
+}
+
+function openCommandOutput(item) {
+    selectedOutputId = item.id;
+    setOutputOpen(true, { focus: true });
+}
+
+function renderEmptyBoard(appHost) {
+    const failed = failedStart(appHost);
+    if (failed) {
+        return element("div", { class: "resource-board-empty is-failed", role: "alert" }, [
+            rowIcon({ icon: "error", tone: "error" }),
+            element("strong", { text: `${appHost.label} didn't start` }),
+            element("span", {
+                text: failed.exitCode === null || failed.exitCode === undefined
+                    ? "Check the output for the error, then try again."
+                    : `aspire start exited with code ${failed.exitCode}. Check the output for the error, then try again.`,
+            }),
+            element("span", { class: "resource-board-empty-actions" }, [
+                element("button", {
+                    class: "button button-secondary",
+                    type: "button",
+                    dataset: { focusKey: "empty:output" },
+                    on: { click: () => openCommandOutput(failed) },
+                }, [svgIcon("terminal", 14), element("span", { text: "View output" })]),
+                ...(appHost.actions?.includes("run") ? [element("button", {
+                    class: "button button-primary",
+                    type: "button",
+                    dataset: { focusKey: "empty:run" },
+                    on: { click: () => requestNodeAction("run", appHost) },
+                }, [svgIcon(ACTIONS.run.icon, 14), element("span", { text: "Retry" })])] : []),
+            ]),
+        ]);
+    }
+    if (appHost.unavailableActionReason || !appHost.actions?.includes("run")) {
+        return element("div", { class: "resource-board-empty", role: "status" }, [
+            rowIcon(appHost),
+            element("strong", { text: "No live resources yet" }),
+            element("span", {
+                text: appHost.unavailableActionReason || "Resources appear here while the AppHost is running.",
+            }),
+        ]);
+    }
+    return element("div", { class: "resource-board-empty", role: "status" }, [
+        rowIcon(appHost),
+        element("strong", { text: `Run ${appHost.label} to see its resources` }),
+        element("span", { text: "Resources, endpoints, and health appear here while it runs." }),
+        element("span", { class: "resource-board-empty-actions" }, [
+            element("button", {
+                class: "button button-primary",
+                type: "button",
+                dataset: { focusKey: "empty:run" },
+                on: { click: () => requestNodeAction("run", appHost) },
+            }, [svgIcon(ACTIONS.run.icon, 14), element("span", { text: "Run" })]),
+        ]),
+    ]);
+}
+
 function hostStatus(appHost) {
     if (appHost.operation) {
         return { label: operationStatusLabel(appHost.operation), tone: "pending" };
     }
     if (appHost.kind === "apphost-running") {
         return { label: "Running", tone: appHost.tone || "healthy" };
+    }
+    if (failedStart(appHost)) {
+        return { label: "Start failed", tone: "error" };
     }
     if (appHost.unavailableActionReason) {
         return { label: "Needs attention", tone: "warning" };
@@ -1844,7 +1921,21 @@ function captureFocusKey() {
     return active?.closest?.(FOCUS_SCOPES) ? active.dataset?.focusKey ?? null : null;
 }
 
+// A rerender can remove the focused control (for example Stop swaps the tray for a busy bar).
+// Keep keyboard users near the AppHost controls instead of dropping focus to <body>.
+function recoverLostFocus() {
+    const active = document.activeElement;
+    if (active && active !== document.body && active.isConnected) {
+        return;
+    }
+    const fallback = document.querySelector('[data-focus-key="host-busy"]')
+        || [...document.querySelectorAll("[data-apphost-primary]")].find((control) => !control.disabled)
+        || els.refreshButton;
+    fallback?.focus();
+}
+
 function renderTree() {
+    const hadScopedFocus = Boolean(document.activeElement?.closest?.(FOCUS_SCOPES));
     const source = modelState?.roots ?? [];
     const hosts = orderAppHosts(source.filter(isAppHostNode));
     if (activeCommandId && !treeContains(source, activeCommandId)) {
@@ -1861,6 +1952,9 @@ function renderTree() {
         els.rosterControls.replaceChildren();
         els.tree.replaceChildren();
         updateFooterCount();
+        if (hadScopedFocus) {
+            recoverLostFocus();
+        }
         return;
     }
     if (renderedAppHostId && renderedAppHostId !== selectedHost.id) {
@@ -1875,15 +1969,22 @@ function renderTree() {
     const focusState = captureCommandFocus();
     const focusKey = focusState ? null : captureFocusKey();
     const paneScroll = renderedAppHostId === selectedHost.id ? capturePaneScroll() : null;
+    const switchedHost = renderedAppHostId !== selectedHost.id;
     els.tree.replaceChildren(renderHostStage(selectedHost, hosts));
     document.body.classList.add("has-host");
     document.body.classList.toggle("is-inspecting", Boolean(selectedResourceId));
     updateFooterCount();
     renderedAppHostId = selectedHost.id;
+    if (switchedHost) {
+        renderOutputPanel();
+    }
     restorePaneScroll(paneScroll);
     restoreCommandFocus(focusState);
     if (focusKey) {
         document.querySelector(`[data-focus-key="${CSS.escape(focusKey)}"]`)?.focus();
+    }
+    if (hadScopedFocus) {
+        recoverLostFocus();
     }
     if (confirmationNeedsFocus) {
         confirmationNeedsFocus = false;
@@ -2738,8 +2839,15 @@ function cleanCommandOutput(text) {
         .join("\n");
 }
 
+function outputAppHostId() {
+    return modelState?.roots?.find((root) => root.id === activeAppHostId)?.appHostId ?? null;
+}
+
+// Output follows the selected AppHost unless the user asks for every AppHost; workspace-wide commands stay visible.
 function visibleCommands() {
-    return showBackgroundCommands ? commandLog : commandLog.filter((item) => item.source !== "background");
+    const appHostId = showAllAppHostCommands ? null : outputAppHostId();
+    return commandLog.filter((item) => (showBackgroundCommands || item.source !== "background")
+        && (!appHostId || !item.appHostId || item.appHostId === appHostId));
 }
 
 function commandTone(item) {
@@ -2805,6 +2913,7 @@ function acceptCommandLogMessage(message) {
             selectedOutputId = null;
         }
         renderOutputPanel();
+        renderTree();
         return true;
     }
     if (message.type === "command-log" && message.command) {
@@ -2815,6 +2924,9 @@ function acceptCommandLogMessage(message) {
             setOutputOpen(true);
         }
         renderOutputPanel();
+        if (item.operation === "run" && item.status !== "running") {
+            renderTree();
+        }
         return true;
     }
     if (message.type === "command-output" && message.id) {
@@ -2981,7 +3093,13 @@ async function copyCommandOutput() {
 
 async function clearCommandOutput() {
     try {
-        await api("/api/command-log/clear", { method: "POST", body: { includeBackground: showBackgroundCommands } });
+        await api("/api/command-log/clear", {
+            method: "POST",
+            body: {
+                includeBackground: showBackgroundCommands,
+                ...(!showAllAppHostCommands && outputAppHostId() ? { appHostId: outputAppHostId() } : {}),
+            },
+        });
     } catch (error) {
         showToast(error.message, true);
     }
@@ -3093,6 +3211,10 @@ els.outputCopy?.addEventListener("click", () => void copyCommandOutput());
 els.outputClear?.addEventListener("click", () => void clearCommandOutput());
 els.outputBackground?.addEventListener("change", () => {
     showBackgroundCommands = els.outputBackground.checked;
+    renderOutputPanel();
+});
+els.outputAllAppHosts?.addEventListener("change", () => {
+    showAllAppHostCommands = els.outputAllAppHosts.checked;
     renderOutputPanel();
 });
 els.statusAction.addEventListener("click", () => void refresh());

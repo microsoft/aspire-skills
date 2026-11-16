@@ -490,6 +490,19 @@ test("an AppHost that loses every resource leaves inspection so narrow layouts k
     assert.equal(renderer.document.body.classList.contains("is-inspecting"), false);
 });
 
+test("Global scope stays marked in the header and Add to chat follows the resource state", async () => {
+    const renderer = await boot();
+    const trigger = renderer.document.getElementById("mode-trigger");
+    assert.equal(trigger.classList.contains("is-global"), false);
+    await renderer.push({ type: "state", state: snapshot(2, { viewMode: "global" }) });
+    assert.ok(trigger.classList.contains("is-global"), "narrow layouts keep the Global label visible");
+    selectApi(renderer);
+    const header = renderer.document.querySelector(".inspector-header");
+    const order = header.children.map((child) => child.className);
+    assert.ok(order.indexOf("inspector-ask") > order.indexOf("inspector-facts"),
+        "Add to chat sits after the state and health pills");
+});
+
 test("a running AppHost without a dashboard URL explains why Open dashboard is unavailable", async () => {
     const renderer = createRenderer();
     const state = snapshot();
@@ -571,6 +584,30 @@ test("output Clear only acts on commands the list shows", async () => {
     assert.equal(clear.disabled, false);
     clear.click();
     const request = renderer.requests.find((candidate) => candidate.path === "/api/command-log/clear");
+    assert.deepEqual(request?.body, { includeBackground: false, appHostId: "host-a" });
+});
+
+test("output follows the selected AppHost unless All AppHosts is checked", async () => {
+    const renderer = await boot();
+    const state = snapshot(2);
+    state.roots.push({ ...state.roots[0], id: "host-b", appHostId: "host-b", label: "Admin.AppHost", identityHint: "admin", children: [] });
+    await renderer.push({ type: "state", state });
+    const base = { startedAt: 0, status: "succeeded", output: "", commandLine: "aspire resource" };
+    await renderer.push({ type: "command-log-snapshot", commands: [
+        { ...base, id: "a-1", source: "resource", appHostId: "host-a", appHostName: "Shop.AppHost", label: "Restart api" },
+        { ...base, id: "b-1", source: "resource", appHostId: "host-b", appHostName: "Admin.AppHost", label: "Restart admin" },
+    ] });
+    renderer.document.getElementById("output-toggle").click();
+    const list = () => renderer.document.getElementById("output-list").textContent;
+    assert.match(list(), /Restart api/);
+    assert.doesNotMatch(list(), /Restart admin/);
+
+    const all = renderer.document.getElementById("output-all-apphosts");
+    all.checked = true;
+    all.dispatch("change");
+    assert.match(list(), /Restart admin/);
+    renderer.document.getElementById("output-clear").click();
+    const request = renderer.requests.findLast((candidate) => candidate.path === "/api/command-log/clear");
     assert.deepEqual(request?.body, { includeBackground: false });
 });
 
@@ -1173,7 +1210,11 @@ test("duplicate host labels use stable public hints in tabs, heading, and confir
     assert.equal(renderer.requests.some((request) => request.path === "/api/apphost-operation"), false);
     button(renderer.document.body, "Cancel").click();
     button(renderer.document.body, "Stop").click();
-    assert.equal(renderer.document.querySelector(".apphost-confirmation"), null, "Stop runs without a confirmation");
+    assert.equal(renderer.document.querySelector(".confirmation-copy strong").textContent, `Stop ${before}?`);
+    assert.equal(renderer.requests.some((request) => request.path === "/api/apphost-operation"), false, "Stop waits for confirmation");
+    const confirmStop = renderer.document.querySelector('[data-confirm-action="stop"]');
+    assert.ok(confirmStop.classList.contains("button-danger"));
+    confirmStop.click();
     assert.equal(renderer.request("/api/apphost-operation").body.operation, "stop");
     const search = renderer.document.getElementById("search-input");
     search.value = "Public API";
@@ -1215,7 +1256,7 @@ test("the inspector opens dashboard views and copies the canonical resource name
     const offline = renderer.context.renderInspector({ resource: { id: "offline", label: "Display only", children: [] } }, false);
     assert.equal(offline.querySelector('[data-focus-key="inspector:details"]'), null);
     assert.match(offline.querySelector(".inspector-note").textContent, /while this AppHost is running/);
-    assert.match(offline.querySelector(".inspector-facts").textContent, /Not reported/);
+    assert.match(offline.querySelector(".inspector-facts").textContent, /No health checks/);
     offline.querySelector('[data-focus-key="inspector:copy"]').click();
     await settle();
     assert.deepEqual(renderer.copied, ["api", "Display only"]);
@@ -1503,6 +1544,64 @@ test("narrow More reuses confirmations and exposes disabled operations without e
     assert.equal(menu.hidden, true, "A live operation invalidates the previously open action menu");
     assert.equal(renderer.document.querySelector(".host-more-actions"), null);
     assert.match(renderer.document.querySelector(".host-action-bar").textContent, /Deploying AppHost/);
+});
+
+test("idle AppHost offers an inline Run and explains a failed start with output and retry", async () => {
+    const renderer = await boot();
+    const idle = snapshot(2);
+    idle.roots[0].kind = "apphost-idle";
+    idle.roots[0].actions = ["run", "deploy", "publish", "pipeline-step", "source"];
+    idle.roots[0].children = [];
+    await renderer.push({ type: "state", state: idle });
+    const empty = () => renderer.document.querySelector(".resource-board-empty");
+    assert.match(empty().textContent, /Run Shop\.AppHost to see its resources/);
+    button(empty(), "Run").click();
+    assert.equal(renderer.requests.at(-1).path, "/api/apphost-operation");
+    assert.equal(renderer.requests.at(-1).body.operation, "run");
+    await renderer.respond(renderer.requests.at(-1), { ok: true });
+
+    const run = {
+        id: "cmd-run", source: "operation", operation: "run", label: "Start Shop.AppHost", appHostId: "host-a",
+        appHostName: "Shop.AppHost", commandLine: "aspire start", startedAt: 0,
+    };
+    await renderer.push({ type: "command-log", command: { ...run, status: "running" } });
+    await renderer.push({ type: "command-log", command: { ...run, status: "failed", exitCode: 1, error: "Build failed" } });
+    assert.equal(renderer.document.querySelector(".host-status").textContent, "Start failed");
+    assert.ok(renderer.document.querySelector(".host-status").classList.contains("tone-error"));
+    assert.match(empty().textContent, /didn't start/);
+    assert.match(empty().textContent, /exited with code 1/);
+
+    renderer.document.getElementById("output-panel").hidden = true;
+    button(empty(), "View output").click();
+    assert.equal(renderer.document.getElementById("output-panel").hidden, false);
+    assert.equal(renderer.document.getElementById("output-command-line").textContent, "aspire start");
+
+    const before = renderer.requests.length;
+    button(empty(), "Retry").click();
+    assert.equal(renderer.requests.length, before + 1);
+    assert.equal(renderer.requests.at(-1).body.operation, "run");
+});
+
+test("Stop from More keeps focus on a live AppHost control while the tray changes", async () => {
+    const renderer = await boot();
+    renderer.evaluate("narrowLayout.matches = true");
+    await renderer.push({ type: "state", state: snapshot(2) });
+    renderer.document.querySelector(".host-more-actions").click();
+    button(renderer.document.getElementById("action-menu"), "Stop AppHost").click();
+    renderer.flushFrames();
+    assert.equal(renderer.document.activeElement.getAttribute("data-confirmation-cancel"), "stop");
+    renderer.document.querySelector('[data-confirm-action="stop"]').click();
+    const busy = snapshot(3);
+    busy.roots[0].operation = { label: "Stopping..." };
+    await renderer.push({ type: "state", state: busy });
+    const active = renderer.document.activeElement;
+    assert.equal(active.isConnected, true, "focus must not stay on a removed control");
+    assert.equal(active.getAttribute("data-focus-key"), "host-busy");
+    const idle = snapshot(4);
+    idle.roots[0].kind = "apphost-idle";
+    idle.roots[0].actions = ["run", "deploy", "publish", "pipeline-step", "source"];
+    await renderer.push({ type: "state", state: idle });
+    assert.equal(renderer.document.activeElement.getAttribute("data-apphost-primary"), "true");
 });
 
 test("unavailable AppHost notice stays short and exposes the full reason on hover and focus", async () => {

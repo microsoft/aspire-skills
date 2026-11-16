@@ -692,8 +692,19 @@ body.is-mode-switching .empty-state {
     white-space: nowrap;
 }
 
+.host-action-bar.is-busy:focus-visible {
+    border-radius: var(--radius-control);
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+}
+
 .host-action-bar.is-confirming {
     flex: 1 1 auto;
+}
+
+/* Truncate the AppHost name before the action buttons collide. */
+.host-action-bar:not(.is-busy):not(.is-confirming) {
+    flex-shrink: 0;
 }
 
 .tray-action-group {
@@ -725,7 +736,7 @@ body.is-mode-switching .empty-state {
     gap: 5px;
     padding: 2px 6px;
     border-radius: 4px;
-    color: var(--warning);
+    color: color-mix(in srgb, var(--warning), var(--text) 25%);
     font-size: var(--text-meta);
     font-weight: var(--weight-semibold);
     white-space: nowrap;
@@ -1263,7 +1274,7 @@ body.is-mode-switching .empty-state {
 
 .inspector-header {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     align-items: start;
     gap: 8px;
     padding: 18px var(--gutter) 16px;
@@ -1297,6 +1308,12 @@ body.is-mode-switching .empty-state {
     outline: none;
 }
 
+.inspector-name-line h3:focus-visible {
+    border-radius: 3px;
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+}
+
 .inspector-copy {
     width: 24px;
     height: 24px;
@@ -1314,22 +1331,27 @@ body.is-mode-switching .empty-state {
 
 .inspector-ask {
     display: inline-flex;
-    min-height: 30px;
+    min-height: 28px;
     align-items: center;
+    justify-self: start;
     gap: 6px;
     padding: 0 10px;
-    border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--border));
+    border: 1px solid var(--border);
     border-radius: var(--radius-control);
-    background: var(--brand-wash);
-    color: var(--brand);
+    background: transparent;
+    color: var(--text);
     cursor: pointer;
     font-size: var(--text-meta);
     font-weight: var(--weight-semibold);
     white-space: nowrap;
 }
 
+.inspector-ask .canvas-icon {
+    color: var(--brand);
+}
+
 .inspector-ask:hover {
-    background: var(--brand-soft);
+    background: var(--brand-wash);
 }
 
 .inspector-facts {
@@ -1676,7 +1698,7 @@ body.is-loading .canvas-footer .footer-count:empty {
 }
 
 .output-toggle:focus-visible {
-    outline: 2px solid var(--brand-strong);
+    outline: 2px solid var(--focus);
     outline-offset: 1px;
 }
 
@@ -1710,8 +1732,9 @@ body.is-loading .canvas-footer .footer-count:empty {
 .output-header {
     display: flex;
     min-height: 36px;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 14px;
+    gap: 2px 14px;
     padding: 0 6px 0 var(--gutter);
     border-bottom: 1px solid var(--border);
 }
@@ -1728,6 +1751,7 @@ body.is-loading .canvas-footer .footer-count:empty {
     gap: 6px;
     color: var(--muted);
     font-size: var(--text-compact);
+    white-space: nowrap;
     cursor: pointer;
 }
 
@@ -1783,7 +1807,7 @@ body.is-loading .canvas-footer .footer-count:empty {
 }
 
 .output-item:focus-visible {
-    outline: 2px solid var(--brand-strong);
+    outline: 2px solid var(--focus);
     outline-offset: -2px;
 }
 
@@ -1880,7 +1904,7 @@ body.is-loading .canvas-footer .footer-count:empty {
 }
 
 .output-text:focus-visible {
-    outline: 2px solid var(--brand-strong);
+    outline: 2px solid var(--focus);
     outline-offset: -2px;
 }
 
@@ -2016,6 +2040,19 @@ body.is-loading .canvas-footer .footer-count:empty {
 .resource-board-empty strong {
     color: var(--text);
     font-size: var(--text-detail);
+}
+
+.resource-board-empty.is-failed {
+    border-color: color-mix(in srgb, var(--failure) 45%, var(--border));
+    border-style: solid;
+}
+
+.resource-board-empty-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 6px;
 }
 
 /* Command composer */
@@ -2424,6 +2461,11 @@ body.is-loading .canvas-footer .footer-count:empty {
         display: none;
     }
 
+    /* Keep the less common Global scope visible when the mode label collapses. */
+    .mode-trigger.is-global #mode-label {
+        display: inline;
+    }
+
     .mode-trigger {
         padding: 0 6px;
     }
@@ -2446,6 +2488,30 @@ body.is-loading .canvas-footer .footer-count:empty {
         display: none;
     }
 
+    /* The primary action keeps its short label so Run and Dashboard stay recognizable. */
+    .host-action-bar .tray-action-group .tray-action.is-primary {
+        width: auto;
+        padding: 0 10px;
+    }
+
+    .host-action-bar .tray-action-group .tray-action.is-primary > span {
+        display: inline;
+    }
+}
+
+@media (max-width: 400px) {
+    .host-action-bar .tray-action-group .tray-action.is-primary {
+        width: 30px;
+        padding: 0;
+    }
+
+    .host-action-bar .tray-action-group .tray-action.is-primary > span {
+        display: none;
+    }
+}
+
+@media (max-width: 520px) {
+
     .control-row {
         flex-wrap: wrap;
         padding-top: 8px;
@@ -2464,20 +2530,6 @@ body.is-loading .canvas-footer .footer-count:empty {
     .resource-row-state .resource-status,
     .resource-row-health {
         max-width: 11ch;
-    }
-
-    .inspector-header {
-        grid-template-columns: minmax(0, 1fr) auto;
-    }
-
-    .inspector-ask {
-        grid-row: 2;
-        grid-column: 1;
-        justify-self: start;
-    }
-
-    .inspector-facts {
-        grid-row: 3;
     }
 
     .endpoint-list {

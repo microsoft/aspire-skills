@@ -1018,10 +1018,23 @@ function resourceDescription(resource) {
     return parts.join(" · ");
 }
 
+// Aspire reports compact state identifiers; show them as words like the dashboard does.
+const RESOURCE_STATE_WORDS = new Map([
+    ["failedtostart", "Failed to start"],
+    ["runtimeunhealthy", "Runtime unhealthy"],
+    ["notstarted", "Not started"],
+    ["valuemissing", "Value not set"],
+]);
+
+function friendlyResourceState(state) {
+    return RESOURCE_STATE_WORDS.get(String(state || "").toLowerCase()) ?? state;
+}
+
 function resourceStatusLabel(resource) {
+    const state = friendlyResourceState(resource.state);
     return resource.exitCode !== undefined && resource.exitCode !== 0
-        ? `${resource.state} · ${resource.exitCode}`
-        : resource.state || undefined;
+        ? `${state} · ${resource.exitCode}`
+        : state || undefined;
 }
 
 function resourceLifecycleTransitioning(resource) {
@@ -1329,6 +1342,7 @@ export function buildResourceTree(resources, appHostId) {
             label: resource.displayName,
             description: resourceDescription(resource),
             statusLabel: resourceStatusLabel(resource),
+            stateValue: resource.state || undefined,
             lifecycleTone: resourceLifecycleTone(resource),
             lifecycleTransitioning: resourceLifecycleTransitioning(resource),
             healthLabel: healthSummary?.label,

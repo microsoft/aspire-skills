@@ -266,6 +266,9 @@ test("warning-styled settled states like ValueMissing get a warning tone without
     const byName = new Map(buildResourceTree(projected.resources, "host").map((node) => [node.label, node]));
     assert.equal(byName.get("password").lifecycleTone, "warning");
     assert.equal(byName.get("password").lifecycleTransitioning, false);
+    assert.equal(byName.get("password").statusLabel, "Value not set");
+    assert.equal(byName.get("password").stateValue, "ValueMissing");
+    assert.equal(byName.get("api").statusLabel, "Starting");
     assert.equal(byName.get("api").lifecycleTone, "warning");
     assert.equal(byName.get("api").lifecycleTransitioning, true);
 });
@@ -1351,7 +1354,7 @@ test("canvas source carries the confirmed direction and protected data routes", 
     assert.match(client, /navigator\.clipboard\?\.writeText/);
     assert.match(client, /class: "resource-row-main"/);
     assert.match(client, /class: "inspector-facts"/);
-    assert.match(client, /Not reported/);
+    assert.match(client, /No health checks/);
     assert.match(client, /Console logs/);
     assert.match(client, /Structured logs/);
     assert.match(client, /Traces/);

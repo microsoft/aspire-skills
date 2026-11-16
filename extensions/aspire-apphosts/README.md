@@ -121,8 +121,12 @@ bounded request bodies.
   cannot silently hide preserved defaults. The provider validates and converts
   the displayed value before execution.
 - Explicit Run, Stop, Deploy, Publish, and pipeline-step actions, with blocked
-  operations explained in place. Deploy and Publish are confirmed inline; Stop
-  runs immediately.
+  operations explained in place. Stop, Deploy, and Publish are confirmed inline.
+  If the last Run failed, the AppHost shows **Start failed** with links to its
+  output and a retry.
+- The **Output** panel shows commands for the selected AppHost. Check
+  **All AppHosts** to see every AppHost, or **Show automatic refreshes** to include
+  background status checks.
 - **View dashboard** opens the authenticated Aspire Dashboard in the registered
   integrated browser, or the default system browser when the host has no browser
   canvas.
