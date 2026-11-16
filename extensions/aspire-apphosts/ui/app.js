@@ -989,10 +989,9 @@ function selectResource(resource) {
     renderTree();
     inspectorEntering = false;
     requestAnimationFrame(() => {
-        const target = rosterVisible()
-            ? els.tree.querySelector(rosterRowSelector(resource.id))
-            : els.tree.querySelector("#inspector-title");
-        target?.focus();
+        const row = rosterVisible() ? els.tree.querySelector(rosterRowSelector(resource.id)) : null;
+        // A related resource can be hidden by roster filters; keep focus in the inspector instead.
+        (row ?? els.tree.querySelector("#inspector-title"))?.focus();
     });
 }
 

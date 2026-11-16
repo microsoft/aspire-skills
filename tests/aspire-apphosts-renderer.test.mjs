@@ -1271,6 +1271,20 @@ test("the inspector lists dependencies both ways and selecting a related name op
     assert.equal(section("Depends on").querySelectorAll(".relation-row").length, 1, "unavailable resources are skipped");
 });
 
+test("opening a related resource hidden by filters keeps focus in the inspector", async () => {
+    const renderer = await boot();
+    const search = renderer.document.getElementById("search-input");
+    search.value = "Public API";
+    search.dispatch("input");
+    selectApi(renderer);
+    renderer.flushFrames();
+    assert.equal(renderer.document.querySelector('[data-resource-id="host-a:resource:database"]'), null);
+    button(renderer.document.querySelector(".relation-row"), "Database").click();
+    renderer.flushFrames();
+    assert.equal(renderer.document.getElementById("inspector-title").textContent, "Database");
+    assert.equal(renderer.document.activeElement.id, "inspector-title");
+});
+
 test("waiting rows name the resources they are waiting for", async () => {
     const renderer = createRenderer();
     const state = snapshot();
