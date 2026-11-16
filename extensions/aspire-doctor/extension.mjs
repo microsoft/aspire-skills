@@ -7,7 +7,7 @@ import { spawn } from "node:child_process";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { basename, dirname, extname, isAbsolute, normalize, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, normalize, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { joinSession, createCanvas, CanvasError } from "@github/copilot-sdk/extension";
 import {
@@ -20,6 +20,7 @@ import {
     selectDiagnosticsResult,
     windowsExplorerExecutable,
     windowsExplorerInvocation,
+    workspaceRelativePath,
 } from "./provider-helpers.mjs";
 import { normalizeDoctorData } from "./ui/model.mjs";
 
@@ -64,6 +65,7 @@ const EDITOR_FILE_EXTENSIONS = new Set([
 const instances = new Map();
 
 let sessionRef;
+let sessionWorkingDirectory;
 
 function log(message, level = "info") {
     try {
@@ -86,7 +88,13 @@ async function serveAsset(res, name) {
     }
 
     try {
-        const body = await readFile(fileUrl);
+        const sharedAsset = name === "canvas-theme.css" ? "theme.css"
+            : name === "canvas-icons.svg" ? "icons.svg" : null;
+        const source = sharedAsset ? new URL(`../../assets/canvas/${sharedAsset}`, import.meta.url) : fileUrl;
+        const body = await readFile(source).catch((error) => {
+            if (sharedAsset && (error.code === "ENOENT" || error.code === "ENOTDIR")) return readFile(fileUrl);
+            throw error;
+        });
         res.writeHead(200, {
             "Content-Type": CONTENT_TYPES[extname(name)] ?? "application/octet-stream",
             "Cache-Control": "no-store",
@@ -260,11 +268,13 @@ async function runDoctor() {
                 return;
             }
 
+            child.stdout?.setEncoding("utf8");
+            child.stderr?.setEncoding("utf8");
             child.stdout?.on("data", (chunk) => {
-                stdout += chunk.toString();
+                stdout += chunk;
             });
             child.stderr?.on("data", (chunk) => {
-                stderr += chunk.toString();
+                stderr += chunk;
             });
             child.on("error", (err) => {
                 finish({
@@ -394,7 +404,7 @@ function stableId(text) {
     return hash.toString(36);
 }
 
-function resolveUserPath(value) {
+function resolveUserPath(entry, value) {
     const text = String(value ?? "").trim();
     if (!text) {
         return null;
@@ -412,22 +422,7 @@ function resolveUserPath(value) {
         return normalize(text);
     }
 
-    const workspacePath = sessionRef?.workspacePath;
-    return workspacePath ? resolve(workspacePath, text) : null;
-}
-
-function getRepoRelativePath(absolutePath) {
-    const workspacePath = sessionRef?.workspacePath;
-    if (!workspacePath) {
-        return null;
-    }
-
-    const relativePath = relative(workspacePath, absolutePath);
-    if (!relativePath || relativePath.startsWith("..") || isAbsolute(relativePath)) {
-        return null;
-    }
-
-    return relativePath.split(sep).join("/");
+    return entry.workingDirectory ? resolve(entry.workingDirectory, text) : null;
 }
 
 function shouldOpenInEditor(absolutePath, stats) {
@@ -466,8 +461,8 @@ async function revealInFileManager(absolutePath, stats) {
     });
 }
 
-async function openPath(value) {
-    const absolutePath = resolveUserPath(value);
+async function openPath(entry, value) {
+    const absolutePath = resolveUserPath(entry, value);
     if (!absolutePath) {
         return { ok: false, error: "No path was provided." };
     }
@@ -479,7 +474,7 @@ async function openPath(value) {
         return { ok: false, error: `Path not found: ${absolutePath}` };
     }
 
-    const repoRelativePath = getRepoRelativePath(absolutePath);
+    const repoRelativePath = workspaceRelativePath(entry.workingDirectory, absolutePath);
     if (repoRelativePath && shouldOpenInEditor(absolutePath, stats) && typeof sessionRef?.rpc?.canvas?.open === "function") {
         await sessionRef.rpc.canvas.open({
             canvasId: "editor",
@@ -512,8 +507,8 @@ async function handleRequest(entry, req, res) {
     if (req.method === "GET" && (path === "/" || path === "/index.html")) {
         return serveAsset(res, "index.html");
     }
-    if (req.method === "GET" && path === "/styles.css") {
-        return serveAsset(res, "styles.css");
+    if (req.method === "GET" && ["/styles.css", "/canvas-theme.css", "/canvas-icons.svg"].includes(path)) {
+        return serveAsset(res, path.slice(1));
     }
     if (req.method === "GET" && path === "/app.js") {
         return serveAsset(res, "app.js");
@@ -570,7 +565,7 @@ async function handleRequest(entry, req, res) {
             return sendJson(res, requestErrorStatus(err), { ok: false, error: `Invalid request: ${err.message}` });
         }
         try {
-            return sendJson(res, 200, await openPath(body?.path));
+            return sendJson(res, 200, await openPath(entry, body?.path));
         } catch (err) {
             return sendJson(res, 500, { ok: false, error: `Failed to open path: ${err?.message ?? err}` });
         }
@@ -580,9 +575,12 @@ async function handleRequest(entry, req, res) {
     res.end("Not found");
 }
 
-async function startServer(instanceId) {
+async function startServer(instanceId, workingDirectory) {
     const entry = {
         instanceId,
+        // The editor's "repo" scope is relative to the session's working directory;
+        // sessionRef.workspacePath is session-state storage, not the repository.
+        workingDirectory,
         server: null,
         url: "",
         origin: "",
@@ -664,7 +662,7 @@ const doctorCanvas = createCanvas({
         let entry = instances.get(ctx.instanceId);
         if (!entry) {
             try {
-                entry = await startServer(ctx.instanceId);
+                entry = await startServer(ctx.instanceId, sessionWorkingDirectoryFor(ctx));
             } catch (error) {
                 throw new CanvasError(
                     "server_unavailable",
@@ -729,7 +727,15 @@ const openTool = {
 
 /* ---------------- hooks ---------------- */
 
-function onSessionStart() {
+function sessionWorkingDirectoryFor(ctx) {
+    const workingDirectory = ctx?.session?.workingDirectory || sessionWorkingDirectory || process.cwd();
+    return normalize(workingDirectory);
+}
+
+function onSessionStart(input) {
+    if (input?.workingDirectory) {
+        sessionWorkingDirectory = normalize(input.workingDirectory);
+    }
     return {
         additionalContext:
             "An 'Aspire Doctor' canvas extension is available in this session. When you diagnose the " +

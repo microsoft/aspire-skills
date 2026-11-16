@@ -1,5 +1,5 @@
 import { stat } from "node:fs/promises";
-import { win32 } from "node:path";
+import { isAbsolute, relative, sep, win32 } from "node:path";
 
 export const MAX_BODY_BYTES = 64 * 1024;
 
@@ -59,6 +59,26 @@ export async function resolveCliExecutable(command, env = process.env) {
         }
     }
     throw new Error(`Could not find '${command}' in fully qualified PATH directories. Set ASPIRE_CLI to the full path of the Aspire executable (.exe).`);
+}
+
+// Returns a "/"-separated path for files inside the workspace. Workspace children
+// may start with ".." (for example "..config"), so only a ".." segment escapes.
+export function workspaceRelativePath(workspacePath, absolutePath) {
+    if (!workspacePath) {
+        return null;
+    }
+
+    const relativePath = relative(workspacePath, absolutePath);
+    if (
+        !relativePath ||
+        relativePath === ".." ||
+        relativePath.startsWith(`..${sep}`) ||
+        isAbsolute(relativePath)
+    ) {
+        return null;
+    }
+
+    return relativePath.split(sep).join("/");
 }
 
 // Explorer lives in the Windows directory; a bare name would be looked up in the working directory first.

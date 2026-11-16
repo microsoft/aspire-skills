@@ -16,6 +16,7 @@ import {
     SnapshotGeneration,
     appHostIdentityHint,
     appHostOperationKey,
+    assertLocalAppHostPath,
     buildDashboardViewUrl,
     buildGlobalTree,
     buildCommandArgumentTokens,
@@ -122,7 +123,13 @@ async function serveAsset(res, name) {
         return sendText(res, 403, "Forbidden");
     }
     try {
-        const body = await readFile(fileUrl);
+        const sharedAsset = name === "canvas-theme.css" ? "theme.css"
+            : name === "canvas-icons.svg" ? "icons.svg" : null;
+        const source = sharedAsset ? new URL(`../../assets/canvas/${sharedAsset}`, import.meta.url) : fileUrl;
+        const body = await readFile(source).catch((error) => {
+            if (sharedAsset && (error.code === "ENOENT" || error.code === "ENOTDIR")) return readFile(fileUrl);
+            throw error;
+        });
         res.writeHead(200, securityHeaders(CONTENT_TYPES[extname(name)] ?? "application/octet-stream"));
         res.end(body);
     } catch {
@@ -339,6 +346,28 @@ function candidateFromPath(entry, appHostPath, {
     };
 }
 
+function localTargetRecords(payload, pathProperty) {
+    let rejected = 0;
+    const records = payload.filter((record) => {
+        try {
+            assertLocalAppHostPath(record?.[pathProperty]);
+            return true;
+        } catch (error) {
+            if (error.code !== "network_apphost_target") {
+                throw error;
+            }
+            rejected += 1;
+            return false;
+        }
+    });
+    return {
+        records,
+        warning: rejected
+            ? `${rejected} AppHost target${rejected === 1 ? " was" : "s were"} rejected: UNC and explicit network paths are not supported.`
+            : null,
+    };
+}
+
 async function discoverWorkspaceCandidates(entry) {
     if (entry.requestedAppHostPath) {
         return {
@@ -352,16 +381,25 @@ async function discoverWorkspaceCandidates(entry) {
         { cwd: entry.workingDirectory, timeoutMs: CLI_TIMEOUT_MS },
     );
     if (result.ok && Array.isArray(result.data)) {
+        const localTargets = localTargetRecords(result.data, "path");
         return {
-            candidates: normalizeLsPayload(result.data).map((record) => ({
+            candidates: normalizeLsPayload(localTargets.records).map((record) => ({
                 ...record,
                 relativePath: relativeWorkspacePath(entry, record.appHostPath),
             })),
-            warning: null,
+            warning: localTargets.warning,
         };
     }
 
-    const fallbackPaths = await discoverConfiguredAppHosts(entry.workingDirectory);
+    let fallbackPaths;
+    try {
+        fallbackPaths = await discoverConfiguredAppHosts(entry.workingDirectory);
+    } catch (error) {
+        if (error.code !== "network_apphost_target") {
+            throw error;
+        }
+        return { candidates: [], warning: error.message };
+    }
     const candidates = fallbackPaths.map((appHostPath) => candidateFromPath(entry, appHostPath));
     return {
         candidates,
@@ -550,7 +588,8 @@ async function performRefresh(entry, generation, showProgress) {
         return;
     }
 
-    const allRunning = normalizePsPayload(psResult.data)
+    const localRunning = localTargetRecords(psResult.data, "appHostPath");
+    const allRunning = normalizePsPayload(localRunning.records)
         .filter((record) => record.status === "running");
     const candidates = candidateResult.candidates;
     const runningHosts = viewMode === "workspace"
@@ -585,6 +624,7 @@ async function performRefresh(entry, generation, showProgress) {
         .filter(Boolean)
         .sort();
     const error = candidateResult.warning
+        || localRunning.warning
         || (failedAppHosts > 0 ? `${failedAppHosts} AppHost${failedAppHosts === 1 ? "" : "s"} could not be refreshed.` : null);
     publishState(entry, {
         viewMode,
@@ -1296,8 +1336,8 @@ async function handleRequest(entry, req, res) {
     if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
         return serveAsset(res, "index.html");
     }
-    if (req.method === "GET" && url.pathname === "/styles.css") {
-        return serveAsset(res, "styles.css");
+    if (req.method === "GET" && ["/styles.css", "/canvas-theme.css", "/canvas-icons.svg"].includes(url.pathname)) {
+        return serveAsset(res, url.pathname.slice(1));
     }
     if (req.method === "GET" && url.pathname === "/app.js") {
         return serveAsset(res, "app.js");
@@ -1438,6 +1478,7 @@ function canvasOpenInput(ctx) {
 }
 
 async function applyEntryInput(entry, input, workingDirectory) {
+    assertLocalAppHostPath(workingDirectory || entry.workingDirectory);
     const nextWorkingDirectory = normalize(workingDirectory || entry.workingDirectory);
     const nextRequestedAppHostPath = Object.hasOwn(input, "appHostPath")
         ? await resolveRequestedAppHostPath(input.appHostPath, nextWorkingDirectory)
@@ -1455,7 +1496,7 @@ async function applyEntryInput(entry, input, workingDirectory) {
         entry.includeHidden = input.includeHidden;
     }
 
-    if (!changed) {
+    if (!changed && !entry.discoveryStale) {
         return;
     }
     entry.generation.invalidate();
@@ -1467,7 +1508,10 @@ async function applyEntryInput(entry, input, workingDirectory) {
         refreshing: true,
         error: null,
     });
-    await requestRefresh(entry, { force: true });
+    const state = await requestRefresh(entry, { force: true });
+    if (entry.discoveryStale) {
+        throw new Error(state.error || "Unable to refresh AppHosts.");
+    }
 }
 
 async function applyReopenInput(entry, ctx) {
@@ -1480,6 +1524,7 @@ async function applyReopenInput(entry, ctx) {
 
 async function startServer(ctx) {
     const input = canvasOpenInput(ctx);
+    assertLocalAppHostPath(ctx.session?.workingDirectory || sessionWorkingDirectory || process.cwd());
     const workingDirectory = normalize(ctx.session?.workingDirectory || sessionWorkingDirectory || process.cwd());
     const viewMode = input.viewMode === "global" ? "global" : "workspace";
     const entry = {
@@ -1688,6 +1733,7 @@ const appHostsCanvas = createCanvas({
                     stale: hasRoots,
                     error: clampText(error?.message || error, 500),
                 });
+                throw error;
             }
         }
         if (entry.closed) {

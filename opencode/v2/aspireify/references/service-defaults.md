@@ -7,9 +7,14 @@ discovery**, and **HTTP resilience**. This is what `Aspire.ServiceDefaults` does
 ## Add the Project
 
 `aspire init` may already have generated a `MyApp.ServiceDefaults` project. If
-not, create one:
+not, create one. The `aspire-servicedefaults` template ships in the
+`Aspire.ProjectTemplates` package, not the .NET SDK. C# `aspire init` installs it, but a
+TypeScript AppHost (`aspire init --language typescript`) does not, so
+`dotnet new aspire-servicedefaults` fails with "No templates or subcommands found". Install
+the templates that match the AppHost's Aspire version first when they are missing:
 
 ```bash
+dotnet new list aspire-servicedefaults || dotnet new install Aspire.ProjectTemplates@<aspire-version>
 dotnet new aspire-servicedefaults -n MyApp.ServiceDefaults
 ```
 

@@ -1,83 +1,3 @@
-/* ==========================================================================
-   Aspire Doctor — canvas chrome
-   Uses the documented canvas theme tokens with literal fallbacks.
-   ========================================================================== */
-
-:root {
-    color-scheme: light dark;
-    --radius: 6px;
-    --radius-lg: 8px;
-
-    --gutter: 12px;
-
-    /* Match microsoft/aspire's Aspire Team App token hierarchy. */
-    --brand: var(--fgColor-done, var(--true-color-purple, light-dark(#8250df, #a371f7)));
-    --brand-strong: color-mix(in srgb, var(--brand), var(--text-color-default, #1f2328) 18%);
-    --brand-soft: color-mix(in srgb, var(--brand) 12%, transparent);
-    --accent: var(--brand);
-    --focus: var(--color-focus-outline, var(--brand));
-
-    --surface-inset: rgba(140, 149, 159, 0.1);
-    --surface-inset: color-mix(in srgb, var(--text-color-default, #1f2328) 5%, transparent);
-    --surface-muted: rgba(140, 149, 159, 0.16);
-    --surface-muted: color-mix(in srgb, var(--text-color-default, #1f2328) 9%, transparent);
-    --surface-raised: var(--background-color-default, #ffffff);
-    --fg: var(--fgColor-default, var(--text-color-default, #1f2328));
-    --card: color-mix(in srgb, var(--surface-raised), var(--text-color-default, #1f2328) 3%);
-    --card-hover: color-mix(in srgb, var(--surface-raised), var(--text-color-default, #1f2328) 5%);
-    --border: var(--border-color-default, #d1d9e0);
-    --border-soft: rgba(140, 149, 159, 0.3);
-    --border-soft: color-mix(in srgb, var(--text-color-default, #1f2328) 14%, transparent);
-    --border-strong: color-mix(in srgb, var(--text-color-default, #1f2328) 30%, transparent);
-
-    --scrollbar-thumb: rgba(140, 149, 159, 0.5);
-    --scrollbar-thumb: color-mix(in srgb, var(--text-color-default, #1f2328) 30%, transparent);
-    --scrollbar-thumb-hover: rgba(140, 149, 159, 0.75);
-    --scrollbar-thumb-hover: color-mix(in srgb, var(--text-color-default, #1f2328) 46%, transparent);
-
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08), 0 1px 1px rgba(0, 0, 0, 0.04);
-
-    --ok: var(--fgColor-success, var(--true-color-green, light-dark(#1a7f37, #3fb950)));
-    --warn: var(--fgColor-attention, var(--true-color-yellow, light-dark(#9a6700, #d29922)));
-    --req: var(--fgColor-danger, var(--true-color-red, light-dark(#cf222e, #f85149)));
-}
-
-@media (prefers-color-scheme: dark) {
-    html:not([data-color-mode]) {
-        --background-color-default: #0d1117;
-        --border-color-default: #30363d;
-        --text-color-default: #e6edf3;
-        --text-color-muted: #8d96a0;
-        --color-focus-outline: #58a6ff;
-        --true-color-blue: #58a6ff;
-        --true-color-green: #56d364;
-        --true-color-orange: #e3b341;
-        --true-color-red: #ff7b72;
-    }
-}
-
-:root[data-color-mode="light"] {
-    color-scheme: light;
-}
-body[data-color-mode="light"] {
-    color-scheme: light;
-}
-:root[data-color-mode="dark"] {
-    color-scheme: dark;
-}
-body[data-color-mode="dark"] {
-    color-scheme: dark;
-}
-
-* {
-    box-sizing: border-box;
-}
-
-[hidden] {
-    display: none !important;
-}
-
-.sr-only,
 .clipboard-fallback {
     position: fixed;
     width: 1px;
@@ -90,60 +10,13 @@ body[data-color-mode="dark"] {
     border: 0;
 }
 
-/* App-style scrollbars without Windows stepper buttons. */
-*::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-}
-*::-webkit-scrollbar-track {
-    background: transparent;
-}
-*::-webkit-scrollbar-thumb {
-    background: var(--scrollbar-thumb);
-    border-radius: 999px;
-    border: 2px solid transparent;
-    background-clip: padding-box;
-}
-*::-webkit-scrollbar-thumb:hover {
-    background: var(--scrollbar-thumb-hover);
-    background-clip: padding-box;
-}
-*::-webkit-scrollbar-button {
-    display: none;
-    width: 0;
-    height: 0;
-}
-@supports (-moz-appearance: none) {
-    * {
-        scrollbar-width: thin;
-        scrollbar-color: var(--scrollbar-thumb) transparent;
-    }
-}
-
-html,
 body {
-    margin: 0;
-    height: 100%;
-    color-scheme: light dark;
-}
-
-body {
-    background: var(--surface-raised);
-    color: var(--text-color-default, #1f2328);
-    font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
-    font-size: var(--text-body-medium, 14px);
-    line-height: var(--leading-body-medium, 20px);
     display: flex;
     flex-direction: column;
 }
 
-.muted {
-    color: var(--text-color-muted, #59636e);
-}
-
 code {
-    font-family: var(--font-mono, "SFMono-Regular", Consolas, "Liberation Mono", monospace);
-    font-size: var(--text-code-inline, 12px);
+    font-size: var(--text-code);
     background: var(--surface-muted);
     padding: 1px 5px;
     border-radius: 5px;
@@ -151,43 +24,7 @@ code {
 
 /* ---------- Buttons ---------- */
 .btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
     height: 32px;
-    padding: 0 12px;
-    border-radius: var(--radius);
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--text-color-default, #1f2328);
-    font-size: 14px;
-    font-weight: var(--font-weight-semibold, 600);
-    font-family: inherit;
-    line-height: 1;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease, filter 0.12s ease;
-}
-.btn:focus-visible {
-    outline: 2px solid var(--focus);
-    outline-offset: 2px;
-}
-.btn-outline {
-    border-color: var(--border-color-default, #d1d9e0);
-    background: var(--surface-raised);
-}
-.btn-outline:hover {
-    background: var(--surface-muted);
-}
-.btn-quiet {
-    border-color: var(--border-soft);
-    background: transparent;
-    color: var(--text-color-muted, #59636e);
-}
-.btn-quiet:hover {
-    color: var(--text-color-default, #1f2328);
-    background: var(--surface-inset);
 }
 .btn-quiet[aria-pressed="true"] {
     color: var(--brand-strong);
@@ -196,27 +33,12 @@ code {
 }
 .btn-sm {
     height: 28px;
-    padding: 0 10px;
-    font-size: 12px;
 }
 .btn-ico {
     display: inline-flex;
     flex: 0 0 auto;
 }
-.btn[disabled] {
-    opacity: 0.6;
-    cursor: default;
-}
-
 /* ---------- Toolbar ---------- */
-.toolbar {
-    position: sticky;
-    top: 0;
-    z-index: 5;
-    background: var(--surface-raised);
-    border-bottom: 1px solid var(--border-soft);
-    box-shadow: 0 1px 0 color-mix(in srgb, var(--brand) 6%, transparent);
-}
 .tb-row {
     display: flex;
     align-items: center;
@@ -237,25 +59,7 @@ code {
 .tb-title > div {
     min-width: 0;
 }
-.brand-mark {
-    display: inline-flex;
-    width: 22px;
-    height: 22px;
-    flex: none;
-    align-items: center;
-    justify-content: center;
-    color: var(--brand);
-}
-.tb-heading {
-    margin: 0;
-    font-size: 14px;
-    font-weight: var(--font-weight-semibold, 600);
-    line-height: 1.2;
-    color: var(--text-color-default, #1f2328);
-}
 .tb-sub {
-    font-size: 12px;
-    line-height: 1.3;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -291,14 +95,14 @@ code {
     gap: 6px;
 }
 .pill {
-    --pill-tone: var(--text-color-muted, #59636e);
+    --pill-tone: var(--muted);
     display: inline-flex;
     align-items: center;
     gap: 6px;
     padding: 3px 11px;
     border-radius: 999px;
-    font-size: 12px;
-    font-weight: var(--font-weight-semibold, 600);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-semibold);
     border: 1px solid var(--border);
     background: var(--surface-raised);
 }
@@ -324,10 +128,10 @@ code {
     --pill-tone: var(--req);
 }
 .pill[data-zero="true"] {
-    --pill-tone: var(--text-color-muted, #59636e);
+    --pill-tone: var(--muted);
 }
 .pill-lbl {
-    color: var(--text-color-muted, #59636e);
+    color: var(--muted);
 }
 
 .progress {
@@ -399,10 +203,10 @@ body.is-busy #rerun .btn-ico svg {
 }
 .diag-sec-title {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--text-detail);
     font-weight: 700;
     letter-spacing: 0.01em;
-    color: var(--text-color-default, #1f2328);
+    color: var(--text);
 }
 .diag-sec-count {
     display: inline-flex;
@@ -413,9 +217,9 @@ body.is-busy #rerun .btn-ico svg {
     border: 1px solid var(--border);
     border-radius: 999px;
     background: var(--surface-raised);
-    color: var(--text-color-muted, #59636e);
-    font-size: 11px;
-    font-weight: var(--font-weight-semibold, 600);
+    color: var(--muted);
+    font-size: var(--text-compact);
+    font-weight: var(--weight-semibold);
 }
 
 .diag-list {
@@ -504,7 +308,7 @@ summary.diag-row:focus-visible {
     background: color-mix(in srgb, var(--req) 12%, transparent);
 }
 .diag-ico.info {
-    color: var(--text-color-muted, #59636e);
+    color: var(--muted);
     opacity: 0.85;
 }
 
@@ -519,12 +323,12 @@ summary.diag-row:focus-visible {
     gap: 4px 8px;
 }
 .diag-id {
-    font-weight: var(--font-weight-semibold, 600);
+    font-weight: var(--weight-semibold);
 }
 .diag-level {
-    --status-tone: var(--text-color-muted, #59636e);
-    font-size: 11px;
-    font-weight: var(--font-weight-semibold, 600);
+    --status-tone: var(--muted);
+    font-size: var(--text-compact);
+    font-weight: var(--weight-semibold);
     text-transform: capitalize;
     padding: 2px 8px;
     border-radius: 999px;
@@ -547,15 +351,15 @@ summary.diag-row:focus-visible {
     border-color: color-mix(in srgb, var(--req) 50%, transparent);
 }
 .diag-note {
-    color: var(--text-color-muted, #59636e);
+    color: var(--muted);
     margin-top: 3px;
-    font-size: 13px;
+    font-size: var(--text-detail);
     word-break: break-word;
 }
 .diag-chevron {
     flex: 0 0 auto;
     margin-top: 2px;
-    color: var(--text-color-muted, #59636e);
+    color: var(--muted);
     transition: transform 0.22s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 details.diag-item[open] > summary .diag-chevron {
@@ -572,11 +376,11 @@ details.diag-item[open] > summary .diag-chevron {
     margin-top: 12px;
 }
 .diag-block-h {
-    font-size: 11px;
-    font-weight: var(--font-weight-semibold, 600);
+    font-size: var(--text-compact);
+    font-weight: var(--weight-semibold);
     letter-spacing: 0.02em;
     text-transform: uppercase;
-    color: var(--text-color-muted, #59636e);
+    color: var(--muted);
     margin-bottom: 4px;
 }
 
@@ -616,9 +420,9 @@ details.diag-item[open] > summary .diag-chevron {
     justify-content: space-between;
     gap: 12px;
     margin-bottom: 10px;
-    color: var(--text-color-muted, #59636e);
-    font-size: 11px;
-    font-weight: var(--font-weight-semibold, 600);
+    color: var(--muted);
+    font-size: var(--text-compact);
+    font-weight: var(--weight-semibold);
     letter-spacing: 0.02em;
     text-transform: uppercase;
 }
@@ -633,10 +437,10 @@ details.diag-item[open] > summary .diag-chevron {
     gap: 6px;
     padding: 5px 10px;
     font-family: inherit;
-    font-size: 12px;
-    font-weight: var(--font-weight-semibold, 600);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-semibold);
     line-height: 1;
-    color: var(--text-color-default, #1f2328);
+    color: var(--text);
     background: var(--surface-raised);
     border: 1px solid var(--border-soft);
     border-radius: var(--radius);
@@ -695,15 +499,15 @@ details.diag-item[open] > summary .diag-chevron {
     border-top: 1px solid var(--border-soft);
 }
 .diag-meta-key {
-    color: var(--text-color-muted, #59636e);
-    font-family: var(--font-mono, "SFMono-Regular", Consolas, monospace);
-    font-size: 11.5px;
+    color: var(--muted);
+    font-family: var(--font-code);
+    font-size: var(--text-code);
     overflow-wrap: anywhere;
 }
 .diag-meta-value {
     min-width: 0;
-    color: var(--text-color-default, #1f2328);
-    font-size: 12.5px;
+    color: var(--text);
+    font-size: var(--text-detail);
     overflow-wrap: anywhere;
 }
 
@@ -720,29 +524,29 @@ details.diag-item[open] > summary .diag-chevron {
     background: transparent;
     border: 0;
     border-radius: 0;
-    font-size: 12.5px;
+    font-size: var(--text-detail);
 }
 .cert-title {
     grid-column: 1 / -1;
-    color: var(--text-color-default, #1f2328);
-    font-weight: var(--font-weight-semibold, 600);
-    font-size: 12px;
+    color: var(--text);
+    font-weight: var(--weight-semibold);
+    font-size: var(--text-meta);
 }
 .cert-row {
     display: contents;
 }
 .cert-key {
-    color: var(--text-color-muted, #59636e);
-    font-size: 11.5px;
+    color: var(--muted);
+    font-size: var(--text-meta);
 }
 .cert-value {
     min-width: 0;
-    color: var(--text-color-default, #1f2328);
-    font-size: 12.5px;
+    color: var(--text);
+    font-size: var(--text-detail);
 }
 .cert-value.is-thumbprint {
-    font-family: var(--font-mono, "SFMono-Regular", Consolas, monospace);
-    font-size: 11.5px;
+    font-family: var(--font-code);
+    font-size: var(--text-code);
     overflow-wrap: anywhere;
 }
 
@@ -760,25 +564,25 @@ details.diag-item[open] > summary .diag-chevron {
 }
 .meta-card-title {
     margin-bottom: 4px;
-    color: var(--text-color-default, #1f2328);
-    font-size: 12px;
-    font-weight: var(--font-weight-semibold, 600);
+    color: var(--text);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-semibold);
 }
 .meta-object {
     display: grid;
     grid-template-columns: minmax(72px, max-content) minmax(0, 1fr);
     gap: 4px 10px;
     margin: 0;
-    font-size: 12.5px;
+    font-size: var(--text-detail);
 }
 .meta-object dt {
-    color: var(--text-color-muted, #59636e);
-    font-size: 11.5px;
+    color: var(--muted);
+    font-size: var(--text-meta);
 }
 .meta-object dd {
     margin: 0;
     min-width: 0;
-    color: var(--text-color-default, #1f2328);
+    color: var(--text);
     overflow-wrap: anywhere;
 }
 .meta-chip-list {
@@ -791,11 +595,11 @@ details.diag-item[open] > summary .diag-chevron {
     align-items: center;
     max-width: 100%;
     padding: 1px 7px;
-    color: var(--text-color-default, #1f2328);
+    color: var(--text);
     background: var(--surface-inset);
     border: 1px solid var(--border-soft);
     border-radius: 999px;
-    font-size: 11.5px;
+    font-size: var(--text-meta);
 }
 
 .path-link {
@@ -826,7 +630,7 @@ details.diag-item[open] > summary .diag-chevron {
     transform: translateY(1px);
 }
 .path-link:hover {
-    color: color-mix(in srgb, var(--accent) 80%, var(--text-color-default, #1f2328));
+    color: color-mix(in srgb, var(--accent) 80%, var(--text));
 }
 .path-link:focus-visible {
     outline: 2px solid var(--focus);
@@ -847,8 +651,8 @@ details.diag-item[open] > summary .diag-chevron {
 .path-link.is-error::after {
     content: attr(data-status-label);
     flex: 0 0 auto;
-    font-size: 10.5px;
-    font-weight: var(--font-weight-semibold, 600);
+    font-size: var(--text-compact);
+    font-weight: var(--weight-semibold);
     text-decoration: none;
 }
 
@@ -878,8 +682,8 @@ details.diag-item[open] > summary .diag-chevron {
 }
 .state-title {
     margin: 0;
-    font-size: 14px;
-    font-weight: var(--font-weight-semibold, 600);
+    font-size: var(--text-body);
+    font-weight: var(--weight-semibold);
 }
 .state-msg {
     max-width: 42ch;
@@ -896,14 +700,14 @@ details.diag-item[open] > summary .diag-chevron {
     background: var(--surface-inset);
     border: 1px solid var(--border-soft);
     border-radius: var(--radius);
-    font-family: var(--font-mono, "SFMono-Regular", Consolas, monospace);
-    font-size: 11.5px;
+    font-family: var(--font-code);
+    font-size: var(--text-code);
     line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-word;
     max-height: 200px;
     overflow: auto;
-    color: var(--text-color-muted, #59636e);
+    color: var(--muted);
 }
 
 /* ---------- Installations (rendered as cards in the main flow) ---------- */
@@ -916,7 +720,7 @@ details.diag-item[open] > summary .diag-chevron {
     align-items: center;
     gap: 10px;
     padding: 9px 12px;
-    font-size: 12.5px;
+    font-size: var(--text-detail);
 }
 .install-ico {
     display: inline-flex;
@@ -927,7 +731,7 @@ details.diag-item[open] > summary .diag-chevron {
     justify-content: center;
     border-radius: 7px;
     background: var(--surface-muted);
-    color: var(--text-color-muted, #59636e);
+    color: var(--muted);
 }
 .install-ico.active {
     color: var(--ok);
@@ -939,10 +743,10 @@ details.diag-item[open] > summary .diag-chevron {
 }
 .install-path {
     width: 100%;
-    font-family: var(--font-mono, "SFMono-Regular", Consolas, monospace);
-    font-size: 12px;
-    font-weight: var(--font-weight-semibold, 600);
-    color: var(--text-color-default, #1f2328);
+    font-family: var(--font-code);
+    font-size: var(--text-code);
+    font-weight: var(--weight-semibold);
+    color: var(--text);
     text-decoration: none;
 }
 .install-path > span {
@@ -957,8 +761,8 @@ details.diag-item[open] > summary .diag-chevron {
     margin-top: 3px;
 }
 .tag {
-    font-size: 10.5px;
-    color: var(--text-color-muted, #59636e);
+    font-size: var(--text-compact);
+    color: var(--muted);
     line-height: 1.7;
 }
 .install-state {
@@ -974,7 +778,7 @@ details.diag-item[open] > summary .diag-chevron {
 }
 .install-meta + .install-meta::before {
     margin-right: 6px;
-    color: var(--text-color-muted, #59636e);
+    color: var(--muted);
     content: "·";
 }
 .tag.active {
@@ -989,8 +793,8 @@ details.diag-item[open] > summary .diag-chevron {
 }
 .install-reason {
     margin-top: 4px;
-    color: var(--text-color-muted, #59636e);
-    font-size: 11.5px;
+    color: var(--muted);
+    font-size: var(--text-meta);
     word-break: break-word;
 }
 
@@ -1011,7 +815,7 @@ details.diag-item[open] > summary .diag-chevron {
     background: linear-gradient(
         90deg,
         transparent,
-        color-mix(in srgb, var(--text-color-default, #1f2328) 10%, transparent),
+        color-mix(in srgb, var(--text) 10%, transparent),
         transparent
     );
     animation: shimmer 1.25s ease-in-out infinite;

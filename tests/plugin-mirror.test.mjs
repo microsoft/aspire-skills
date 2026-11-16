@@ -29,6 +29,15 @@ test("published plugin mirrors every extension file with a relative symlink", ()
   });
 });
 
+test("telemetry hook scripts are absent from the source and published plugin", () => {
+  for (const root of [repoRoot, join(repoRoot, ".github", "plugins", "aspire-skills")]) {
+    for (const fileName of ["track-telemetry.sh", "track-telemetry.ps1"]) {
+      const hookPath = join(root, "hooks", "scripts", fileName);
+      assert.equal(lstatSync(hookPath, { throwIfNoEntry: false }), undefined, `${hookPath} must not be shipped.`);
+    }
+  }
+});
+
 test("published plugin contains no dangling Git symlinks", () => {
   const indexEntries = readMirrorIndexEntries(".github/plugins/aspire-skills");
 

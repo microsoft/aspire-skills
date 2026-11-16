@@ -1,0 +1,49 @@
+{
+  "resources": [
+    {
+      "name": "apiservice-drexmgkp",
+      "displayName": "apiservice",
+      "resourceType": "Project",
+      "state": "Running",
+      "creationTimestamp": "2026-11-02T23:06:06+00:00",
+      "startTimestamp": "2026-11-02T23:06:05.59+00:00",
+      "source": "Starter139.ApiService.csproj",
+      "healthStatus": "Unhealthy",
+      "dashboardUrl": "https://localhost:17103/?resource=apiservice-drexmgkp",
+      "relationships": [],
+      "urls": [
+        {
+          "name": "http",
+          "url": "http://localhost:5416"
+        },
+        {
+          "name": "https",
+          "url": "https://localhost:7594"
+        }
+      ],
+      "volumes": [],
+      "properties": {},
+      "environment": {},
+      "healthReports": {},
+      "commands": {}
+    },
+    {
+      "name": "webfrontend-bzvuaxqt",
+      "displayName": "webfrontend",
+      "resourceType": "Project",
+      "state": "Waiting",
+      "waitingFor": [
+        "apiservice"
+      ],
+      "source": "Starter139.Web.csproj",
+      "dashboardUrl": "https://localhost:17103/?resource=webfrontend-bzvuaxqt",
+      "relationships": [],
+      "urls": [],
+      "volumes": [],
+      "properties": {},
+      "environment": {},
+      "healthReports": {},
+      "commands": {}
+    }
+  ]
+}

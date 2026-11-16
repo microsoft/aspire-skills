@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import * as http from "node:http";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { SourceTextModule, SyntheticModule, createContext } from "node:vm";
 import { test } from "node:test";
@@ -27,6 +28,153 @@ const ok = (data) => ({ ok: true, code: 0, stdout: JSON.stringify(data), stderr:
 const fail = (error = "Synthetic CLI failure") => ({ ok: false, code: 1, stdout: "", stderr: error, error });
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
+test("shared canvas assets are served locally with their correct MIME types", async (t) => {
+    const h = await harness(t);
+    const opened = await h.open();
+    for (const [asset, type] of [["theme.css", "text/css"], ["icons.svg", "image/svg+xml"]]) {
+        const response = await fetch(new URL(`/canvas-${asset}`, opened.url));
+        assert.equal(response.status, 200);
+        assert.ok(response.headers.get("content-type").startsWith(type));
+        assert.equal(
+            await response.text(),
+            await readFile(new URL(`../../assets/canvas/${asset}`, import.meta.url), "utf8"),
+        );
+    }
+    const response = await fetch(new URL("/assets/canvas/theme.css", opened.url));
+    assert.equal(response.status, 404, "only the exact static asset allowlist is public");
+});
+
+test("generic reopen rejects invalid retargets while retaining the existing panel", async (t) => {
+    const h = await harness(t);
+    const opened = await h.open();
+    await h.action("refresh_model");
+    const before = await h.request(opened, "/api/state");
+    await assert.rejects(
+        h.open("test", { appHostPath: join(tmpdir(), "missing-apphost-target", "AppHost.cs") }),
+    );
+    const retained = await sse(h, opened);
+    t.after(() => retained.close());
+    const failed = (await retained.waitFor((event) => event.type === "state")).state;
+    assert.equal(failed.stale, true);
+    assert.ok(failed.error, "the retained panel must explain the failure");
+    const after = await h.request(opened, "/api/state");
+    assert.equal(after.status, 200);
+    assert.deepEqual(after.state.roots, before.state.roots);
+    assert.equal(h.servers.length, 1, "failed retargeting must not replace the listener");
+});
+
+test("generic reopen rejects failed retarget refreshes while preserving the stale board", async (t) => {
+    const workspace = await mkdtemp(join(tmpdir(), "aspire-retarget-"));
+    t.after(() => rm(workspace, { recursive: true, force: true }));
+    const targets = ["A", "B"].map((name) => join(workspace, name, "AppHost.cs"));
+    for (const target of targets) {
+        await mkdir(resolve(target, ".."), { recursive: true });
+        await writeFile(target, "// Synthetic AppHost fixture.\n");
+    }
+    const h = await harness(t, {
+        workingDirectory: workspace,
+        cliOverride: (args) => args[0] === "ps"
+            ? h.controls.failPs
+                ? fail("ps unavailable")
+                : ok(targets.map((appHostPath) => ({ appHostPath, status: "running" })))
+            : undefined,
+    });
+    const opened = await h.open("test", { viewMode: "workspace", appHostPath: targets[0] });
+    const before = (await h.request(opened, "/api/state")).state;
+    h.controls.failPs = true;
+    await assert.rejects(
+        h.open("test", { appHostPath: targets[1] }),
+        /ps unavailable/,
+    );
+    await assert.rejects(
+        h.open("test", { appHostPath: targets[1] }),
+        /ps unavailable/,
+        "retrying the same target must not report success while discovery is still failing",
+    );
+    const failed = (await h.request(opened, "/api/state")).state;
+    assert.equal(failed.status, "stale");
+    assert.equal(failed.stale, true);
+    assert.deepEqual(failed.roots, before.roots);
+    assert.equal(h.servers.length, 1);
+    assert.equal((await h.action("refresh_model")).stale, true, "ordinary refreshes retain their stale-state contract");
+    h.controls.failPs = false;
+    await h.open("test", { appHostPath: targets[1] });
+    const recovered = (await h.request(opened, "/api/state")).state;
+    assert.equal(recovered.status, "ready");
+    assert.notDeepEqual(recovered.roots, before.roots);
+});
+
+test("Global mode rejects discovered network targets without disabling local hosts or hidden visibility", async (t) => {
+    const network = "\\\\server\\share\\AppHost.cs";
+    const h = await harness(t, {
+        cliOverride: (args) => args[0] === "ps"
+            ? ok([...paths, network].map((appHostPath) => ({ appHostPath, status: "running" })))
+            : undefined,
+    });
+    const opened = await h.open("network-policy", { viewMode: "global", includeHidden: true });
+    const { state } = await h.request(opened, "/api/state");
+    assert.equal(state.viewMode, "global");
+    assert.equal(state.includeHidden, true);
+    assert.equal(state.summary.running, paths.length);
+    assert.match(state.error, /1 AppHost target was rejected.*network paths/);
+    const describes = h.calls.filter(({ args }) => args[0] === "describe");
+    assert.ok(describes.length > 0);
+    assert.ok(describes.every(({ args }) => args.includes("--include-hidden")));
+    assert.ok(describes.every(({ args }) => !args.includes(network)));
+});
+
+test("workspace discovery rejects explicit network candidates with a visible warning", async (t) => {
+    const h = await harness(t, {
+        cliOverride: (args) => args[0] === "ls"
+            ? ok([
+                { path: paths[0], status: "buildable" },
+                { path: "//server/share/AppHost.cs", status: "buildable" },
+            ])
+            : undefined,
+    });
+    const opened = await h.open("network-workspace", { viewMode: "workspace" });
+    const { state } = await h.request(opened, "/api/state");
+    assert.match(state.error, /1 AppHost target was rejected.*network paths/);
+    assert.ok(state.roots.length > 0, "local candidates remain available");
+    assert.doesNotMatch(JSON.stringify(state.roots), /server|share/);
+});
+
+test("AppHosts rejects network targets before stat, readdir, or target-file reads", async () => {
+    const url = new URL("../../extensions/aspire-apphosts/lib/app-model.mjs", import.meta.url);
+    const context = createContext({ Buffer, process, URL, setTimeout, clearTimeout });
+    const filesystemCalls = [];
+    let configuredPath;
+    const module = new SourceTextModule(await readFile(url, "utf8"), { context });
+    await module.link(async (specifier) => {
+        const exports = specifier === "node:fs/promises"
+            ? {
+                stat: async () => { filesystemCalls.push("stat"); throw new Error("unexpected stat"); },
+                readdir: async () => { filesystemCalls.push("readdir"); throw new Error("unexpected readdir"); },
+                readFile: async () => {
+                    filesystemCalls.push("readFile");
+                    if (configuredPath) {
+                        return JSON.stringify({ appHost: { path: configuredPath } });
+                    }
+                    throw new Error("unexpected readFile");
+                },
+            }
+            : await import(specifier);
+        return new SyntheticModule(Object.keys(exports), function () {
+            for (const [key, value] of Object.entries(exports)) this.setExport(key, value);
+        }, { context });
+    });
+    await module.evaluate();
+    for (const path of ["\\\\server\\share\\AppHost.cs", "//server/share/AppHost.cs", "\\\\?\\UNC\\server\\share\\AppHost.cs", "smb://server/share"]) {
+        await assert.rejects(module.namespace.resolveRequestedAppHostPath(path, process.cwd()), { code: "network_apphost_target" });
+    }
+    await assert.rejects(module.namespace.discoverConfiguredAppHosts("\\\\server\\share"), { code: "network_apphost_target" });
+    await assert.rejects(module.namespace.resolveRequestedAppHostPath("AppHost.cs", "\\\\server\\share"), { code: "network_apphost_target" });
+    assert.deepEqual(filesystemCalls, []);
+    configuredPath = "\\\\server\\share\\AppHost.cs";
+    await assert.rejects(module.namespace.discoverConfiguredAppHosts(process.cwd()), { code: "network_apphost_target" });
+    assert.deepEqual(filesystemCalls, ["readFile"], "a network config target is rejected after reading only the local config");
+});
+
 function describe(inputs = baseInputs, state = "Running") {
     return { resources: [
         {
@@ -44,6 +192,7 @@ function describe(inputs = baseInputs, state = "Running") {
 
 async function harness(t, {
     listenGate, failListen = false, cliOverride,
+    workingDirectory = process.cwd(),
     browserCanvases = [{ canvasId: "browser", extensionId: "host:builtins" }],
     browserListAvailable = true, browserListError, browserOpenError, systemBrowserError,
 } = {}) {
@@ -154,9 +303,9 @@ async function harness(t, {
     const opened = new Set();
     const h = {
         controls, calls, servers, intervals, attachments, canvasOpens, systemBrowserUrls, logs,
-        async open(instanceId = "test") {
+        async open(instanceId = "test", input = { viewMode: "global" }) {
             opened.add(instanceId);
-            return declaration.open({ instanceId, input: { viewMode: "global" } });
+            return declaration.open({ instanceId, input, session: { workingDirectory } });
         },
         close: (instanceId = "test") => declaration.onClose({ instanceId }),
         action: (name, input = {}, instanceId = "test") =>
@@ -194,6 +343,43 @@ async function requestFor(h, open) {
     const { state } = await h.request(open, "/api/state");
     return { appHostId: state.roots[0].appHostId, resourceName: "api", commandName: "deploy" };
 }
+
+test("dot-prefixed workspace AppHosts remain visible and open source without admitting outside hosts", async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "aspire-workspace-path-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const workingDirectory = join(root, "workspace");
+    const inside = join(workingDirectory, "..apphost", "AppHost.cs");
+    const outside = join(root, "outside", "AppHost.cs");
+    await mkdir(join(workingDirectory, "..apphost"), { recursive: true });
+    await mkdir(join(root, "outside"));
+    await writeFile(inside, "// Synthetic AppHost");
+    await writeFile(outside, "// Synthetic AppHost");
+    const h = await harness(t, {
+        workingDirectory,
+        cliOverride: async (args) => {
+            if (args[0] === "ls") return ok([]);
+            if (args[0] === "ps") return ok([inside, outside].map((appHostPath) => ({
+                appHostPath, status: "running",
+            })));
+        },
+    });
+    const insideId = model.createStoppedAppHost(inside).id;
+    const outsideId = model.createStoppedAppHost(outside).id;
+    const workspace = await h.open("workspace", { viewMode: "workspace" });
+    const { state } = await h.request(workspace, "/api/state");
+    assert.deepEqual(state.roots.map((node) => node.appHostId), [insideId]);
+    assert.equal((await h.request(workspace, "/api/open-source", { appHostId: insideId })).ok, true);
+    assert.equal(h.canvasOpens.length, 1);
+    assert.equal(h.canvasOpens[0].canvasId, "editor");
+    assert.equal(h.canvasOpens[0].input.path, "..apphost/AppHost.cs");
+    assert.equal(h.canvasOpens[0].input.scope, "repo");
+
+    const global = await h.open("global");
+    const rejected = await h.request(global, "/api/open-source", { appHostId: outsideId });
+    assert.equal(rejected.status, 400);
+    assert.match(rejected.error, /outside the current workspace/);
+    assert.equal(h.canvasOpens.length, 1, "outside source must not open an editor");
+});
 
 async function sse(h, open) {
     const url = new URL(open.url);
@@ -541,6 +727,50 @@ test("loader and execution bind the same normalized number, boolean, and omitted
     assert.equal((await h.request(open, "/api/command", body)).ok, true);
     const executedArgs = h.commandCalls()[0].args;
     assert.deepEqual(executedArgs.slice(executedArgs.indexOf("--") + 1), ["--count=1", "--flag=false"]);
+});
+
+test("describe and loaded text defaults match Hosting before command execution", async (t) => {
+    const h = await harness(t);
+    const value = "  hello world  ";
+    const fields = [{ name: "message", inputType: "Text", value }];
+    h.controls.inputs = fields;
+    h.controls.loader = async () => ok(fields);
+    const open = await h.open();
+    const request = await requestFor(h, open);
+    const { state } = await h.request(open, "/api/state");
+    const command = allNodes(state.roots).find((node) => node.kind === "command" && node.commandName === "deploy");
+    assert.equal(command.command.argumentInputs[0].value, "hello world");
+    const loaded = await h.request(open, "/api/command-inputs", { ...request, arguments: { message: value } });
+    assert.equal(loaded.ok, true);
+    assert.equal(loaded.inputs[0].value, "hello world");
+    assert.equal((await h.request(open, "/api/command", {
+        ...request, arguments: { message: value },
+    })).ok, true);
+    const executedArgs = h.commandCalls()[0].args;
+    assert.deepEqual(executedArgs.slice(executedArgs.indexOf("--") + 1), ["--message=hello world"]);
+});
+
+test("loader and execution normalize text dependencies without trimming secrets", async (t) => {
+    const h = await harness(t);
+    const fields = [
+        { name: "message", inputType: "Text" },
+        { name: "token", inputType: "SecretText" },
+        { name: "target", inputType: "Text", dynamicLoading: { dependsOnInputs: ["message", "token"] } },
+    ];
+    h.controls.inputs = fields;
+    let loadedArgs;
+    h.controls.loader = async (args) => { loadedArgs = args; return ok(fields); };
+    const open = await h.open();
+    const request = await requestFor(h, open);
+    const body = { ...request, arguments: { message: "\u0085  hello world  \u0085", token: "  test-token  " } };
+    assert.equal((await h.request(open, "/api/command-inputs", body)).ok, true);
+    assert.ok(loadedArgs.includes("--message=hello world"));
+    assert.ok(loadedArgs.includes("--token=  test-token  "));
+    assert.equal((await h.request(open, "/api/command", body)).ok, true);
+    const executedArgs = h.commandCalls()[0].args;
+    assert.deepEqual(executedArgs.slice(executedArgs.indexOf("--") + 1), [
+        "--message=hello world", "--token=  test-token  ",
+    ]);
 });
 
 test("schema changes invalidate loaded metadata and reject in-flight old-schema results", async (t) => {

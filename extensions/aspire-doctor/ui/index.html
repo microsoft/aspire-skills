@@ -4,24 +4,26 @@
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Aspire Doctor</title>
+        <link rel="stylesheet" href="/canvas-theme.css" />
         <link rel="stylesheet" href="/styles.css" />
     </head>
     <body class="is-loading">
         <!-- Toolbar: title + summary pills + re-run -->
-        <header class="toolbar">
+        <header class="toolbar canvas-toolbar">
             <div class="tb-row">
                 <div class="tb-title">
-                    <span class="brand-mark" aria-hidden="true">
-                        <svg width="18" height="18" viewBox="0 0 16 16">
-                            <path
-                                fill="currentColor"
-                                d="M6 2c.306 0 .582.187.696.471L10 10.708l1.304-3.26A.75.75 0 0 1 12 7h3.25a.75.75 0 0 1 0 1.5h-2.742l-1.812 4.529A.75.75 0 0 1 10 13a.75.75 0 0 1-.696-.471L6 4.292l-1.304 3.26A.75.75 0 0 1 4 8H.75a.75.75 0 0 1 0-1.5h2.742l1.812-4.529A.75.75 0 0 1 6 2Z"
-                            />
-                        </svg>
-                    </span>
+                    <a
+                        class="brand-mark canvas-brand"
+                        href="https://aspire.dev/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="Visit Aspire.dev (opens in a new tab)"
+                    >
+                        <svg class="canvas-icon" width="22" height="22" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><use href="/canvas-icons.svg#aspire"></use></svg>
+                    </a>
                     <div>
-                        <h1 class="tb-heading" id="page-title">Aspire Doctor</h1>
-                        <div class="tb-sub muted" id="tb-sub" role="status" aria-live="polite" aria-atomic="true">
+                        <h1 class="tb-heading canvas-heading" id="page-title">Aspire Doctor</h1>
+                        <div class="tb-sub muted canvas-subtitle" id="tb-sub" role="status" aria-live="polite" aria-atomic="true">
                             Checking your environment…
                         </div>
                     </div>
@@ -29,12 +31,7 @@
                 <div class="tb-actions">
                     <button class="btn btn-outline btn-sm" id="rerun" type="button">
                         <span class="btn-ico" aria-hidden="true">
-                            <svg width="14" height="14" viewBox="0 0 16 16">
-                                <path
-                                    fill="currentColor"
-                                    d="M8 2.5a5.5 5.5 0 1 0 5.478 6.03.75.75 0 0 1 1.492.148A7 7 0 1 1 8 1c1.79 0 3.42.67 4.66 1.77V1.75a.75.75 0 0 1 1.5 0v3.5a.75.75 0 0 1-.75.75h-3.5a.75.75 0 0 1 0-1.5h1.72A5.48 5.48 0 0 0 8 2.5Z"
-                                />
-                            </svg>
+                            <svg class="canvas-icon" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><use href="/canvas-icons.svg#restart"></use></svg>
                         </span>
                         <span class="rerun-label">Re-run</span>
                     </button>
@@ -110,12 +107,7 @@
             <!-- Error state -->
             <section id="error" class="state-card" role="alert" aria-live="assertive" aria-atomic="true" hidden>
                 <div class="state-ico req" aria-hidden="true">
-                    <svg width="22" height="22" viewBox="0 0 16 16">
-                        <path
-                            fill="currentColor"
-                            d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0Zm.75 4.75a.75.75 0 0 0-1.5 0v3.5a.75.75 0 0 0 1.5 0Zm-.75 7a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"
-                        />
-                    </svg>
+                    <svg class="canvas-icon" width="22" height="22" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><use href="/canvas-icons.svg#error"></use></svg>
                 </div>
                 <h2 class="state-title">Couldn't run <code>aspire doctor</code></h2>
                 <div class="state-msg muted" id="error-msg"></div>

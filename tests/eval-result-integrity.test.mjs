@@ -68,6 +68,25 @@ test("single-trial Vally records may omit trial metadata", () => {
   assert.equal(checkEvalRecords(data, "fixture"), 1);
 });
 
+test("one scoped run can contain root and nested evaluations", () => {
+  const data = records();
+  const nestedPath = "/repo/skills/fixture/evals/safety/eval.yaml";
+  const nestedTrial = {
+    ...data[0],
+    itemId: `${nestedPath}::main::model::fixture-stimulus::trial-0`,
+    evalName: "fixture-safety-eval",
+    evalFilePath: nestedPath
+  };
+  data.splice(1, 0, nestedTrial);
+  data.at(-1).evals.push({
+    ...data.at(-1).evals[0],
+    name: nestedTrial.evalName,
+    evalFilePath: nestedPath,
+    scoringApplied: false
+  });
+  assert.equal(checkEvalRecords(data, "fixture"), 2);
+});
+
 for (const [name, mutate, expected] of [
   ["unavailable judge despite a passing aggregate", data => { data[0].gradeResult.details[0].status = "error"; }, /grading infrastructure error/],
   ["aggregate grader error", data => { data[0].gradeResult.status = "error"; }, /grading infrastructure error/],

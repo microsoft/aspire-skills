@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { parse } from "yaml";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const readWorkflow = name => readFileSync(join(repoRoot, ".github", "workflows", name), "utf8");
@@ -140,12 +141,14 @@ for (const name of workflows) {
   });
 }
 
-test("PR evaluations exclude forks and Dependabot without privileged PR triggers", () => {
+test("PR evaluations allow Dependabot authors but exclude forks and Dependabot actors without privileged triggers", () => {
   const workflow = readWorkflow("skill-eval.yml");
   assert.match(workflow, /^  pull_request:/m);
-  assert.match(workflow, /^    if: >-\r?\n      github\.event\.pull_request\.head\.repo\.full_name == github\.event\.pull_request\.base\.repo\.full_name &&\r?\n      github\.event\.pull_request\.user\.login != 'dependabot\[bot\]' &&\r?\n      github\.actor != 'dependabot\[bot\]'/m);
+  assert.equal(parse(workflow).jobs.eval.if,
+    "github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name && github.actor != 'dependabot[bot]'");
   assert.doesNotMatch(workflow, /^\s*(pull_request_target|workflow_run):/m);
-  assert.match(workflow, /gh pr diff/);
+  assert.match(workflow, /gh api --paginate \\\r?\n\s+"repos\/\$\{\{ github\.repository \}\}\/pulls\/\$\{\{ github\.event\.pull_request\.number \}\}\/files\?per_page=100"/);
+  assert.doesNotMatch(workflow, /gh pr diff/);
 });
 
 test("scheduled and manual triggers remain unchanged", () => {
@@ -244,11 +247,7 @@ test("skill-eval.yml: guard requires every expected scoped run", t => {
   assert.match(result.stderr, /Missing expected evaluation run: migration/);
 });
 
-test("workflow and redaction changes exercise regression coverage", () => {
-  const workflow = readWorkflow("bundle-test.yml");
-  for (const filter of [".github/workflows/skill-eval*.yml", ".github/workflows/skill-experiment.yml"]) {
-    assert.equal(workflow.split(`- "${filter}"`).length - 1, 2);
-  }
+test("redaction and grading infrastructure stay covered by the eval workflow", () => {
   const gate = readWorkflow("skill-eval.yml");
   assert.match(gate, /- "scripts\/redact-eval-artifacts\.mjs"/);
   assert.match(gate, /scripts\/redact-eval-artifacts\\\.mjs/);
@@ -256,7 +255,6 @@ test("workflow and redaction changes exercise regression coverage", () => {
     assert.ok(gate.includes(`- "${path}"`));
     assert.ok(gate.includes(path.replace(".mjs", "\\.mjs")));
   }
-  assert.equal(workflow.split('- "evals/grade-routing-entry.mjs"').length - 1, 2);
 });
 
 function getStepRun(workflow, name) {
@@ -268,12 +266,13 @@ function getStepRun(workflow, name) {
   return body.replace(/^ {10}/gm, "");
 }
 
-function runChangedSpecSelection(t, changedPaths, skills) {
+function runChangedSpecSelection(t, changedPaths, specs) {
   const root = mkdtempSync(join(tmpdir(), "aspire-ci-selection-"));
   t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 3 }));
-  for (const skill of skills) {
-    mkdirSync(join(root, "skills", skill, "evals"), { recursive: true });
-    writeFileSync(join(root, "skills", skill, "evals", "eval.yaml"), "");
+  for (const spec of specs) {
+    const path = join(root, "skills", spec);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, "");
   }
   const output = join(root, "outputs");
   const script = getStepRun(readWorkflow("skill-eval.yml"), "Determine changed skill eval specs")
@@ -287,9 +286,9 @@ function runChangedSpecSelection(t, changedPaths, skills) {
   return readFileSync(output, "utf8").replaceAll("\r\n", "\n");
 }
 
-for (const changedPath of ["scripts/check-eval-results.mjs", "evals/grade-routing-entry.mjs"]) {
-  test(`${changedPath}: a helper-only PR selects the router smoke evaluation`, t => {
-    assert.equal(runChangedSpecSelection(t, [changedPath], ["aspire"]),
+for (const changedPath of [".github/workflows/skill-eval.yml", "scripts/check-eval-results.mjs", "evals/grade-routing-entry.mjs"]) {
+  test(`${changedPath}: an eval-infrastructure-only PR selects the router smoke evaluation`, t => {
+    assert.equal(runChangedSpecSelection(t, [changedPath], ["aspire/evals/eval.yaml"]),
       "run_full=false\nhas_specs=true\nmatched=aspire\nexpected_runs=aspire\n");
   });
 }
@@ -297,19 +296,107 @@ for (const changedPath of ["scripts/check-eval-results.mjs", "evals/grade-routin
 test("routing helper changes add the router smoke eval to another changed skill", t => {
   assert.equal(runChangedSpecSelection(t,
     ["evals/grade-routing-entry.mjs", "skills/aspire-init/SKILL.md"],
-    ["aspire", "aspire-init"]),
+    ["aspire/evals/eval.yaml", "aspire-init/evals/eval.yaml"]),
   "run_full=false\nhas_specs=true\nmatched=aspire-init aspire\nexpected_runs=aspire-init aspire\n");
 });
 
 test("routing helper changes de-duplicate an explicitly changed router spec", t => {
   assert.equal(runChangedSpecSelection(t,
     ["evals/grade-routing-entry.mjs", "skills/aspire/SKILL.md"],
-    ["aspire"]),
+    ["aspire/evals/eval.yaml"]),
   "run_full=false\nhas_specs=true\nmatched=aspire\nexpected_runs=aspire\n");
 });
 
 test("an ordinary skill-only change selects only that skill", t => {
-  assert.equal(runChangedSpecSelection(t, ["skills/aspire-init/SKILL.md"], ["aspire-init"]),
+  assert.equal(runChangedSpecSelection(t, ["skills/aspire-init/SKILL.md"], ["aspire-init/evals/eval.yaml"]),
+    "run_full=false\nhas_specs=true\nmatched=aspire-init\nexpected_runs=aspire-init\n");
+});
+
+test("a nested-only eval selects its owning skill", t => {
+  assert.equal(runChangedSpecSelection(t, ["skills/aspireify/evals/safety/eval.yaml"],
+    ["aspireify/evals/safety/eval.yaml"]),
+  "run_full=false\nhas_specs=true\nmatched=aspireify\nexpected_runs=aspireify\n");
+});
+
+test("root and nested eval changes select the owning skill once", t => {
+  assert.equal(runChangedSpecSelection(t,
+    ["skills/aspireify/evals/eval.yaml", "skills/aspireify/evals/safety/eval.yaml"],
+    ["aspireify/evals/eval.yaml", "aspireify/evals/safety/eval.yaml"]),
+  "run_full=false\nhas_specs=true\nmatched=aspireify\nexpected_runs=aspireify\n");
+});
+
+for (const [name, failingSpec, expectedStatus] of [
+  ["passes when both specs pass", "", 0],
+  ["fails when the strict safety spec fails", "skills/aspireify/evals/safety/eval.yaml", 1],
+  ["fails when the general spec fails", "skills/aspireify/evals/eval.yaml", 1]
+]) {
+  test(`scoped PR execution includes root and nested specs and ${name}`, t => {
+    const root = mkdtempSync(join(tmpdir(), "aspire-ci-nested-evals-"));
+    t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 3 }));
+    const specs = ["skills/aspireify/evals/eval.yaml", "skills/aspireify/evals/safety/eval.yaml"];
+    for (const spec of [...specs, "skills/aspire-init/evals/eval.yaml"]) {
+      mkdirSync(dirname(join(root, spec)), { recursive: true });
+      writeFileSync(join(root, spec), "");
+    }
+    const script = getStepRun(readWorkflow("skill-eval.yml"), "Run CI gate evals")
+      .replaceAll("${{ steps.changed.outputs.matched }}", "aspireify");
+    const result = runBash(`
+vally() {
+  printf 'argument:%s\\n' "$@"
+  for argument; do
+    if [[ "$argument" = "${failingSpec}" ]]; then return 1; fi
+  done
+  return 0
+}
+${script}`, root);
+    assert.ifError(result.error);
+    assert.equal(result.status, expectedStatus, result.stderr);
+    const args = [...result.stdout.matchAll(/^argument:(.*)$/gm)].map(match => match[1]);
+    const selectedSpecs = args.flatMap((arg, index) => arg === "--eval-spec" ? [args[index + 1]] : []);
+    assert.deepEqual(selectedSpecs.sort(), [...specs].sort());
+    assert.ok(args.includes("--require-pass"));
+  });
+}
+
+test("scoped PR execution rejects missing specs rather than running the full suite", t => {
+  const root = mkdtempSync(join(tmpdir(), "aspire-ci-missing-specs-"));
+  t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 3 }));
+  const script = getStepRun(readWorkflow("skill-eval.yml"), "Run CI gate evals")
+    .replaceAll("${{ steps.changed.outputs.matched }}", "aspireify");
+  const result = runBash(`vally() { echo "unexpected-eval"; }\n${script}`, root);
+  assert.ifError(result.error);
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /no match/);
+  assert.doesNotMatch(result.stdout, /unexpected-eval/);
+});
+
+test("a PR whose diff exceeds GitHub's 20,000-line limit still selects its changed specs", t => {
+  const root = mkdtempSync(join(tmpdir(), "aspire-ci-large-selection-"));
+  t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 3 }));
+  mkdirSync(join(root, "skills", "aspire-init", "evals"), { recursive: true });
+  writeFileSync(join(root, "skills", "aspire-init", "evals", "eval.yaml"), "");
+  const output = join(root, "outputs");
+  const script = getStepRun(readWorkflow("skill-eval.yml"), "Determine changed skill eval specs")
+    .replaceAll("${{ github.event.pull_request.number }}", "111")
+    .replaceAll("${{ github.repository }}", "microsoft/aspire-skills");
+  // Mirrors the real CLI for release PR #111: the diff endpoint rejects the
+  // oversized diff, while the paginated PR files endpoint still lists paths.
+  const gh = `gh() {
+  if [ "$1 $2" = "pr diff" ]; then
+    echo "could not find pull request diff: HTTP 406: Sorry, the diff exceeded the maximum number of lines (20000)" >&2
+    return 1
+  fi
+  case " $* " in
+    *" --paginate "*"repos/microsoft/aspire-skills/pulls/111/files"*)
+      printf '%s\\n' 'README.md' 'skills/aspire-init/SKILL.md'; return 0 ;;
+  esac
+  echo "unexpected gh invocation: $*" >&2
+  return 2
+}`;
+  const result = runBash(`${gh}\n${script}`, root, { GITHUB_OUTPUT: output.replaceAll("\\", "/") });
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(readFileSync(output, "utf8").replaceAll("\r\n", "\n"),
     "run_full=false\nhas_specs=true\nmatched=aspire-init\nexpected_runs=aspire-init\n");
 });
 
@@ -334,19 +421,21 @@ test("skill lint uses the evaluation workflows' pinned Vally version", () => {
   assert.match(script, /vally --version/);
 });
 
-for (const [name, skills, expectedStatus] of [
-  ["continues after the first failure", ["a-fail", "b-pass"], 1],
-  ["reports every failure", ["a-fail", "b-pass", "c-fail"], 1],
-  ["succeeds when all specs pass", ["a-pass", "b-pass"], 0],
+for (const [name, specs, expectedStatus] of [
+  ["continues after the first failure", ["a-fail/evals/eval.yaml", "b-pass/evals/eval.yaml"], 1],
+  ["reports every failure", ["a-fail/evals/eval.yaml", "b-pass/evals/eval.yaml", "c-fail/evals/eval.yaml"], 1],
+  ["succeeds when all specs pass", ["a-pass/evals/eval.yaml", "b-pass/evals/eval.yaml"], 0],
+  ["includes nested specs", ["a-pass/evals/eval.yaml", "a-pass/evals/safety/eval.yaml", "b-pass/evals/eval.yaml"], 0],
+  ["reports nested failures", ["a-pass/evals/eval.yaml", "a-pass/evals/safety-fail/eval.yaml", "b-pass/evals/eval.yaml"], 1],
   ["rejects an empty spec set", [], 1]
 ]) {
   test(`eval spec lint ${name}`, () => {
     const root = mkdtempSync(join(tmpdir(), "aspire-eval-lint-"));
     try {
-      for (const skill of skills) {
-        const directory = join(root, "skills", skill, "evals");
-        mkdirSync(directory, { recursive: true });
-        writeFileSync(join(directory, "eval.yaml"), "");
+      for (const spec of specs) {
+        const path = join(root, "skills", spec);
+        mkdirSync(dirname(path), { recursive: true });
+        writeFileSync(path, "");
       }
       const result = runBash(`
 cd -- "${basename(root)}" || exit 1
@@ -356,20 +445,20 @@ vally() {
     return 64
   fi
   printf 'checked:%s\\n' "$3"
-  [[ "$3" != skills/*-fail/evals/eval.yaml ]]
+  [[ "$3" != skills/*-fail/evals/eval.yaml && "$3" != */safety-fail/eval.yaml ]]
 }
 ${getStepRun(readWorkflow("skill-lint.yml"), "Validate eval specs")}
 `, dirname(root));
       assert.ifError(result.error);
       assert.equal(result.status, expectedStatus, result.stderr);
-      const expectedSpecs = skills.map(skill => `skills/${skill}/evals/eval.yaml`);
+      const expectedSpecs = specs.map(spec => `skills/${spec}`);
       assert.deepEqual(
         [...result.stdout.matchAll(/^checked:(.*)$/gm)].map(match => match[1]),
         expectedSpecs
       );
       assert.equal(result.stdout.match(/::group::Validating /g)?.length ?? 0, expectedSpecs.length);
       assert.equal(result.stdout.match(/::endgroup::/g)?.length ?? 0, expectedSpecs.length);
-      if (skills.length === 0) assert.match(result.stderr, /No eval specs found/);
+      if (specs.length === 0) assert.match(result.stderr, /No eval specs found/);
     }
     finally {
       rmSync(root, { recursive: true, force: true, maxRetries: 3 });

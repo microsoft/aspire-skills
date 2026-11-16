@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
     appHostIdentity,
+    assertLocalAppHostPath,
     assignNonConflictingGeneratedEdgeIds,
     confirmedSnapshotForReadback,
     DurableSnapshotStore,
@@ -12,6 +13,79 @@ import {
     resolveAppHostIdentity,
     scanTimeoutDelay,
 } from "../../extensions/aspireify/provider-state.mjs";
+import { assertLocalAppHostPath as assertAppHostsPath } from "../../extensions/aspire-apphosts/lib/app-model.mjs";
+
+const networkPaths = [
+    "\\\\server\\share\\AppHost.cs",
+    "//server/share/AppHost.cs",
+    "\\\\\\server\\\\share\\AppHost.cs",
+    "\\\\?\\UNC\\server\\share\\AppHost.cs",
+    "//?/uNc/server/share/AppHost.cs",
+    "\\\\.\\UNC\\server\\share\\AppHost.cs",
+    "\\??\\UNC\\server\\share\\AppHost.cs",
+    "\\\\?\\GLOBALROOT\\Device\\Mup\\server\\share\\AppHost.cs",
+    "\\Device\\LanmanRedirector\\server\\share\\AppHost.cs",
+    "\\\\?\\GLOBALROOT\\Device\\WebDavRedirector\\server\\share\\AppHost.cs",
+    "\\\\?\\GLOBALROOT\\GLOBAL??\\UNC\\server\\share\\AppHost.cs",
+    "\\\\?\\GLOBALROOT\\??\\UNC\\server\\share\\AppHost.cs",
+    "\\GLOBAL??\\UNC\\server\\share\\AppHost.cs",
+    "\\DosDevices\\UNC\\server\\share\\AppHost.cs",
+    "smb://server/share/AppHost.cs",
+    "cifs://server/share/AppHost.cs",
+    "nfs://server/share/AppHost.cs",
+    "file://server/share/AppHost.cs",
+];
+
+test("standalone canvas providers reject the same explicit network path forms", () => {
+    for (const guard of [assertLocalAppHostPath, assertAppHostsPath]) {
+        for (const path of networkPaths) {
+            assert.throws(() => guard(path), { code: "network_apphost_target" }, path);
+        }
+        for (const path of [
+            "C:\\repo\\AppHost.cs",
+            "\\\\?\\C:\\repo\\AppHost.cs",
+            "\\\\?\\Volume{local-volume}\\repo\\AppHost.cs",
+            "/repo/team\\tools/AppHost.cs",
+            "/outside-workspace/AppHost.cs",
+            "../another-repo/AppHost.cs",
+        ]) {
+            assert.doesNotThrow(() => guard(path), path);
+        }
+    }
+});
+
+test("network target rejection precedes realpath, including a network working directory", async () => {
+    let filesystemCalls = 0;
+    const options = {
+        platform: "win32",
+        cwd: "C:\\repo",
+        realpathImpl: async (path) => { filesystemCalls += 1; return path; },
+    };
+    for (const path of networkPaths) {
+        await assert.rejects(resolveAppHostIdentity(path, options), { code: "network_apphost_target" });
+    }
+    await assert.rejects(
+        resolveAppHostIdentity("AppHost.cs", { ...options, cwd: "\\\\server\\share" }),
+        { code: "network_apphost_target" },
+    );
+    assert.equal(filesystemCalls, 0);
+});
+
+test("resolved network identities are rejected without treating local aliases as a sandbox", async () => {
+    let filesystemCalls = 0;
+    await assert.rejects(
+        resolveAppHostIdentity("C:\\repo\\AppHost.cs", {
+            platform: "win32",
+            cwd: "C:\\repo",
+            realpathImpl: async () => {
+                filesystemCalls += 1;
+                return "\\\\server\\share\\AppHost.cs";
+            },
+        }),
+        { code: "network_apphost_target" },
+    );
+    assert.equal(filesystemCalls, 1, "local alias resolution is outside the pre-access syntax guarantee");
+});
 
 test("equivalent Windows AppHost paths use one domain", () => {
     const options = { platform: "win32", cwd: "C:\\work\\repo" };
@@ -22,16 +96,9 @@ test("equivalent Windows AppHost paths use one domain", () => {
     assert.equal(first.domainId, "c:\\work\\repo\\src\\apphost");
 });
 
-test("Windows UNC and device prefixes survive canonicalization", () => {
+test("Windows local device paths retain their canonical identity", () => {
     const options = { platform: "win32", cwd: "C:\\work" };
 
-    assert.deepEqual(
-        appHostIdentity("\\\\server\\share\\repo\\AppHost.cs", options),
-        {
-            appHostPath: "\\\\server\\share\\repo\\AppHost.cs",
-            domainId: "\\\\server\\share\\repo\\apphost.cs",
-        },
-    );
     assert.deepEqual(
         appHostIdentity("\\\\?\\C:\\repo\\AppHost.cs", options),
         {
@@ -39,6 +106,45 @@ test("Windows UNC and device prefixes survive canonicalization", () => {
             domainId: "\\\\?\\c:\\repo\\apphost.cs",
         },
     );
+});
+
+test("POSIX AppHost identities preserve literal backslashes", () => {
+    const options = { platform: "linux", cwd: "/repo" };
+    const literal = appHostIdentity("team\\tools/AppHost.cs", options);
+    const nested = appHostIdentity("team/tools/AppHost.cs", options);
+
+    assert.equal(literal.appHostPath, "/repo/team\\tools/AppHost.cs");
+    assert.equal(literal.domainId, literal.appHostPath);
+    assert.notEqual(literal.domainId, nested.domainId);
+    assert.deepEqual(appHostIdentity("./team//tools/../tools/AppHost.cs", options), nested);
+});
+
+test("distinct POSIX AppHosts keep separate durable snapshots when a directory contains a backslash", {
+    skip: process.platform === "win32",
+}, async (context) => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "aspireify-path-state-")));
+    context.after(() => rm(root, { recursive: true, force: true }));
+    const literalPath = join(root, "team\\tools", "AppHost.cs");
+    const nestedPath = join(root, "team", "tools", "AppHost.cs");
+    await mkdir(join(root, "team\\tools"));
+    await mkdir(join(root, "team", "tools"), { recursive: true });
+    await writeFile(literalPath, "// Literal backslash directory");
+    await writeFile(nestedPath, "// Nested directories");
+
+    const literal = await resolveAppHostIdentity(literalPath);
+    const nested = await resolveAppHostIdentity(nestedPath);
+    const workspace = join(root, "session");
+    const store = new DurableSnapshotStore(workspace);
+    const literalSnapshot = { appHostPath: literalPath, proposal: { resources: [{ id: "literal" }] } };
+    const nestedSnapshot = { appHostPath: nestedPath, proposal: { resources: [{ id: "nested" }] } };
+    await store.save(literal.domainId, literalSnapshot);
+    await store.save(nested.domainId, nestedSnapshot);
+
+    const reloaded = new DurableSnapshotStore(workspace);
+    assert.deepEqual(await reloaded.load(literal.domainId), literalSnapshot);
+    assert.deepEqual(await reloaded.load(nested.domainId), nestedSnapshot);
+    assert.equal(literal.appHostPath, literalPath);
+    assert.equal(nested.appHostPath, nestedPath);
 });
 
 test("real paths collapse symlink aliases before selecting a domain", async () => {

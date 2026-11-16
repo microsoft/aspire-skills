@@ -16,7 +16,7 @@ description: >-
 license: MIT
 metadata:
   author: Microsoft
-  version: "0.0.5"
+  version: "0.0.6"
 ---
 
 # Aspire Monitoring
@@ -97,8 +97,10 @@ aspire describe --format Json
 # ✅ When a resource you expect is missing, retry with --include-hidden
 aspire describe --include-hidden --format Json
 
-# ✅ Get endpoints from describe, not guessing ports
-ENDPOINT=$(aspire describe apiservice --format Json | jq -r '.endpoints[0].url')
+# ✅ Get endpoints from describe, not guessing ports. Wait first; jq -e fails when
+#    there is no external URL. JSON keeps AppHost order, not the https-first table order.
+aspire wait apiservice
+ENDPOINT=$(aspire describe apiservice --format Json | jq -er '[.resources[0].urls[]? | select(.isInternal | not) | .url][0] // empty')
 
 # ✅ Use --apphost <path> when multiple AppHosts exist
 aspire describe --apphost ./src/MyApp.AppHost/

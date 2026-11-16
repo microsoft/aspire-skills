@@ -227,11 +227,12 @@ For a release PR, verify:
   in that order, omitting empty sections and preserving published history.
 - Committed V1 and V2 catalogs match the shipped source. Dev retains these
   catalogs too; regenerate them whenever shipped source changes.
-- Tests, bundle builds and attestations, skills-only upload, and required checks
-  agree. Distinguish local evidence from CI results.
+- Tests, catalog and version checks, and required CI agree. Distinguish local
+  evidence from CI results.
 - Maintainer approval and merge authorize the publisher to tag the exact merged
-  main commit and publish matching changelog notes. Reruns preserve that tag and
-  those notes; no manual tag step or token-triggered follow-up job is needed.
+  main commit and create a source-only GitHub release with matching changelog
+  notes. Reruns preserve that tag and those notes; no manual tag step, generated
+  archive upload, or token-triggered follow-up job is needed.
 
 Backflow starts from current dev and merges main. Keep dev's next version,
 current changelog notes, and newer work, including non-version manifest changes;
