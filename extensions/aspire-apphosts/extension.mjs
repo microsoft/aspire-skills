@@ -63,6 +63,7 @@ const STREAM_MAX_FAILURES = 3;
 const BACKGROUND_LOG_DIR = join(tmpdir(), "aspire-apphosts-logs");
 const MAX_KEPT_BACKGROUND_LOGS = 10;
 const FAILED_BACKGROUND_LOG_PREFIX = "failed-";
+const ACTIVE_BACKGROUND_LOG_PREFIX = "active-";
 const CLI_TIMEOUT_MS = 30_000;
 const OPERATION_TIMEOUT_MS = 30 * 60_000;
 const GLOBAL_DESCRIBE_CONCURRENCY = 4;
@@ -83,6 +84,9 @@ const cli = createAspireCliRunner();
 const appHostOperations = new AppHostOperationCoordinator();
 const activeStreams = new Set();
 let backgroundLogFileSupported = true;
+// Optional describe-stream flags that older CLIs reject; each is dropped once a stream proves it unsupported.
+const streamOptionalFlags = new Set(["--include-disabled-commands", "--nologo"]);
+let orphanedLogSweep;
 let sessionRef;
 let sessionWorkingDirectory;
 
@@ -519,14 +523,41 @@ function isLsUnsupported(result) {
 }
 
 // Background polls and streams write CLI diagnostics to a temp file instead of ~/.aspire/logs.
-// Successful runs delete it; failures keep the newest few for troubleshooting.
+// Successful runs delete it; failures keep the newest few for troubleshooting. Active log names carry
+// the owning process id so logs orphaned by a provider that died mid-run can be reclaimed later.
 async function createBackgroundLogFile() {
     if (!backgroundLogFileSupported) return null;
     try {
         await mkdir(BACKGROUND_LOG_DIR, { recursive: true });
-        return join(BACKGROUND_LOG_DIR, `${randomUUID()}.log`);
+        orphanedLogSweep ??= sweepOrphanedBackgroundLogs();
+        await orphanedLogSweep;
+        return join(BACKGROUND_LOG_DIR, `${ACTIVE_BACKGROUND_LOG_PREFIX}${process.pid}-${randomUUID()}.log`);
     } catch {
         return null;
+    }
+}
+
+function processIsAlive(pid) {
+    if (pid === process.pid) return true;
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (error) {
+        return error?.code === "EPERM";
+    }
+}
+
+async function sweepOrphanedBackgroundLogs() {
+    try {
+        const pattern = new RegExp(`^${ACTIVE_BACKGROUND_LOG_PREFIX}(\\d+)-.+\\.log$`);
+        const names = await readdir(BACKGROUND_LOG_DIR);
+        await Promise.all(names.map((name) => {
+            const pid = Number(pattern.exec(name)?.[1]);
+            if (!pid || processIsAlive(pid)) return undefined;
+            return rm(join(BACKGROUND_LOG_DIR, name), { force: true }).catch(() => {});
+        }));
+    } catch {
+        // Reclaiming orphaned logs is best effort.
     }
 }
 
@@ -878,11 +909,23 @@ function ensureStreamCleanup() {
 }
 
 function describeStreamArgs(entry, record) {
-    const args = ["describe", "--follow", "--apphost", record.appHostPath, "--format", "Json", "--include-disabled-commands"];
+    const args = ["describe", "--follow", "--apphost", record.appHostPath, "--format", "Json"];
+    if (streamOptionalFlags.has("--include-disabled-commands")) {
+        args.push("--include-disabled-commands");
+    }
     if (entry.includeHidden) {
         args.push("--include-hidden");
     }
-    return [...args, "--non-interactive", "--nologo"];
+    args.push("--non-interactive");
+    if (streamOptionalFlags.has("--nologo")) {
+        args.push("--nologo");
+    }
+    return args;
+}
+
+function unsupportedStreamFlag(result) {
+    if (streamOptionalFlags.has("--nologo") && isNoLogoUnsupported(result)) return "--nologo";
+    return [...streamOptionalFlags].find((flag) => optionalFlagIsUnsupported(result, flag));
 }
 
 // `describe --follow` emits one JSON resource per line: a full burst first, then each change.
@@ -946,7 +989,9 @@ function projectStreamModel(state) {
         ...projectDescribePayload({ resources: [...state.resources.values()] }),
         stale: false,
         error: null,
-        compatibilityWarning: null,
+        compatibilityWarning: streamOptionalFlags.has("--include-disabled-commands")
+            ? null
+            : "This Aspire CLI version does not expose disabled resource commands.",
         lastSuccessfulAt: new Date().toISOString(),
     };
 }
@@ -1031,6 +1076,13 @@ async function startDescribeStream(entry, state) {
             state.model = null;
             if (logFile && !gotData && optionalFlagIsUnsupported({ error, stderr: stderrTail }, "--log-file")) {
                 backgroundLogFileSupported = false;
+                void discardBackgroundLogFile(logFile);
+                if (!entry.paused) requestStreamRefresh(entry);
+                return;
+            }
+            const unsupportedFlag = gotData ? undefined : unsupportedStreamFlag({ error, stderr: stderrTail });
+            if (unsupportedFlag) {
+                streamOptionalFlags.delete(unsupportedFlag);
                 void discardBackgroundLogFile(logFile);
                 if (!entry.paused) requestStreamRefresh(entry);
                 return;

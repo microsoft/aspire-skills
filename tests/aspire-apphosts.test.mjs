@@ -806,6 +806,11 @@ test("relativizeWorkspacePaths shows workspace paths relative to the workspace",
         relativizeWorkspacePaths("C:\\repo-other\\App.csproj and C:\\other\\App.csproj", workspace),
         "C:\\repo-other\\App.csproj and C:\\other\\App.csproj",
     );
+    assert.equal(
+        relativizeWorkspacePaths("/private/tmp/app/Program.cs and /tmp/app/Program.cs", "/tmp/app"),
+        "/private/tmp/app/Program.cs and Program.cs",
+        "the workspace root only matches where a path starts",
+    );
 });
 
 test("parseLegacyPipelineSteps supports Aspire 13.5 available-step output", () => {

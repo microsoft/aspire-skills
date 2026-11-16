@@ -621,7 +621,8 @@ export function relativizeWorkspacePaths(value, workspaceRoot) {
     const root = String(workspaceRoot ?? "").replace(/[\\/]+$/, "");
     if (!root) return text;
     const flags = process.platform === "win32" ? "gi" : "g";
-    const rootPattern = root.split(/[\\/]+/).map(escapeRegExp).join("[\\\\/]");
+    // The left boundary stops a root such as /tmp/app from matching inside /private/tmp/app.
+    const rootPattern = `(?<![\\w.~-])${root.split(/[\\/]+/).map(escapeRegExp).join("[\\\\/]")}`;
     return text
         .replace(new RegExp(`${rootPattern}[\\\\/]+`, flags), "")
         .replace(new RegExp(`${rootPattern}(?![A-Za-z0-9._-])`, flags), ".");
@@ -2192,6 +2193,8 @@ export function streamProcess(command, args, {
         child.stdout?.setEncoding("utf8");
         child.stderr?.setEncoding("utf8");
         child.stdout?.on("data", (chunk) => {
+            // A rejected stream is already failing; output buffered before the kill lands must not be trusted.
+            if (rejectedLine) return;
             pending += chunk;
             let index;
             while ((index = pending.indexOf("\n")) >= 0) {

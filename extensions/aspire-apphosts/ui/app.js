@@ -144,6 +144,7 @@ let activeCommandId = null;
 let requestCount = 0;
 let commandRunning = false;
 let runningCommandId = null;
+let pendingCommandRequest = null;
 let actionMenuNodeId = null;
 let actionMenuTrigger = null;
 let pipelineAppHostId = null;
@@ -664,7 +665,7 @@ function trayAction(action, node) {
         title: accessibleLabel,
         "aria-label": accessibleLabel,
         disabled: !enabled,
-        ...(primary ? { dataset: { apphostPrimary: "true" } } : {}),
+        dataset: { focusKey: `tray:${action}`, ...(primary ? { apphostPrimary: "true" } : {}) },
         on: { click: () => requestNodeAction(action, node) },
     }, [
         svgIcon(definition.icon, 14),
@@ -780,6 +781,7 @@ function renderAppHostActionTray(node) {
             "aria-label": `More operations for ${node.presentationLabel || node.label}`,
             "aria-haspopup": "menu",
             "aria-expanded": "false",
+            dataset: { focusKey: "host-more" },
             on: { click: (event) => openActionMenu(node, event.currentTarget, overflow) },
         }, [svgIcon("more", 14)]),
     ]);
@@ -840,7 +842,7 @@ function detailChip(node, { open = false, command = false, combineStatus = false
         ...(interactive ? {
             type: "button",
             ...(command ? { "aria-pressed": selected } : {}),
-            dataset: { nodeId: node.id },
+            dataset: { nodeId: node.id, focusKey: `chip:${node.id}` },
             on: {
                 click: () => {
                     if (open) {
@@ -1049,7 +1051,8 @@ function handleRosterKey(event) {
 }
 
 function handleInspectorKey(event) {
-    if (event.key !== "Escape" || !selectedResourceId || event.target?.closest?.(".command-form")) {
+    // Escape inside a command panel closes only that panel through the document handler.
+    if (event.key !== "Escape" || !selectedResourceId || event.target?.closest?.("[data-command-panel]")) {
         return;
     }
     event.preventDefault();
@@ -1298,6 +1301,7 @@ function endpointRow(endpoint) {
                 type: "button",
                 text: url || endpoint.label,
                 title: `Open ${url || endpoint.label}`,
+                dataset: { focusKey: `endpoint-url:${endpoint.id}` },
                 on: { click: () => void executeNodeAction("endpoint", endpoint) },
             })
             : element("span", {
@@ -1311,7 +1315,7 @@ function endpointRow(endpoint) {
                 type: "button",
                 title: `Open ${endpoint.label} endpoint`,
                 "aria-label": `Open ${endpoint.label} endpoint${url ? ` at ${url}` : ""}`,
-                dataset: { nodeId: endpoint.id },
+                dataset: { nodeId: endpoint.id, focusKey: `endpoint-open:${endpoint.id}` },
                 on: { click: () => void executeNodeAction("endpoint", endpoint) },
             }, [svgIcon("link", 13)]),
             element("button", {
@@ -1319,6 +1323,7 @@ function endpointRow(endpoint) {
                 type: "button",
                 title: copyLabel,
                 "aria-label": copyLabel,
+                dataset: { focusKey: `endpoint-copy:${endpoint.id}` },
                 on: { click: () => void copyEndpointUrl(endpoint) },
             }, [svgIcon("copy", 13)]),
         ])] : []),
@@ -1790,6 +1795,11 @@ function renderHostStage(appHost, hosts) {
         presentationLabel: duplicateHostLabel(appHost, modelState?.roots ?? hosts),
     };
     const entries = flattenResources(appHostResources(appHost));
+    if (!entries.length && selectedResourceId) {
+        // The empty board has no inspector or Back button, so keep the narrow layout out of inspection.
+        selectedResourceId = null;
+        inspectorReturnFocusId = null;
+    }
     const visible = entries.filter(resourceMatches);
     const notices = (appHost.children ?? [])
         .filter((child) => child.kind === "error" || child.kind === "warning");
@@ -2563,6 +2573,8 @@ async function submitResourceCommand(node, form) {
             }
         }
     }
+    const request = {};
+    pendingCommandRequest = request;
     commandRunning = true;
     runningCommandId = node.id;
     updateBusy();
@@ -2605,8 +2617,12 @@ async function submitResourceCommand(node, form) {
         commandResults.set(node.id, { ok: false, error: error.message });
         showToast(error.message, true);
     } finally {
-        commandRunning = false;
-        runningCommandId = null;
+        // A newer submission owns the running state once it starts; an older response must not clear it.
+        if (pendingCommandRequest === request) {
+            pendingCommandRequest = null;
+            commandRunning = false;
+            runningCommandId = null;
+        }
         updateBusy();
         renderTree();
     }
@@ -2996,7 +3012,8 @@ function connectEvents() {
             return;
         }
         if (message.type === "command") {
-            commandRunning = message.phase === "started";
+            // The provider reports completion before its refresh finishes, so a local request still owns the busy state.
+            commandRunning = message.phase === "started" || pendingCommandRequest !== null;
             if (message.phase === "completed" && message.result) {
                 const commandNode = findCommandNode(
                     message.result.appHostId,
@@ -3125,7 +3142,8 @@ document.addEventListener("keydown", (event) => {
     }
 });
 document.addEventListener("scroll", (event) => {
-    if (event.target !== els.actionMenu) {
+    // Output auto-scroll moves only its own log, so it must not dismiss an open menu.
+    if (event.target !== els.actionMenu && !els.outputPanel?.contains(event.target)) {
         hideActionMenu();
     }
 }, true);

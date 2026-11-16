@@ -76,8 +76,8 @@ bounded request bodies.
   root and its immediate child directories, preserving the actual file spelling.
 - Global mode with every running machine AppHost available from the same
   switcher and a bounded describe fanout of four.
-- A responsive resource board that removes explorer-style nesting while
-  preserving parent ownership.
+- A responsive resource board with a nested resource roster beside a resource
+  inspector. Narrow panels show one pane at a time with a Back control.
 - The roster has collapsible **Resources** and **Parameters** sections. Parameters
   appear only when the AppHost declares them, and parameter values are never
   shown. Parameters with a missing value count toward resources that need
@@ -88,20 +88,17 @@ bounded request bodies.
   opens that resource.
 - A resource in the Waiting state names the resources it is waiting for in its
   roster row.
-- Resource cards keep natural content-driven heights instead of stretching to
-  match neighboring cards.
-- Team App-style resource cards with compact labeled Endpoints and Health rows,
+- The resource inspector has compact labeled Endpoints and Health rows,
   endpoint name plus sanitized host/port, natural-width semantic health pills, and
-  a distinct unlabeled command footer inside the resource that owns them.
+  the commands the selected resource owns.
 - Endpoint links prefer GitHub Copilot's registered integrated browser and use
   the default system browser in CLI hosts without that canvas. They expose a
   separate copy-URL control. Browser discovery and launch failures remain visible
   and do not trigger a fallback. System-browser requests acknowledge a detached
   opener without waiting for the browser to exit; later launcher failures appear
   as error notifications and in the provider log.
-- Resource overflow opens authenticated Dashboard details, console logs,
-  structured logs, traces, and metrics without adding a separate diagnostics
-  row to every card.
+- The resource inspector opens authenticated Dashboard details, console logs,
+  structured logs, traces, and metrics.
 - Resources that explicitly advertise terminal support can open an attached
   terminal canvas.
 - Sanitized AppHost or resource context can be added to the Copilot composer as
@@ -124,7 +121,8 @@ bounded request bodies.
   cannot silently hide preserved defaults. The provider validates and converts
   the displayed value before execution.
 - Explicit Run, Stop, Deploy, Publish, and pipeline-step actions, with blocked
-  operations explained in place and high-impact actions confirmed inline.
+  operations explained in place. Deploy and Publish are confirmed inline; Stop
+  runs immediately.
 - **View dashboard** opens the authenticated Aspire Dashboard in the registered
   integrated browser, or the default system browser when the host has no browser
   canvas.

@@ -148,6 +148,13 @@ class TestElement {
         return this.parentElement?.closest(selector) ?? null;
     }
 
+    contains(node) {
+        for (let current = node; current; current = current.parentElement) {
+            if (current === this) return true;
+        }
+        return false;
+    }
+
     querySelectorAll(selector) {
         const alternatives = selector.split(",").map((part) => part.trim().split(/\s+(?=(?:[^"]*"[^"]*")*[^"]*$)/));
         const found = [];
@@ -427,6 +434,60 @@ test("commands without inputs run directly from the chip without opening the com
     await renderer.respond(run, { ok: true });
     const settled = renderer.document.querySelector(`[data-node-id="${commandId}"]`);
     assert.equal(settled.classList.contains("is-running"), false);
+    assert.equal(renderer.document.activeElement, settled, "focus follows the chip across rerenders");
+});
+
+test("a command stays running until its own request settles even after the provider reports completion", async () => {
+    const renderer = createRenderer();
+    await renderer.respond(renderer.request("/api/state"), { state: commandSnapshot(1, []) });
+    clickCommand(renderer);
+    await settle();
+    const run = renderer.request("/api/command");
+    await renderer.push({ type: "command", phase: "completed",
+        result: { ok: true, appHostId: "host-a", resourceName: "api", commandName: "inspect" } });
+    const chip = () => renderer.document.querySelector(`[data-node-id="${commandId}"]`);
+    assert.ok(chip().classList.contains("is-running"), "the provider refresh is still pending");
+    clickCommand(renderer);
+    await settle();
+    assert.equal(renderer.requests.filter((request) => request.path === "/api/command").length, 1,
+        "a second run cannot start while the first request is outstanding");
+    await renderer.respond(run, { ok: true });
+    assert.equal(chip().classList.contains("is-running"), false);
+});
+
+test("Escape in the secret warning closes only the command panel", async () => {
+    const renderer = await boot();
+    const fields = [...inputs(), { name: "token", label: "Token", inputType: "SecretText" }];
+    await renderer.push({ type: "state", state: commandSnapshot(2, fields) });
+    clickCommand(renderer);
+    await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
+    const target = button(renderer.document.body, "Continue");
+    const escape = { key: "Escape", target };
+    renderer.document.querySelector(".inspector-pane").dispatch("keydown", escape);
+    renderer.document.dispatch("keydown", escape);
+    assert.equal(renderer.document.querySelector("[data-command-panel]"), null);
+    assert.ok(renderer.document.querySelector('[data-inspector-resource="host-a:resource:api"]'), "the resource stays selected");
+});
+
+test("output auto-scroll does not dismiss an open menu", async () => {
+    const renderer = await boot();
+    renderer.document.querySelector('[data-focus-key="host-more"]').click();
+    const menu = renderer.document.getElementById("action-menu");
+    assert.equal(menu.hidden, false);
+    renderer.document.dispatch("scroll", { target: renderer.document.getElementById("output-text") });
+    assert.equal(menu.hidden, false);
+    renderer.document.dispatch("scroll", { target: renderer.document.getElementById("model-view") });
+    assert.equal(menu.hidden, true);
+});
+
+test("an AppHost that loses every resource leaves inspection so narrow layouts keep their controls", async () => {
+    const renderer = await boot();
+    selectApi(renderer);
+    assert.ok(renderer.document.body.classList.contains("is-inspecting"));
+    const empty = snapshot(2);
+    empty.roots[0].children[0].children = [];
+    await renderer.push({ type: "state", state: empty });
+    assert.equal(renderer.document.body.classList.contains("is-inspecting"), false);
 });
 
 test("a running AppHost without a dashboard URL explains why Open dashboard is unavailable", async () => {

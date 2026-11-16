@@ -26,6 +26,8 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   when you ask to aspireify, re-scan, or re-propose the whole resource graph.
 - AppHosts now reports an error when it cannot switch to the requested AppHost.
 - Redesigned the AppHosts canvas as a compact companion to the Aspire Dashboard.
+  An **Output** panel streams AppHost command output, and **Stop** now runs without
+  a confirmation step.
 - AppHosts no longer has a Relationships tab. The resource inspector now lists
   **Depends on** and **Used by**, waiting resources name what they are waiting for,
   and parameters appear in their own collapsible section without showing values.

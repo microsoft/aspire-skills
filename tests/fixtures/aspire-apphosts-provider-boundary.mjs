@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import * as http from "node:http";
 import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -1418,6 +1419,88 @@ test("failed background logs are kept under a bounded prefix without touching ac
     });
     assert.ok(names.includes("active.log"), "pruning must not delete a log that is still being written");
     assert.ok(!names.includes("failed-old-0.log"), "the oldest failed log is pruned first");
+});
+
+test("logs orphaned by a dead provider are reclaimed while live providers keep theirs", async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "aspire-logs-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const logDirectory = join(root, "aspire-apphosts-logs");
+    await mkdir(logDirectory);
+    const orphaned = "active-999999999-orphaned.log";
+    const live = `active-${process.pid}-live.log`;
+    await writeFile(join(logDirectory, orphaned), "crashed run");
+    await writeFile(join(logDirectory, live), "in progress");
+    const h = await harness(t, { tmpDirectory: root });
+    await h.open();
+    let names = [];
+    await waitUntil(async () => {
+        names = await readdir(logDirectory);
+        return !names.includes(orphaned);
+    });
+    assert.ok(names.includes(live), "a running provider's log is never reclaimed");
+});
+
+test("streamProcess ignores output that arrives after an oversized line", async () => {
+    const modelUrl = new URL("../../extensions/aspire-apphosts/lib/app-model.mjs", import.meta.url);
+    const context = createContext({ URL, Buffer, process, console, setTimeout, clearTimeout });
+    const children = [];
+    const fakeChildProcess = {
+        spawn() {
+            const child = Object.assign(new EventEmitter(), { kill() {} });
+            child.stdout = Object.assign(new EventEmitter(), { setEncoding() {} });
+            child.stderr = Object.assign(new EventEmitter(), { setEncoding() {} });
+            children.push(child);
+            return child;
+        },
+    };
+    const module = new SourceTextModule(await readFile(modelUrl, "utf8"), {
+        context, identifier: modelUrl.href,
+        initializeImportMeta(meta) { meta.url = modelUrl.href; },
+    });
+    await module.link(async (specifier) => {
+        const exports = specifier === "node:child_process" ? fakeChildProcess : await import(specifier);
+        return new SyntheticModule(Object.keys(exports), function () {
+            for (const [name, value] of Object.entries(exports)) this.setExport(name, value);
+        }, { context });
+    });
+    await module.evaluate();
+    const lines = [];
+    let result;
+    module.namespace.streamProcess(process.execPath, [], {
+        maxLineBytes: 64,
+        onLine: (line) => lines.push(line),
+        onExit: (exit) => { result = exit; },
+    });
+    await waitUntil(() => children.length === 1);
+    const [child] = children;
+    child.stdout.emit("data", `${"x".repeat(256)}\n`);
+    // Output already in the pipe still arrives after kill() and must not be parsed.
+    child.stdout.emit("data", '{"n":1}\n{"tail":true}');
+    child.emit("close", 0);
+
+    assert.deepEqual(lines, []);
+    assert.match(result.error, /exceeded 64 bytes/);
+});
+
+test("describe streams drop optional flags an older CLI rejects and keep streaming", async (t) => {
+    const streams = [];
+    const h = await harness(t, {
+        stream: (args, options) => {
+            streams.push({ args, ...options });
+            return { kill() {} };
+        },
+    });
+    await h.open();
+    await waitUntil(() => streams.length > 0);
+    const [first] = streams;
+    const path = first.args[first.args.indexOf("--apphost") + 1];
+    assert.ok(first.args.includes("--include-disabled-commands"));
+    first.onExit({ code: 1, stderrTail: "Unrecognized command or argument '--include-disabled-commands'." });
+    await waitUntil(() => streams.some((stream) => stream !== first
+        && stream.args[stream.args.indexOf("--apphost") + 1] === path));
+    const retry = streams.findLast((stream) => stream.args[stream.args.indexOf("--apphost") + 1] === path);
+    assert.equal(retry.args.includes("--include-disabled-commands"), false);
+    assert.ok(retry.args.includes("--nologo"), "only the rejected flag is dropped");
 });
 
 test("closing a panel does not cancel its already-started explicit operation", { timeout: 10_000 }, async (t) => {
