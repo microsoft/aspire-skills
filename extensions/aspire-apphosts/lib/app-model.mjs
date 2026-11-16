@@ -2145,6 +2145,12 @@ export function streamProcess(command, args, {
     let exited = false;
     let pending = "";
     let stderrTail = "";
+    let rejectedLine = false;
+    const rejectLine = () => {
+        pending = "";
+        rejectedLine = true;
+        try { child.kill(); } catch { /* already exited */ }
+    };
     const exit = (result) => {
         if (exited) return;
         exited = true;
@@ -2183,15 +2189,13 @@ export function streamProcess(command, args, {
                 const line = pending.slice(0, index);
                 pending = pending.slice(index + 1);
                 if (Buffer.byteLength(line, "utf8") > maxLineBytes) {
-                    pending = "";
-                    try { child.kill(); } catch { /* already exited */ }
+                    rejectLine();
                     return;
                 }
                 emit(line);
             }
             if (Buffer.byteLength(pending, "utf8") > maxLineBytes) {
-                pending = "";
-                try { child.kill(); } catch { /* already exited */ }
+                rejectLine();
             }
         });
         child.stderr?.on("data", (chunk) => {
@@ -2203,7 +2207,10 @@ export function streamProcess(command, args, {
         child.once("close", (code) => {
             if (pending) emit(pending);
             pending = "";
-            exit({ code, error: undefined });
+            exit({
+                code,
+                error: rejectedLine ? `Aspire CLI stream output line exceeded ${maxLineBytes} bytes.` : undefined,
+            });
         });
     }, (error) => {
         exit({ code: null, error: redactText(`Failed to launch Aspire CLI: ${error.message}`, 8000) });

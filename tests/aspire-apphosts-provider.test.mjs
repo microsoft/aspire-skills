@@ -198,7 +198,7 @@ test("streamProcess rejects oversized complete lines before publishing them", as
     });
 
     assert.deepEqual(lines, []);
-    assert.notEqual(result.code, 0);
+    assert.match(result.error, /exceeded 64 bytes/, "the rejection is reported even if the child already exited cleanly");
 });
 
 test("interrupted output redacts a complete self-overlapping secret before considering partial tails", async () => {
