@@ -153,9 +153,9 @@ heading; `release/<version>` PRs finalize the notes for the selected snapshot.
 ## 8. Project-local override pattern
 
 Every skill's SKILL.md contains a "Project-Local Skill Override" section that defers to
-`.agents/skills/<skill>/SKILL.md` when present (installed by `aspire agent init` /
-`aspire init`). This pattern **must survive** edits — the in-plugin skill must
-never silently shadow the project-local copy.
+`.agents/skills/<skill>/SKILL.md` when Aspire 13.6 or earlier installed it. The in-plugin skill
+must never silently shadow the project-local copy on those versions. On Aspire 17.0 and
+later, the section treats copies as stale and suggests `aspire doctor`.
 
 **Severity if a PR removes or weakens the deference:** `blocking`. The plugin's safety
 guardrails apply even when project-local skills are active, but everything else defers.

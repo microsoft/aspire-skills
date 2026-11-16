@@ -111,8 +111,8 @@ stimuli:
       umbrella aspire router for specialist-owned work, invoke both the router
       and the owner.
       Should I use aspire agent init for better AI agent support in this Aspire
-      project? Give read-only advice on what project-local guidance that command
-      generates and covers. This is Aspire-specific project guidance, not Copilot
+      project? Give read-only advice on what Aspire agent guidance that command
+      sets up and covers. This is Aspire-specific project guidance, not Copilot
       cloud-agent, CI runner, or copilot-setup-steps.yml configuration. Do not
       generate files, install tools or run setup commands.
     tags: { priority: p1, area: recommendation }
@@ -122,7 +122,7 @@ stimuli:
         - { src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs, dest: csharp-apphost/MyApp.AppHost/Program.cs }
         - { src: ../../../evals/csharp-apphost/aspire.config.json, dest: csharp-apphost/aspire.config.json }
     rubric:
-      - The response recommends aspire agent init for project-local Aspire skills, not generic Copilot CI or cloud-agent setup.
+      - The response recommends aspire agent init for Aspire agent skills, not generic Copilot CI or cloud-agent setup.
       - The response explains richer C# AppHost editing, TypeScript AppHost and investigation/diagnostics guidance.
       - Guidance is sufficient; generating files or executing setup is neither required nor permitted.
     graders:
@@ -177,7 +177,7 @@ stimuli:
       files: *csharp_apphost
     rubric:
       - The response checks the Aspire CLI version before choosing a command.
-      - For Aspire 13.6 or later it recommends standalone aspire agent init --mcp, keeping any existing --skills or --skill-locations choices.
+      - For Aspire 13.6 or later it recommends standalone aspire agent init --mcp, keeping any agent setup flags the user already chose.
       - For Aspire 13.5 it explains there is no --mcp flag and the MCP option must be selected in interactive aspire agent init.
       - The response does not claim aspire new, aspire init or plain aspire agent init configure MCP by default, and does not reference the removed dashboard MCP server or ASPIRE_DASHBOARD_MCP_ENDPOINT_URL as a current option.
     graders:

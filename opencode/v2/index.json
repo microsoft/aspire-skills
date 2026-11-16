@@ -2,7 +2,7 @@
   "skills": [
     {
       "name": "aspire",
-      "version": "sha512-66f8b8f6bbef0c0a51f8c7eb17f8f24d1cde547fd17dda42db1b33aaa59c129ba3f96c14e448cfb6e8fc816947a9d84b3545ad1eaa2db8165f536d15977d08b3",
+      "version": "sha512-d745008ba7016359ed9df443e919052c9f3c345c4dd19a6ff97c208d60b921a0b7c6e7fa2d71faac3a9d2d9dbe63513319ddb7e84c3a5769cb8ed9ec7ebdd77c",
       "files": [
         "aspire.md",
         "references/aspire-13-3-breaking-changes.md",
@@ -11,7 +11,7 @@
     },
     {
       "name": "aspire-deployment",
-      "version": "sha512-3c99432de4e8b9be178dae48ce06e398c7de716e43d27278264e1f0469fb26d9d8d1a0bcfd5dc5f4e89f94137b9d6e0a5c6c5c1b54dd83a7a2c68daf176e7423",
+      "version": "sha512-437e71c2d5a26366c7eaee62b4281d4462f0e88a15bf832dd8de1d9ee6eb9de46c5e902fd170e494366546839a8fb995d545a858140750b42eed8ec87568db04",
       "files": [
         "aspire-deployment.md",
         "references/aws.md",
@@ -27,7 +27,7 @@
     },
     {
       "name": "aspire-init",
-      "version": "sha512-43ecf6dd808ac4e567ac6b3cdd3f3a1302a36acd54a4f4420b63f4b5811f9d961375a5ea6d67932bb62d84e7c94ea652bbcf3a1dd905399376c2e89ef0a05f0c",
+      "version": "sha512-58f174050a6ddbd757d644e1a095970fc76a7ef7dff81acdcfc91010a44b2b81b46810bce922fe7032730ed70b3fdec1b1d6369c4e256701d90df53eec4dd788",
       "files": [
         "aspire-init.md",
         "references/init-workflow.md",
@@ -36,7 +36,7 @@
     },
     {
       "name": "aspire-monitoring",
-      "version": "sha512-761a6e0ae1ca96ac1a2303e543cf2988013e7fbbc19e5e37a37a90abe0581a48debb47f0f6f893767ecf5cb30c04fb51ed6a23e471e9cd4c05db6a88b687f2ec",
+      "version": "sha512-209aaf62981ad41f48de5b0aa3f155165a855ebba50d995065d7c8749098a9480ec7ee7cb27ae327d8ca78eb4004a4e8cf802b40af6bbf60bd300aa6ca8c92e6",
       "files": [
         "aspire-monitoring.md",
         "references/diagnostics-bridge.md",
@@ -46,7 +46,7 @@
     },
     {
       "name": "aspire-orchestration",
-      "version": "sha512-ec4f537eaf30a368ddacb0f6a5dbdd7928f2f7c77b167e25b2390bbf13659c381be01b5b4c4897b474f5913d816d59da794d30fe5152e49eaacd79399a17f714",
+      "version": "sha512-f153d0c3a6f771c95040128739c1a9121272e1646378acb624a7b9f209a48168c2e0dc9fec585ce27721f17ecb87fccbd408b4181c34305a7821003ce15f6401",
       "files": [
         "aspire-orchestration.md",
         "references/agent-workflows.md",
@@ -58,7 +58,7 @@
     },
     {
       "name": "aspire-project-v2-migration",
-      "version": "sha512-3cb16fdda017dc3d46ebfbbba4d7313a34c39c61131fb2ffc50f5b4dbea4154f2b0556ba924f179b23c19b44040c31d565380f7f11b85e9c21b32b1518869f2c",
+      "version": "sha512-f6f6058581d2805746b32922b268042a3ed9027ec2874fc44e4304499d195e836f6434288f380de2f24261db2a661f97fe3b77689df483584ed22cd39fa08108",
       "files": [
         "aspire-project-v2-migration.md",
         "references/compatibility-and-validation.md",
@@ -78,7 +78,7 @@
     },
     {
       "name": "aspireify",
-      "version": "sha512-bc3f7983c9c3f6c12afeea7f0675a82c4bdf34a8aa395fc56ad9a57f7e1b2553213935bb6be74e7863a6ab4486a5ae6906fec4f1c7f016a68efa6b3d6511f2ae",
+      "version": "sha512-21f96254e6d8b5a0626aa1f4b552598e50b0b5d45f493eb0d6628a91474b00e80d09802c5a70ef94c2667ae5bd9c0cef3de1295ad766b695f565b0c0b47e66ab",
       "files": [
         "aspireify.md",
         "references/apphost-wiring.md",

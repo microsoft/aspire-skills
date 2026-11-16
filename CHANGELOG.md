@@ -17,7 +17,11 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 
 ### Changed
 - Clarified Aspire 17 agent setup, source updates, version pins, and recovery when
-  the Aspire guidance is remote rather than copied into the project.
+  the Aspire guidance is remote rather than copied into the project. The `aspire`
+  router now separates copied skills from Aspire 17.0 source registration and
+  explains client reloads. Project-local skill overrides now apply to copies from Aspire
+  13.6 and earlier. On 17.0 and later, skills treat copies as stale and point to
+  `aspire doctor` cleanup.
 - Removed Community Toolkit guidance from Aspireify and orchestration. Go services use
   the first-party `Aspire.Hosting.Go` integration (`AddGoApp`); resource wiring now
   prefers first-party packages and falls back to raw executables or containers.

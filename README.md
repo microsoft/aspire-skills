@@ -41,18 +41,13 @@ Choose the path that matches your agent host.
 Aspire's first-party agent setup configures detected agent environments with Aspire guidance.
 Aspire MCP server configuration is separate and opt-in.
 
-`aspire new` and `aspire init` offer agent setup without MCP configuration.
-In Aspire 13.6, this setup preselects recommended repository-local skills,
-including `aspireify`.
+In Aspire 13.6 and later, `aspire new` and `aspire init` offer agent setup
+without MCP. Standalone `aspire agent init` offers MCP, off by default, and
+non-interactive runs configure it only when you pass `--mcp`.
 
-In Aspire 17.0 and later, agent setup lets you choose which agent clients,
-skills, and CLI tools to configure. You can choose project-specific settings or
-global settings shared across projects. The CLI registers the selected sources
-in agent settings; it does not download their content. Agent clients fetch and
-update plugin or catalog content instead of receiving copied skill files.
-
-Standalone `aspire agent init` also offers MCP configuration, which is off by
-default. Non-interactive runs configure MCP only when you pass `--mcp`.
+Aspire 13.6 preselects the recommended skills, including `aspireify`, and copies
+them into agent skill directories. Aspire 17.0 and later instead register skill
+sources in agent settings for the project or globally.
 
 **Create a new Aspire app** and opt into agent guidance when prompted:
 
@@ -78,29 +73,19 @@ aspire agent init
 aspire agent init --scope project
 ```
 
-Use `--scope global` for settings shared across projects. For update options, see
+Use `--scope global` to share settings across projects. For update options, see
 [Automatic updates and version pinning](#automatic-updates-and-version-pinning).
 
-The official [`microsoft/aspire-skills` repository](https://github.com/microsoft/aspire-skills)
-is the default source. Workspace or global `skillSources` settings can add other
-plugin repositories or skill catalogs, override the default source, or disable it.
-Review every configured repository and catalog before enabling remote skills.
-Setup may omit details for the built-in `default` source, so check project and
-global `skillSources` settings for overrides.
+The default source is the official
+[`microsoft/aspire-skills` repository](https://github.com/microsoft/aspire-skills).
+Project or global `skillSources` settings can add, override, or disable sources.
+Review each source before you enable it.
 
-Existing local Aspire skill files may take precedence over skills loaded from
-remote sources.
+Aspire skills copied by older CLIs can take precedence over remote skills. Run
+`aspire doctor` to find these copies and get guidance on removing them.
 
-Older Aspire CLI versions may have copied Aspire skills into agent skill
-directories. If your Aspire 17.0 CLI supports `--remove-skill-copies`, setup
-offers to remove copies that the selected Aspire source replaces. The prompt
-defaults to keeping them; non-interactive runs also keep them unless you pass
-`--remove-skill-copies`. Pass `--remove-skill-copies=false` to keep them without
-a prompt. The CLI leaves unrelated skills alone.
-
-In Aspire 13.6, run `aspire agent init` interactively to select the bundled
-Aspire skills and installation locations. Aspire 13.6 has no `--agents` or
-`--scope` flags and does not register remote plugins or skill catalogs.
+Aspire 13.6 has no `--scope` or `--agents` flags. Run `aspire agent init`
+interactively to choose bundled skills and locations.
 
 **Configure the Aspire MCP server** only when you want it (Aspire 13.6+):
 
@@ -288,8 +273,8 @@ In that command, `-a github-copilot` selects the target agent, `-g` installs glo
 
 The Aspire CLI registers skill sources but does not fetch or update their
 content. Agent clients handle acquisition and updates. Aspire preserves matching
-registrations and existing client-side pins when you run `aspire agent init`;
-re-running the command does not move a pin to a newer version.
+registrations and existing client-side pins when you run `aspire agent init`.
+Re-running the command does not move a pin to a newer version.
 
 If your agent client supports automatic updates, keep them enabled to receive
 security and bug fixes.

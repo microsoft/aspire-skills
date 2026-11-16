@@ -40,6 +40,10 @@ https://aspire.dev/reference/cli/commands/aspire-new/
 | `--non-interactive` | **Required for agent execution.** Disables prompts and spinners |
 | `--nologo` | Suppress startup banner / telemetry notice |
 | `--suppress-agent-init` | Skip the post-create prompt to configure AI agent environments |
+| `--skills` | Comma-separated skills, `all`, or `none` |
+| `--skill-locations` | Aspire 13.6 and earlier. Comma-separated agent skill locations, `all`, or `none` |
+| `--agents` | Aspire 17.0 and later. Comma-separated agent clients to configure |
+| `--scope` | Aspire 17.0 and later. `project` (default) or `global` |
 | `-l, --log-level` | `Critical`, `Debug`, `Error`, `Information`, `None`, `Trace`, `Warning` |
 
 ## Template-Specific Options

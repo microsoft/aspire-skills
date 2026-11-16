@@ -225,8 +225,13 @@ The Aspire CLI talks to a *running AppHost* through a local backchannel socket a
 
 ## Project-Local Skill Routing
 
-If `.agents/skills/aspire/SKILL.md` exists (from `aspire agent init`), see its
-`references/monitoring.md` for deeper telemetry workflow guidance.
+If `.agents/skills/aspire/SKILL.md` exists, check `aspire --version`.
+
+- **Aspire 13.6 and earlier:** `aspire agent init` installed it. See its
+  `references/monitoring.md` for deeper telemetry workflow guidance.
+- **Aspire 17.0 and later:** Aspire registers this plugin instead, so the copy is stale
+  unless the user maintains it. If it is stale, use this skill instead. Tell the user the
+  copy is stale and suggest running `aspire doctor` for an actionable fix.
 
 ## References
 

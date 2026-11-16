@@ -57,8 +57,11 @@ for the merged API baseline and publishing boundaries.
 
 ## Project-Local Skill Override
 
-If `.agents/skills/aspire-project-v2-migration/SKILL.md` exists, warn the user and
-defer to that project-local skill while retaining these safety gates.
+If `.agents/skills/aspire-project-v2-migration/SKILL.md` exists, check `aspire --version`.
+On Aspire 13.6 and earlier, warn the user and defer to that project-local skill while
+retaining these safety gates. On Aspire 17.0 and later, the copy is stale unless the user
+maintains it. If it is stale, use this skill instead. Tell the user the copy is stale and
+suggest running `aspire doctor` for an actionable fix.
 
 ## Workflow
 

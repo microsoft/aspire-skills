@@ -54,13 +54,17 @@ aspire init --language go     # Aspire 17.0 or later
 
 ## After `aspire init` — Hand Off to `aspireify`
 
-`aspire init` drops a minimal AppHost skeleton + AppHost configuration into the
-repo and installs the **`aspireify`** agent skill alongside it. `aspire init` itself does not
-wire resources, projects, or integrations. Hand off the wiring step to:
+`aspire init` drops a minimal AppHost skeleton and AppHost configuration into the repo, then
+offers agent setup. Aspire 13.6 and earlier copy the **`aspireify`** skill into the project.
+Aspire 17.0 and later register the aspire-skills plugin, which includes `aspireify`. `aspire init`
+itself does not wire resources, projects, or integrations. Hand off the wiring step to:
 
 1. The in-plugin sibling skill: [`../../aspireify/SKILL.md`](../../aspireify/SKILL.md), or
-2. The project-local `.agents/skills/aspireify/SKILL.md` if `aspire init` installed it
-   (project-local wins — defer to it and warn the user).
+2. The project-local `.agents/skills/aspireify/SKILL.md`, if Aspire 13.6 or earlier
+   installed it. Project-local wins, so defer to it and warn the user. On 17.0 and later,
+   the copy is stale unless the user maintains it. If it is stale, use the in-plugin skill
+   instead. Tell the user the copy is stale and suggest running `aspire doctor` for an
+   actionable fix.
 
 The aspireify workflow:
 

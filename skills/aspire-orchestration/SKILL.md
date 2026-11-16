@@ -288,14 +288,21 @@ on lifecycle (start/stop/wait/restart) and never edits AppHost code itself.
 
 ## Project-Local Skill Precedence
 
-If `.agents/skills/aspire/SKILL.md` exists (from `aspire agent init`), defer to it for:
-C# AppHost editing, TS AppHost editing, Playwright handoff, investigation workflows.
-Safety guardrails from this plugin ALWAYS apply.
+If project-local Aspire skills exist, check `aspire --version`.
 
-If `.agents/skills/aspireify/SKILL.md` exists project-locally (installed by `aspire init` in
-current Aspire), **warn the user** that a project-local aspireify skill is present and **defer to it**
-for AppHost wiring instead of the in-plugin sibling. Same precedence rule as the project-local
-`aspire` skill above: project-local wins, plugin guardrails still apply.
+**Aspire 13.6 and earlier:** `aspire agent init` and `aspire init` installed them.
+
+- If `.agents/skills/aspire/SKILL.md` exists, defer to it for C# AppHost editing, TS AppHost
+  editing, Playwright handoff, and investigation workflows.
+- If `.agents/skills/aspireify/SKILL.md` exists, **warn the user** that a project-local
+  aspireify skill is present and **defer to it** for AppHost wiring instead of the in-plugin
+  sibling.
+
+**Aspire 17.0 and later:** Aspire registers this plugin instead, so copies are stale unless
+the user maintains them. If they are stale, use the plugin's skills instead. Tell the user
+the copies are stale and suggest running `aspire doctor` for an actionable fix.
+
+Safety guardrails from this plugin ALWAYS apply.
 
 ## References
 
