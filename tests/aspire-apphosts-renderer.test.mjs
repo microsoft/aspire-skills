@@ -1363,6 +1363,32 @@ test("opening a related resource hidden by filters keeps focus in the inspector"
     assert.equal(renderer.document.activeElement.id, "inspector-title");
 });
 
+test("the focused inspector heading keeps focus across a state update", async () => {
+    const renderer = await boot();
+    const search = renderer.document.getElementById("search-input");
+    search.value = "Public API";
+    search.dispatch("input");
+    selectApi(renderer);
+    renderer.flushFrames();
+    button(renderer.document.querySelector(".relation-row"), "Database").click();
+    renderer.flushFrames();
+    assert.equal(renderer.document.activeElement.id, "inspector-title");
+    await renderer.push({ type: "state", state: snapshot(2) });
+    renderer.flushFrames();
+    assert.equal(renderer.document.activeElement.id, "inspector-title");
+    assert.equal(renderer.document.activeElement.isConnected, true);
+});
+
+test("switching modes with Filters open hides the panel", async () => {
+    const renderer = await boot();
+    const panel = renderer.document.getElementById("filters-panel");
+    renderer.document.querySelector(".roster-filters-trigger").click();
+    assert.equal(panel.hidden, false);
+    renderer.document.getElementById("global-mode").click();
+    assert.equal(panel.hidden, true);
+    assert.equal(renderer.evaluate("filtersOpen"), false);
+});
+
 test("waiting rows name the resources they are waiting for", async () => {
     const renderer = createRenderer();
     const state = snapshot();

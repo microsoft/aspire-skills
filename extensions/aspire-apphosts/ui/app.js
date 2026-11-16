@@ -440,7 +440,7 @@ function resetModeScopedState() {
     attentionOnly = false;
     stateFilter = "all";
     healthFilter = "all";
-    filtersOpen = false;
+    setFiltersOpen(false);
     if (els.pipelineDialog.open) {
         els.pipelineDialog.close("cancel");
     }
@@ -1399,7 +1399,13 @@ function renderInspector({ resource, parentLabel }, dashboardAvailable, attentio
         element("header", { class: "inspector-header" }, [
             element("div", { class: "inspector-title" }, [
                 element("div", { class: "inspector-name-line" }, [
-                    element("h3", { id: "inspector-title", tabIndex: -1, text: resource.label, title: resource.label }),
+                    element("h3", {
+                        id: "inspector-title",
+                        tabIndex: -1,
+                        text: resource.label,
+                        title: resource.label,
+                        dataset: { focusKey: "inspector-title" },
+                    }),
                     element("button", {
                         class: "icon-button inspector-copy",
                         type: "button",
@@ -1464,7 +1470,12 @@ function renderInspector({ resource, parentLabel }, dashboardAvailable, attentio
 function renderMissingResource(attention = 0) {
     return element("div", { class: "inspector inspector-missing" }, [
         inspectorBackBar(attention),
-        element("h3", { id: "inspector-title", tabIndex: -1, text: "Resource no longer available" }),
+        element("h3", {
+            id: "inspector-title",
+            tabIndex: -1,
+            text: "Resource no longer available",
+            dataset: { focusKey: "inspector-title" },
+        }),
         element("p", {
             class: "inspector-note",
             role: "status",

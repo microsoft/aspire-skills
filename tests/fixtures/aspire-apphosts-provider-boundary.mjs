@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import * as http from "node:http";
-import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setImmediate as nextTurn } from "node:timers/promises";
@@ -28,6 +28,9 @@ const deferred = () => {
 const ok = (data) => ({ ok: true, code: 0, stdout: JSON.stringify(data), stderr: "" });
 const fail = (error = "Synthetic CLI failure") => ({ ok: false, code: 1, stdout: "", stderr: error, error });
 const clone = (value) => JSON.parse(JSON.stringify(value));
+const backgroundLogDirectory = (root) => join(root, process.platform === "win32"
+    ? "aspire-apphosts-logs"
+    : `aspire-apphosts-logs-${process.getuid()}`);
 const waitUntil = async (predicate, timeoutMs = 2000) => {
     const deadline = Date.now() + timeoutMs;
     while (!(await predicate())) {
@@ -1438,6 +1441,50 @@ test("logs orphaned by a dead provider are reclaimed while live providers keep t
         return !names.includes(orphaned);
     });
     assert.ok(names.includes(live), "a running provider's log is never reclaimed");
+});
+
+async function backgroundLogArgs(t, root) {
+    const psArgs = [];
+    const h = await harness(t, {
+        tmpDirectory: root,
+        cliOverride: async (args) => {
+            if (args[0] === "ps") psArgs.push(args);
+            return undefined;
+        },
+    });
+    await h.open();
+    await waitUntil(() => psArgs.length > 0);
+    return psArgs[0];
+}
+
+test("background logs are not written through a symlinked log directory", async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "aspire-logs-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const target = join(root, "elsewhere");
+    await mkdir(target, { mode: 0o700 });
+    await symlink(target, backgroundLogDirectory(root), process.platform === "win32" ? "junction" : "dir");
+    const args = await backgroundLogArgs(t, root);
+    assert.ok(!args.includes("--log-file"), "a planted directory link must not receive CLI logs");
+    assert.deepEqual(await readdir(target), []);
+});
+
+test("background logs are not written to a log directory other users can write", { skip: process.platform === "win32" }, async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "aspire-logs-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const logDirectory = backgroundLogDirectory(root);
+    await mkdir(logDirectory);
+    await chmod(logDirectory, 0o777);
+    const args = await backgroundLogArgs(t, root);
+    assert.ok(!args.includes("--log-file"), "a shared log directory must not receive CLI logs");
+});
+
+test("background logs use a private per-user log directory", async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "aspire-logs-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const args = await backgroundLogArgs(t, root);
+    const logFile = args[args.indexOf("--log-file") + 1];
+    assert.ok(args.includes("--log-file"));
+    assert.equal(join(logFile, ".."), backgroundLogDirectory(root));
 });
 
 test("streamProcess ignores output that arrives after an oversized line", async () => {

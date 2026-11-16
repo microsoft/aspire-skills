@@ -4,7 +4,7 @@
 
 import { createServer } from "node:http";
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { mkdir, readFile, readdir, rename, rm, stat } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { basename, dirname, extname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
@@ -60,7 +60,9 @@ const STREAM_PUBLISH_DEBOUNCE_MS = 200;
 const STREAM_RESTART_DELAY_MS = 1_000;
 const STREAM_MAX_RESTART_DELAY_MS = 60_000;
 const STREAM_MAX_FAILURES = 3;
-const BACKGROUND_LOG_DIR = join(tmpdir(), "aspire-apphosts-logs");
+const BACKGROUND_LOG_DIR = join(tmpdir(), process.platform === "win32"
+    ? "aspire-apphosts-logs"
+    : `aspire-apphosts-logs-${process.getuid()}`);
 const MAX_KEPT_BACKGROUND_LOGS = 10;
 const FAILED_BACKGROUND_LOG_PREFIX = "failed-";
 const ACTIVE_BACKGROUND_LOG_PREFIX = "active-";
@@ -528,13 +530,23 @@ function isLsUnsupported(result) {
 async function createBackgroundLogFile() {
     if (!backgroundLogFileSupported) return null;
     try {
-        await mkdir(BACKGROUND_LOG_DIR, { recursive: true });
+        await mkdir(BACKGROUND_LOG_DIR, { recursive: true, mode: 0o700 });
+        if (!await isPrivateDirectory(BACKGROUND_LOG_DIR)) return null;
         orphanedLogSweep ??= sweepOrphanedBackgroundLogs();
         await orphanedLogSweep;
         return join(BACKGROUND_LOG_DIR, `${ACTIVE_BACKGROUND_LOG_PREFIX}${process.pid}-${randomUUID()}.log`);
     } catch {
         return null;
     }
+}
+
+// The temp root can be shared with other users, who could pre-create the directory or plant symlinks
+// at log paths. Only log into a real directory that this user owns and nobody else can write to.
+async function isPrivateDirectory(path) {
+    const info = await lstat(path);
+    if (info.isSymbolicLink() || !info.isDirectory()) return false;
+    if (process.platform === "win32") return true;
+    return info.uid === process.getuid() && (info.mode & 0o077) === 0;
 }
 
 function processIsAlive(pid) {
