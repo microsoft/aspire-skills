@@ -1401,6 +1401,9 @@ function displayLanguage(value) {
     if (normalized.includes("typescript")) {
         return "TypeScript";
     }
+    if (normalized === "go") {
+        return "Go";
+    }
     return value;
 }
 

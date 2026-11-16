@@ -863,7 +863,7 @@ test("workspace fallback discovers file-based TypeScript AppHosts with mts exten
 });
 
 test("workspace fallback recognizes source AppHost casing at either scan depth", async (t) => {
-    for (const fileName of ["AppHost.cs", "AppHost.ts", "AppHost.mts", "APPHOST.MTS", "apphost.go"]) {
+    for (const fileName of ["AppHost.cs", "AppHost.ts", "AppHost.mts", "APPHOST.MTS", "apphost.go", "AppHost.go"]) {
         await t.test(fileName, async () => {
             const fixtureRoot = await mkdtemp(join(tmpdir(), "aspire-cased-apphost-"));
             try {

@@ -11,8 +11,14 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   wiring and deployment CI. Guidance for the first-party `Aspire.Hosting.Go`
   integration distinguishes preview packages from Aspire 13.4 and stable packages
   from Aspire 17.0.
+- Added `AddGoApp` private-module (`WithGoPrivate`) and Delve debugging
+  (`WithDelveServer`) guidance to Aspireify's Go authoring reference, and the AppHosts
+  canvas now recognizes `apphost.go` and labels its language as Go.
 
 ### Changed
+- Removed Community Toolkit guidance from Aspireify and orchestration. Go services use
+  the first-party `Aspire.Hosting.Go` integration (`AddGoApp`); resource wiring now
+  prefers first-party packages and falls back to raw executables or containers.
 - The Aspireify proposal canvas no longer opens when you ask to edit an AppHost
   that already declares resources. Connecting or wiring a resource, adding a single
   integration or API, running a one-off `aspire add`, and repairing the TypeScript

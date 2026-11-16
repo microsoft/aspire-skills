@@ -66,10 +66,9 @@ The aspireify workflow:
 
 1. **Scan** the repository — discover .NET projects, Node.js apps, Python/Go services, docker-compose files
 2. **Present findings** — confirm with user which services to include
-3. **Wire the AppHost** — add resources using 3-tier API preference:
+3. **Wire the AppHost** — add resources using 2-tier API preference:
    - Tier 1: First-party `Aspire.Hosting.*` (e.g., `AddPostgres`, `AddRedis`, `AddViteApp`, `AddNextJsApp`; for a Go application, `AddGoApp` from `Aspire.Hosting.Go` via `aspire add go`: preview from 13.4, stable from 17.0; require approval and an explicit compatible preview version on 13.x)
-   - Tier 2: Community Toolkit `CommunityToolkit.Aspire.Hosting.*` (e.g., `AddGolangApp` via `aspire add communitytoolkit-golang` for Go applications on Aspire older than 13.4 or when the user deliberately uses it; never migrate an existing Toolkit-based AppHost implicitly)
-   - Tier 3: Raw fallbacks (`AddExecutable`, `AddDockerfile`, `AddContainer`)
+   - Tier 2: Raw fallbacks (`AddExecutable`, `AddDockerfile`, `AddContainer`)
 4. **Configure dependencies** — ServiceDefaults for .NET, OTel for non-.NET
 5. **Validate** — `aspire start` until all resources are healthy
 

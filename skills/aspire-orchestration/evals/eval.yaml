@@ -1082,7 +1082,7 @@ stimuli:
         config:
           prompt: "Does the assistant's response describe (or reference, via aspireify) the wiring workflow:
             scanning the repository, selecting services, adding resources to the AppHost using the
-            3-tier API preference (first-party Aspire.Hosting.* > Community Toolkit > raw
+            2-tier API preference (first-party Aspire.Hosting.* > raw
             fallbacks), and validating with `aspire start`?"
       - type: output-not-contains
         config:
@@ -1323,9 +1323,7 @@ stimuli:
             17.0. This AppHost uses Aspire.AppHost.Sdk 13.5.3, so recommend discovering a
             compatible preview and obtaining approval before adding it with aspire add go
             --version; do not claim a stable 13.5.3 package exists or upgrade implicitly.
-            Community Toolkit CommunityToolkit.Aspire.Hosting.Golang (AddGolangApp) is the
-            older Tier 2 alternative, with AddExecutable as the Tier 3 fallback. The agent should
-            prefer higher tiers when available. Answer based on intent.
+            AddExecutable is the Tier 2 fallback. The agent should prefer Tier 1 when available. Answer based on intent.
       - type: prompt
         name: uses-aspire-docs
         config:
