@@ -13,10 +13,13 @@ import {
     buildAppHostTreeNode,
     createAspireCliRunner,
     createStoppedAppHost,
+    processOutputSecrets,
     publicAppHost,
+    redactProcessOutput,
     resolveCliExecutable,
     runProcess,
     sanitizeCommandArgumentInputs,
+    splitProcessOutput,
     streamProcess,
     validateCommandArguments,
 } from "../extensions/aspire-apphosts/lib/app-model.mjs";
@@ -164,7 +167,7 @@ for (const size of [32, 9_000]) {
     });
 }
 
-test("output limits and timeouts redact partial secret streams as well as complete values", async () => {
+test("output limits and timeouts never return secret fragments", async () => {
     const secret = `DUMMY-${"abcdef0123456789".repeat(600)}`;
     const result = await runProcess(process.execPath, [
         "-e", "process.stdout.write('before '+process.argv[1].slice(0,200));setTimeout(()=>process.stdout.write(process.argv[1].slice(200)),80);",
@@ -172,16 +175,48 @@ test("output limits and timeouts redact partial secret streams as well as comple
     ], { sensitiveValues: [secret], maxOutputBytes: 512, timeoutMs: 10_000 });
     assert.equal(result.ok, false);
     assert.match(result.error, /output exceeded/);
-    assert.match(result.stdout, /before \[redacted\]/);
-    assert.doesNotMatch(result.stdout, /DUMMY-/);
+    assert.doesNotMatch(JSON.stringify(result), /DUMMY-/);
 
     const timeout = await runProcess(process.execPath, [
         "-e", "process.stderr.write('before '+process.argv[1].slice(0,200));setTimeout(()=>{},10000);", secret,
     ], { sensitiveValues: [secret], timeoutMs: 1_500 });
     assert.equal(timeout.ok, false);
     assert.match(timeout.error, /timed out/);
-    assert.match(timeout.stderr, /before \[redacted\]/);
-    assert.doesNotMatch(timeout.stderr, /DUMMY-/);
+    assert.doesNotMatch(JSON.stringify(timeout), /DUMMY-/);
+});
+
+test("interrupted output redacts partial secret tails after complete self-overlapping secrets", () => {
+    const longSecret = `DUMMY-${"abcdef0123456789".repeat(600)}`;
+    const long = processOutputSecrets([longSecret]);
+    assert.equal(redactProcessOutput(`before ${longSecret.slice(0, 200)}`, long, true), "before [redacted]");
+    assert.equal(redactProcessOutput(`before ${longSecret.slice(0, 200)}`, long, false), `before ${longSecret.slice(0, 200)}`,
+        "completed runs keep text that only resembles a secret prefix");
+
+    const overlapping = processOutputSecrets(["DUMMY-abcDUMMY-abc"]);
+    assert.equal(redactProcessOutput("before DUMMY-abcDUMMY-abc", overlapping, true), "before [redacted]");
+    assert.equal(redactProcessOutput("before DUMMY-abcDUMMY-", overlapping, true), "before [redacted]");
+    assert.equal(redactProcessOutput("before DUMMY-DUMMY-DUMMY-", processOutputSecrets(["DUMMY-DUMMY-xyz123456789"]), true),
+        "before DUMMY-[redacted]", "a failed partial match falls back to the longest repeated prefix");
+});
+
+test("live output holds a secret split across chunks until it can be redacted whole", () => {
+    const feed = (secrets, chunks) => {
+        let held = "";
+        const emitted = [];
+        for (const chunk of chunks) {
+            const split = splitProcessOutput(held + chunk, secrets);
+            emitted.push(split.text);
+            held = split.held;
+        }
+        emitted.push(splitProcessOutput(held, secrets, true).text);
+        return emitted.join("");
+    };
+    const overlapping = processOutputSecrets(["DUMMY-", "DUMMY-super-secret-value"]);
+    assert.equal(feed(overlapping, ["DUMMY-super-", "secret-value\nafter DUMMY- done\n"]),
+        "[redacted]\nafter [redacted] done\n");
+    const longSecret = `DUMMY-${"abcdef0123456789".repeat(600)}`;
+    assert.equal(feed(processOutputSecrets([longSecret]), ["before ", longSecret.slice(0, 200), `${longSecret.slice(200)} after`]),
+        "before [redacted] after");
 });
 
 test("streamProcess rejects oversized complete lines before publishing them", async () => {
@@ -199,15 +234,6 @@ test("streamProcess rejects oversized complete lines before publishing them", as
 
     assert.deepEqual(lines, []);
     assert.match(result.error, /exceeded 64 bytes/, "the rejection is reported even if the child already exited cleanly");
-});
-
-test("interrupted output redacts a complete self-overlapping secret before considering partial tails", async () => {
-    const secret = "DUMMY-abcDUMMY-abc";
-    const result = await runProcess(process.execPath, [
-        "-e", "process.stdout.write('before '+process.argv[1]);setTimeout(()=>{},10000);", secret,
-    ], { sensitiveValues: [secret], timeoutMs: 1_500 });
-    assert.equal(result.ok, false);
-    assert.equal(result.stdout, "before [redacted]");
 });
 
 test("live output keeps a longer secret whole when a shorter overlapping secret arrives first", async () => {

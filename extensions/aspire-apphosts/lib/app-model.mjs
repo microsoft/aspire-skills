@@ -1927,6 +1927,62 @@ export async function resolveCliExecutable(command, env = process.env) {
     throw new Error(`Could not find '${command}' in fully qualified PATH directories. Set ASPIRE_CLI to the full path of the Aspire executable (.exe).`);
 }
 
+export function processOutputSecrets(sensitiveValues = []) {
+    return [...new Set(sensitiveValues.flatMap((value) => {
+        const text = String(value ?? "");
+        return text ? [text, JSON.stringify(text).slice(1, -1)] : [];
+    }))].sort((left, right) => right.length - left.length);
+}
+
+export function redactProcessOutput(value, secrets, incomplete = false) {
+    let text = String(value ?? "");
+    for (const secret of secrets) {
+        text = text.replaceAll(secret, "[redacted]");
+    }
+    if (incomplete) {
+        for (const secret of secrets) {
+            if (secret.length < 2) continue;
+            // KMP finds the longest suffix that is an incomplete secret without
+            // quadratic scans when a long secret has repeated characters.
+            const prefixes = new Uint32Array(secret.length);
+            for (let i = 1, matched = 0; i < secret.length; i++) {
+                while (matched && secret[i] !== secret[matched]) matched = prefixes[matched - 1];
+                if (secret[i] === secret[matched]) matched++;
+                prefixes[i] = matched;
+            }
+            let matched = 0;
+            const tail = text.slice(-(secret.length - 1));
+            for (let i = 0; i < tail.length; i++) {
+                const character = tail[i];
+                while (matched && character !== secret[matched]) matched = prefixes[matched - 1];
+                if (character === secret[matched]) matched++;
+            }
+            if (matched) text = `${text.slice(0, -matched)}[redacted]`;
+        }
+    }
+    return text;
+}
+
+export function splitProcessOutput(raw, secrets, flush = false) {
+    // Holding back one secret length minus one keeps a secret split across
+    // chunks from being emitted before it can be recognized. Held text stays
+    // raw, and the cut moves before any secret that straddles it, so redacting
+    // a shorter overlapping secret never hides a longer one that is still arriving.
+    const holdback = secrets.length ? secrets[0].length - 1 : 0;
+    let cut = flush ? raw.length : Math.max(0, raw.length - holdback);
+    for (let moved = true; moved && cut > 0;) {
+        moved = false;
+        for (const secret of secrets) {
+            const start = raw.indexOf(secret, Math.max(0, cut - secret.length + 1));
+            if (start >= 0 && start < cut) {
+                cut = start;
+                moved = true;
+            }
+        }
+    }
+    return { text: redactProcessOutput(raw.slice(0, cut), secrets), held: raw.slice(cut) };
+}
+
 export async function runProcess(command, args, {
     cwd,
     timeoutMs = DEFAULT_TIMEOUT_MS,
@@ -1935,35 +1991,12 @@ export async function runProcess(command, args, {
     sensitiveValues = [],
     onOutput,
 } = {}) {
-    const secrets = [...new Set(sensitiveValues.flatMap((value) => {
-        const text = String(value ?? "");
-        return text ? [text, JSON.stringify(text).slice(1, -1)] : [];
-    }))].sort((left, right) => right.length - left.length);
-    const holdback = secrets.length ? secrets[0].length - 1 : 0;
+    const secrets = processOutputSecrets(sensitiveValues);
     const pendingOutput = { stdout: "", stderr: "" };
     const emitOutput = (stream, flush) => {
-        const raw = pendingOutput[stream];
-        // Holding back one secret length minus one keeps a secret split across
-        // chunks from being emitted before it can be recognized. Held text stays
-        // raw, and the cut moves before any secret that straddles it, so redacting
-        // a shorter overlapping secret never hides a longer one that is still arriving.
-        let cut = flush ? raw.length : Math.max(0, raw.length - holdback);
-        for (let moved = true; moved && cut > 0;) {
-            moved = false;
-            for (const secret of secrets) {
-                const start = raw.indexOf(secret, Math.max(0, cut - secret.length + 1));
-                if (start >= 0 && start < cut) {
-                    cut = start;
-                    moved = true;
-                }
-            }
-        }
-        pendingOutput[stream] = raw.slice(cut);
-        let text = raw.slice(0, cut);
-        for (const secret of secrets) {
-            text = text.replaceAll(secret, "[redacted]");
-        }
-        if (cut > 0) {
+        const { text, held } = splitProcessOutput(pendingOutput[stream], secrets, flush);
+        pendingOutput[stream] = held;
+        if (text) {
             try {
                 onOutput(stream, text);
             } catch {
@@ -1971,34 +2004,7 @@ export async function runProcess(command, args, {
             }
         }
     };
-    const redactOutput = (value, incomplete) => {
-        let text = String(value ?? "");
-        for (const secret of secrets) {
-            text = text.replaceAll(secret, "[redacted]");
-        }
-        if (incomplete) {
-            for (const secret of secrets) {
-                if (secret.length < 2) continue;
-                // KMP finds the longest suffix that is an incomplete secret without
-                // quadratic scans when a long secret has repeated characters.
-                const prefixes = new Uint32Array(secret.length);
-                for (let i = 1, matched = 0; i < secret.length; i++) {
-                    while (matched && secret[i] !== secret[matched]) matched = prefixes[matched - 1];
-                    if (secret[i] === secret[matched]) matched++;
-                    prefixes[i] = matched;
-                }
-                let matched = 0;
-                const tail = text.slice(-(secret.length - 1));
-                for (let i = 0; i < tail.length; i++) {
-                    const character = tail[i];
-                    while (matched && character !== secret[matched]) matched = prefixes[matched - 1];
-                    if (character === secret[matched]) matched++;
-                }
-                if (matched) text = `${text.slice(0, -matched)}[redacted]`;
-            }
-        }
-        return text;
-    };
+    const redactOutput = (value, incomplete) => redactProcessOutput(value, secrets, incomplete);
     return new Promise((resolveResult) => {
         let stdout = "";
         let stderr = "";
