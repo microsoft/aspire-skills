@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import * as http from "node:http";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setImmediate as nextTurn } from "node:timers/promises";
@@ -27,6 +28,16 @@ const deferred = () => {
 const ok = (data) => ({ ok: true, code: 0, stdout: JSON.stringify(data), stderr: "" });
 const fail = (error = "Synthetic CLI failure") => ({ ok: false, code: 1, stdout: "", stderr: error, error });
 const clone = (value) => JSON.parse(JSON.stringify(value));
+const backgroundLogDirectory = (root) => join(root, process.platform === "win32"
+    ? "aspire-apphosts-logs"
+    : `aspire-apphosts-logs-${process.getuid()}`);
+const waitUntil = async (predicate, timeoutMs = 2000) => {
+    const deadline = Date.now() + timeoutMs;
+    while (!(await predicate())) {
+        if (Date.now() > deadline) throw new Error("Timed out waiting for condition");
+        await new Promise((done) => setTimeout(done, 10));
+    }
+};
 
 test("shared canvas assets are served locally with their correct MIME types", async (t) => {
     const h = await harness(t);
@@ -42,6 +53,38 @@ test("shared canvas assets are served locally with their correct MIME types", as
     }
     const response = await fetch(new URL("/assets/canvas/theme.css", opened.url));
     assert.equal(response.status, 404, "only the exact static asset allowlist is public");
+});
+
+test("loopback server rejects foreign hosts, origins, missing tokens, and malformed bodies", async (t) => {
+    const h = await harness(t);
+    const opened = await h.open();
+    const url = new URL(opened.url);
+    const token = url.searchParams.get("token");
+    const raw = (path, { method = "GET", headers = {}, body } = {}) => new Promise((done, reject) => {
+        const request = http.request({
+            host: url.hostname, port: url.port, path, method,
+            headers: { host: url.host, ...headers },
+        }, (response) => {
+            response.resume();
+            response.once("end", () => done(response.statusCode));
+        });
+        request.once("error", (error) => error.code === "ECONNRESET" ? done("reset") : reject(error));
+        request.end(body);
+    });
+    const authed = { "x-aspire-apphosts-token": token };
+    assert.equal(await raw("/api/state", { headers: authed }), 200);
+    assert.equal(await raw("/api/state"), 403, "missing token");
+    assert.equal(await raw("/api/state", { headers: { "x-aspire-apphosts-token": `${token}x` } }), 403, "wrong token");
+    assert.equal(await raw("/events"), 403, "event stream requires the token");
+    assert.equal(await raw("/api/state", { headers: { ...authed, host: `localhost:${url.port}` } }), 403, "foreign host");
+    assert.equal(await raw("/", { headers: { host: `evil.example:${url.port}` } }), 403, "static assets check the host");
+    assert.equal(await raw("/api/state", { headers: { ...authed, origin: "http://evil.example" } }), 403, "foreign origin");
+    const json = { ...authed, "content-type": "application/json" };
+    assert.equal(await raw("/api/selection", { method: "POST", headers: json, body: "{not json" }), 400);
+    const oversized = await raw("/api/selection", {
+        method: "POST", headers: json, body: JSON.stringify({ nodeId: "x".repeat(130 * 1024) }),
+    });
+    assert.ok(oversized === 413 || oversized === "reset", `oversized body must be refused, got ${oversized}`);
 });
 
 test("generic reopen rejects invalid retargets while retaining the existing panel", async (t) => {
@@ -84,11 +127,11 @@ test("generic reopen rejects failed retarget refreshes while preserving the stal
     h.controls.failPs = true;
     await assert.rejects(
         h.open("test", { appHostPath: targets[1] }),
-        /ps unavailable/,
+        (error) => error.code === "apphosts_refresh_failed" && /ps unavailable/.test(error.message),
     );
     await assert.rejects(
         h.open("test", { appHostPath: targets[1] }),
-        /ps unavailable/,
+        (error) => error.code === "apphosts_refresh_failed" && /ps unavailable/.test(error.message),
         "retrying the same target must not report success while discovery is still failing",
     );
     const failed = (await h.request(opened, "/api/state")).state;
@@ -148,6 +191,7 @@ test("AppHosts rejects network targets before stat, readdir, or target-file read
     await module.link(async (specifier) => {
         const exports = specifier === "node:fs/promises"
             ? {
+                open: async () => { filesystemCalls.push("open"); throw new Error("unexpected open"); },
                 stat: async () => { filesystemCalls.push("stat"); throw new Error("unexpected stat"); },
                 readdir: async () => { filesystemCalls.push("readdir"); throw new Error("unexpected readdir"); },
                 readFile: async () => {
@@ -191,7 +235,7 @@ function describe(inputs = baseInputs, state = "Running") {
 }
 
 async function harness(t, {
-    listenGate, failListen = false, cliOverride,
+    listenGate, failListen = false, cliOverride, stream, tmpDirectory,
     workingDirectory = process.cwd(),
     browserCanvases = [{ canvasId: "browser", extensionId: "host:builtins" }],
     browserListAvailable = true, browserListError, browserOpenError, systemBrowserError,
@@ -250,8 +294,18 @@ async function harness(t, {
         servers.push(server);
         return server;
     };
+    const idleTimers = new Set();
     const context = createContext({
-        URL, Buffer, process, console, setTimeout, clearTimeout,
+        URL, Buffer, process, console,
+        setTimeout(callback, delay, ...args) {
+            if (delay !== 10_000) return setTimeout(callback, delay, ...args);
+            const timer = { callback, unref() {} };
+            idleTimers.add(timer);
+            return timer;
+        },
+        clearTimeout(timer) {
+            if (!idleTimers.delete(timer)) clearTimeout(timer);
+        },
         setInterval(callback) {
             const timer = { callback, unref() {} };
             intervals.add(timer);
@@ -267,7 +321,10 @@ async function harness(t, {
             return {
                 log: (message) => logs.push(message),
                 rpc: {
-                    extensions: { sendAttachmentsToMessage: async (payload) => attachments.push(clone(payload)) },
+                    extensions: { sendAttachmentsToMessage: async (payload) => {
+                        if (controls.attachError) throw controls.attachError;
+                        attachments.push(clone(payload));
+                    } },
                     canvas: {
                         ...(browserListAvailable ? { list: async () => {
                             if (browserListError) throw browserListError;
@@ -288,13 +345,15 @@ async function harness(t, {
     });
     await module.link(async (specifier) => {
         const exports = specifier === "@github/copilot-sdk/extension" ? sdk
-            : specifier === "./lib/app-model.mjs" ? { ...model, createAspireCliRunner: () => ({ run }) }
+            : specifier === "./lib/app-model.mjs" ? { ...model, createAspireCliRunner: () => (stream ? { run, stream } : { run }) }
                 : specifier === "./lib/browser.mjs" ? { ...browser, openSystemBrowser: async (url, options) => {
                     if (systemBrowserError) throw systemBrowserError;
                     systemBrowserUrls.push(url);
                     controls.reportBrowserError = options.onError;
                 } }
-                : specifier === "node:http" ? { ...http, createServer } : await import(specifier);
+                : specifier === "node:http" ? { ...http, createServer }
+                    : specifier === "node:os" && tmpDirectory ? { ...await import(specifier), tmpdir: () => tmpDirectory }
+                        : await import(specifier);
         return new SyntheticModule(Object.keys(exports), function () {
             for (const [name, value] of Object.entries(exports)) this.setExport(name, value);
         }, { context });
@@ -302,7 +361,12 @@ async function harness(t, {
     await module.evaluate();
     const opened = new Set();
     const h = {
-        controls, calls, servers, intervals, attachments, canvasOpens, systemBrowserUrls, logs,
+        controls, calls, servers, intervals, idleTimers, attachments, canvasOpens, systemBrowserUrls, logs,
+        fireIdleTimers() {
+            const due = [...idleTimers];
+            idleTimers.clear();
+            for (const timer of due) timer.callback();
+        },
         async open(instanceId = "test", input = { viewMode: "global" }) {
             opened.add(instanceId);
             return declaration.open({ instanceId, input, session: { workingDirectory } });
@@ -381,6 +445,139 @@ test("dot-prefixed workspace AppHosts remain visible and open source without adm
     assert.equal(h.canvasOpens.length, 1, "outside source must not open an editor");
 });
 
+test("switching view mode publishes an empty tree before the new mode loads", async (t) => {
+    const workspaceRefresh = deferred();
+    let loaderCalls = 0;
+    const h = await harness(t, {
+        cliOverride: async (args) => {
+            if (args[0] === "ls") {
+                await workspaceRefresh.promise;
+                return ok([]);
+            }
+            if (args[0] === "resource" && args.includes("--load-arguments")) {
+                loaderCalls++;
+                return ok(baseInputs);
+            }
+            return undefined;
+        },
+    });
+    const open = await h.open();
+    const { state } = await h.request(open, "/api/state");
+    assert.ok(state.roots.length > 0);
+    const commandRequest = await requestFor(h, open);
+    assert.equal((await h.request(open, "/api/command-inputs", {
+        ...commandRequest,
+        arguments: { environment: "prod", key: "secret" },
+    })).ok, true);
+    assert.equal(loaderCalls, 1);
+    const stream = await sse(h, open);
+    t.after(() => stream.close());
+    const modeRequest = h.request(open, "/api/mode", { viewMode: "workspace" });
+    const cleared = (await stream.waitFor((event) => event.type === "state"
+        && event.state.viewMode === "workspace" && event.state.status === "loading")).state;
+    assert.deepEqual(cleared.roots, []);
+    assert.equal(cleared.selectionId ?? null, null);
+    const staleOperation = await h.request(open, "/api/apphost-operation", {
+        appHostId: commandRequest.appHostId,
+        operation: "stop",
+    });
+    assert.equal(staleOperation.status, 404);
+    workspaceRefresh.resolve();
+    await modeRequest;
+    await h.request(open, "/api/mode", { viewMode: "global" });
+    assert.equal((await h.request(open, "/api/command-inputs", {
+        ...commandRequest,
+        arguments: { environment: "prod", key: "secret" },
+    })).ok, true);
+    assert.equal(loaderCalls, 2, "mode clearing must revoke cached command-input authority");
+});
+
+test("machine-readable stdout stays provider-side", async (t) => {
+    const privateValue = "private-machine-json-value";
+    let failPs = false;
+    let failLoader = false;
+    const h = await harness(t, {
+        cliOverride: async (args, options) => {
+            if (args[0] === "ls") {
+                const stdout = JSON.stringify(paths.map((path) => ({
+                    path,
+                    status: "buildable",
+                    language: "C#",
+                    privateValue,
+                })));
+                options.onOutput?.("stdout", stdout);
+                return { ok: true, code: 0, stdout, stderr: "", error: "" };
+            } else if (args[0] === "ps") {
+                const stdout = JSON.stringify({ privateValue });
+                options.onOutput?.("stdout", stdout);
+                if (failPs) {
+                    return { ok: false, code: 1, stdout, stderr: "", error: stdout };
+                }
+            } else if (args[0] === "describe") {
+                options.onOutput?.("stdout", JSON.stringify({ environment: { privateValue } }));
+            }
+            return undefined;
+        },
+    });
+    const open = await h.open("test", { viewMode: "workspace" });
+    h.controls.loader = async (_args, options) => {
+        const stdout = JSON.stringify([...baseInputs, {
+            name: "token",
+            inputType: "SecretText",
+            defaultValue: privateValue,
+        }]);
+        options.onOutput?.("stdout", stdout);
+        return failLoader
+            ? { ok: false, code: 1, stdout, stderr: "", error: stdout }
+            : { ok: true, code: 0, stdout, stderr: "", error: "" };
+    };
+    const stream = await sse(h, open);
+    t.after(() => stream.close());
+    const snapshot = await stream.waitFor((event) => event.type === "command-log-snapshot");
+    assert.ok(snapshot.commands.length > 0);
+    assert.doesNotMatch(JSON.stringify(snapshot), new RegExp(privateValue));
+    await h.action("refresh_model");
+    await stream.waitFor((event) => event.type === "command-output" && /"appHosts"/.test(event.text));
+    await stream.waitFor((event) => event.type === "command-output" && /"resources"/.test(event.text));
+    await stream.waitFor((event) => event.type === "command-output" && /"workspaceLocation"/.test(event.text));
+    const reconnected = await sse(h, open);
+    t.after(() => reconnected.close());
+    const projectedSnapshot = await reconnected.waitFor((event) => event.type === "command-log-snapshot");
+    const listOutputs = projectedSnapshot.commands
+        .filter((command) => command.label === "List running AppHosts")
+        .map((command) => command.output);
+    const describeOutputs = projectedSnapshot.commands
+        .filter((command) => command.label.startsWith("Describe "))
+        .map((command) => command.output);
+    const findCommands = projectedSnapshot.commands
+        .filter((command) => command.label === "Find AppHosts");
+    assert.ok(listOutputs.some((output) => /"appHosts"/.test(output)));
+    assert.ok(describeOutputs.some((output) => /"resources"/.test(output)));
+    assert.ok(findCommands.some((command) => command.sanitizedOutput
+        && /"workspaceLocation"/.test(command.output)));
+    assert.ok(projectedSnapshot.commands
+        .filter((command) => /^(Find AppHosts|List running AppHosts|Describe )/.test(command.label))
+        .every((command) => command.sanitizedOutput === true));
+    assert.doesNotMatch(
+        JSON.stringify(describeOutputs),
+        /not-for-composer|dummy-dashboard-token|private-endpoint-token/,
+    );
+    const commandRequest = await requestFor(h, open);
+    assert.equal((await h.request(open, "/api/command-inputs", {
+        ...commandRequest,
+        arguments: { environment: "prod" },
+    })).ok, true);
+    failLoader = true;
+    assert.equal((await h.request(open, "/api/command-inputs", {
+        ...commandRequest,
+        arguments: { environment: "prod" },
+    })).status, 500);
+    failPs = true;
+    await h.action("refresh_model");
+    await stream.waitFor((event) => event.type === "command-log" && event.command.status === "failed");
+    assert.doesNotMatch(JSON.stringify(stream.events), new RegExp(privateValue));
+});
+
 async function sse(h, open) {
     const url = new URL(open.url);
     url.pathname = "/events";
@@ -426,7 +623,7 @@ async function sse(h, open) {
     };
 }
 
-test("context is owner-specific, fresh/stale-aware, and relationship-selectable through HTTP and SDK", async (t) => {
+test("context is owner-specific, fresh/stale-aware, and carries resource dependencies through HTTP and SDK", async (t) => {
     const h = await harness(t);
     const open = await h.open();
     const { state } = await h.request(open, "/api/state");
@@ -454,14 +651,15 @@ test("context is owner-specific, fresh/stale-aware, and relationship-selectable 
             assert.deepEqual(h.attachments.at(-1).attachments[0].payload, context);
             if (kind === "resource") contexts.push(context);
         }
-        const edge = root.graph.edges[0];
-        assert.deepEqual(edge.context.relationship, { from: edge.from, to: edge.to, types: edge.types });
-        assert.equal(edge.context.id, `${root.id}:relationship:${edge.id}`);
-        assert.ok(!nodes.some((node) => node.kind === "relationship"), "edges must not pollute resource tree children");
-        assert.equal((await h.request(open, "/api/selection", { nodeId: edge.context.id })).ok, true);
-        assert.deepEqual(clone(await h.action("get_selected_context")).relationship, edge.context.relationship);
-        assert.equal((await h.request(open, "/api/copilot-context", { nodeId: edge.context.id })).ok, true);
+        const api = nodes.find((node) => node.kind === "resource" && node.resourceName === "api");
+        assert.deepEqual(clone(api.dependsOn), [{ resourceName: "db", types: ["Reference", "WaitFor"] }]);
+        assert.equal(root.graph, undefined);
     }
+    h.controls.attachError = new Error("Composer unavailable");
+    const failedAttach = await h.request(open, "/api/copilot-context", { nodeId: contexts[0].nodeId });
+    assert.equal(failedAttach.status, 400);
+    assert.equal(failedAttach.error, "Could not add to chat: Composer unavailable");
+    h.controls.attachError = null;
     assert.notDeepEqual(contexts[0], contexts[1], "identical APIs under distinct AppHosts retain owner identity");
     assert.doesNotMatch(JSON.stringify(h.attachments), /not-for-composer|dummy-dashboard-token|private-host-token|private-endpoint-token|appHostPath|"environment":\{/);
     for (const path of paths) assert.ok(!JSON.stringify(h.attachments).includes(path));
@@ -724,6 +922,7 @@ test("loader and execution bind the same normalized number, boolean, and omitted
     assert.ok(loadedArgs.includes("--count=1"));
     assert.ok(loadedArgs.includes("--flag=false"));
     assert.ok(!loadedArgs.some((arg) => arg.startsWith("--optional=")));
+    assert.deepEqual([...loadedArgs.slice(loadedArgs.indexOf("--") + 1)], ["--count=1", "--flag=false"]);
     assert.equal((await h.request(open, "/api/command", body)).ok, true);
     const executedArgs = h.commandCalls()[0].args;
     assert.deepEqual(executedArgs.slice(executedArgs.indexOf("--") + 1), ["--count=1", "--flag=false"]);
@@ -892,7 +1091,500 @@ test("listen errors reject opens, clean error/listening handlers, and permit ret
     assert.equal(h.servers.length, 2);
 });
 
-test("closing a panel does not cancel its already-started explicit operation", async (t) => {
+test("background polling pauses without a connected view and resumes when one reconnects", async (t) => {
+    const h = await harness(t);
+    const open = await h.open();
+    assert.equal(h.intervals.size, 1);
+    const stream = await sse(h, open);
+    assert.equal(h.idleTimers.size, 0, "a connected view cancels the idle pause");
+    stream.close();
+    await waitUntil(() => h.idleTimers.size === 1);
+    h.fireIdleTimers();
+    assert.equal(h.intervals.size, 0, "polling stops while no view is connected");
+    const callsWhilePaused = h.calls.length;
+    const resumed = await sse(h, open);
+    t.after(() => resumed.close());
+    assert.equal(h.intervals.size, 1, "polling restarts when a view reconnects");
+    await waitUntil(() => h.calls.slice(callsWhilePaused).some(({ args }) => args[0] === "ps"));
+});
+
+test("a reconnect snapshot does not replay buffered command output as a live delta", async (t) => {
+    const h = await harness(t);
+    h.controls.inputs = [];
+    const open = await h.open();
+    const request = await requestFor(h, open);
+    const outputWritten = deferred();
+    const release = deferred();
+    h.controls.executor = async (_args, options) => {
+        options.onOutput("stdout", "one buffered line\n");
+        outputWritten.resolve();
+        await release.promise;
+        return ok({ completed: true });
+    };
+    const running = h.request(open, "/api/command", request);
+    await outputWritten.promise;
+    const stream = await sse(h, open);
+    t.after(() => stream.close());
+    const snapshot = await stream.waitFor((event) => event.type === "command-log-snapshot");
+    assert.match(snapshot.commands.find((command) => command.status === "running").output, /one buffered line/);
+    await new Promise((done) => setTimeout(done, 200));
+    assert.equal(
+        stream.events.filter((event) => event.type === "command-output"
+            && event.text.includes("one buffered line")).length,
+        0,
+    );
+    release.resolve();
+    await running;
+});
+
+test("oversized command lines are discarded through newline without leaking split tokens", async (t) => {
+    const h = await harness(t);
+    h.controls.inputs = [];
+    const open = await h.open();
+    const stream = await sse(h, open);
+    t.after(() => stream.close());
+    const request = await requestFor(h, open);
+    const privateValue = "private-output-token";
+    h.controls.executor = async (_args, options) => {
+        options.onOutput("stdout", `${"x".repeat(9_000)} https://localhost/?token=`);
+        options.onOutput("stdout", `${privateValue}\nsafe output\n`);
+        return ok({ completed: true });
+    };
+    assert.equal((await h.request(open, "/api/command", request)).ok, true);
+    const completed = await stream.waitFor((event) => event.type === "command-log"
+        && event.command.status === "succeeded");
+    assert.equal(completed.command.status, "succeeded");
+    assert.doesNotMatch(JSON.stringify(stream.events), new RegExp(privateValue));
+    assert.match(JSON.stringify(stream.events), /safe output/);
+});
+
+test("another stream's newline does not complete a held partial command line", async (t) => {
+    const h = await harness(t);
+    h.controls.inputs = [];
+    const open = await h.open();
+    const stream = await sse(h, open);
+    t.after(() => stream.close());
+    const request = await requestFor(h, open);
+    h.controls.executor = async (_args, options) => {
+        options.onOutput("stdout", "Login: https://localhost/login?t=private-");
+        options.onOutput("stderr", "warning: still starting\n");
+        options.onOutput("stdout", "token-tail\nsafe output\n");
+        return ok({ completed: true });
+    };
+    assert.equal((await h.request(open, "/api/command", request)).ok, true);
+    await stream.waitFor((event) => event.type === "command-log" && event.command.status === "succeeded");
+    const events = JSON.stringify(stream.events);
+    assert.doesNotMatch(events, /token-tail/);
+    assert.match(events, /warning: still starting/);
+    assert.match(events, /safe output/);
+});
+
+test("clearing output while background commands are hidden keeps their history", async (t) => {
+    const h = await harness(t);
+    h.controls.inputs = [];
+    const open = await h.open();
+    const stream = await sse(h, open);
+    t.after(() => stream.close());
+    const request = await requestFor(h, open);
+    h.controls.executor = async () => ok({ completed: true });
+    assert.equal((await h.request(open, "/api/command", request)).ok, true);
+    await stream.waitFor((event) => event.type === "command-log" && event.command.status === "succeeded");
+    const clear = async (body) => {
+        const mark = stream.events.length;
+        assert.equal((await h.request(open, "/api/command-log/clear", body)).ok, true);
+        return (await stream.waitFor((event) => event.type === "command-log-snapshot"
+            && stream.events.indexOf(event) >= mark)).commands.filter((command) => command.status !== "running");
+    };
+
+    const otherHostCleared = await clear({ includeBackground: true, appHostId: "another-apphost" });
+    assert.ok(otherHostCleared.some((command) => command.source !== "background"), "another AppHost's history survives");
+    const hiddenCleared = await clear({ includeBackground: false });
+    assert.ok(hiddenCleared.length > 0, "background history survives");
+    assert.ok(hiddenCleared.every((command) => command.source === "background"), "user commands are cleared");
+    assert.deepEqual(await clear({ includeBackground: true }), []);
+});
+
+test("initial describe stream reconciliation removes resources missing from a fresh snapshot", async (t) => {
+    const streams = [];
+    let missingPath = null;
+    const h = await harness(t, {
+        cliOverride: (args) => {
+            if (args[0] === "describe" && args[args.indexOf("--apphost") + 1] === missingPath) {
+                return ok({ resources: [describe().resources[0]] });
+            }
+            return undefined;
+        },
+        stream: (args, options) => {
+            streams.push({ args, ...options });
+            return { kill() {} };
+        },
+    });
+    const open = await h.open();
+    await waitUntil(() => streams.length > 0);
+    const baseline = describe().resources;
+    missingPath = streams[0].args[streams[0].args.indexOf("--apphost") + 1];
+    const callsBeforeLine = h.calls.length;
+    streams[0].onLine(JSON.stringify({ ...baseline[0], state: "Starting" }));
+    await waitUntil(() => h.calls.slice(callsBeforeLine).some(({ args }) =>
+        args[0] === "describe" && args[args.indexOf("--apphost") + 1] === missingPath));
+    let state;
+    await waitUntil(async () => {
+        state = (await h.request(open, "/api/state")).state;
+        return allNodes(state.roots).some((node) => node.resourceName === "api"
+            && node.resource?.state === "Starting");
+    });
+    assert.equal(allNodes(state.roots).filter((node) => node.resourceName === "db").length, paths.length - 1);
+});
+
+test("explicit refresh removes resources that a live describe stream never reports as gone", async (t) => {
+    const streams = [];
+    let shrunkPath = null;
+    const h = await harness(t, {
+        cliOverride: (args) => {
+            if (args[0] === "describe" && args[args.indexOf("--apphost") + 1] === shrunkPath) {
+                return ok({ resources: [describe().resources[0]] });
+            }
+            return undefined;
+        },
+        stream: (args, options) => {
+            streams.push({ args, ...options });
+            return { kill() {} };
+        },
+    });
+    const open = await h.open();
+    await waitUntil(() => streams.length > 0);
+    const [stream] = streams;
+    stream.onLine(JSON.stringify(describe()));
+    shrunkPath = stream.args[stream.args.indexOf("--apphost") + 1];
+    const dbCount = (state) => allNodes(state.roots).filter((node) => node.resourceName === "db").length;
+
+    assert.equal(dbCount((await h.request(open, "/api/refresh", {})).state), paths.length - 1);
+    stream.onLine(JSON.stringify({ ...describe().resources[0], state: "Starting" }));
+    let state;
+    await waitUntil(async () => {
+        state = (await h.request(open, "/api/state")).state;
+        return allNodes(state.roots).some((node) => node.resourceName === "api" && node.resource?.state === "Starting");
+    });
+    assert.equal(dbCount(state), paths.length - 1, "later stream upserts must not resurrect removed resources");
+});
+
+test("explicit refresh keeps stream updates that arrive while other hosts reconcile", async (t) => {
+    const streams = [];
+    const heldStarted = deferred();
+    const releaseHeld = deferred();
+    let reconcile = false;
+    const h = await harness(t, {
+        cliOverride: async (args) => {
+            if (!reconcile || args[0] !== "describe") return undefined;
+            if (args[args.indexOf("--apphost") + 1] === paths[0]) {
+                return ok({ resources: [describe(baseInputs, "Running").resources[0]] });
+            }
+            heldStarted.resolve();
+            await releaseHeld.promise;
+            return undefined;
+        },
+        stream: (args, options) => {
+            streams.push({ args, ...options });
+            return { kill() {} };
+        },
+    });
+    const open = await h.open();
+    await waitUntil(() => streams.length === paths.length);
+    for (const stream of streams) stream.onLine(JSON.stringify(describe()));
+    const first = streams.find(({ args }) => args[args.indexOf("--apphost") + 1] === paths[0]);
+    await waitUntil(async () => allNodes((await h.request(open, "/api/state")).state.roots)
+        .filter((node) => node.resourceName === "db").length === paths.length);
+
+    reconcile = true;
+    const refresh = h.request(open, "/api/refresh", {});
+    await heldStarted.promise;
+    await waitUntil(() => h.calls.some(({ args }) => args[0] === "describe" && args.includes(paths[0])));
+    first.onLine(JSON.stringify(describe(baseInputs, "Stopped").resources[0]));
+    releaseHeld.resolve();
+    const { state } = await refresh;
+
+    const nodes = allNodes([state.roots.find((root) => /checkouts-one/.test(root.identityHint))]);
+    assert.equal(nodes.find((node) => node.resourceName === "api")?.resource?.state, "Stopped",
+        "a stream update received during reconciliation must not be overwritten by the older snapshot");
+    assert.equal(nodes.some((node) => node.resourceName === "db"), false, "the snapshot still drops removed resources");
+});
+
+test("explicit refresh that overlaps a poll still reconciles streamed hosts", async (t) => {
+    const streams = [];
+    const psHeld = deferred();
+    const releasePs = deferred();
+    let holdPs = false;
+    let shrink = false;
+    const h = await harness(t, {
+        cliOverride: async (args) => {
+            if (args[0] === "ps" && holdPs) {
+                holdPs = false;
+                psHeld.resolve();
+                await releasePs.promise;
+            }
+            if (shrink && args[0] === "describe") return ok({ resources: [describe().resources[0]] });
+            return undefined;
+        },
+        stream: (args, options) => {
+            streams.push({ args, ...options });
+            return { kill() {} };
+        },
+    });
+    const open = await h.open();
+    await waitUntil(() => streams.length === paths.length);
+    for (const stream of streams) stream.onLine(JSON.stringify(describe()));
+    const dbCount = (state) => allNodes(state.roots).filter((node) => node.resourceName === "db").length;
+    await waitUntil(async () => dbCount((await h.request(open, "/api/state")).state) === paths.length);
+
+    holdPs = true;
+    [...h.intervals][0].callback();
+    await psHeld.promise;
+    shrink = true;
+    const refreshArrived = deferred();
+    h.controls.requestEnded = (url) => { if (url === "/api/refresh") refreshArrived.resolve(); };
+    const refresh = h.request(open, "/api/refresh", {});
+    await refreshArrived.promise;
+    await new Promise((resolveTick) => setTimeout(resolveTick, 0));
+    releasePs.resolve();
+
+    assert.equal(dbCount((await refresh).state), 0, "Refresh must re-describe streamed hosts even after a queued poll");
+});
+
+test("a describe stream that fails after data falls back to one-shot describe", async (t) => {
+    const streams = [];
+    const h = await harness(t, {
+        stream: (args, options) => {
+            streams.push({ args, ...options });
+            return { kill() {} };
+        },
+    });
+    const open = await h.open();
+    await waitUntil(() => streams.length > 0);
+    const [first] = streams;
+    first.onLine(JSON.stringify(describe(baseInputs, "Running")));
+    h.controls.state = "Stopped";
+    const callsBeforeExit = h.calls.length;
+    first.onExit({ code: 1 });
+    await waitUntil(() => h.calls.slice(callsBeforeExit).some(({ args }) => args[0] === "describe"));
+    await waitUntil(async () => {
+        const { state } = await h.request(open, "/api/state");
+        return allNodes(state.roots).find((node) => node.resourceName === "api")?.resource.state === "Stopped";
+    });
+});
+
+test("a stream failure during refresh queues a fresh one-shot model", async (t) => {
+    const streams = [];
+    const describeStarted = deferred();
+    const releaseDescribe = deferred();
+    let heldPath = null;
+    let holdDescribe = false;
+    let describeState = "Running";
+    const h = await harness(t, {
+        cliOverride: async (args) => {
+            if (holdDescribe && args[0] === "describe"
+                && args[args.indexOf("--apphost") + 1] === heldPath) {
+                describeStarted.resolve();
+                await releaseDescribe.promise;
+                return ok(describe(baseInputs, describeState));
+            }
+            return undefined;
+        },
+        stream: (args, options) => {
+            streams.push({ args, ...options });
+            return { kill() {} };
+        },
+    });
+    const open = await h.open();
+    await waitUntil(() => streams.length === paths.length);
+    const [failedStream, waitingStream] = streams;
+    failedStream.onLine(JSON.stringify(describe(baseInputs, "Running")));
+    await waitUntil(async () => {
+        const { state } = await h.request(open, "/api/state");
+        return allNodes(state.roots).some((node) => node.resourceName === "api"
+            && node.resource?.state === "Running");
+    });
+
+    heldPath = waitingStream.args[waitingStream.args.indexOf("--apphost") + 1];
+    holdDescribe = true;
+    [...h.intervals][0].callback();
+    await describeStarted.promise;
+
+    describeState = "Stopped";
+    h.controls.state = "Stopped";
+    const failedPath = failedStream.args[failedStream.args.indexOf("--apphost") + 1];
+    const callsBeforeExit = h.calls.length;
+    failedStream.onExit({ code: 1 });
+    releaseDescribe.resolve();
+
+    await waitUntil(() => h.calls.slice(callsBeforeExit).some(({ args }) =>
+        args[0] === "describe" && args[args.indexOf("--apphost") + 1] === failedPath));
+    await waitUntil(async () => {
+        const { state } = await h.request(open, "/api/state");
+        return allNodes(state.roots).filter((node) => node.resourceName === "api"
+            && node.resource?.state === "Stopped").length === paths.length;
+    });
+});
+
+test("failed background logs are kept under a bounded prefix without touching active logs", async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "aspire-logs-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const logDirectory = backgroundLogDirectory(root);
+    await mkdir(logDirectory, { mode: 0o700 });
+    const seeded = [];
+    for (let index = 0; index < 11; index++) {
+        const path = join(logDirectory, `failed-old-${index}.log`);
+        await writeFile(path, "old failure");
+        const time = new Date(Date.UTC(2020, 0, 1, 0, index));
+        await utimes(path, time, time);
+        seeded.push(`failed-old-${index}.log`);
+    }
+    await writeFile(join(logDirectory, "active.log"), "in progress");
+    const h = await harness(t, {
+        tmpDirectory: root,
+        cliOverride: async (args) => {
+            if (args[0] !== "ps" || !args.includes("--log-file")) return undefined;
+            await writeFile(args[args.indexOf("--log-file") + 1], "ps failure");
+            return fail("ps unavailable");
+        },
+    });
+    await h.open();
+    let names = [];
+    await waitUntil(async () => {
+        names = await readdir(logDirectory);
+        return names.some((name) => name.startsWith("failed-") && !seeded.includes(name))
+            && names.filter((name) => name.startsWith("failed-")).length === 10;
+    });
+    assert.ok(names.includes("active.log"), "pruning must not delete a log that is still being written");
+    assert.ok(!names.includes("failed-old-0.log"), "the oldest failed log is pruned first");
+});
+
+test("logs orphaned by a dead provider are reclaimed while live providers keep theirs", async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "aspire-logs-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const logDirectory = backgroundLogDirectory(root);
+    await mkdir(logDirectory, { mode: 0o700 });
+    const orphaned = "active-999999999-orphaned.log";
+    const live = `active-${process.pid}-live.log`;
+    await writeFile(join(logDirectory, orphaned), "crashed run");
+    await writeFile(join(logDirectory, live), "in progress");
+    const h = await harness(t, { tmpDirectory: root });
+    await h.open();
+    let names = [];
+    await waitUntil(async () => {
+        names = await readdir(logDirectory);
+        return !names.includes(orphaned);
+    });
+    assert.ok(names.includes(live), "a running provider's log is never reclaimed");
+});
+
+async function backgroundLogArgs(t, root) {
+    const psArgs = [];
+    const h = await harness(t, {
+        tmpDirectory: root,
+        cliOverride: async (args) => {
+            if (args[0] === "ps") psArgs.push(args);
+            return undefined;
+        },
+    });
+    await h.open();
+    await waitUntil(() => psArgs.length > 0);
+    return psArgs[0];
+}
+
+test("background logs are not written through a symlinked log directory", async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "aspire-logs-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const target = join(root, "elsewhere");
+    await mkdir(target, { mode: 0o700 });
+    await symlink(target, backgroundLogDirectory(root), process.platform === "win32" ? "junction" : "dir");
+    const args = await backgroundLogArgs(t, root);
+    assert.ok(!args.includes("--log-file"), "a planted directory link must not receive CLI logs");
+    assert.deepEqual(await readdir(target), []);
+});
+
+test("background logs are not written to a log directory other users can write", { skip: process.platform === "win32" }, async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "aspire-logs-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const logDirectory = backgroundLogDirectory(root);
+    await mkdir(logDirectory);
+    await chmod(logDirectory, 0o777);
+    const args = await backgroundLogArgs(t, root);
+    assert.ok(!args.includes("--log-file"), "a shared log directory must not receive CLI logs");
+});
+
+test("background logs use a private per-user log directory", async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "aspire-logs-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const args = await backgroundLogArgs(t, root);
+    const logFile = args[args.indexOf("--log-file") + 1];
+    assert.ok(args.includes("--log-file"));
+    assert.equal(join(logFile, ".."), backgroundLogDirectory(root));
+});
+
+test("streamProcess ignores output that arrives after an oversized line", async () => {
+    const modelUrl = new URL("../../extensions/aspire-apphosts/lib/app-model.mjs", import.meta.url);
+    const context = createContext({ URL, Buffer, process, console, setTimeout, clearTimeout });
+    const children = [];
+    const fakeChildProcess = {
+        spawn() {
+            const child = Object.assign(new EventEmitter(), { kill() {} });
+            child.stdout = Object.assign(new EventEmitter(), { setEncoding() {} });
+            child.stderr = Object.assign(new EventEmitter(), { setEncoding() {} });
+            children.push(child);
+            return child;
+        },
+    };
+    const module = new SourceTextModule(await readFile(modelUrl, "utf8"), {
+        context, identifier: modelUrl.href,
+        initializeImportMeta(meta) { meta.url = modelUrl.href; },
+    });
+    await module.link(async (specifier) => {
+        const exports = specifier === "node:child_process" ? fakeChildProcess : await import(specifier);
+        return new SyntheticModule(Object.keys(exports), function () {
+            for (const [name, value] of Object.entries(exports)) this.setExport(name, value);
+        }, { context });
+    });
+    await module.evaluate();
+    const lines = [];
+    let result;
+    module.namespace.streamProcess(process.execPath, [], {
+        maxLineBytes: 64,
+        onLine: (line) => lines.push(line),
+        onExit: (exit) => { result = exit; },
+    });
+    await waitUntil(() => children.length === 1);
+    const [child] = children;
+    child.stdout.emit("data", `${"x".repeat(256)}\n`);
+    // Output already in the pipe still arrives after kill() and must not be parsed.
+    child.stdout.emit("data", '{"n":1}\n{"tail":true}');
+    child.emit("close", 0);
+
+    assert.deepEqual(lines, []);
+    assert.match(result.error, /exceeded 64 bytes/);
+});
+
+test("describe streams drop optional flags an older CLI rejects and keep streaming", async (t) => {
+    const streams = [];
+    const h = await harness(t, {
+        stream: (args, options) => {
+            streams.push({ args, ...options });
+            return { kill() {} };
+        },
+    });
+    await h.open();
+    await waitUntil(() => streams.length > 0);
+    const [first] = streams;
+    const path = first.args[first.args.indexOf("--apphost") + 1];
+    assert.ok(first.args.includes("--include-disabled-commands"));
+    first.onExit({ code: 1, stderrTail: "Unrecognized command or argument '--include-disabled-commands'." });
+    await waitUntil(() => streams.some((stream) => stream !== first
+        && stream.args[stream.args.indexOf("--apphost") + 1] === path));
+    const retry = streams.findLast((stream) => stream.args[stream.args.indexOf("--apphost") + 1] === path);
+    assert.equal(retry.args.includes("--include-disabled-commands"), false);
+    assert.ok(retry.args.includes("--nologo"), "only the rejected flag is dropped");
+});
+
+test("closing a panel does not cancel its already-started explicit operation", { timeout: 10_000 }, async (t) => {
     const h = await harness(t);
     h.controls.inputs = [];
     const open = await h.open();
