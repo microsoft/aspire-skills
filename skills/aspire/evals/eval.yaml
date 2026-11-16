@@ -190,6 +190,63 @@ stimuli:
       - type: diff-empty
         name: keeps-explicit-mcp-read-only
 
+  - name: router-agent-init-registers-sources-17-001
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. If this request explicitly uses the
+      umbrella aspire router for specialist-owned work, invoke both the router
+      and the owner.
+      I'm on Aspire 17.0 and ran aspire agent init for GitHub Copilot CLI with
+      project scope. No SKILL.md files appeared under .agents/skills, and my
+      current Copilot session doesn't seem to know the aspireify skill. Did setup
+      fail? Give read-only advice. Do not generate files, install tools or run
+      setup commands.
+    tags: { priority: p1, scenario: version-compatibility, area: agent-setup }
+    environment:
+      files: *csharp_apphost
+    rubric:
+      - The response explains that Aspire 17.0 registers plugin or skill sources in agent settings, such as .github/copilot/settings.json, instead of copying skill files.
+      - The response says missing local SKILL.md files are expected and do not mean setup failed.
+      - The response tells the user to reload the client, for example with /restart or a new Copilot session, before relying on the new skills.
+      - The response does not recommend copying skill files into the project or passing --skills aspireify to the 17.0 CLI as the fix.
+    graders:
+      - type: skill-invocation
+        name: invokes-router-for-source-registration
+        config: { required: [aspire], disallowed: [customize-cloud-agent] }
+      - type: prompt
+        name: explains-source-registration-and-reload
+        config: { scoring: binary }
+      - type: diff-empty
+        name: keeps-source-registration-read-only
+
+  - name: router-stale-skill-copy-17-001
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. If this request explicitly uses the
+      umbrella aspire router for specialist-owned work, invoke both the router
+      and the owner.
+      I upgraded to Aspire 17.0. This repo still has .agents/skills/aspireify/SKILL.md
+      from an older aspire agent init run, and I never edited it. Which aspireify
+      guidance should my agent follow, and what should I do about the copy? Give
+      read-only advice. Do not generate files, delete files or run setup commands.
+    tags: { priority: p1, scenario: version-compatibility, area: agent-setup }
+    environment:
+      files: *csharp_apphost
+    rubric:
+      - The response treats the project-local aspireify copy as stale on Aspire 17.0 and says to follow the plugin's aspireify skill instead of deferring to the copy.
+      - The response explains that the stale copy can take precedence over the plugin skill with the same name.
+      - The response suggests aspire doctor to find the copies and learn how to remove them.
+      - The response does not claim aspire agent init removes the copies and does not delete files itself.
+    graders:
+      - type: skill-invocation
+        name: invokes-router-for-stale-copy
+        config: { required: [aspire] }
+      - type: prompt
+        name: treats-copy-as-stale-and-suggests-doctor
+        config: { scoring: binary }
+      - type: diff-empty
+        name: keeps-stale-copy-read-only
+
   - name: router-reject-001
     prompt: >
       How do I run this .NET console app? Give read-only guidance; do not build,

@@ -23,8 +23,11 @@ metadata:
 # Aspire Terminals
 
 Teach an agent to use the right terminal, not to replace every process with a shell.
-Honor a project-local `.agents/skills/aspire-terminals/SKILL.md` when present;
-retain the safety and ownership rules below.
+If a project-local `.agents/skills/aspire-terminals/SKILL.md` exists, check
+`aspire --version`. On Aspire 13.6 and earlier, honor it while retaining the safety
+and ownership rules below. On Aspire 17.0 and later, the copy is stale unless the user
+maintains it. If it is stale, use this skill instead. Tell the user the copy is stale
+and suggest running `aspire doctor` for an actionable fix.
 
 ## Required reference lookup
 
