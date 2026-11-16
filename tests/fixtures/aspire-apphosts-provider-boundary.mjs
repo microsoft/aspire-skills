@@ -55,6 +55,38 @@ test("shared canvas assets are served locally with their correct MIME types", as
     assert.equal(response.status, 404, "only the exact static asset allowlist is public");
 });
 
+test("loopback server rejects foreign hosts, origins, missing tokens, and malformed bodies", async (t) => {
+    const h = await harness(t);
+    const opened = await h.open();
+    const url = new URL(opened.url);
+    const token = url.searchParams.get("token");
+    const raw = (path, { method = "GET", headers = {}, body } = {}) => new Promise((done, reject) => {
+        const request = http.request({
+            host: url.hostname, port: url.port, path, method,
+            headers: { host: url.host, ...headers },
+        }, (response) => {
+            response.resume();
+            response.once("end", () => done(response.statusCode));
+        });
+        request.once("error", (error) => error.code === "ECONNRESET" ? done("reset") : reject(error));
+        request.end(body);
+    });
+    const authed = { "x-aspire-apphosts-token": token };
+    assert.equal(await raw("/api/state", { headers: authed }), 200);
+    assert.equal(await raw("/api/state"), 403, "missing token");
+    assert.equal(await raw("/api/state", { headers: { "x-aspire-apphosts-token": `${token}x` } }), 403, "wrong token");
+    assert.equal(await raw("/events"), 403, "event stream requires the token");
+    assert.equal(await raw("/api/state", { headers: { ...authed, host: `localhost:${url.port}` } }), 403, "foreign host");
+    assert.equal(await raw("/", { headers: { host: `evil.example:${url.port}` } }), 403, "static assets check the host");
+    assert.equal(await raw("/api/state", { headers: { ...authed, origin: "http://evil.example" } }), 403, "foreign origin");
+    const json = { ...authed, "content-type": "application/json" };
+    assert.equal(await raw("/api/selection", { method: "POST", headers: json, body: "{not json" }), 400);
+    const oversized = await raw("/api/selection", {
+        method: "POST", headers: json, body: JSON.stringify({ nodeId: "x".repeat(130 * 1024) }),
+    });
+    assert.ok(oversized === 413 || oversized === "reset", `oversized body must be refused, got ${oversized}`);
+});
+
 test("generic reopen rejects invalid retargets while retaining the existing panel", async (t) => {
     const h = await harness(t);
     const opened = await h.open();
@@ -95,11 +127,11 @@ test("generic reopen rejects failed retarget refreshes while preserving the stal
     h.controls.failPs = true;
     await assert.rejects(
         h.open("test", { appHostPath: targets[1] }),
-        /ps unavailable/,
+        (error) => error.code === "apphosts_refresh_failed" && /ps unavailable/.test(error.message),
     );
     await assert.rejects(
         h.open("test", { appHostPath: targets[1] }),
-        /ps unavailable/,
+        (error) => error.code === "apphosts_refresh_failed" && /ps unavailable/.test(error.message),
         "retrying the same target must not report success while discovery is still failing",
     );
     const failed = (await h.request(opened, "/api/state")).state;
@@ -1164,6 +1196,8 @@ test("clearing output while background commands are hidden keeps their history",
             && stream.events.indexOf(event) >= mark)).commands.filter((command) => command.status !== "running");
     };
 
+    const otherHostCleared = await clear({ includeBackground: true, appHostId: "another-apphost" });
+    assert.ok(otherHostCleared.some((command) => command.source !== "background"), "another AppHost's history survives");
     const hiddenCleared = await clear({ includeBackground: false });
     assert.ok(hiddenCleared.length > 0, "background history survives");
     assert.ok(hiddenCleared.every((command) => command.source === "background"), "user commands are cleared");

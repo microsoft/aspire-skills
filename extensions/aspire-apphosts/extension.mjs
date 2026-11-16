@@ -303,6 +303,7 @@ function publicCommandLogItem(item, includeOutput) {
     return {
         id: item.id,
         source: item.source,
+        operation: item.operation,
         label: item.label,
         appHostId: item.appHostId,
         appHostName: item.appHostName,
@@ -341,6 +342,7 @@ function beginCommandLog(entry, args, meta, sensitiveValues = []) {
     const item = {
         id: `cmd-${++entry.commandSequence}`,
         source: meta.source ?? "user",
+        operation: meta.operation ?? null,
         label: meta.label,
         appHostId: record?.id ?? null,
         appHostName: record?.displayName ?? null,
@@ -452,10 +454,11 @@ function finishCommandLog(entry, item, result) {
     trimCommandLog(entry, commandLogKind(item));
 }
 
-function clearCommandLog(entry, { includeBackground = true } = {}) {
-    // Hidden background history is not what the user asked to clear.
+function clearCommandLog(entry, { includeBackground = true, appHostId = null } = {}) {
+    // Hidden background history and other AppHosts' history are not what the user asked to clear.
     entry.commandLog = entry.commandLog.filter((item) => item.status === "running"
-        || (!includeBackground && commandLogKind(item) === "background"));
+        || (!includeBackground && commandLogKind(item) === "background")
+        || (appHostId && item.appHostId && item.appHostId !== appHostId));
     broadcast(entry, commandLogSnapshot(entry));
     return { ok: true, status: 200 };
 }
@@ -1855,6 +1858,7 @@ async function runAppHostOperation(entry, request) {
                     entry,
                     record,
                     source: "operation",
+                    operation: operationName,
                     label: operationName === "pipeline-step"
                         ? `${definition.title} ${step} on ${record.displayName}`
                         : `${definition.title} ${record.displayName}`,
@@ -2260,7 +2264,10 @@ async function handleRequest(entry, req, res) {
         return sendJson(res, result.status, result);
     }
     if (url.pathname === "/api/command-log/clear") {
-        const result = clearCommandLog(entry, { includeBackground: body?.includeBackground !== false });
+        const result = clearCommandLog(entry, {
+            includeBackground: body?.includeBackground !== false,
+            appHostId: typeof body?.appHostId === "string" && body.appHostId ? body.appHostId : null,
+        });
         return sendJson(res, result.status, result);
     }
 
@@ -2308,7 +2315,7 @@ async function applyEntryInput(entry, input, workingDirectory) {
     });
     const state = await requestRefresh(entry, { force: true });
     if (entry.discoveryStale) {
-        throw new Error(state.error || "Unable to refresh AppHosts.");
+        throw new CanvasError("apphosts_refresh_failed", state.error || "Unable to refresh AppHosts.");
     }
 }
 
@@ -2561,7 +2568,9 @@ const appHostsCanvas = createCanvas({
                     stale: hasRoots,
                     error: clampText(error?.message || error, 500),
                 });
-                throw error;
+                throw error instanceof CanvasError
+                    ? error
+                    : new CanvasError("apphosts_reopen_failed", clampText(error?.message || error, 500));
             }
         }
         if (entry.closed) {
