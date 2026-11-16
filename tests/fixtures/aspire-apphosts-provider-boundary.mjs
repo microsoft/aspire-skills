@@ -1143,6 +1143,29 @@ test("another stream's newline does not complete a held partial command line", a
     assert.match(events, /safe output/);
 });
 
+test("clearing output while background commands are hidden keeps their history", async (t) => {
+    const h = await harness(t);
+    h.controls.inputs = [];
+    const open = await h.open();
+    const stream = await sse(h, open);
+    t.after(() => stream.close());
+    const request = await requestFor(h, open);
+    h.controls.executor = async () => ok({ completed: true });
+    assert.equal((await h.request(open, "/api/command", request)).ok, true);
+    await stream.waitFor((event) => event.type === "command-log" && event.command.status === "succeeded");
+    const clear = async (body) => {
+        const mark = stream.events.length;
+        assert.equal((await h.request(open, "/api/command-log/clear", body)).ok, true);
+        return (await stream.waitFor((event) => event.type === "command-log-snapshot"
+            && stream.events.indexOf(event) >= mark)).commands.filter((command) => command.status !== "running");
+    };
+
+    const hiddenCleared = await clear({ includeBackground: false });
+    assert.ok(hiddenCleared.length > 0, "background history survives");
+    assert.ok(hiddenCleared.every((command) => command.source === "background"), "user commands are cleared");
+    assert.deepEqual(await clear({ includeBackground: true }), []);
+});
+
 test("initial describe stream reconciliation removes resources missing from a fresh snapshot", async (t) => {
     const streams = [];
     let missingPath = null;

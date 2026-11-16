@@ -2873,7 +2873,7 @@ function renderOutputPanel() {
     }
 
     els.outputCopy.disabled = !selected;
-    els.outputClear.disabled = commandLog.every((item) => item.status === "running");
+    els.outputClear.disabled = visible.every((item) => item.status === "running");
     renderOutputText();
 }
 
@@ -2954,7 +2954,7 @@ async function copyCommandOutput() {
 
 async function clearCommandOutput() {
     try {
-        await api("/api/command-log/clear", { method: "POST" });
+        await api("/api/command-log/clear", { method: "POST", body: { includeBackground: showBackgroundCommands } });
     } catch (error) {
         showToast(error.message, true);
     }

@@ -446,8 +446,10 @@ function finishCommandLog(entry, item, result) {
     trimCommandLog(entry, commandLogKind(item));
 }
 
-function clearCommandLog(entry) {
-    entry.commandLog = entry.commandLog.filter((item) => item.status === "running");
+function clearCommandLog(entry, { includeBackground = true } = {}) {
+    // Hidden background history is not what the user asked to clear.
+    entry.commandLog = entry.commandLog.filter((item) => item.status === "running"
+        || (!includeBackground && commandLogKind(item) === "background"));
     broadcast(entry, commandLogSnapshot(entry));
     return { ok: true, status: 200 };
 }
@@ -2194,7 +2196,7 @@ async function handleRequest(entry, req, res) {
         return sendJson(res, result.status, result);
     }
     if (url.pathname === "/api/command-log/clear") {
-        const result = clearCommandLog(entry);
+        const result = clearCommandLog(entry, { includeBackground: body?.includeBackground !== false });
         return sendJson(res, result.status, result);
     }
 

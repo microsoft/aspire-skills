@@ -496,6 +496,23 @@ test("background refreshes never evict completed user commands from the output h
         "the provider keeps 40 user commands regardless of background activity");
 });
 
+test("output Clear only acts on commands the list shows", async () => {
+    const renderer = await boot();
+    const base = { appHostId: "host-a", appHostName: "Host A", startedAt: 0, status: "succeeded", output: "" };
+    await renderer.push({ type: "command-log-snapshot", commands: [
+        { ...base, id: "bg-1", source: "background", label: "List AppHosts", commandLine: "aspire ps" },
+    ] });
+    renderer.document.getElementById("output-toggle").click();
+    const clear = renderer.document.getElementById("output-clear");
+    assert.equal(clear.disabled, true, "hidden background history alone leaves nothing to clear");
+
+    await renderer.push({ type: "command-log", command: { ...base, id: "user-1", source: "resource", label: "Restart api", commandLine: "aspire resource api restart" } });
+    assert.equal(clear.disabled, false);
+    clear.click();
+    const request = renderer.requests.find((candidate) => candidate.path === "/api/command-log/clear");
+    assert.deepEqual(request?.body, { includeBackground: false });
+});
+
 test("output panel identifies sanitized command output", async () => {
     const renderer = await boot();
     const sanitized = renderer.document.getElementById("output-sanitized");
