@@ -68,8 +68,9 @@ The **Release branch check** fails any PR into main unless its head is a
 
 Backport patches set coordinated versions on both sides to the target's
 version. Manifest content edits still apply, but a release cannot overwrite the
-target's version. A release PR's patch starts at the dev commit in its
-`Aspire-Release-Source` trailer, so it does not replay older dev history.
+target's version. The release PR body records its dev source commit; backports
+start there so they do not replay older dev history. The marker also identifies
+the operation on reruns, so release preparation does not need an empty commit.
 Main-to-dev backports also merge main's approved release notes while preserving
 dev's current changelog entry and newer work. Patch conflicts or
 preservation-check failures stop the operation and post a source-PR comment

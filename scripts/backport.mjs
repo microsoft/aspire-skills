@@ -47,8 +47,8 @@ function fetchHead(repo, number, head) {
 
 // GitHub diffs a release PR against main, which spans all dev work since the last release.
 // Diff from the recorded dev source instead.
-function patchBase(repo, head, source, targetTip) {
-  const recorded = releaseSources(repo.run(["log", "--format=%B%x00", head, "--not", targetTip, `${source}^1`]));
+function patchBase(repo, head, releaseBody, source, targetTip) {
+  const recorded = releaseSources(releaseBody ?? "");
   if (recorded.size > 1) throw new Error("The source PR records more than one release source; backport manually.");
   if (recorded.size === 1) {
     const [base] = recorded;
@@ -115,7 +115,7 @@ export function runBackport(repo, { repository, number, target, automatic = fals
       repo.run(["checkout", "--detach", targetTip]);
       const head = fullSha(pr.head.sha);
       fetchHead(repo, number, head);
-      const patch = backportPatch(repo, pr, patchBase(repo, head, source, targetTip), head, versionSnapshot(repo, targetTip).version);
+      const patch = backportPatch(repo, pr, patchBase(repo, head, pr.body, source, targetTip), head, versionSnapshot(repo, targetTip).version);
       // Generated catalogs are rebuilt for the target instead of patched.
       const applyArgs = ["am", "--3way", "--empty=keep", "--ignore-whitespace", "--keep-non-patch", "--exclude=opencode/*"];
       let mergedChangelog;

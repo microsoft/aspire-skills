@@ -136,18 +136,24 @@ export function githubRequest(path, { method = "GET", body } = {}) {
   return result.stdout.trim() ? JSON.parse(result.stdout) : null;
 }
 
-export function ensurePullRequest(api, repository, { branch, base, title, body, marker }) {
+function matchingPullRequest(api, repository, { branch, base, marker }) {
   const owner = repository.split("/")[0];
   const pulls = api(`repos/${repository}/pulls?state=all&head=${encodeURIComponent(`${owner}:${branch}`)}&per_page=100`);
   if (pulls.length > 1) throw new Error(`Multiple PRs exist for ${branch}; resolve manually.`);
   const existing = pulls[0];
   if (existing) {
-    if (existing.base.ref !== base || !existing.body?.includes(marker)) {
+    const body = existing.body?.replaceAll("\r\n", "\n");
+    if (existing.base.ref !== base || !body?.includes(marker.replaceAll("\r\n", "\n"))) {
       throw new Error(`Existing PR does not match this automation operation: ${branch}`);
     }
     if (existing.state !== "open") throw new Error(`PR #${existing.number} is already closed or merged; it will not be reopened.`);
-    return existing;
   }
+  return existing ?? null;
+}
+
+export function ensurePullRequest(api, repository, { branch, base, title, body, marker }) {
+  const existing = matchingPullRequest(api, repository, { branch, base, marker });
+  if (existing) return existing;
   return api(`repos/${repository}/pulls`, {
     method: "POST", body: { head: branch, base, title, body: `${marker}\n\n${body}` }
   });
@@ -160,11 +166,23 @@ function operationMarker(source, version, nextVersion) {
 }
 
 export function releaseSources(messages) {
-  const pattern = new RegExp(`^${releaseSourceTrailer}: ([0-9a-f]{40})$`, "gm");
-  return new Set([...messages.matchAll(pattern)].map(match => match[1]));
+  const pattern = new RegExp(`^(?:<!-- )?${releaseSourceTrailer}: ([0-9a-f]{40})$`, "gm");
+  return new Set([...messages.replaceAll("\r\n", "\n").matchAll(pattern)].map(match => match[1]));
 }
 
-export function prepareRelease(repo, source, version, nextVersion) {
+function isAncestor(repo, ancestor, descendant) {
+  try {
+    repo.run(["merge-base", "--is-ancestor", ancestor, descendant]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function prepareRelease(repo, source, version, nextVersion, {
+  api = githubRequest,
+  repository = process.env.GITHUB_REPOSITORY
+} = {}) {
   fullSha(source);
   parseVersion(version);
   parseVersion(nextVersion);
@@ -183,27 +201,40 @@ export function prepareRelease(repo, source, version, nextVersion) {
   for (const kind of ["release", "bump-dev"]) {
     const branch = `${kind}/${kind === "release" ? version : nextVersion}`;
     const base = kind === "release" ? "main" : "dev";
+    let expected;
+    if (kind === "release") {
+      expected = commitFiles(repo, source, releaseFiles(repo, source, version, main),
+        `Prepare release ${version}`);
+      assertPublishedHistory(repo, expected, main);
+      expected = commitFiles(repo, expected, expectedCatalog(repo, expected),
+        `Generate release ${version} catalogs`, { replace: ["opencode"] });
+      validateRelease(repo, expected, main, branch);
+    } else {
+      const { files } = developmentVersionFiles(repo, dev, nextVersion);
+      expected = commitFiles(repo, dev, files, `Advance dev to ${nextVersion}\n\n${marker}`);
+      expected = commitFiles(repo, expected, expectedCatalog(repo, expected),
+        `Generate dev ${nextVersion} catalogs`, { replace: ["opencode"] });
+    }
+    const pull = repository ? matchingPullRequest(api, repository, {
+      branch, base, marker: `<!-- ${marker} -->`
+    }) : null;
     let commit = remoteHead(repo, branch);
     const existing = commit !== null;
     if (commit) {
       repo.run(["fetch", "--no-tags", "origin", commit]);
-      // The original operation commit remains in history even after maintainer edits.
-      const messages = repo.run(["log", "--format=%B%x00", commit, "--not", main]);
-      if (!messages.split("\0").some(message => message.includes(marker))) {
-        throw new Error(`Existing branch belongs to another operation: ${branch}`);
+      const operationBase = kind === "release" ? source : dev;
+      if (!isAncestor(repo, operationBase, commit)) {
+        throw new Error(`Existing branch does not descend from this operation's source: ${branch}`);
+      }
+      if (!pull && repo.run(["rev-parse", `${commit}^{tree}`]) !== repo.run(["rev-parse", `${expected}^{tree}`])) {
+        throw new Error(`Existing branch has no matching PR and contains unexpected changes: ${branch}`);
+      }
+      if (kind === "release") validateRelease(repo, commit, main, branch);
+      else if (versionSnapshot(repo, commit).version !== nextVersion) {
+        throw new Error(`Existing branch has an unexpected development version: ${branch}`);
       }
     } else {
-      if (kind === "release") {
-        commit = commitFiles(repo, source, releaseFiles(repo, source, version, main),
-          `Prepare release ${version}\n\n${marker}`, { allowEmpty: true });
-        assertPublishedHistory(repo, commit, main);
-        commit = commitFiles(repo, commit, expectedCatalog(repo, commit), `Generate release ${version} catalogs`, { replace: ["opencode"] });
-        validateRelease(repo, commit, main, branch);
-      } else {
-        const { files } = developmentVersionFiles(repo, dev, nextVersion);
-        commit = commitFiles(repo, dev, files, `Advance dev to ${nextVersion}\n\n${marker}`);
-        commit = commitFiles(repo, commit, expectedCatalog(repo, commit), `Generate dev ${nextVersion} catalogs`, { replace: ["opencode"] });
-      }
+      commit = expected;
     }
     branches.push({ branch, base, commit, baseCommit: base === "main" ? main : dev, existing });
   }

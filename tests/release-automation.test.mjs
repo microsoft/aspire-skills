@@ -78,9 +78,24 @@ function githubFixture() {
   return { api, pulls, comments, sources };
 }
 
+function prepareWithGithub(f, github, source, version, nextVersion) {
+  return prepareRelease(f.repo, source, version, nextVersion, {
+    api: github.api, repository: "example/test"
+  });
+}
+
+function openPreparedPulls(github, plan) {
+  for (const { branch, base } of plan.branches) {
+    ensurePullRequest(github.api, "example/test", {
+      branch, base, marker: plan.marker, title: branch, body: "Prepared release."
+    });
+  }
+}
+
 test("preparation returns 0.0.5 release commits without publishing; reruns preserve edits", t => {
   const f = fixture(t);
-  const plan = prepareRelease(f.repo, f.dev, "0.0.5", "0.0.6");
+  const github = githubFixture();
+  const plan = prepareWithGithub(f, github, f.dev, "0.0.5", "0.0.6");
   assert.deepEqual(plan.branches.map(({commit, ...branch}) => branch), [
     { branch: "release/0.0.5", base: "main", baseCommit: f.main, existing: false },
     { branch: "bump-dev/0.0.6", base: "dev", baseCommit: f.dev, existing: false }
@@ -93,22 +108,26 @@ test("preparation returns 0.0.5 release commits without publishing; reruns prese
   validateCatalog(f.repo, bump, expectedCatalog(f.repo, bump));
   assert.match(f.repo.read(bump, "package.json").toString(), /Preserve non-version metadata/);
   for (const {branch, commit} of plan.branches) guardedPush(f.repo, branch, commit, null);
+  openPreparedPulls(github, plan);
+  for (const pull of github.pulls) pull.body = pull.body.replaceAll("\n", "\r\n");
   const edited = commitFiles(f.repo, release, new Map([["maintainer.txt", Buffer.from("Keep this edit.\n")]]), "Maintainer review");
   guardedPush(f.repo, "release/0.0.5", edited, release);
-  const retry = prepareRelease(f.repo, f.dev, "0.0.5", "0.0.6");
+  const retry = prepareWithGithub(f, github, f.dev, "0.0.5", "0.0.6");
   assert.deepEqual(retry.branches.map(({commit, existing}) => ({commit, existing})), [
     { commit: edited, existing: true }, { commit: bump, existing: true }
   ]);
   assert.equal(remoteHead(f.repo, "release/0.0.5"), edited);
-  assert.throws(() => prepareRelease(f.repo, f.dev, "0.0.5", "0.0.7"), /another operation/);
+  assert.throws(() => prepareWithGithub(f, github, f.dev, "0.0.5", "0.0.7"), /does not match this automation operation/);
 });
 
 test("preparation resumes when the workflow has pushed only one branch", t => {
   const f = fixture(t);
-  const plan = prepareRelease(f.repo, f.dev, "0.0.4", "0.0.5");
+  const github = githubFixture();
+  const plan = prepareWithGithub(f, github, f.dev, "0.0.4", "0.0.5");
   const release = plan.branches[0];
+  assert.doesNotMatch(f.repo.run(["log", "--format=%s", release.commit, "--not", f.dev]), /Prepare release/);
   guardedPush(f.repo, release.branch, release.commit, null);
-  const retry = prepareRelease(f.repo, f.dev, "0.0.4", "0.0.5");
+  const retry = prepareWithGithub(f, github, f.dev, "0.0.4", "0.0.5");
   assert.deepEqual(retry.branches[0], { ...release, existing: true });
   assert.equal(retry.branches[1].existing, false);
   assert.equal(remoteHead(f.repo, retry.branches[1].branch), null);
@@ -116,15 +135,17 @@ test("preparation resumes when the workflow has pushed only one branch", t => {
 
 test("preparation rejects invalid versions, unrelated sources, and existing tags or branches", t => {
   const f = fixture(t);
+  const github = githubFixture();
   const prepare = (source = f.dev, version = "0.0.4", next = "0.0.5") =>
-    prepareRelease(f.repo, source, version, next);
+    prepareWithGithub(f, github, source, version, next);
   assert.throws(() => prepare(f.dev, "v0.0.4"), /SemVer/);
   assert.throws(() => prepare(f.dev, "0.0.4", "0.0.4"), /newer than the release/);
   assert.throws(() => prepare(f.dev, "0.0.3"), /newer than main/);
   const unrelated = commitFiles(f.repo, null, new Map([["unrelated", Buffer.from("Unrelated")]]), "Unrelated root");
   assert.throws(() => prepare(unrelated), /git merge-base failed/);
-  guardedPush(f.repo, "release/0.0.4", f.dev, null);
-  assert.throws(() => prepare(), /another operation/);
+  const unexpected = commitFiles(f.repo, f.dev, new Map([["unexpected.txt", Buffer.from("Not generated.\n")]]), "Unrelated branch work");
+  guardedPush(f.repo, "release/0.0.4", unexpected, null);
+  assert.throws(() => prepare(), /unexpected changes/);
   f.repo.run(["tag", "v0.0.4", f.main]);
   f.repo.run(["push", "--quiet", "origin", "refs/tags/v0.0.4"]);
   assert.throws(() => prepare(), /published tag/);
@@ -178,16 +199,17 @@ test("a remote update between the last read and push is rejected by the lease", 
 function sourcePull(github, number, source, base, head = source) {
   github.sources.set(number, {
     number, merged: true, merge_commit_sha: source, base: { ref: base, repo: { full_name: "example/test" } },
-    head: { sha: head }, title: "Fix an important instruction", user: { login: "contributor", id: 1 }
+    head: { sha: head }, title: "Fix an important instruction", user: { login: "contributor", id: 1 }, body: ""
   });
 }
 
-function mergeReleasePull(f, github, number, release, devBump) {
+function mergeReleasePull(f, github, number, release, devBump, marker) {
   const releaseTree = new Map([...f.repo.files(release).keys()].map(path => [path, f.repo.read(release, path)]));
   const source = commitFiles(f.repo, f.main, releaseTree, "Merge release PR");
   guardedPush(f.repo, "main", source, f.main);
   guardedPush(f.repo, "dev", devBump, remoteHead(f.repo, "dev"));
   sourcePull(github, number, source, "main", release);
+  github.sources.get(number).body = marker.replaceAll("\n", "\r\n");
 }
 
 test("Arcade patch backport preserves unrelated target work and reruns reuse the PR", t => {
@@ -229,12 +251,12 @@ test("automatic main-to-dev backport regenerates catalogs for the dev target", t
 test("automatic release backport preserves the bumped dev version", t => {
   const f = fixture(t);
   const github = githubFixture();
-  const plan = prepareRelease(f.repo, f.dev, "0.0.4", "0.0.5");
+  const plan = prepareWithGithub(f, github, f.dev, "0.0.4", "0.0.5");
   const release = commitFiles(f.repo, plan.branches[0].commit, new Map([["CHANGELOG.md",
     Buffer.from(f.repo.read(plan.branches[0].commit, "CHANGELOG.md").toString().replace("Approved notes.", "Final release notes."))
   ]]), "Finalize release notes");
   const devBump = plan.branches[1].commit;
-  mergeReleasePull(f, github, 46, release, devBump);
+  mergeReleasePull(f, github, 46, release, devBump, plan.marker);
 
   runBackport(f.repo, { repository: "example/test", number: 46, target: "dev", automatic: true, api: github.api });
 
@@ -254,10 +276,10 @@ test("automatic release backport preserves the bumped dev version", t => {
 test("automatic release backport carries manifest content edits at the dev version", t => {
   const f = fixture(t);
   const github = githubFixture();
-  const plan = prepareRelease(f.repo, f.dev, "0.0.4", "0.0.5");
+  const plan = prepareWithGithub(f, github, f.dev, "0.0.4", "0.0.5");
   const body = f.repo.read(plan.branches[0].commit, "skills/aspire/SKILL.md").toString().replace("# Aspire", "# Aspire hotfix");
   const release = commitFiles(f.repo, plan.branches[0].commit, new Map([["skills/aspire/SKILL.md", Buffer.from(body)]]), "Hotfix skill");
-  mergeReleasePull(f, github, 47, release, plan.branches[1].commit);
+  mergeReleasePull(f, github, 47, release, plan.branches[1].commit, plan.marker);
 
   runBackport(f.repo, { repository: "example/test", number: 47, target: "dev", automatic: true, api: github.api });
 
@@ -272,9 +294,9 @@ test("automatic release backport does not replay dev history from before the rel
   const released = commitFiles(f.repo, f.dev, new Map([["skills/aspire/links.md", Buffer.from("Released link.\n")]]), "Released dev work");
   const newer = commitFiles(f.repo, released, new Map([["skills/aspire/links.md", Buffer.from("Newer dev link.\n")]]), "Newer dev work");
   guardedPush(f.repo, "dev", newer, f.dev);
-  const plan = prepareRelease(f.repo, released, "0.0.4", "0.0.5");
+  const plan = prepareWithGithub(f, github, released, "0.0.4", "0.0.5");
   const release = commitFiles(f.repo, plan.branches[0].commit, new Map([["skills/aspire/fix.md", Buffer.from("Release fix.\n")]]), "Release fix");
-  mergeReleasePull(f, github, 48, release, plan.branches[1].commit);
+  mergeReleasePull(f, github, 48, release, plan.branches[1].commit, plan.marker);
 
   runBackport(f.repo, { repository: "example/test", number: 48, target: "dev", automatic: true, api: github.api });
 
@@ -342,6 +364,7 @@ test("workflow wiring keeps fork validation unprivileged and bot checks on final
   for (const name of ["prepare-release", "backport"]) {
     const config = workflow(name);
     assert.equal(config.permissions.contents, "read");
+    if (name === "prepare-release") assert.equal(config.permissions["pull-requests"], "read");
     assert.equal(config.on.pull_request_target, undefined);
     assert.equal(config.concurrency["cancel-in-progress"], false);
     const job = Object.values(config.jobs)[0];
