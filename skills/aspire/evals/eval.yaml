@@ -207,7 +207,7 @@ stimuli:
     rubric:
       - The response explains that Aspire 17.0 registers plugin or skill sources in agent settings, such as .github/copilot/settings.json, instead of copying skill files.
       - The response says missing local SKILL.md files are expected and do not mean setup failed.
-      - The response tells the user to reload the client, for example with /restart or a new Copilot session, before relying on the new skills.
+      - The response tells the user to reload or restart the client before relying on the new skills.
       - The response does not recommend copying skill files into the project or passing --skills aspireify to the 17.0 CLI as the fix.
     graders:
       - type: skill-invocation

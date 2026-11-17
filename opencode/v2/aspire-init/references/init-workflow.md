@@ -88,11 +88,8 @@ instead of at the repo root.
 - **Aspire 17.0 and later:** Aspire registers the aspire-skills plugin, which includes
   `aspireify`, in the selected clients' settings, such as `.github/copilot/settings.json` or
   `.claude/settings.json`. OpenCode gets a skill catalog URL in `opencode.json`. The client
-  fetches the content, so no local `aspireify/SKILL.md` is expected. Reload the client
-  before relying on it:
-  - **GitHub Copilot CLI:** run `/restart`.
-  - **Claude Code:** accept the workspace trust prompt, then run `/reload-plugins`.
-  - **OpenCode:** restart OpenCode.
+  fetches the content, so no local `aspireify/SKILL.md` is expected. Reload or restart the
+  client before relying on it.
 - The skill instructs the agent to scan the repo, propose a resource graph, edit the
   AppHost, and validate via `aspire start`.
 - In 13.6+, the chained agent setup preselects the recommended skills (including
