@@ -16,6 +16,8 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   canvas now recognizes `apphost.go` and labels its language as Go.
 
 ### Changed
+- The AppHosts canvas preserves focused command inputs during live refreshes and
+  loads secret-dependent inputs when you leave the field or run the command.
 - Removed Community Toolkit guidance from Aspireify and orchestration. Go services use
   the first-party `Aspire.Hosting.Go` integration (`AddGoApp`); resource wiring now
   prefers first-party packages and falls back to raw executables or containers.

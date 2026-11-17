@@ -190,6 +190,8 @@ const dynamicLoadTimers = new Map();
 const dynamicLoadGenerations = new Map();
 const dynamicLoadingIds = new Set();
 const dynamicLoadFailedIds = new Set();
+const pendingSecretDependencies = new Set();
+const commandControlSchemas = new WeakMap();
 
 function element(tag, properties = {}, children = []) {
     const node = document.createElement(tag);
@@ -1970,7 +1972,7 @@ function renderTree() {
     const focusKey = focusState ? null : captureFocusKey();
     const paneScroll = renderedAppHostId === selectedHost.id ? capturePaneScroll() : null;
     const switchedHost = renderedAppHostId !== selectedHost.id;
-    els.tree.replaceChildren(renderHostStage(selectedHost, hosts));
+    replaceTreePreservingCommandInput(renderHostStage(selectedHost, hosts));
     document.body.classList.add("has-host");
     document.body.classList.toggle("is-inspecting", Boolean(selectedResourceId));
     updateFooterCount();
@@ -1999,6 +2001,52 @@ function treeContains(nodes, nodeId) {
     return nodes.some((node) => node.id === nodeId || treeContains(node.children ?? [], nodeId));
 }
 
+function replaceTreePreservingCommandInput(nextTree) {
+    const active = document.activeElement;
+    const nextControl = active?.closest?.(".command-form") && active.name
+        ? nextTree.querySelector(`.command-form [name="${CSS.escape(active.name)}"]`)
+        : null;
+    const branch = (node, root) => {
+        const nodes = [];
+        for (; node && node !== root; node = node.parentElement) nodes.unshift(node);
+        return node === root ? nodes : [];
+    };
+    const currentBranch = branch(active, els.tree);
+    const nextBranch = nextControl ? branch(nextControl, nextTree) : [];
+    if (nextControl) nextBranch.unshift(nextTree);
+    if (!nextControl || !commandControlSchemas.has(active)
+        || commandControlSchemas.get(active) !== commandControlSchemas.get(nextControl)
+        || active.value !== nextControl.value || active.checked !== nextControl.checked
+        || currentBranch.length !== nextBranch.length
+        || currentBranch.some((node, index) => node.tagName !== nextBranch[index].tagName)) {
+        els.tree.replaceChildren(nextTree);
+        return;
+    }
+
+    // Keep the focused control and its ancestors attached, including during IME composition.
+    let parent = els.tree;
+    for (let index = 0; index < currentBranch.length; index++) {
+        const current = currentBranch[index];
+        const next = nextBranch[index];
+        for (const name of current.getAttributeNames()) {
+            if (!next.hasAttribute(name)) current.removeAttribute(name);
+        }
+        for (const name of next.getAttributeNames()) current.setAttribute(name, next.getAttribute(name));
+        for (const sibling of [...parent.childNodes]) {
+            if (sibling !== current) sibling.remove();
+        }
+        const nextParent = index === 0 ? null : nextBranch[index - 1];
+        const siblings = nextParent ? [...nextParent.childNodes] : [nextTree];
+        let before = true;
+        for (const sibling of siblings) {
+            if (sibling === next) before = false;
+            else if (before) parent.insertBefore(sibling, current);
+            else parent.appendChild(sibling);
+        }
+        parent = current;
+    }
+}
+
 function captureCommandFocus() {
     const active = document.activeElement;
     if (!active?.closest?.(".command-form") || !active.name) {
@@ -2016,7 +2064,7 @@ function restoreCommandFocus(focusState) {
         return;
     }
     const control = els.tree.querySelector(`.command-form [name="${CSS.escape(focusState.name)}"]`);
-    if (!control) {
+    if (!control || control === document.activeElement) {
         return;
     }
     control.focus();
@@ -2369,6 +2417,7 @@ function cancelDynamicInputsLoad(nodeId) {
     dynamicLoadGenerations.set(nodeId, (dynamicLoadGenerations.get(nodeId) ?? 0) + 1);
     dynamicLoadingIds.delete(nodeId);
     dynamicLoadFailedIds.delete(nodeId);
+    pendingSecretDependencies.delete(nodeId);
 }
 
 function clearActiveCommand() {
@@ -2448,11 +2497,12 @@ function commandField(node, input) {
                 input: (event) => updateCommandDraft(node, input, event.target.value),
                 change: (event) => {
                     event.target.value = normalizeCommandValue(input.inputType, event.target.value);
-                    updateCommandDraft(node, input, event.target.value);
+                    updateCommandDraft(node, input, event.target.value, { committed: true });
                 },
             },
         });
     }
+    commandControlSchemas.set(control, JSON.stringify({ commandId: node.id, input }));
     const label = element("span", { text: `${input.label}${input.required ? " *" : ""}` });
     return element("label", { class: `command-field${checkbox ? " checkbox-field" : ""}`, htmlFor: id }, [
         ...(checkbox ? [control, label] : [label, control]),
@@ -2485,7 +2535,8 @@ function descriptionContent(text, markdown) {
     return parts.filter((part) => part !== "");
 }
 
-function updateCommandDraft(node, input, value) {
+function updateCommandDraft(node, input, value, { committed = false } = {}) {
+    node = findNode(node.id) ?? node;
     const changed = (normalizeCommandValue(input.inputType, commandDraft(node)[input.name]) ?? "")
         !== (normalizeCommandValue(input.inputType, value) ?? "");
     commandDraft(node)[input.name] = value;
@@ -2510,10 +2561,23 @@ function updateCommandDraft(node, input, value) {
         error.hidden = true;
     }
     const inputs = commandInputList(node);
-    if (changed && [...(node.command.argumentInputs ?? []), ...inputs].some((candidate) =>
-        candidate.dynamicLoading?.dependsOnInputs?.includes(input.name))) {
-        clearTimeout(dynamicLoadTimers.get(node.id));
-        const generation = beginDynamicInputsLoad(node);
+    if ([...(node.command.argumentInputs ?? []), ...inputs].some((candidate) =>
+        candidate.dynamicLoading?.dependsOnInputs?.includes(input.name))
+        && (changed || (committed && pendingSecretDependencies.has(node.id)))) {
+        if (input.inputType.toLowerCase().includes("secret")) {
+            if (changed) {
+                beginDynamicInputsLoad(node, { render: false, deferred: true });
+            }
+            if (committed) {
+                clearTimeout(dynamicLoadTimers.get(node.id));
+                dynamicLoadTimers.set(node.id, setTimeout(() => {
+                    dynamicLoadTimers.delete(node.id);
+                    void reloadDynamicInputs(findNode(node.id) ?? node);
+                }, 250));
+            }
+            return;
+        }
+        const generation = beginDynamicInputsLoad(node, { render: false });
         dynamicLoadTimers.set(node.id, setTimeout(() => {
             dynamicLoadTimers.delete(node.id);
             void reloadDynamicInputs(findNode(node.id) ?? node, generation);
@@ -2521,16 +2585,33 @@ function updateCommandDraft(node, input, value) {
     }
 }
 
-function beginDynamicInputsLoad(node) {
+function beginDynamicInputsLoad(node, { render = true, deferred = false } = {}) {
     clearTimeout(dynamicLoadTimers.get(node.id));
     dynamicLoadTimers.delete(node.id);
     const generation = (dynamicLoadGenerations.get(node.id) ?? 0) + 1;
     dynamicLoadGenerations.set(node.id, generation);
-    dynamicLoadingIds.add(node.id);
+    if (deferred) {
+        pendingSecretDependencies.add(node.id);
+        dynamicLoadingIds.delete(node.id);
+    } else {
+        pendingSecretDependencies.delete(node.id);
+        dynamicLoadingIds.add(node.id);
+    }
     dynamicLoadFailedIds.delete(node.id);
     commandResults.delete(node.id);
     if (activeCommandId === node.id) {
-        renderTree();
+        if (render) {
+            renderTree();
+        } else {
+            const panel = els.tree.querySelector(`[data-command-panel="${CSS.escape(node.id)}"]`);
+            const submit = panel?.querySelector('button[type="submit"]');
+            if (submit) {
+                submit.disabled = commandRunning || !deferred;
+                submit.textContent = commandRunning ? "Running..." : deferred ? "Run command" : "Loading inputs...";
+            }
+            panel?.querySelector(".command-result")?.remove();
+            panel?.querySelector("[data-retry-inputs]")?.remove();
+        }
     }
     return generation;
 }
@@ -2548,7 +2629,7 @@ async function reloadDynamicInputs(node, generation = beginDynamicInputsLoad(nod
             },
         });
         if (dynamicLoadGenerations.get(node.id) !== generation || activeCommandId !== node.id) {
-            return;
+            return false;
         }
         if (result.ok === false || !Array.isArray(result.inputs)) {
             throw new Error(result.error || "Couldn't load command inputs. Retry inputs before running this command.");
@@ -2561,19 +2642,20 @@ async function reloadDynamicInputs(node, generation = beginDynamicInputsLoad(nod
         const draft = prepareCommandDraft(node, inputs);
         if (commandDependencySignature(node, inputs, argumentsToLoad) !== commandDependencySignature(node, inputs, draft)) {
             if (reconcileDefaults) {
-                await reloadDynamicInputs(node, beginDynamicInputsLoad(node), false);
-                return;
+                return await reloadDynamicInputs(node, beginDynamicInputsLoad(node), false);
             }
             throw new Error("Command input defaults changed again. Retry inputs before running this command.");
         }
         commandResults.delete(node.id);
         dynamicLoadFailedIds.delete(node.id);
+        return true;
     } catch (error) {
         if (dynamicLoadGenerations.get(node.id) !== generation) {
-            return;
+            return false;
         }
         dynamicLoadFailedIds.add(node.id);
         commandResults.set(node.id, { ok: false, error: error.message });
+        return false;
     } finally {
         if (dynamicLoadGenerations.get(node.id) === generation) {
             dynamicLoadingIds.delete(node.id);
@@ -2608,6 +2690,7 @@ function renderCommandPanel(node) {
                     class: "button button-secondary button-small",
                     type: "button",
                     text: "Retry inputs",
+                    dataset: { retryInputs: "true" },
                     on: { click: () => void reloadDynamicInputs(node) },
                 })] : []),
                 element("button", {
@@ -2652,6 +2735,7 @@ function renderCommandPanel(node) {
                 class: "button button-secondary button-small",
                 type: "button",
                 text: "Retry inputs",
+                dataset: { retryInputs: "true" },
                 on: { click: () => void reloadDynamicInputs(node) },
             })] : []),
             element("button", {
@@ -2659,6 +2743,15 @@ function renderCommandPanel(node) {
                 type: "submit",
                 text: commandRunning ? "Running..." : loadingInputs ? "Loading inputs..." : "Run command",
                 disabled: commandRunning || loadingInputs || failedInputs,
+                on: {
+                    click: (event) => {
+                        if (pendingSecretDependencies.has(node.id)) {
+                            // Load dependent inputs before validating the updated form.
+                            event.preventDefault();
+                            void submitResourceCommand(node, event.currentTarget.closest("form"));
+                        }
+                    },
+                },
             }),
         ]),
         ...(result ? [element("pre", {
@@ -2670,7 +2763,35 @@ function renderCommandPanel(node) {
 }
 
 async function submitResourceCommand(node, form) {
-    if (commandRunning || dynamicLoadingIds.has(node.id) || dynamicLoadFailedIds.has(node.id)) {
+    node = findNode(node.id) ?? node;
+    if (commandRunning || dynamicLoadFailedIds.has(node.id)) {
+        return;
+    }
+    if (pendingSecretDependencies.has(node.id)) {
+        const previousInputs = JSON.stringify(commandInputList(node));
+        const previousDraft = { ...commandDraft(node) };
+        const loaded = await reloadDynamicInputs(node);
+        if (!loaded || activeCommandId !== node.id || dynamicLoadingIds.has(node.id)
+            || pendingSecretDependencies.has(node.id)) {
+            return;
+        }
+        node = findNode(node.id);
+        if (!node) {
+            return;
+        }
+        const draft = commandDraft(node);
+        const previousNames = Object.keys(previousDraft);
+        if (previousInputs !== JSON.stringify(commandInputList(node))
+            || previousNames.length !== Object.keys(draft).length
+            || previousNames.some((name) => previousDraft[name] !== draft[name])) {
+            commandResults.set(node.id, { ok: false, error: "Inputs changed. Review them before running the command." });
+            renderTree();
+            return;
+        }
+        els.tree.querySelector(`[data-command-panel="${CSS.escape(node.id)}"] .command-form`)?.requestSubmit();
+        return;
+    }
+    if (dynamicLoadingIds.has(node.id)) {
         return;
     }
     const inputs = commandInputList(node);
