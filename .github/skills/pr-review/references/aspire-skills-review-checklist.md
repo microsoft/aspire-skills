@@ -155,7 +155,9 @@ heading; `release/<version>` PRs finalize the notes for the selected snapshot.
 Every skill's SKILL.md contains a "Project-Local Skill Override" section that defers to
 `.agents/skills/<skill>/SKILL.md` when Aspire 13.6 or earlier installed it. The in-plugin skill
 must never silently shadow the project-local copy on those versions. On Aspire 17.0 and
-later, the section treats copies as stale and suggests `aspire doctor`.
+later, the section treats copies as stale and suggests `aspire doctor`. Exception:
+`aspire-terminals` defers to a project-local copy on all versions because no Aspire CLI
+copied it, and `aspire doctor` does not detect it.
 
 **Severity if a PR removes or weakens the deference:** `blocking`. The plugin's safety
 guardrails apply even when project-local skills are active, but everything else defers.
