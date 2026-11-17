@@ -5,6 +5,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [0.0.6](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.6)
 
 ### Added
+- Added opt-in, bounded upstream Aspire main/release-branch skill-impact
+  assessment with immutable source evidence, replay deduplication and human
+  triage. This preparatory workflow produces read-only review artifacts, not
+  published guidance or PRs; proposed edits still require maintainer validation.
 - Added Go AppHost guidance (Aspire 17.0+) to the `aspire`,
   `aspire-orchestration`, `aspire-init`, `aspire-deployment` and `aspireify`
   skills, covering detection, authoring, `aspire init --language go`, `AddGoApp`
