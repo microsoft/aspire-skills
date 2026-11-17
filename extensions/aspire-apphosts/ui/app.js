@@ -2816,7 +2816,10 @@ async function submitResourceCommand(node, form) {
             renderTree();
             return;
         }
-        els.tree.querySelector(`[data-command-panel="${CSS.escape(node.id)}"] .command-form`)?.requestSubmit();
+        const currentForm = els.tree.querySelector(`[data-command-panel="${CSS.escape(node.id)}"] .command-form`);
+        if (currentForm) {
+            HTMLFormElement.prototype.requestSubmit.call(currentForm);
+        }
         return;
     }
     if (dynamicLoadingIds.has(node.id)) {

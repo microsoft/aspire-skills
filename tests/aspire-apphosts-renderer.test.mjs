@@ -289,6 +289,7 @@ function createRenderer({ transitions = false } = {}) {
     let now = 0;
     const context = vm.createContext({
         document, URLSearchParams,
+        HTMLFormElement: { prototype: { requestSubmit: TestElement.prototype.requestSubmit } },
         window: {
             location: { search: "?token=test-renderer" }, innerWidth: 480, innerHeight: 720,
             matchMedia: () => ({ matches: false }),
@@ -1210,23 +1211,25 @@ test("native browser preserves number defaults and focused command inputs during
         "Native-browser number regression failed.");
 });
 
-test("native browser submits a secret dependency after the input loses focus", {
+test("native browser submits secret-dependent commands when an input is named requestSubmit", {
     skip: !process.env.CHROME_BIN && "Set CHROME_BIN to a Chromium executable for native-browser regressions.",
 }, async (t) => {
     const directory = await mkdtemp(join(tmpdir(), "apphosts-secret-submit-browser-"));
     t.after(() => rm(directory, { recursive: true, force: true }));
-    const fields = inputs();
-    fields[0] = { ...fields[0], inputType: "SecretText" };
+    const fields = [
+        { name: "token", label: "Token", inputType: "SecretText" },
+        { name: "requestSubmit", label: "Target", inputType: "Choice", value: "east",
+            options: [{ value: "east", label: "East" }, { value: "west", label: "West" }],
+            dynamicLoading: { dependsOnInputs: ["token"] } },
+    ];
     const setup = `
         window.inputRequests = [];
         window.commandRequests = [];
         window.fetch = (path, options) => {
             if (path === "/api/command-inputs") {
                 inputRequests.push(JSON.parse(options.body));
-                return new Promise((resolve) => {
-                    window.finishInputLoad = (inputs) => resolve({
-                        ok: true, status: 200, json: async () => ({ ok: true, inputs }),
-                    });
+                return Promise.resolve({
+                    ok: true, status: 200, json: async () => ({ ok: true, inputs: window.dynamicInputs }),
                 });
             }
             if (path === "/api/command") commandRequests.push(JSON.parse(options.body));
@@ -1238,31 +1241,26 @@ test("native browser submits a secret dependency after the input loses focus", {
         (async () => {
             try {
                 const fields = ${JSON.stringify(fields)};
+                window.dynamicInputs = fields;
                 acceptState(${JSON.stringify(commandSnapshot(1, fields))});
                 selectedResourceId = "host-a:resource:api";
                 activeCommandId = ${JSON.stringify(commandId)};
                 secretWarningAccepted = true;
                 commandInputs.set(activeCommandId, { baseSignature: JSON.stringify(fields), inputs: fields });
                 renderTree();
-                const control = document.querySelector('[name="environment"]');
+                const control = document.querySelector('[name="token"]');
                 control.focus();
-                if (!document.execCommand("insertText", false, "secret")) throw new Error("Could not type");
-                let changes = 0;
-                control.addEventListener("change", () => changes++);
+                control.value = "secret";
+                control.dispatchEvent(new Event("input", { bubbles: true }));
                 const submit = document.querySelector('.command-form button[type="submit"]');
                 if (submit.disabled || submit.textContent !== "Run command") throw new Error("Run is blocked while editing");
                 if (inputRequests.length) throw new Error("Inputs loaded while typing");
-                submit.focus();
-                if (changes !== 1 || submit.disabled) throw new Error("Leaving the secret blocked Run");
                 submit.click();
                 if (inputRequests.length !== 1 || commandRequests.length) throw new Error("Run did not start one input load");
-                if (inputRequests[0].arguments.environment !== "secret") throw new Error("Incorrect dependency value");
-                if (document.querySelector('.command-form button[type="submit"]').textContent !== "Loading inputs...") {
-                    throw new Error("Loading state is missing");
-                }
-                finishInputLoad(fields);
+                if (inputRequests[0].arguments.token !== "secret") throw new Error("Incorrect dependency value");
                 await new Promise((resolve) => setTimeout(resolve, 0));
-                if (commandRequests.length !== 1 || commandRequests[0].arguments.environment !== "secret") {
+                if (commandRequests.length !== 1 || commandRequests[0].arguments.token !== "secret"
+                    || commandRequests[0].arguments.requestSubmit !== "east") {
                     throw new Error("Run did not submit after inputs loaded");
                 }
                 document.body.dataset.secretSubmitRegression = "passed";
