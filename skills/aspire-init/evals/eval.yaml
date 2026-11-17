@@ -138,7 +138,7 @@ stimuli:
         name: hands-off-to-aspireify
         config:
           prompt: Does the assistant's response explicitly hand off the resource-wiring step to the
-            `aspireify` skill (or the project-local `aspireify` skill installed by `aspire init`)?
+            `aspireify` skill (or a project-local `aspireify` skill installed by Aspire 13.6 or earlier)?
             It should make clear that `aspire init` only drops the skeleton plus
             `aspire.config.json` and that wiring is `aspireify`'s job.
       - type: output-not-contains

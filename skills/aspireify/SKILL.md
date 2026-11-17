@@ -111,13 +111,19 @@ plain Redis.
 
 ## Project-Local Override
 
-If `.agents/skills/aspireify/SKILL.md` exists (installed by `aspire init` or
-`aspire agent init --skills aspireify`), **warn the user** that a project-local
-copy is present and **defer to it**. The plugin version is the fallback.
+If `.agents/skills/aspireify/SKILL.md` exists, check `aspire --version`.
 
-```
-⚠️ Project-local .agents/skills/aspireify/SKILL.md detected — deferring to it.
-```
+- **Aspire 13.6 and earlier:** `aspire init` or `aspire agent init --skills aspireify`
+  installed it. **Warn the user** that a project-local copy is present and **defer to it**.
+  The plugin version is the fallback.
+
+  ```
+  ⚠️ Project-local .agents/skills/aspireify/SKILL.md detected — deferring to it.
+  ```
+
+- **Aspire 17.0 and later:** Aspire registers this plugin instead, so treat the copy as
+  stale unless the user says they maintain it. Use this skill, tell the user the copy is
+  stale, and suggest `aspire doctor`, which lists each copy and explains how to remove it.
 
 ## Prerequisites
 
