@@ -87,6 +87,25 @@ The `release-automation.mjs prepare` command only prepares local commits and
 prints a JSON plan. It does not push branches or call the GitHub PR API; those
 operations belong to the workflow.
 
+### Pre-merge live validation
+
+The temporary **Test release preparation** workflow runs on pushes to
+`ellahathaway-release-catalog-automation`. It calls **Prepare release** from the
+same commit, checks out that exact branch commit, and uses the Aspire App token
+to push branches and open both PRs. Production manual runs still require main
+and check out main.
+
+The test inputs are pinned in `.github/workflows/prepare-release-test.yml`:
+dev source `c04950a72509426059081fca518797194025acd1`, release `0.0.6`, and
+next dev version `0.0.7`. It opens draft `[Test]` PRs from `release/0.0.6` to
+main and from `bump-dev/0.0.7` to dev. These are real repository branches and
+PRs, not a dry run. Do not merge them. Reruns reuse matching open PRs.
+
+This push trigger does not need the workflow on the default branch. It does
+not run for forks, other branches, or PR events. Remove the temporary test
+workflow and its branch exception from **Prepare release** before merging
+the automation.
+
 ## Automation setup
 
 Install the Aspire repository GitHub App for this repository and make

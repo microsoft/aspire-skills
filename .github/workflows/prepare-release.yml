@@ -15,6 +15,25 @@ on:
         description: Next development version without v
         required: true
         type: string
+  workflow_call:
+    inputs:
+      source:
+        description: Full dev source commit SHA
+        required: true
+        type: string
+      version:
+        description: Release version without v
+        required: true
+        type: string
+      next_version:
+        description: Next development version without v
+        required: true
+        type: string
+    secrets:
+      ASPIRE_BOT_APP_ID:
+        required: true
+      ASPIRE_BOT_PRIVATE_KEY:
+        required: true
 
 permissions:
   contents: read
@@ -25,13 +44,17 @@ concurrency:
 
 jobs:
   prepare:
-    if: github.repository == 'microsoft/aspire-skills' && github.ref == 'refs/heads/main'
+    if: >-
+      github.repository == 'microsoft/aspire-skills' &&
+      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'push' &&
+      github.ref == 'refs/heads/ellahathaway-release-catalog-automation'))
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout trusted automation
+      - name: Checkout automation
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
-          ref: main
+          ref: ${{ github.event_name == 'push' && github.sha || 'main' }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
@@ -89,10 +112,12 @@ jobs:
           SOURCE_SHA: ${{ inputs.source }}
           RELEASE_VERSION: ${{ inputs.version }}
           NEXT_VERSION: ${{ inputs.next_version }}
+          TEST_RUN: ${{ github.event_name == 'push' }}
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
             const {marker, branches} = JSON.parse(process.env.RELEASE_PLAN);
+            const testRun = process.env.TEST_RUN === "true";
             const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
             core.summary.addHeading("Prepared release");
             for (const {branch, base} of branches) {
@@ -110,13 +135,13 @@ jobs:
                 }
               } else {
                 const release = base === "main";
-                const title = release ? `Release ${process.env.RELEASE_VERSION}` : `Advance dev to ${process.env.NEXT_VERSION}`;
+                const title = (testRun ? "[Test] " : "") + (release ? `Release ${process.env.RELEASE_VERSION}` : `Advance dev to ${process.env.NEXT_VERSION}`);
                 const notes = release
                   ? "Finalize the release notes and merge after required checks pass."
                   : "Advances coordinated versions, adds the next changelog heading, and regenerates catalogs.";
                 ({data: pull} = await github.rest.pulls.create({
-                  ...context.repo, head: branch, base, title,
-                  body: `${marker}\n\nSource commit: ${process.env.SOURCE_SHA}\n\n${notes}\n\nWorkflow: ${runUrl}`
+                  ...context.repo, head: branch, base, title, draft: testRun,
+                  body: `${marker}\n\n${testRun ? "**Live workflow validation only. Do not merge.**\n\n" : ""}Source commit: ${process.env.SOURCE_SHA}\n\n${notes}\n\nWorkflow: ${runUrl}`
                 }));
               }
               core.info(`${branch}: ${pull.html_url}`);

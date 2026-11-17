@@ -347,7 +347,8 @@ test("workflow wiring keeps fork validation unprivileged and bot checks on final
     const job = Object.values(config.jobs)[0];
     assert.match(job.if, /microsoft\/aspire-skills/);
     const checkout = job.steps.find(step => step.uses?.startsWith("actions/checkout@"));
-    assert.equal(checkout.with.ref, "main");
+    assert.equal(checkout.with.ref, name === "prepare-release"
+      ? "${{ github.event_name == 'push' && github.sha || 'main' }}" : "main");
     assert.equal(checkout.with["persist-credentials"], false);
     const token = job.steps.find(step => step.uses?.startsWith("actions/create-github-app-token@"));
     assert.equal(token.with["client-id"], "${{ secrets.ASPIRE_BOT_APP_ID }}");
@@ -369,4 +370,65 @@ test("workflow wiring keeps fork validation unprivileged and bot checks on final
   assert.ok(Object.hasOwn(workflow("test").on, "merge_group"));
   const publisher = workflow("publish").jobs.publish.steps.find(step => step.name === "Check release contents");
   assert.match(publisher.run, /npm run catalog:check/);
+});
+
+test("live preparation only admits main dispatches and same-repository test-branch pushes", () => {
+  const workflow = name => parse(readFileSync(new URL(`../.github/workflows/${name}.yml`, import.meta.url), "utf8"));
+  const preparation = workflow("prepare-release");
+  const live = workflow("prepare-release-test");
+  const branch = "ellahathaway-release-catalog-automation";
+  assert.deepEqual(live.on, { push: { branches: [branch] } });
+  assert.equal(live.jobs.prepare.uses, "./.github/workflows/prepare-release.yml");
+  assert.deepEqual(Object.keys(live.jobs.prepare.secrets).sort(),
+    ["ASPIRE_BOT_APP_ID", "ASPIRE_BOT_PRIVATE_KEY"]);
+  for (const [name, input] of Object.entries(preparation.on.workflow_call.inputs)) {
+    assert.equal(input.required, true);
+    assert.equal(typeof live.jobs.prepare.with[name], input.type);
+  }
+  const allowed = new Function("github", `return (${preparation.jobs.prepare.if});`);
+  const context = { repository: "microsoft/aspire-skills", event_name: "push", ref: `refs/heads/${branch}` };
+  assert.equal(allowed(context), true);
+  assert.equal(allowed({ ...context, repository: "fork/aspire-skills" }), false);
+  assert.equal(allowed({ ...context, ref: "refs/heads/untrusted" }), false);
+  assert.equal(allowed({ ...context, event_name: "pull_request" }), false);
+  assert.equal(allowed({ ...context, event_name: "workflow_dispatch" }), false);
+  assert.equal(allowed({ ...context, ref: "refs/heads/main" }), false);
+  assert.equal(allowed({ ...context, event_name: "workflow_dispatch", ref: "refs/heads/main" }), true);
+});
+
+test("live preparation opens both draft test PRs while production PRs remain ready", async () => {
+  const workflow = parse(readFileSync(new URL("../.github/workflows/prepare-release.yml", import.meta.url), "utf8"));
+  const step = workflow.jobs.prepare.steps.find(step => step.name === "Open release and development PRs");
+  assert.equal(step.env.TEST_RUN, "${{ github.event_name == 'push' }}");
+  const run = new (Object.getPrototypeOf(async function () {}).constructor)(
+    "github", "context", "core", "process", step.with.script);
+  for (const testRun of [true, false]) {
+    const created = [];
+    const summary = { addHeading() {}, addLink() { return this; }, addEOL() {}, async write() {} };
+    const branches = [
+      { branch: "release/0.0.6", base: "main" },
+      { branch: "bump-dev/0.0.7", base: "dev" }
+    ];
+    await run({
+      rest: { pulls: { list() {}, async create(pull) {
+        created.push(pull);
+        return { data: { ...pull, html_url: `https://github.com/example/test/pull/${created.length}` } };
+      } } },
+      async paginate() { return []; }
+    }, { repo: { owner: "microsoft", repo: "aspire-skills" } }, { summary, info() {} }, {
+      env: {
+        RELEASE_PLAN: JSON.stringify({ marker: "<!-- test operation -->", branches }),
+        TEST_RUN: String(testRun), SOURCE_SHA: "a".repeat(40),
+        RELEASE_VERSION: "0.0.6", NEXT_VERSION: "0.0.7",
+        GITHUB_SERVER_URL: "https://github.com", GITHUB_REPOSITORY: "microsoft/aspire-skills", GITHUB_RUN_ID: "1"
+      }
+    });
+    assert.deepEqual(created.map(({ head, base, draft }) => ({ head, base, draft })),
+      branches.map(({ branch, base }) => ({ head: branch, base, draft: testRun })));
+    for (const pull of created) {
+      assert.equal(pull.title.startsWith("[Test] "), testRun);
+      assert.equal(pull.body.includes("Do not merge."), testRun);
+      assert.match(pull.body, /<!-- test operation -->/);
+    }
+  }
 });
