@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isUtf8 } from "node:buffer";
 import { execFileSync } from "node:child_process";
 import { lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -17,7 +18,7 @@ const shaPattern = /^[a-f0-9]{40}$/;
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
 class PolicyError extends Error {}
-class AssessmentRuntimeError extends Error {}
+class ModelResponseSyntaxError extends SyntaxError {}
 
 function requireValue(condition, message) {
   if (!condition) throw new PolicyError(message);
@@ -228,6 +229,7 @@ async function snapshot(github, source, path, kind) {
     "Malformed base64 evidence.");
   const bytes = Buffer.from(encoded, "base64");
   requireValue(bytes.length === data.size, "Evidence size mismatch.");
+  requireValue(isUtf8(bytes), "Authoritative evidence must be valid UTF-8.");
   const content = boundedText(decoder.decode(bytes), limits.fileBytes, "authoritative evidence", true);
   return {
     path, kind, commit: source.merge, blob: immutableSha(data.sha), content,
@@ -286,12 +288,17 @@ async function hydrateEvidence(github, source, evidence) {
 
 function evidenceFailure(source, error) {
   // Do not put remote error bodies (or credentials) in artifacts.
-  const status = Number.isInteger(error?.status) && error.status >= 100 && error.status <= 599 ? error.status : null;
-  return {
-    source, status: "triage", reason: "Evidence could not be collected within policy.",
-    questions: [status ? `GitHub read failed (HTTP ${status}). Retry manually.`
-      : error instanceof PolicyError ? error.message : "Evidence is unavailable or malformed. Inspect the source manually."]
+  if (error instanceof PolicyError) return {
+    source, status: "triage", reason: "Evidence could not be collected within policy.", questions: [error.message]
   };
+  if (error?.name === "HttpError" && Number.isInteger(error.status) && error.status >= 400 && error.status <= 599 &&
+      error.response?.status === error.status && error.request?.method === "GET" &&
+      typeof error.request.url === "string" && error.request.url.startsWith("https://api.github.com/")) {
+    return {
+      source, status: "blocked", reason: `GitHub evidence read failed (HTTP ${error.status}). Check access/service availability and retry.`
+    };
+  }
+  throw error;
 }
 
 export function skillDocuments(directory) {
@@ -379,7 +386,13 @@ export async function prepareAssessment({
 }
 
 export function parseResponse(content) {
-  return JSON.parse(boundedText(content, limits.responseBytes, "model response"));
+  const text = boundedText(content, limits.responseBytes, "model response");
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    if (error instanceof SyntaxError) throw new ModelResponseSyntaxError("The model response is not valid JSON.");
+    throw error;
+  }
 }
 
 function keys(value, expected) {
@@ -455,14 +468,7 @@ export const assessmentInstructions = readFileSync(
 ).trim();
 
 export async function assessCandidate(candidate, documents, ask) {
-  const request = async prompt => {
-    try {
-      return await ask(prompt);
-    } catch {
-      throw new AssessmentRuntimeError();
-    }
-  };
-  const route = validateRouting(parseResponse(await request(`${assessmentInstructions}
+  const route = validateRouting(parseResponse(await ask(`${assessmentInstructions}
 Select up to six documents needing inspection, including relevant references, using
 {"status":"inspect","paths":["skills/.../SKILL.md"]}, or return noop/triage.
 Inventory and entrypoints: ${JSON.stringify({
@@ -472,7 +478,7 @@ Inventory and entrypoints: ${JSON.stringify({
 Upstream evidence: ${JSON.stringify(candidate)}`)), documents);
   if (route.status !== "inspect") return route;
   const selected = Object.fromEntries(route.paths.map(path => [path, documents[path]]));
-  return validateDraft(parseResponse(await request(`${assessmentInstructions}
+  return validateDraft(parseResponse(await ask(`${assessmentInstructions}
 If a change is grounded in the supplied authoritative source and tests, propose:
 {"status":"draft","reason":"impact and rationale","api":"affected API or CLI command",
 "citations":[{"path":"src/...","quote":"exact source quote, >=20 characters"},
@@ -495,10 +501,9 @@ export async function finishAssessment(prepared, ask) {
       try {
         result = await assessCandidate(candidate, prepared.documents, ask);
       } catch (error) {
-        result = error instanceof AssessmentRuntimeError ? {
-          status: "blocked", reason: "Agent configuration, authentication or runtime request failed. Correct setup and retry."
-        } : {
-          status: "triage", reason: "Agent failed or returned an unsupported/ungrounded assessment.",
+        if (!(error instanceof PolicyError || error instanceof ModelResponseSyntaxError)) throw error;
+        result = {
+          status: "triage", reason: "Agent returned an unsupported/ungrounded assessment.",
           questions: ["Review immutable source evidence manually; no guidance was changed."]
         };
       }

@@ -28,48 +28,51 @@ export async function askWithClient(client, model, prompt) {
   }
 }
 
-export async function run(directory, environment = process.env) {
+async function createRuntimeClient(environment) {
+  const tools = resolve(".test-artifacts", "upstream-agent-tools");
+  const require = createRequire(join(tools, "package.json"));
+  const { CopilotClient, RuntimeConnection } = await import(pathToFileURL(require.resolve("@github/copilot-sdk")).href);
+  const home = resolve(".test-artifacts", "upstream-agent-home");
+  const work = resolve(".test-artifacts", "upstream-agent-work");
+  mkdirSync(home, { recursive: true });
+  mkdirSync(work, { recursive: true });
+  return new CopilotClient({
+    mode: "empty", baseDirectory: home, workingDirectory: work,
+    useLoggedInUser: false, logLevel: "error",
+    connection: RuntimeConnection.forStdio({
+      path: join(tools, "node_modules", "@github", "copilot-linux-x64", "index.js")
+    }),
+    env: {
+      PATH: environment.PATH, HOME: home,
+      COPILOT_GITHUB_TOKEN: environment.COPILOT_GITHUB_TOKEN
+    }
+  });
+}
+
+export async function run(directory, environment = process.env, createClient = createRuntimeClient) {
   const prepared = readJson(join(directory, "evidence.json"));
   let client;
-  let ask;
-  let runtime = "disabled";
-  if (environment.UPSTREAM_SKILL_AGENT_ENABLED === "true" && environment.UPSTREAM_SKILL_MODEL) {
-    try {
-      const tools = resolve(".test-artifacts", "upstream-agent-tools");
-      const require = createRequire(join(tools, "package.json"));
-      const { CopilotClient, RuntimeConnection } = await import(pathToFileURL(require.resolve("@github/copilot-sdk")).href);
-      const home = resolve(".test-artifacts", "upstream-agent-home");
-      const work = resolve(".test-artifacts", "upstream-agent-work");
-      mkdirSync(home, { recursive: true });
-      mkdirSync(work, { recursive: true });
-      client = new CopilotClient({
-        mode: "empty", baseDirectory: home, workingDirectory: work,
-        useLoggedInUser: false, logLevel: "error",
-        connection: RuntimeConnection.forStdio({
-          path: join(tools, "node_modules", "@github", "copilot-linux-x64", "index.js")
-        }),
-        env: {
-          PATH: environment.PATH, HOME: home,
-          COPILOT_GITHUB_TOKEN: environment.COPILOT_GITHUB_TOKEN
-        }
-      });
+  let result;
+  try {
+    let ask;
+    let runtime = "disabled";
+    if (environment.UPSTREAM_SKILL_AGENT_ENABLED === "true" && environment.UPSTREAM_SKILL_MODEL) {
+      client = await createClient(environment);
       await client.start();
       ask = prompt => askWithClient(client, environment.UPSTREAM_SKILL_MODEL, prompt);
-      runtime = "started; individual assessments may still fail";
-    } catch {
-      // Missing auth/runtime is a blocked handoff, never a successful model assessment.
-      runtime = "setup failed; no model assessment ran";
+      runtime = "started";
+    }
+    result = await finishAssessment(prepared, ask);
+    result.runtime = runtime;
+  } finally {
+    if (client) {
+      const errors = await client.stop();
+      if (errors?.length) throw errors[0];
     }
   }
-  try {
-    const result = await finishAssessment(prepared, ask);
-    result.runtime = runtime;
-    writeFileSync(join(directory, "review.json"), JSON.stringify(result, null, 2));
-    writeFileSync(join(directory, "state.json"), JSON.stringify(result.state));
-    return result;
-  } finally {
-    if (client) await client.stop();
-  }
+  writeFileSync(join(directory, "review.json"), JSON.stringify(result, null, 2));
+  writeFileSync(join(directory, "state.json"), JSON.stringify(result.state));
+  return result;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

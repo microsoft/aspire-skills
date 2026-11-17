@@ -126,8 +126,10 @@ explicitly blocked, not replaced with keyword-derived guidance.
    webhook, PAT, GitHub App, or cross-repository write access. Repository Actions
    policy, organization Copilot/model access and billing must permit this token
    and pinned runtime installation. These settings are **not assumed configured**.
-   Missing runtime/auth/model support blocks the assessment for retry; it never
-   permits publication. No existing telemetry App secrets are used.
+   Explicitly disabled/unconfigured inference remains blocked. Once enabled and
+   configured, runtime/auth/model setup errors fail the run without writing a
+   completed ledger, so a later run can retry. No existing telemetry App secrets
+   are used, and failures never permit publication.
 
 Runtime and activation contracts:
 [pinned Copilot SDK](https://github.com/github/copilot-sdk/blob/v1.0.11/nodejs/README.md),
@@ -179,9 +181,17 @@ kept in the review artifact.
   `noop`, `triage`, `blocked`, `duplicate`, or **unvalidated draft** outcomes.
   Uncertain items include maintainer questions, not invented guidance or automatic
   issues. Maintainers must inspect these artifacts; no notification service is
-  configured. Configuration/authentication/session/transport failures and missing
-  runtime responses are retryable **blocked** outcomes, not completed semantic
-  triage. Malformed or ungrounded model responses still require human triage.
+  configured. Configuration/authentication/session/transport failures, missing
+  runtime responses and unexpected implementation errors **fail the run** without
+  writing new review/completed-state artifacts. Allocated clients are stopped
+  in a finally block, including partial-start failures; artifacts are written
+  only after cleanup succeeds. Missing enabled/model variables remain explicit
+  blocked handoffs. Only expected evidence/response policy
+  violations and malformed model-response JSON become semantic triage.
+  Structurally identified GitHub HTTP read failures produce sanitized, retryable
+  blocked handoffs, including auth/rate-limit/service failures; unknown read errors
+  propagate. Remote error bodies, request credentials and opaque error messages
+  are never copied into review artifacts.
 - `upstream-assessment-state` retains completed source identities (repository,
   PR, merge SHA and target branch) via a hash for fourteen days after assessment, capped
   at 2,000 entries. State from the newest eligible successful default-branch run
@@ -189,7 +199,8 @@ kept in the review artifact.
   for each identity. An older blocked rerun cannot erase newer completed work.
   Runs are serialized. Main and release backports remain distinct.
   Explicit `reassess=true` revisits recorded
-  triage/no-op/draft outcomes. Blocked setup/budget outcomes remain retryable.
+  triage/no-op/draft outcomes. Explicitly blocked configuration/budget/HTTP
+  outcomes and failed runtime runs remain retryable.
   Artifacts expire after 90 days; missing/expired state can repeat **analysis**,
   but cannot duplicate PRs because there is no publisher. Poll delays, outages
   beyond 48 hours, or older historical replays require a manual window/PR.

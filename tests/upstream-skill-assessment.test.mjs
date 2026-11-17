@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
@@ -390,18 +390,43 @@ test("overlap, repeats and reruns skip completed source identities; reassess is 
     "An old run's frozen discovery clock must not reject newer valid state.");
 });
 
-test("upstream read failures produce triage without leaking remote messages or credentials", async () => {
-  for (const status of [undefined, 403, "malicious status"]) {
+test("identified GitHub HTTP evidence failures remain retryable without leaking remote bodies or credentials", async () => {
+  for (const status of [401, 403, 404, 429, 500, 503]) {
     const github = api();
     github.rest.repos.getContent = async () => {
       const error = new Error("Do not disclose this remote response or credential.");
+      error.name = "HttpError";
       error.status = status;
+      error.request = {
+        method: "GET", url: "https://api.github.com/repos/microsoft/aspire/contents/source",
+        headers: { authorization: "secret-token" }
+      };
+      error.response = { status, data: { message: "private remote body" } };
       throw error;
     };
     const prepared = await prepare(github);
-    assert.equal(prepared.reports[0].status, "triage");
-    assert.doesNotMatch(JSON.stringify(prepared.reports), /Do not disclose|credential|malicious status/);
-    if (status === 403) assert.match(prepared.reports[0].questions[0], /HTTP 403/);
+    const result = await finishAssessment(prepared);
+    assert.equal(result.reports[0].status, "blocked");
+    assert.deepEqual(result.state, emptyState());
+    assert.match(result.reports[0].reason, new RegExp(`HTTP ${status}`));
+    assert.doesNotMatch(JSON.stringify(result), /Do not disclose|credential|secret-token|private remote body/);
+  }
+});
+
+test("unknown evidence errors and status-only lookalikes propagate instead of becoming completed triage", async () => {
+  const failures = [
+    new Error("Implementation failure"), new TypeError("Unexpected response processing failure"),
+    Object.assign(new Error("Not an identified HTTP error"), { status: 503 }),
+    Object.assign(new Error("Not a GitHub read"), {
+      name: "HttpError", status: 403, request: { method: "POST", url: "https://api.github.com/repos/source" },
+      response: { status: 403 }
+    })
+  ];
+  for (const stage of ["files", "content"]) for (const failure of failures) {
+    const github = api();
+    if (stage === "files") github.rest.pulls.listFiles = async () => { throw failure; };
+    else github.rest.repos.getContent = async () => { throw failure; };
+    await assert.rejects(prepare(github), error => error === failure);
   }
 });
 
@@ -640,7 +665,7 @@ test("the SDK has no tools, config discovery, skills, shared store, or permissio
   assert.equal(disconnected, true);
 });
 
-test("session configuration, model authentication, transport and empty-response failures remain retryable blocked", async () => {
+test("SDK/session/authentication/unexpected errors propagate without completed ledger entries", async () => {
   const clients = [
     { createSession: async () => { throw new Error("Invalid SDK session configuration"); } },
     { createSession: async () => { throw new Error("Model authentication failed"); } },
@@ -649,29 +674,91 @@ test("session configuration, model authentication, transport and empty-response 
     }) },
     { createSession: async () => ({
       sendAndWait: async () => undefined, disconnect: async () => {}
-    }) }
+    }) },
+    { createSession: async () => { throw new TypeError("Unexpected implementation error"); } },
+    { createSession: async () => { throw new SyntaxError("SDK transport JSON failure, not model-response JSON"); } }
   ];
   for (const client of clients) {
-    const result = await finishAssessment(await prepare(), prompt => askWithClient(client, "test-model", prompt));
-    assert.equal(result.reports[0].status, "blocked");
-    assert.equal(result.reports[0].edits, undefined);
-    assert.deepEqual(result.state, emptyState(), "Infrastructure failures must not become completed semantic triage.");
-    assert.equal((await prepare(api(), {}, result.state)).sources.length, 1);
+    const prepared = await prepare();
+    await assert.rejects(finishAssessment(prepared, prompt => askWithClient(client, "test-model", prompt)));
+    assert.deepEqual(prepared.state, emptyState(), "A failed assessment must not mutate completed state.");
+    assert.deepEqual(prepared.reports, []);
   }
   let requests = 0;
-  const secondPass = await finishAssessment(await prepare(), async () => {
+  const failure = new Error("Second session could not be created");
+  await assert.rejects(finishAssessment(await prepare(), async () => {
     if (requests++ === 0) return JSON.stringify({ status: "inspect", paths: [skillPath] });
-    throw new Error("Second session could not be created");
-  });
-  assert.equal(secondPass.reports[0].status, "blocked");
-  assert.deepEqual(secondPass.state, emptyState());
+    throw failure;
+  }), error => error === failure);
+});
+
+test("runtime initialization and request failures always clean up allocated clients and never write review/state", async t => {
+  for (const phase of ["factory", "start", "session", "request", "stop", "stop-result"]) {
+    const directory = scratch(t);
+    writeFileSync(join(directory, "evidence.json"), JSON.stringify(await prepare()));
+    const failure = new Error(`Unexpected ${phase} error`);
+    const calls = [];
+    const createClient = async () => {
+      calls.push("factory");
+      if (phase === "factory") throw failure;
+      return {
+        start: async () => { calls.push("start"); if (phase === "start") throw failure; },
+        createSession: async () => {
+          calls.push("session");
+          if (phase === "session") throw failure;
+          return {
+            sendAndWait: async () => {
+              if (phase === "request") throw failure;
+              return { data: { content: '{"status":"noop","reason":"Already covered."}' } };
+            },
+            disconnect: async () => { calls.push("disconnect"); }
+          };
+        },
+        stop: async () => {
+          calls.push("stop");
+          if (phase === "stop") throw failure;
+          return phase === "stop-result" ? [failure] : [];
+        }
+      };
+    };
+    await assert.rejects(run(directory, {
+      UPSTREAM_SKILL_AGENT_ENABLED: "true", UPSTREAM_SKILL_MODEL: "test-model"
+    }, createClient), error => error === failure);
+    assert.equal(existsSync(join(directory, "review.json")), false, phase);
+    assert.equal(existsSync(join(directory, "state.json")), false, phase);
+    if (phase === "factory") assert.deepEqual(calls, ["factory"]);
+    else assert.equal(calls.at(-1), "stop", "Even a partially started client must be stopped.");
+  }
+});
+
+test("successful runtime assessment persists results only after cleanup completes", async t => {
+  const directory = scratch(t);
+  writeFileSync(join(directory, "evidence.json"), JSON.stringify(await prepare()));
+  let stopped = false;
+  const result = await run(directory, {
+    UPSTREAM_SKILL_AGENT_ENABLED: "true", UPSTREAM_SKILL_MODEL: "test-model"
+  }, async () => ({
+    start: async () => {},
+    createSession: async () => ({
+      sendAndWait: async () => ({ data: { content: '{"status":"noop","reason":"Already covered."}' } }),
+      disconnect: async () => {}
+    }),
+    stop: async () => {
+      assert.equal(existsSync(join(directory, "review.json")), false);
+      assert.equal(existsSync(join(directory, "state.json")), false);
+      stopped = true;
+    }
+  }));
+  assert.equal(stopped, true);
+  assert.equal(result.runtime, "started");
+  assert.equal(readJson(join(directory, "state.json")).entries[0].status, "noop");
 });
 
 test("disabled runtime produces persistent blocked artifacts, without changing any skill files", async t => {
   const directory = scratch(t);
   const prepared = await prepare();
   writeFileSync(join(directory, "evidence.json"), JSON.stringify(prepared));
-  const result = await run(directory, {});
+  const result = await run(directory, {}, async () => assert.fail("Disabled assessment must not initialize a runtime."));
   assert.equal(result.scope, "preparatory");
   assert.equal(result.runtime, "disabled");
   assert.equal(result.reports[0].status, "blocked");
@@ -687,7 +774,8 @@ test("disabled runtime produces persistent blocked artifacts, without changing a
 test("an enabled runtime without a configured model stays blocked and retryable", async t => {
   const directory = scratch(t);
   writeFileSync(join(directory, "evidence.json"), JSON.stringify(await prepare()));
-  const result = await run(directory, { UPSTREAM_SKILL_AGENT_ENABLED: "true" });
+  const result = await run(directory, { UPSTREAM_SKILL_AGENT_ENABLED: "true" },
+    async () => assert.fail("Missing model must not initialize a runtime."));
   assert.equal(result.runtime, "disabled");
   assert.equal(result.reports[0].status, "blocked");
   assert.equal(result.state.entries.length, 0);

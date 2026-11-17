@@ -7,7 +7,8 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ### Added
 - Added opt-in, bounded upstream Aspire main/release-branch skill-impact
   assessment with immutable source evidence, replay deduplication and human
-  triage, including monitored-source renames and retryable agent setup failures.
+  triage, including monitored-source renames. Runtime/unexpected failures fail
+  without completing source identities; recognized HTTP failures stay retryable.
   Reruns merge newer completed assessments instead of replacing them with older
   attempt state. This preparatory workflow produces read-only review artifacts, not
   published guidance or PRs; proposed edits still require maintainer validation.

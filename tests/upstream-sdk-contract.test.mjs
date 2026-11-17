@@ -33,10 +33,11 @@ test("SDK 1.0.11 itself accepts the tool-free session and rejects a bare wildcar
   ]) assert.equal(defaults[setting], false, setting);
   assert.equal(session.enableConfigDiscovery, false);
   assert.deepEqual(session.mcpServers, {});
-  const result = await finishAssessment({
+  const prepared = {
     reports: [], sources: [{ source: { key: "a".repeat(64) }, evidence: {} }],
     documents: {}, state: { schema: 1, entries: [] }
-  }, async () => normalize({ ...session, excludedTools: ["*"] }));
-  assert.equal(result.reports[0].status, "blocked", "Real SDK configuration failures must not become semantic triage.");
-  assert.deepEqual(result.state.entries, []);
+  };
+  await assert.rejects(finishAssessment(prepared,
+    async () => normalize({ ...session, excludedTools: ["*"] })), /there is no bare wildcard/);
+  assert.deepEqual(prepared.state.entries, [], "SDK failures must not become completed semantic triage.");
 });
