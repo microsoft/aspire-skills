@@ -859,6 +859,33 @@ test("whitespace edits to secret dependencies still invalidate metadata", async 
     assert.equal(button(renderer.document.body, "Run command").disabled, false);
 });
 
+test("changing a secret select reloads dependent inputs", async () => {
+    const renderer = await boot();
+    const fields = inputs();
+    fields[0] = {
+        ...fields[0],
+        inputType: "SecretChoice",
+        options: [{ value: "dev", label: "Development" }, { value: "prod", label: "Production" }],
+    };
+    await renderer.push({ type: "state", state: commandSnapshot(2, fields) });
+    clickCommand(renderer);
+    await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
+    button(renderer.document.body, "Continue").click();
+
+    const environment = renderer.document.querySelector('[name="environment"]');
+    environment.value = "prod";
+    environment.dispatch("change");
+    await renderer.advance(250);
+    const updatedFields = structuredClone(fields);
+    updatedFields[1].value = "west";
+    updatedFields[1].options = [{ value: "west", label: "West" }];
+    const load = renderer.request("/api/command-inputs");
+    assert.equal(load.body.arguments.environment, "prod");
+    await renderer.respond(load, { ok: true, inputs: updatedFields });
+    assert.equal(renderer.document.querySelector('[name="target"]').value, "west");
+    assert.equal(button(renderer.document.body, "Run command").disabled, false);
+});
+
 for (const activation of ["click", "Enter"]) {
     test(`a pending secret dependency can be submitted with ${activation}`, async () => {
         const renderer = await boot();

@@ -2486,7 +2486,7 @@ function commandField(node, input) {
             name: input.name,
             required: input.required,
             disabled: input.disabled,
-            on: { change: (event) => updateCommandDraft(node, input, event.target.value) },
+            on: { change: (event) => updateCommandDraft(node, input, event.target.value, { committed: true }) },
         }, [
             ...(!input.required ? [element("option", { value: "", text: "Select..." })] : []),
             ...input.options.map((option) => element("option", { value: option.value, text: option.label })),
