@@ -97,6 +97,41 @@ Inspect the selected AppHost and every legacy candidate:
 
 An already migrated app or an app with no matching resources is a no-op.
 
+### 1a. Fresh polyglot worktree / capability bootstrap
+
+Missing `.aspire/modules/` and resolved integration metadata in a fresh TypeScript
+or other polyglot worktree is normal, git-ignored generated state, not missing
+application source or an Aspire defect. Do not treat online docs or a version
+label as proof of the installed API.
+
+1. Request bounded preparation approval for restoring the **unchanged exact AppHost once**.
+   Name its working directory, command, existing SDK/integration pins and channel,
+   and expected restore downloads/cache/generated-file writes. Keep assessment
+   read-only while waiting; no package additions or migration edits are included.
+2. Only after that approval, run the exact scoped restore. For a selected
+   `apphost.mts`, from its directory:
+
+   ```powershell
+   aspire restore --apphost .\apphost.mts --non-interactive
+   ```
+
+   Use the actual selected entry point, not another AppHost. If restore fails, stop
+   and surface the actual diagnostic; do not loop restore or invent a workaround.
+3. Inspect the resolved integration graph and generated API read-only. Restoring
+   existing integrations may not expose `addDotnetProject` when
+   `Aspire.Hosting.Dotnet` is not referenced. That is not yet a handle-only API
+   failure. Request a separately approved capability probe using the supported
+   add/restore flow in a disposable copy, preserving the app's pins and channel.
+   Follow the [bounded probe and failure rules](references/compatibility-and-validation.md#bounded-polyglot-capability-probe).
+4. Require the resolved `addDotnetProject(name, path, options?)` with flat `DotnetProjectOptions`
+   and every other needed capability. Missing/older APIs remain a capability stop.
+   Once verified, return to **Classify and propose** (workflow step 2) for the exact
+   per-resource/per-file plan and request migration-edit approval; never copy probe
+   edits into the application as preparation.
+
+Preparation approval is not migration-edit, runtime, or publish approval. Run only
+the approved preparation; never hand-edit generated modules or upgrade implicitly.
+
 ### 2. Classify and propose
 
 Present a table before editing:

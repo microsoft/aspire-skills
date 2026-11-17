@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -127,6 +127,99 @@ test("source mutation controls are not substituted agent outputs", () => {
 test("source mutation controls reject unchanged input", t => {
   const { after } = fixture(t);
   assert.throws(() => edit(after, editCases.csharp.source, source => source), /Test mutation did not change/);
+});
+
+test("fresh polyglot bootstrap orders preparation, capability proof, and exact edit approval", () => {
+  const skill = readFileSync(new URL("../skills/aspire-project-v2-migration/SKILL.md", import.meta.url), "utf8");
+  const start = skill.indexOf("### 1a. Fresh polyglot worktree / capability bootstrap");
+  const end = skill.indexOf("### 2. Classify and propose");
+  assert.ok(start > 0 && end > start, "Bootstrap belongs between read-only inventory and the exact edit plan");
+  const bootstrap = skill.slice(start, end);
+  assert.match(skill.slice(0, start), /do not restore, build, run, or regenerate SDK files\s+before approval/);
+  const steps = [
+    /git-ignored generated state/,
+    /Request bounded preparation approval/,
+    /Only after that approval/,
+    /aspire restore --apphost \.\\apphost\.mts --non-interactive/,
+    /If restore fails, stop/,
+    /Aspire\.Hosting\.Dotnet/,
+    /separately approved capability probe/,
+    /disposable copy/,
+    /flat `DotnetProjectOptions`/,
+    /return to \*\*Classify and propose\*\* \(workflow step 2\)/,
+    /request migration-edit approval/
+  ];
+  let offset = 0;
+  for (const step of steps) {
+    const match = step.exec(bootstrap.slice(offset));
+    assert.ok(match, `Missing or misordered bootstrap gate: ${step}`);
+    offset += match.index + match[0].length;
+  }
+  assert.match(bootstrap, /unchanged exact AppHost once/);
+  assert.match(bootstrap, /Preparation approval is not migration-edit, runtime, or publish approval/);
+  assert.match(bootstrap, /never hand-edit generated modules or upgrade implicitly/);
+});
+
+test("capability probe preserves pinned inputs and restore failures stay diagnostic", () => {
+  const reference = readFileSync(new URL("../skills/aspire-project-v2-migration/references/compatibility-and-validation.md", import.meta.url), "utf8");
+  const start = reference.indexOf("### Bounded polyglot capability probe");
+  const end = reference.indexOf("## Unsupported and decision-required patterns");
+  assert.ok(start > 0 && end > start);
+  const probe = reference.slice(start, end);
+  assert.match(probe, /separate approval/);
+  assert.match(probe, /pinned SDK, integrations, channel and feeds/);
+  assert.match(probe, /aspire add --help/);
+  assert.match(probe, /aspire add Aspire\.Hosting\.Dotnet --version <compatible-pinned-version> --non-interactive/);
+  assert.match(probe, /supported add\/restore flow/);
+  assert.match(probe, /Do not copy probe changes back/);
+  assert.match(probe, /report the command, exit code and actual diagnostic/);
+  assert.match(probe, /IntegrationRestore\.csproj/);
+  assert.match(probe, /SourceRoot\.RevisionId/);
+  assert.match(probe, /microsoft\/aspire\/issues\/21735/);
+  assert.match(probe, /Never add blanket SourceLink suppression/);
+});
+
+test("bootstrap evals guard every approval phase against edits and command execution", () => {
+  const spec = parse(readFileSync(new URL("../skills/aspire-project-v2-migration/evals/eval.yaml", import.meta.url), "utf8"));
+  const phases = ["fresh", "restore-scope", "missing-integration", "resume", "failure"];
+  const stimuli = spec.stimuli.filter(stimulus => stimulus.tags?.area === "capability-bootstrap");
+  assert.deepEqual(stimuli.map(stimulus => stimulus.tags.phase), phases);
+  for (const stimulus of stimuli) {
+    assert.equal(stimulus.tags.priority, "p0");
+    assert.ok(stimulus.graders.some(grader => grader.type === "diff-empty"));
+    assert.ok(stimulus.graders.some(grader => grader.type === "prompt" && grader.config.scoring === "binary"));
+    assert.ok(stimulus.rubric.length >= 2);
+    const guard = stimulus.graders.find(grader => grader.type === "tool-calls");
+    assert.ok(guard, `${stimulus.name} needs a trace guard, not just an empty diff`);
+    const disallowed = (name, args = {}) => guard.config.disallowed.some(entry =>
+      new RegExp(entry.name).test(name)
+      && Object.entries(entry.args ?? {}).every(([key, pattern]) =>
+        typeof args[key] === "string" && new RegExp(pattern).test(args[key])));
+    for (const name of ["bash", "powershell", "functions.powershell", "shell", "terminal", "run_command"]) {
+      assert.ok(disallowed(name), `${stimulus.name} must not execute ${name}`);
+    }
+    for (const command of [
+      "aspire restore --apphost .\\apphost.mts --non-interactive",
+      "aspire add Aspire.Hosting.Dotnet",
+      "aspire start --apphost .\\apphost.mts",
+      "aspire publish --apphost .\\apphost.mts",
+      "echo preparing\naspire restore"
+    ]) {
+      assert.ok(disallowed("custom_runner", { command }), `${stimulus.name} must reject ${command}`);
+    }
+    for (const name of ["skill", "view", "glob", "rg"]) {
+      assert.ok(!disallowed(name), `${stimulus.name} must permit ${name}`);
+    }
+  }
+  assert.match(stimuli[1].prompt, /offline command-planning exercise/);
+  assert.match(stimuli[2].prompt, /not approved adding integrations or making migration edits/);
+  assert.match(stimuli[3].prompt, /not approved any application edits or runtime\/publish validation/);
+  assert.match(stimuli[4].prompt, /exited 6/);
+  const config = JSON.parse(readFileSync(join(fixturesRoot, "runnable-csharp/Migration.TypeScriptAppHost/aspire.config.json"), "utf8"));
+  assert.equal(config.sdk.version, config.packages["Aspire.Hosting.AppHost"]);
+  assert.equal(config.packages["Aspire.Hosting.Dotnet"], undefined);
+  assert.ok(!existsSync(join(fixturesRoot, "runnable-csharp/Migration.TypeScriptAppHost/.aspire/modules")));
+  assert.ok(!stimuli[0].environment.files.some(file => file.src.endsWith("capability-evidence.json")));
 });
 
 test("gateway image decisions have read-only controls and a separately approved edit case", () => {

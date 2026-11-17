@@ -1,7 +1,7 @@
 # Project v2 migration evaluations
 
 These fixtures are **legacy inputs**, not hand-written successful agent outputs.
-The migration spec loads all eight sibling skills and contains 15 read-only cases
+The migration spec loads all eight sibling skills and contains 20 read-only cases
 and seven actual-edit cases.
 
 ## Source and approval gates
@@ -63,6 +63,12 @@ The separate `clientpublish` Dockerfile annotation remains unchanged.
 | File app | Preserve `PublishAot=true`, runtime environment, and publishing options |
 | EF/Blazor | Retain EF metadata/operation ownership and client configuration; handle the new EF overload's `ASPIREPROJECTS001`; require explicit approval of resolved gateway framework/base/user changes; remove only the obsolete gateway Dockerfile-image mutation while preserving SDK container options |
 | Assessment/routing | No implicit edits, upgrades, or missing-capability workarounds; ordinary wiring routes to `aspireify` |
+| Fresh polyglot bootstrap | Normal generated-state absence; bounded unchanged-AppHost restore approval; separately approved pinned disposable add/restore probe; return to exact migration-edit approval; honest upstream restore-failure reporting |
+
+The five bootstrap cases are offline decision/command-planning stimuli with
+empty-diff and no-command trace guards. Reported restore/probe results are inputs,
+not executed installation evidence. These cases do not qualify a real Aspire
+restore or reproduce the upstream SourceLink SHA-256 failure.
 
 The generated TypeScript third argument is optional, not nullable.
 `{ launchProfileName: null }` is valid and selects the default profile; literal

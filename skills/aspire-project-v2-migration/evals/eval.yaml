@@ -163,6 +163,167 @@ stimuli:
           scoring: binary
           prompt: Does the assistant's response require the new target capability and stop without edits despite approval, while leaving legacy handle semantics unchanged?
 
+  - name: project-v2-fresh-polyglot-preparation
+    prompt: |
+      Use the migration skill to assess app/Migration.TypeScriptAppHost/apphost.mts
+      in this fresh worktree. There is no .aspire/modules directory or resolved
+      integration graph. Is application source missing, and what should happen
+      before the legacy addProject calls can be migrated? I have not approved
+      preparation or edits. Use file-reading tools only; do not execute commands.
+    tags: { priority: p0, area: capability-bootstrap, phase: fresh }
+    environment:
+      files: &fresh_polyglot
+        - { src: ../../../evals/project-v2-migration/runnable-csharp, dest: app }
+    rubric:
+      - The response explains normal git-ignored generated-state absence rather than missing application source or an Aspire defect.
+      - The response requests bounded approval for one restore of the unchanged exact AppHost, identifying its command, existing pins/channel and generated/cache writes.
+      - No command is executed and no file is changed; docs/version labels do not bypass the resolved flat DTO capability gate.
+    graders:
+      - type: diff-empty
+      - type: tool-calls
+        name: fresh-polyglot-no-execution
+        config: &bootstrap_no_execution
+          disallowed:
+            - name: '(^|[._-])(bash|powershell|shell|terminal|exec|execute|run_command)([._-]|$)'
+            - name: '.*'
+              args:
+                command: '[\s\S]*'
+      - type: prompt
+        name: fresh-polyglot-preparation-approval
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response explain normal generated-state absence
+            and explicitly request bounded approval for restoring this unchanged
+            exact AppHost once before migration, without treating docs/version
+            labels as resolved API proof? Answer based on intent.
+
+  - name: project-v2-polyglot-restore-scope
+    prompt: |
+      Use the migration skill for app/Migration.TypeScriptAppHost/apphost.mts.
+      I approve only one restore of the unchanged exact AppHost using the existing
+      SDK/integration pins and channel. This is an offline command-planning exercise:
+      show the command from that AppHost's directory and where you would stop,
+      but do not execute it here. I have not approved adding packages, migration
+      edits, starting resources or publishing. Use file-reading tools only.
+    tags: { priority: p0, area: capability-bootstrap, phase: restore-scope }
+    environment: { files: *fresh_polyglot }
+    rubric:
+      - The response gives aspire restore --apphost .\apphost.mts --non-interactive from app/Migration.TypeScriptAppHost, once, without changing its inputs.
+      - The response stops on actual restore failure or inspects resolved capabilities on success; missing Dotnet requires separately approved disposable probing, not an in-place package addition.
+      - Preparation is kept separate from migration-edit and runtime/publish approvals; the offline exercise executes no command and changes no files.
+    graders:
+      - type: diff-empty
+      - type: tool-calls
+        name: polyglot-restore-plan-no-execution
+        config: *bootstrap_no_execution
+      - type: prompt
+        name: polyglot-restore-scope-stays-bounded
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response give the exact once-approved restore
+            command and directory, then limit subsequent work to read-only
+            capability inspection or reporting the actual failure, with separate
+            approval required for a probe, migration edits and runtime/publish?
+            This is command planning, not an executed restore.
+
+  - name: project-v2-polyglot-missing-dotnet-integration
+    prompt: |
+      Continue the migration assessment for app/Migration.TypeScriptAppHost.
+      For this offline exercise, my approved unchanged-AppHost restore succeeded
+      and generated bindings for existing integrations, but the resolved graph
+      has no Aspire.Hosting.Dotnet and no addDotnetProject declaration. I have
+      not approved adding integrations or making migration edits. Is this an
+      unsupported handle-only target, or is more preparation needed? Explain
+      the next approval request. Use file-reading tools only; do not execute commands.
+    tags: { priority: p0, area: capability-bootstrap, phase: missing-integration }
+    environment: { files: *fresh_polyglot }
+    rubric:
+      - The response distinguishes an unreferenced Dotnet integration from a proven handle-only target.
+      - The response requests separate bounded approval for a disposable-copy supported aspire add/restore probe preserving the exact AppHost, SDK/integration pins, channel and feeds.
+      - A probe must prove the resolved flat DTO before exact migration-edit approval; no in-place package addition, generated-file edit, upgrade, runtime or publishing is authorized.
+    graders:
+      - type: diff-empty
+      - type: tool-calls
+        name: polyglot-probe-request-no-execution
+        config: *bootstrap_no_execution
+      - type: prompt
+        name: polyglot-probe-needs-separate-approval
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response request a separately approved supported
+            add/restore capability probe in a disposable copy preserving pinned
+            SDK/integrations/channel/feeds, rather than declaring a handle-only
+            failure or adding a package in place? It must require resolved flat
+            DTO evidence before returning to exact migration-edit approval.
+
+  - name: project-v2-polyglot-probe-resume
+    prompt: |
+      Continue assessing api and worker in app/Migration.TypeScriptAppHost.
+      In this offline exercise, the unchanged restore and separately approved
+      disposable-copy add/restore probe are complete. Treat capability-evidence.json
+      as the probe's source-backed flat DTO API input, not proof of installed or
+      released packages. The probe preserved SDK/integration pins and channel;
+      no probe changes were copied back. I have not approved any application edits or runtime/publish validation.
+      What exact migration approval is needed now? Use file-reading tools only;
+      do not execute commands or change files.
+    tags: { priority: p0, area: capability-bootstrap, phase: resume }
+    environment: { files: *runnable }
+    rubric:
+      - The response resumes the exact api/worker per-resource and per-file plan, adding matching Aspire.Hosting.Dotnet and preserving paths, default profiles, fluent configuration and existing pins.
+      - The response explicitly requests migration-edit approval rather than treating preparation/probe approval as permission to edit or copy probe changes back.
+      - The response distinguishes the offline API input from actual validation and keeps runtime/publish authorization separate.
+    graders:
+      - type: diff-empty
+      - type: tool-calls
+        name: polyglot-resume-no-execution
+        config: *bootstrap_no_execution
+      - type: prompt
+        name: polyglot-resume-exact-migration-approval
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response return to an exact api/worker
+            resource/file/package migration plan and explicitly ask approval,
+            preserving default profiles and other behavior, while separating
+            preparation from edit and runtime/publish authorization?
+
+  - name: project-v2-polyglot-restore-failure
+    prompt: |
+      Use the migration skill to assess the next step for app/Migration.TypeScriptAppHost.
+      I approved only restoring its unchanged AppHost. In this offline exercise,
+      the command aspire restore --apphost .\apphost.mts --non-interactive
+      exited 6 on Windows with the following actual diagnostic:
+      Microsoft.SourceLink.GitHub.targets(36,5): error: The value of
+      SourceRoot.RevisionId is not a valid commit hash:
+      '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+      in generated IntegrationRestore.csproj. The adjacent generated
+      Directory.Build.targets is <Project />. Is this missing application source,
+      and should we suppress SourceLink and continue migration? Use file-reading
+      tools only; do not execute commands or change files.
+    tags: { priority: p0, area: capability-bootstrap, phase: failure }
+    environment: { files: *fresh_polyglot }
+    rubric:
+      - The response reports the failed command, exit 6 and SourceRoot.RevisionId SHA-256 diagnostic, not just missing generated SDK files.
+      - The response identifies microsoft/aspire#21735 as the upstream failure and stops without retrying, editing generated targets, suppressing SourceLink or changing toolchains.
+      - Preparation approval does not authorize migration edits, package changes, runtime or publish actions; capability verification remains blocked.
+    graders:
+      - type: diff-empty
+      - type: tool-calls
+        name: polyglot-restore-failure-no-execution
+        config: *bootstrap_no_execution
+      - type: prompt
+        name: polyglot-restore-failure-diagnostic
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response surface the command, exit 6 and actual
+            SourceLink SourceRoot.RevisionId SHA-256 failure as upstream
+            microsoft/aspire#21735, then stop without suppression, generated-target
+            edits, retries, toolchain changes or migration edits?
+
   - name: project-v2-approved-runnable-typescript-edit
     prompt: |
       Use the migration skill. I approve converting only the api and worker

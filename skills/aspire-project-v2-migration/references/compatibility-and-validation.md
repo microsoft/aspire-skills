@@ -26,6 +26,41 @@ earlier 13.6 development builds can lack either capability. Verify the resolved
 package/generated API or a known matching build; edit approval and package
 declarations alone are not capability evidence.
 
+### Bounded polyglot capability probe
+
+If an approved unchanged-AppHost restore succeeds but the Dotnet integration is
+absent, request separate approval for a disposable-copy probe, not package changes
+in the application. Identify the copy location, exact AppHost, integration/version
+to add, commands, expected downloads/generated writes, and cleanup scope.
+
+- Preserve the pinned SDK, integrations, channel and feeds, including effective
+  `global.json`, NuGet and package-manager configuration and relevant ancestor
+  settings. A copy outside those settings must carry equivalent configuration;
+  otherwise it is not evidence for this app. Do not switch to latest/stable or
+  use another SDK merely to make the probe pass.
+- Confirm targeting/version/source flags with the selected CLI's `aspire add --help`
+  and `aspire restore --help`. Use its supported add/restore flow **only in the
+  approved copy**: for example, where supported,
+  `aspire add Aspire.Hosting.Dotnet --version <compatible-pinned-version> --non-interactive`,
+  then restore the copy's exact AppHost. Keep existing integration pins unchanged;
+  if a matching package cannot be resolved without upgrades, stop for a decision.
+- Inspect the resulting package graph and generated declarations for the flat
+  `addDotnetProject(name, path, options?: DotnetProjectOptions)` contract and the
+  other APIs required by the selected resources. A successful restore alone is
+  not capability proof. Record the resolved versions and declaration evidence.
+- Do not copy probe changes back. Clean up only the task-owned copy as approved,
+  then present the exact application resource/file/package plan for migration-edit
+  approval. Preparation never authorizes starting resources or publishing.
+
+At either restore failure, report the command, exit code and actual diagnostic,
+leaving application source/configuration unchanged. In particular,
+`IntegrationRestore.csproj` can fail with a SourceLink `SourceRoot.RevisionId`
+invalid-commit-hash error for a valid 64-character SHA-256 Git revision. This is
+the upstream failure tracked by [microsoft/aspire#21735](https://github.com/microsoft/aspire/issues/21735),
+not proof that application source or the generated SDK is missing. Preserve that
+diagnostic and stop; do not retry unchanged commands or edit generated targets.
+Never add blanket SourceLink suppression or silently change toolchains to bypass it.
+
 ## Unsupported and decision-required patterns
 
 | Pattern | Required response |
