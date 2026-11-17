@@ -16,6 +16,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   canvas now recognizes `apphost.go` and labels its language as Go.
 
 ### Changed
+- Aspireify now inventories significant external APIs, WebSocket streams and
+  SDK-selected dependencies, requires evidence-backed dispositions before approval,
+  and distinguishes useful external-service visibility from configuration/SDK
+  ownership without adding unsafe health checks or startup gates.
 - Documented Aspire 17.0 agent setup, which registers the aspire-skills plugin instead of
   copying skills, plus client reloads, automatic updates, and version pins. Project-local
   skill overrides now apply to copies from Aspire 13.6 and earlier. On 17.0 and later,

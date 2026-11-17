@@ -142,6 +142,12 @@ const api = await builder.addCSharpApp("api", "./src/Api")
 - Connection strings: `ConnectionStrings__<resourceName>` (e.g., `ConnectionStrings__mydb=Host=...`)
 - Service URLs: `services__<resourceName>__<endpointName>__0` (e.g., `services__api__http__0=http://localhost:5123`)
 
+`WithReference` does not automatically configure arbitrary SDK options or make a
+client consume service discovery. Check the actual consumer: it may require its
+existing configuration key via `WithEnvironment`, a supported client integration,
+or no AppHost wiring at all. Do not replace SDK clients or their HTTP transports
+just to consume a reference.
+
 **`WithEnvironment()`** injects raw environment variables. Use this for custom config that isn't a service reference:
 
 ```csharp
@@ -154,6 +160,107 @@ var api = builder.AddCSharpApp("api", "../src/Api")
 - Connecting service A to service B or a database/cache/queue → `WithReference()`
 - Passing configuration values, feature flags, API keys → `WithEnvironment()`
 - Never manually construct connection strings with `WithEnvironment()` when `WithReference()` would work
+
+## External dependency modeling
+
+Use the [significant dependency inventory](scan-and-propose.md#significant-dependency-inventory)
+before choosing a resource. An external HTTPS API, WebSocket stream, or SDK-selected
+service remains significant even when Aspire does not own its lifecycle.
+
+### When `AddExternalService` adds value
+
+`AddExternalService` represents a separately operated service; it does not launch,
+provision, authenticate to, or take ownership of that service. Propose it when there
+is an evidence-backed benefit:
+
+- **Descriptive-only visibility:** a useful named dashboard entry for an explicit,
+  safe endpoint. Consumers may retain their existing configuration and SDKs; no
+  `WithReference`, configuration migration, probe, or startup wait is required.
+  Say clearly that this is a description, not verified reachability or health.
+- **Endpoint wiring:** a consumer already understands Aspire service discovery, or
+  an agreed `WithEnvironment` mapping supplies the exact key the client reads.
+  Preserve the existing client and establish that the address is compatible.
+- **Meaningful diagnostics:** an actual supported health contract exists and the
+  user opts in; a dashboard URL by itself is not a diagnostic check.
+
+Retain configuration/SDK ownership when the SDK discovers endpoints dynamically,
+or a single resource URL would misrepresent account/region selection, failover,
+authentication or transport behavior. Do not invent a representative endpoint.
+An explicit WebSocket URL can be descriptive-only if useful and safe; it is not
+an HTTP probe target. Importance alone is not a reason to add or reject a resource.
+
+### Endpoint parameters are not service resources
+
+`AddParameter` can hold an endpoint value; it does not describe the service itself.
+Creating a URL parameter, or a secret parameter for a token, does not create an
+`ExternalServiceResource`. Likewise, adding an external resource does not require
+moving existing configuration or credentials into AppHost parameters.
+
+C# alternatives below assume the application already reads `Catalog:BaseUrl` and
+`api` is its existing AppHost resource. Choose one after agreement; do not combine
+all three:
+
+```csharp
+// Configuration only; no external service resource.
+var catalogUrl = builder.AddParameter("catalog-url");
+api.WithEnvironment("Catalog__BaseUrl", catalogUrl);
+```
+
+```csharp
+// Descriptive-only; the application keeps its existing configuration and SDK.
+var catalogUrl = builder.AddParameter("catalog-url");
+builder.AddExternalService("catalog", catalogUrl);
+```
+
+```csharp
+// Deliberate wiring to an existing configuration key, not arbitrary SDK options.
+var catalogUrl = builder.AddParameter("catalog-url");
+var catalog = builder.AddExternalService("catalog", catalogUrl);
+api.WithEnvironment("Catalog__BaseUrl", catalog);
+```
+
+Use the existing approved configuration source to supply the parameter, without
+printing its value. Only use credential-free URLs for external resources: dashboard
+URLs are visible, and making a parameter secret does not make a rendered URL safe.
+The inspected API accepts an absolute URL or URL parameter and rejects query
+strings and fragments. Do not strip required signed query parameters to force a fit;
+retain the client's configuration instead. Check the installed version and language
+before translating examples to TypeScript or Go; do not assume identical overloads.
+
+### Preserve client behavior and opt in to diagnostics
+
+Preserve SDK-owned authentication, credential providers, endpoint discovery,
+protected HTTP transports (TLS, certificates, proxies and signing), retry policies,
+stream reconnect/resubscription, failover and recovery semantics. Do not replace
+them with a generic client, hardcoded URL, or plain transport for easier wiring.
+Resolve any material behavior change with the user in chat before confirmation.
+
+Do not add `WithHttpHealthCheck` to `ws://` or `wss://` URLs, invent `/health` paths,
+or treat the WebSocket handshake as HTTP readiness. An HTTP(S) probe must use an
+evidence-backed, safe, authorized endpoint with known status semantics; account
+for authentication, rate limits, side effects, and reachability from the AppHost.
+The built-in external HTTP probe is a separate HTTP client, not the SDK's protected
+transport or auth pipeline. Retain SDK diagnostics or defer checks if those
+requirements cannot be met accurately.
+
+External-service startup gates are **off by default**. Do not add `WaitFor` merely
+because a dependency is important or referenced. Only propose a gate after
+establishing a meaningful readiness contract and explicit agreement; a
+descriptive-only resource's state does not prove availability.
+
+### Authoritative API evidence
+
+Inspected official `microsoft/aspire` source at
+[`e3008dc09c8aa26b666c6557165178c4a0bb9b5e`](https://github.com/microsoft/aspire/commit/e3008dc09c8aa26b666c6557165178c4a0bb9b5e)
+(2026-11-17; evidence, not a target-version requirement):
+
+- [ExternalServiceBuilderExtensions.cs](https://github.com/microsoft/aspire/blob/e3008dc09c8aa26b666c6557165178c4a0bb9b5e/src/Aspire.Hosting/ExternalServiceBuilderExtensions.cs):
+  URL/parameter overloads, dashboard state and opt-in HTTP-only health checks.
+- [ExternalServiceResource.cs](https://github.com/microsoft/aspire/blob/e3008dc09c8aa26b666c6557165178c4a0bb9b5e/src/Aspire.Hosting/ExternalServiceResource.cs):
+  absolute-URI validation, query/fragment restrictions.
+- [ResourceBuilderExtensions.cs](https://github.com/microsoft/aspire/blob/e3008dc09c8aa26b666c6557165178c4a0bb9b5e/src/Aspire.Hosting/ResourceBuilderExtensions.cs):
+  `WithReference` injects connection/discovery information; `WithEnvironment`
+  accepts parameter and external-service builders for explicit key mapping.
 
 ## Endpoints and ports
 
@@ -294,7 +401,10 @@ var api = builder.AddCSharpApp("api", "../src/Api")
     .WaitFor(db);  // Don't start api until db is healthy
 ```
 
-Always pair `WithReference()` with `WaitFor()` for infrastructure dependencies (databases, caches, queues). Services that depend on other services should generally also wait for them.
+Pair `WithReference()` with `WaitFor()` for AppHost-managed infrastructure dependencies
+(databases, caches, queues) when the consumer needs them at startup. For local services,
+use their actual readiness contract. External dependencies are not startup gates by
+default; follow the [external modeling policy](#external-dependency-modeling).
 
 **`WaitForCompletion()`** — wait for a resource to run to completion (exit successfully). Use for init containers, database migrations, or seed data scripts:
 

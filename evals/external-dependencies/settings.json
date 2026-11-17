@@ -1,0 +1,5 @@
+{
+  "catalogBaseUrl": "https://catalog.example.invalid",
+  "streamUrl": "wss://events.example.invalid/updates",
+  "storageRegion": "us-west-2"
+}
