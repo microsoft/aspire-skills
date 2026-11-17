@@ -5,6 +5,11 @@
       "version": "v6.0.2",
       "sha": "de0fac2e4500dabe0009e67214ff5f5447ce83dd"
     },
+    "actions/create-github-app-token@v3.3.0": {
+      "repo": "actions/create-github-app-token",
+      "version": "v3.3.0",
+      "sha": "64ab729a6294000f5aa4a4bc0b73d1f32bc45510"
+    },
     "actions/setup-node@v6.4.0": {
       "repo": "actions/setup-node",
       "version": "v6.4.0",

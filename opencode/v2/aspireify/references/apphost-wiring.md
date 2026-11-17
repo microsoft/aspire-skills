@@ -2,7 +2,7 @@
 
 Use this reference when writing Step 5 (Wire up the AppHost) or when you need to look up Aspire APIs, integration packages, or wiring patterns.
 
-> **⚠️ Always look up APIs before writing code.** Do not guess builder method names or parameter shapes. Use `aspire docs search "<topic>"` and `aspire docs get "<slug>"` for documented patterns, then `aspire docs api search "<query>" --language csharp|typescript` and `aspire docs api get "<id>"` to confirm the exact reference entry for the API you are about to call.
+> **⚠️ Always look up APIs before writing code.** Do not guess builder method names or parameter shapes. Use `aspire docs search "<topic>"` and `aspire docs get "<slug>"` for documented patterns, then `aspire docs api search "<query>" --language csharp|typescript|go` (`go` needs the 17.0 CLI) and `aspire docs api get "<id>"` to confirm the exact reference entry for the API you are about to call.
 
 ## Looking up APIs and integrations
 
@@ -18,24 +18,15 @@ Packages named `Aspire.Hosting.*` — maintained by the Aspire team and ship wit
 |---------|---------|
 | `Aspire.Hosting.Python` | `AddPythonApp()`, `AddUvicornApp()` |
 | `Aspire.Hosting.JavaScript` | `AddJavaScriptApp()`, `AddNodeApp()`, `AddViteApp()`, `.WithYarn()`, `.WithPnpm()` |
+| `Aspire.Hosting.Go` | `AddGoApp()`, `.WithModTidy()` |
 | `Aspire.Hosting.PostgreSQL` | `AddPostgres()`, `AddDatabase()` |
 | `Aspire.Hosting.Redis` | `AddRedis()` |
 
-#### Tier 2: Community Toolkit packages (use when no first-party exists)
+**Go apps:** use first-party `Aspire.Hosting.Go` (`AddGoApp`). It was introduced as preview in 13.4; its first stable package ships with 17.0. On 13.x, discover a compatible preview and get approval before `aspire add go --version <compatible-preview-version>`; do not imply that `Aspire.Hosting.Go` has a stable 13.x version.
 
-Packages named `CommunityToolkit.Aspire.Hosting.*` — maintained by the community, documented on aspire.dev, and installable via `aspire add`. Examples:
+#### Tier 2: Raw fallbacks (last resort)
 
-| Package | Unlocks |
-|---------|---------|
-| `CommunityToolkit.Aspire.Hosting.Golang` | `AddGolangApp()` — handles `go run .`, working dir, PORT env |
-| `CommunityToolkit.Aspire.Hosting.Rust` | `AddRustApp()` |
-| `CommunityToolkit.Aspire.Hosting.Java` | Java hosting support |
-
-These provide typed APIs with proper endpoint handling, health checks, and dashboard integration — significantly better than raw executables.
-
-#### Tier 3: Raw fallbacks (last resort)
-
-`AddExecutable()`, `AddDockerfile()`, `AddContainer()` — use only when no Tier 1 or Tier 2 package exists for the technology, or when the user's setup is too custom for a typed integration.
+`AddExecutable()`, `AddDockerfile()`, `AddContainer()` — use only when no Tier 1 package exists for the technology, or when the user's setup is too custom for a typed integration.
 
 ### How to discover available packages
 
@@ -46,8 +37,8 @@ aspire docs search "golang"
 aspire docs search "python uvicorn"
 
 # Get a specific doc page by slug (returned from search results)
-aspire docs get "redis-integration"
-aspire docs get "go-integration"
+aspire docs get "set-up-redis-in-the-apphost"
+aspire docs get "set-up-go-apps-in-the-apphost"
 
 # Find the exact C# / TypeScript API reference entry for a builder method
 aspire docs api search "AddRedis" --language csharp
@@ -61,7 +52,7 @@ aspire integration search postgres --format Json
 
 Use `aspire docs search` / `aspire docs get` to find the right builder methods, configuration options, and patterns. Use `aspire docs api search` / `aspire docs api get` when you need the exact reference entry (parameter shapes, return types, overloads) for the API you are about to call. Use `aspire integration list` and `aspire integration search <query>` to discover packages you might not have known about.
 
-**Don't invent APIs** — if docs search and integration list don't return it, it doesn't exist. Fall back to Tier 3 and note the limitation to the user. **API shapes differ between C# and TypeScript** — always check the correct language docs.
+**Don't invent APIs** — if docs search and integration list don't return it, it doesn't exist. Fall back to Tier 2 and note the limitation to the user. **API shapes differ between C#, TypeScript, and Go** — always check the correct language docs. For Go, if the API search finds nothing, check the generated SDK (see `go-authoring.md`) before concluding an API is missing.
 
 ## Package compatibility and interaction rules
 
@@ -89,10 +80,10 @@ Before modeling environment variables, passwords, ports, or volumes for a typed 
 
 ```bash
 # Check what AddPostgres manages automatically
-aspire docs get "postgresql-hosting-integration" --section "Connection properties"
+aspire docs get "connect-to-postgresql" --section "Connection properties"
 
 # Check what AddSqlServer manages
-aspire docs get "sql-server-integration" --section "Hosting integration"
+aspire docs get "connect-to-sql-server" --section "Connection properties"
 ```
 
 Look for the **"Connection properties"** section — it lists what the integration injects into consuming services. If it lists `Password`, `Host`, `Port` — the integration manages those. Do not create `AddParameter()` for values the integration already handles.
@@ -114,14 +105,11 @@ To add an integration package (which unlocks typed builder methods):
 # First-party
 aspire add redis
 aspire add python
-aspire add nodejs
-
-# Community Toolkit
-aspire add communitytoolkit-golang
-aspire add communitytoolkit-rust
+aspire add javascript
+aspire add go
 ```
 
-After adding, run `aspire restore` (TypeScript) or `dotnet restore` (C#) to update available APIs, then check what methods are now available.
+After adding, run `aspire restore` (TypeScript or Go) or `dotnet restore` (C#) to update available APIs, then check what methods are now available.
 
 **Always prefer a typed integration over raw `AddExecutable`/`AddContainer`.** Typed integrations handle working directories, port injection, health checks, and dashboard integration automatically.
 
@@ -225,9 +213,13 @@ var grpcService = builder.AddCSharpApp("grpc", "../src/GrpcService")
     .WithEndpoint("grpc", endpoint =>
     {
         endpoint.Port = 5050;
-        endpoint.Protocol = "grpc";
+        endpoint.UriScheme = "http";  // gRPC runs over HTTP/2; use "https" for TLS
+        endpoint.Transport = "http2";
     });
 ```
+
+`EndpointAnnotation.Protocol` is the socket protocol (`ProtocolType.Tcp` or `Udp`), not an
+application protocol name; set the scheme and transport instead.
 
 **`WithExternalHttpEndpoints()`** — mark a resource's HTTP endpoints as externally visible. Use this for user-facing frontends so the URL appears prominently in the dashboard:
 
@@ -241,6 +233,7 @@ var frontend = builder.AddViteApp("frontend", "../frontend")
 **Port injection**: Many frameworks (Express, Vite, Flask) need to know which port to listen on. Use the `env:` parameter:
 - `withHttpsEndpoint({ env: "PORT" })` (TypeScript)
 - `.WithHttpsEndpoint(env: "PORT")` (C#)
+- `.WithHttpsEndpoint(aspire.HttpsEndpointEnv("PORT"))` (Go)
 
 Aspire assigns a port and injects it as the specified environment variable. The service should read it and listen on that port.
 
@@ -349,7 +342,7 @@ This prevents data loss when restarting the AppHost — the container stays runn
 **TypeScript equivalent:**
 
 ```typescript
-import { ContainerLifetime } from './.aspire/modules/aspire.mjs';
+import { ContainerLifetime } from "./.aspire/modules/aspire.mjs";
 
 const db = await builder.addPostgres("pg")
     .withLifetime(ContainerLifetime.Persistent);
@@ -375,6 +368,11 @@ To fix it, choose the least destructive option the user approves:
      mounted host directory is dedicated to this one resource and get explicit approval
      naming that exact path before removing the container and resetting only that
      directory's data. Do not remove or clear a parent directory.
+   - If the bind-mounted directory is shared with other data, do not clear it and do not
+     propose a replacement path inside it or next to it as safe, because you have not
+     verified its contents. Recommend restoring the previous password, or ask the user to
+     choose a new empty directory dedicated to this resource and confirm it before
+     changing the mount.
 3. **Reset all Aspire-owned volume data for the AppHost.**
    `aspire stop --force --volumes --apphost <filesystem-path>` removes the AppHost's
    persistent resources and every named volume Aspire created for it. In an AppHost with
@@ -441,5 +439,5 @@ var db = builder.AddPostgres("pg")
 
 ```typescript
 const db = await builder.addPostgres("pg")
-    .withDataVolume("pg-data");
+    .withDataVolume({ name: "pg-data" });
 ```

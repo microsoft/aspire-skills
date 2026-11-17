@@ -1,7 +1,12 @@
 # Development
 
-Use Node.js 22 or later, Git, and GitHub CLI. Create feature branches from `dev`
-and target contributor PRs at `dev`. Before opening a PR, run:
+Use Node.js 22 or later, Git, GitHub CLI, and Bash 4 or later available as `bash`
+on `PATH`. Workflow-script tests use recursive globs, which macOS's system Bash
+does not support. On macOS, install Bash with `brew install bash` and prepend
+`$(brew --prefix bash)/bin` to `PATH`. On Windows, use Git Bash.
+
+Create feature branches from `dev` and target contributor PRs at `dev`.
+Before opening a PR, run:
 
 ```powershell
 npm ci --ignore-scripts

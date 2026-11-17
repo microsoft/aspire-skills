@@ -16,7 +16,7 @@ description: >-
 license: MIT
 metadata:
   author: Microsoft
-  version: "0.0.5"
+  version: "0.0.6"
 ---
 
 # Aspire Monitoring
@@ -97,8 +97,10 @@ aspire describe --format Json
 # ✅ When a resource you expect is missing, retry with --include-hidden
 aspire describe --include-hidden --format Json
 
-# ✅ Get endpoints from describe, not guessing ports
-ENDPOINT=$(aspire describe apiservice --format Json | jq -r '.endpoints[0].url')
+# ✅ Get endpoints from describe, not guessing ports. Wait first; jq -e fails when
+#    there is no external URL. JSON keeps AppHost order, not the https-first table order.
+aspire wait apiservice
+ENDPOINT=$(aspire describe apiservice --format Json | jq -er '[.resources[0].urls[]? | select(.isInternal | not) | .url][0] // empty')
 
 # ✅ Use --apphost <path> when multiple AppHosts exist
 aspire describe --apphost ./src/MyApp.AppHost/
@@ -223,8 +225,13 @@ The Aspire CLI talks to a *running AppHost* through a local backchannel socket a
 
 ## Project-Local Skill Routing
 
-If `.agents/skills/aspire/SKILL.md` exists (from `aspire agent init`), see its
-`references/monitoring.md` for deeper telemetry workflow guidance.
+If `.agents/skills/aspire/SKILL.md` exists, check `aspire --version`.
+
+- **Aspire 13.6 and earlier:** `aspire agent init` installed it. See its
+  `references/monitoring.md` for deeper telemetry workflow guidance.
+- **Aspire 17.0 and later:** Aspire registers this plugin instead, so treat the copy as
+  stale unless the user says they maintain it. Use this skill, tell the user the copy is
+  stale, and suggest `aspire doctor`, which lists each copy and explains how to remove it.
 
 ## References
 

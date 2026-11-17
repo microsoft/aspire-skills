@@ -111,8 +111,8 @@ stimuli:
       umbrella aspire router for specialist-owned work, invoke both the router
       and the owner.
       Should I use aspire agent init for better AI agent support in this Aspire
-      project? Give read-only advice on what project-local guidance that command
-      generates and covers. This is Aspire-specific project guidance, not Copilot
+      project? Give read-only advice on what Aspire agent guidance that command
+      sets up and covers. This is Aspire-specific project guidance, not Copilot
       cloud-agent, CI runner, or copilot-setup-steps.yml configuration. Do not
       generate files, install tools or run setup commands.
     tags: { priority: p1, area: recommendation }
@@ -122,7 +122,7 @@ stimuli:
         - { src: ../../../evals/csharp-apphost/MyApp.AppHost/Program.cs, dest: csharp-apphost/MyApp.AppHost/Program.cs }
         - { src: ../../../evals/csharp-apphost/aspire.config.json, dest: csharp-apphost/aspire.config.json }
     rubric:
-      - The response recommends aspire agent init for project-local Aspire skills, not generic Copilot CI or cloud-agent setup.
+      - The response recommends aspire agent init for Aspire agent skills, not generic Copilot CI or cloud-agent setup.
       - The response explains richer C# AppHost editing, TypeScript AppHost and investigation/diagnostics guidance.
       - Guidance is sufficient; generating files or executing setup is neither required nor permitted.
     graders:
@@ -177,7 +177,7 @@ stimuli:
       files: *csharp_apphost
     rubric:
       - The response checks the Aspire CLI version before choosing a command.
-      - For Aspire 13.6 or later it recommends standalone aspire agent init --mcp, keeping any existing --skills or --skill-locations choices.
+      - For Aspire 13.6 or later it recommends standalone aspire agent init --mcp, keeping any agent setup flags the user already chose.
       - For Aspire 13.5 it explains there is no --mcp flag and the MCP option must be selected in interactive aspire agent init.
       - The response does not claim aspire new, aspire init or plain aspire agent init configure MCP by default, and does not reference the removed dashboard MCP server or ASPIRE_DASHBOARD_MCP_ENDPOINT_URL as a current option.
     graders:
@@ -189,6 +189,63 @@ stimuli:
         config: { scoring: binary }
       - type: diff-empty
         name: keeps-explicit-mcp-read-only
+
+  - name: router-agent-init-registers-sources-17-001
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. If this request explicitly uses the
+      umbrella aspire router for specialist-owned work, invoke both the router
+      and the owner.
+      I'm on Aspire 17.0 and ran aspire agent init for GitHub Copilot CLI with
+      project scope. No SKILL.md files appeared under .agents/skills, and my
+      current Copilot session doesn't seem to know the aspireify skill. Did setup
+      fail? Give read-only advice. Do not generate files, install tools or run
+      setup commands.
+    tags: { priority: p1, scenario: version-compatibility, area: agent-setup }
+    environment:
+      files: *csharp_apphost
+    rubric:
+      - The response explains that Aspire 17.0 registers plugin or skill sources in agent settings, such as .github/copilot/settings.json, instead of copying skill files.
+      - The response says missing local SKILL.md files are expected and do not mean setup failed.
+      - The response tells the user to reload or restart the client before relying on the new skills.
+      - The response does not recommend copying skill files into the project or passing --skills aspireify to the 17.0 CLI as the fix.
+    graders:
+      - type: skill-invocation
+        name: invokes-router-for-source-registration
+        config: { required: [aspire], disallowed: [customize-cloud-agent] }
+      - type: prompt
+        name: explains-source-registration-and-reload
+        config: { scoring: binary }
+      - type: diff-empty
+        name: keeps-source-registration-read-only
+
+  - name: router-stale-skill-copy-17-001
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. If this request explicitly uses the
+      umbrella aspire router for specialist-owned work, invoke both the router
+      and the owner.
+      I upgraded to Aspire 17.0. This repo still has .agents/skills/aspireify/SKILL.md
+      from an older aspire agent init run, and I never edited it. Which aspireify
+      guidance should my agent follow, and what should I do about the copy? Give
+      read-only advice. Do not generate files, delete files or run setup commands.
+    tags: { priority: p1, scenario: version-compatibility, area: agent-setup }
+    environment:
+      files: *csharp_apphost
+    rubric:
+      - The response treats the project-local aspireify copy as stale on Aspire 17.0 and says to follow the plugin's aspireify skill instead of deferring to the copy.
+      - The response explains that the stale copy can take precedence over the plugin skill with the same name.
+      - The response suggests aspire doctor to find the copies and learn how to remove them.
+      - The response does not claim aspire agent init removes the copies and does not delete files itself.
+    graders:
+      - type: skill-invocation
+        name: invokes-router-for-stale-copy
+        config: { required: [aspire] }
+      - type: prompt
+        name: treats-copy-as-stale-and-suggests-doctor
+        config: { scoring: binary }
+      - type: diff-empty
+        name: keeps-stale-copy-read-only
 
   - name: router-reject-001
     prompt: >
@@ -595,6 +652,28 @@ stimuli:
         config: { required: [aspire-deployment] }
       - type: prompt
         name: engages-aspire-destroy
+        config: { scoring: binary }
+      - type: diff-empty
+
+  - name: should_trigger_11
+    description: Go AppHost detection
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge.
+      My apphost.go file needs updating. Give read-only guidance on the owning
+      workflow and what information is needed before edits; do not update,
+      restore, install or run it.
+    tags: { priority: p1, area: routing }
+    rubric:
+      - The response recognizes a Go Aspire AppHost and routes ordinary source authoring to aspireify.
+      - Asking for its path, contents or desired change is appropriate when missing; the filename alone does not request Project v2 migration.
+      - No actual update is required or permitted.
+    graders:
+      - type: skill-invocation
+        name: required-skills-should-trigger-11
+        config: { required: [aspireify] }
+      - type: prompt
+        name: engages-go-apphost
         config: { scoring: binary }
       - type: diff-empty
 

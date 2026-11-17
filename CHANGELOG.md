@@ -2,6 +2,96 @@
 
 All notable changes to the aspire-skills plugin will be documented in this file.
 
+## [0.0.6](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.6)
+
+### Added
+- Added Go AppHost guidance (Aspire 17.0+) to the `aspire`,
+  `aspire-orchestration`, `aspire-init`, `aspire-deployment` and `aspireify`
+  skills, covering detection, authoring, `aspire init --language go`, `AddGoApp`
+  wiring and deployment CI. Guidance for the first-party `Aspire.Hosting.Go`
+  integration distinguishes preview packages from Aspire 13.4 and stable packages
+  from Aspire 17.0.
+- Added `AddGoApp` private-module (`WithGoPrivate`) and Delve debugging
+  (`WithDelveServer`) guidance to Aspireify's Go authoring reference, and the AppHosts
+  canvas now recognizes `apphost.go` and labels its language as Go.
+
+### Changed
+- Documented Aspire 17.0 agent setup, which registers the aspire-skills plugin instead of
+  copying skills, plus client reloads, automatic updates, and version pins. Project-local
+  skill overrides now apply to copies from Aspire 13.6 and earlier. On 17.0 and later,
+  skills treat copies as stale and point to `aspire doctor`.
+- Removed Community Toolkit guidance from Aspireify and orchestration. Go services use
+  the first-party `Aspire.Hosting.Go` integration (`AddGoApp`); resource wiring now
+  prefers first-party packages and falls back to raw executables or containers.
+- The Aspireify proposal canvas no longer opens when you ask to edit an AppHost
+  that already declares resources. Connecting or wiring a resource, adding a single
+  integration or API, running a one-off `aspire add`, and repairing the TypeScript
+  toolchain now stay in chat. The canvas still opens to wire an unwired AppHost, or
+  when you ask to aspireify, re-scan, or re-propose the whole resource graph.
+- AppHosts now reports an error when it cannot switch to the requested AppHost.
+- Redesigned the AppHosts canvas as a compact companion to the Aspire Dashboard,
+  with an **Output** panel for AppHost command output.
+- AppHosts no longer has a Relationships tab. The resource inspector now lists
+  **Depends on** and **Used by**, waiting resources name what they are waiting for,
+  and parameters appear in their own collapsible section without showing values.
+- Aspireify now prompts you in Copilot to approve the AppHost plan you reviewed.
+  Starting over requires separate approval and preserves the previous review.
+- Aspireify marks the agent's findings and recommendations as unverified.
+  Review them before approving a plan.
+- Use a local checkout with AppHosts and Aspireify. UNC paths such as
+  `\\server\share\AppHost` are no longer supported.
+- Surfaced Aspireify's existing persistent-data recovery safeguards in the skill
+  entrypoint, including target-specific approval and protection for shared directories.
+- Corrected the Aspireify TypeScript data-volume example to the generated AppHost SDK:
+  `withDataVolume({ name: "pg-data" })` instead of a positional name. The previous form
+  failed type checking, so `aspire start` exited before starting any resource. A new
+  `aspireify-ts-named-volume-001` eval checks that TypeScript named-volume guidance uses
+  the options object.
+- Corrected the Aspireify TypeScript YARP example to add routes inside
+  `withConfiguration(async (yarp) => ...)`. The generated AppHost SDK has no
+  `addRoute` or `addCatchAllRoute` on the YARP resource, so the previous example
+  failed type checking and `aspire start` exited before starting any resource.
+- Corrected endpoint-discovery guidance so agents use reachable service URLs
+  instead of `null`.
+- Corrected Aspireify's TypeScript cache-wiring guidance so generated AppHosts
+  build and start.
+- Corrected Aspireify's C# AppHost samples so they build against Aspire 13.6.
+- Corrected Aspireify's Node.js OpenTelemetry setup so it builds against current
+  `@opentelemetry/sdk-node` and exports telemetry.
+- Pointed Aspireify's "check what integrations auto-manage" lookups at the current
+  `connect-to-postgresql` and `connect-to-sql-server` docs pages. The retired
+  `postgresql-hosting-integration` and `sql-server-integration` slugs fail with
+  "Documentation page ... not found" in `aspire docs get`. The package-discovery examples
+  now use `set-up-redis-in-the-apphost` and `set-up-go-apps-in-the-apphost` instead of the
+  retired `redis-integration` and `go-integration` slugs.
+- Corrected the Aspireify integration example to `aspire add javascript`. `aspire add nodejs`
+  no longer resolves after the package was renamed to `Aspire.Hosting.JavaScript`, and
+  non-interactive mode fails because it requires an exact friendly name.
+- Fixed two Aspireify C# examples that did not compile against Aspire: lifecycle hooks now
+  subscribe through `builder.Eventing.Subscribe<BeforeStartEvent>` and
+  `Subscribe<AfterResourcesCreatedEvent>` instead of the TypeScript-only
+  `SubscribeBeforeStart` and `SubscribeAfterResourcesCreated`, and the gRPC endpoint example
+  sets `UriScheme` and `Transport` instead of assigning `"grpc"` to the `ProtocolType`
+  `Protocol` property.
+- Replaced the nonexistent `resource.WithPrivateEndpoint()` in Aspireify's C#
+  authoring reference with Aspire's subnet-based `subnet.AddPrivateEndpoint(target)` API,
+  including the `Aspire.Hosting.Azure.Network` package reference and `ASPIREAZURE003` opt-in.
+  Aspireify's authoring rules now route private endpoint requests to that API instead of raw Bicep.
+- Fixed the TypeScript deploy workflow reference and CI/CD setup snippet to install the
+  Aspire CLI and run `aspire restore` before `npm run build`. The generated
+  `.aspire/modules/` folder is gitignored, so on a clean checkout the build failed with
+  `TS2307: Cannot find module './.aspire/modules/aspire.mjs'`. In the shared Node setup
+  snippet, the restore runs only when `apphost.mts` exists, so C# and Go AppHosts with
+  JavaScript resources are unaffected.
+- Corrected Aspireify's TypeScript AppHost `package.json` guidance to match `aspire init`.
+  With an existing root `package.json`, the AppHost goes in `aspire-apphost/` and the
+  root only gains `aspire:start`/`aspire:build`/`aspire:dev` delegates; the merge rules
+  (kept scripts and module type, replaced `engines.node`) apply to the AppHost package.
+  `aspire restore` is no longer described as creating or merging `package.json` or
+  `tsconfig.apphost.json`, and the fresh-package scripts are labeled 13.6+ alongside the
+  13.5 alias layout. The `aspire:*` scripts compile with `tsc -p tsconfig.apphost.json`
+  instead of bare `tsc`.
+
 ## [0.0.5](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.5)
 
 ### Changed

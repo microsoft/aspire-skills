@@ -58,7 +58,7 @@ async function openProvider(t, extension, layout) {
     const providerUrl = new URL(`../../extensions/${extension}/extension.mjs`, import.meta.url);
     const installedUrl = pathToFileURL(join(root, "extensions", extension, "extension.mjs"));
     const context = createContext({
-        URL, Buffer, process, console, setTimeout, clearTimeout, setInterval, clearInterval,
+        URL, Buffer, process, console, structuredClone, setTimeout, clearTimeout, setInterval, clearInterval,
     });
     const provider = new SourceTextModule(await fs.readFile(providerUrl, "utf8"), {
         context,

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { EventEmitter } from "node:events";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
@@ -13,9 +13,14 @@ import {
     buildAppHostTreeNode,
     createAspireCliRunner,
     createStoppedAppHost,
+    processOutputSecrets,
     publicAppHost,
+    redactProcessOutput,
+    resolveCliExecutable,
     runProcess,
     sanitizeCommandArgumentInputs,
+    splitProcessOutput,
+    streamProcess,
     validateCommandArguments,
 } from "../extensions/aspire-apphosts/lib/app-model.mjs";
 
@@ -99,35 +104,42 @@ test("native executable invocation preserves JSON, quotes, empty tokens, and she
 });
 
 for (const command of ["aspire.exe", "aspire-13.6"]) {
-    test(`Windows native launcher resolves ${command} through PATH, ignoring working-directory copies`, { skip: process.platform !== "win32" }, async (t) => {
-        const root = await mkdtemp(join(tmpdir(), "aspire-cli-launch-"));
+    test(`Windows CLI resolution finds ${command} on PATH, ignoring working-directory copies`, { skip: process.platform !== "win32" }, async (t) => {
+        const root = await mkdtemp(join(tmpdir(), "aspire-cli-resolve-"));
         t.after(() => rm(root, { recursive: true, force: true }));
         const installed = join(root, "installed");
         const workspace = join(root, "workspace");
-        const appHost = join(workspace, "Demo.AppHost");
         const executableName = command.endsWith(".exe") ? command : `${command}.exe`;
-        const executable = join(installed, executableName);
-        for (const directory of [installed, workspace, appHost]) {
+        // Placeholders are never executed, so cleanup cannot race a released executable image.
+        for (const directory of [installed, workspace, join(workspace, "Demo.AppHost")]) {
             await mkdir(directory, { recursive: true });
-            await copyFile(process.execPath, join(directory, executableName));
+            await writeFile(join(directory, executableName), "");
         }
-        const searchPolicy = Object.entries(process.env).filter(([key]) => key.toUpperCase() === "NODEFAULTCURRENTDIRECTORYINEXEPATH");
-        // Exercise Windows' default search policy even when the test host disables it.
-        for (const [key] of searchPolicy) delete process.env[key];
-        try {
-            const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toUpperCase() !== "PATH"));
-            env.Path = installed;
-            const cli = createAspireCliRunner({ command });
-            for (const cwd of [workspace, appHost]) {
-                const result = await cli.run(["-e", "process.stdout.write(process.execPath)"], { cwd, env });
-                assert.equal(result.ok, true, result.error);
-                assert.equal(result.stdout, executable);
-            }
-        } finally {
-            for (const [key, value] of searchPolicy) process.env[key] = value;
-        }
+        const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toUpperCase() !== "PATH"));
+        env.Path = installed;
+        assert.equal(await resolveCliExecutable(command, env), join(installed, executableName));
     });
 }
+
+test("Windows native launcher spawns the PATH executable, not a working-directory decoy", { skip: process.platform !== "win32" }, async (t) => {
+    const workspace = await mkdtemp(join(tmpdir(), "aspire-cli-launch-"));
+    t.after(() => rm(workspace, { recursive: true, force: true }));
+    // An empty decoy fails to launch if the search falls back to the working directory.
+    await writeFile(join(workspace, "node.exe"), "");
+    const searchPolicy = Object.entries(process.env).filter(([key]) => key.toUpperCase() === "NODEFAULTCURRENTDIRECTORYINEXEPATH");
+    // Exercise Windows' default search policy even when the test host disables it.
+    for (const [key] of searchPolicy) delete process.env[key];
+    try {
+        const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toUpperCase() !== "PATH"));
+        env.Path = dirname(process.execPath);
+        const result = await createAspireCliRunner({ command: "node" })
+            .run(["-e", "process.stdout.write(process.execPath)"], { cwd: workspace, env });
+        assert.equal(result.ok, true, result.error);
+        assert.equal(result.stdout, process.execPath);
+    } finally {
+        for (const [key, value] of searchPolicy) process.env[key] = value;
+    }
+});
 
 test("process stdout preserves machine JSON while redacting only submitted secret values", async () => {
     const secret = "dummy-\"quoted\"\n😀-secret";
@@ -155,7 +167,7 @@ for (const size of [32, 9_000]) {
     });
 }
 
-test("output limits and timeouts redact partial secret streams as well as complete values", async () => {
+test("output limits and timeouts never return secret fragments", async () => {
     const secret = `DUMMY-${"abcdef0123456789".repeat(600)}`;
     const result = await runProcess(process.execPath, [
         "-e", "process.stdout.write('before '+process.argv[1].slice(0,200));setTimeout(()=>process.stdout.write(process.argv[1].slice(200)),80);",
@@ -163,25 +175,80 @@ test("output limits and timeouts redact partial secret streams as well as comple
     ], { sensitiveValues: [secret], maxOutputBytes: 512, timeoutMs: 10_000 });
     assert.equal(result.ok, false);
     assert.match(result.error, /output exceeded/);
-    assert.match(result.stdout, /before \[redacted\]/);
-    assert.doesNotMatch(result.stdout, /DUMMY-/);
+    assert.doesNotMatch(JSON.stringify(result), /DUMMY-/);
 
     const timeout = await runProcess(process.execPath, [
         "-e", "process.stderr.write('before '+process.argv[1].slice(0,200));setTimeout(()=>{},10000);", secret,
     ], { sensitiveValues: [secret], timeoutMs: 1_500 });
     assert.equal(timeout.ok, false);
     assert.match(timeout.error, /timed out/);
-    assert.match(timeout.stderr, /before \[redacted\]/);
-    assert.doesNotMatch(timeout.stderr, /DUMMY-/);
+    assert.doesNotMatch(JSON.stringify(timeout), /DUMMY-/);
 });
 
-test("interrupted output redacts a complete self-overlapping secret before considering partial tails", async () => {
-    const secret = "DUMMY-abcDUMMY-abc";
+test("interrupted output redacts partial secret tails after complete self-overlapping secrets", () => {
+    const longSecret = `DUMMY-${"abcdef0123456789".repeat(600)}`;
+    const long = processOutputSecrets([longSecret]);
+    assert.equal(redactProcessOutput(`before ${longSecret.slice(0, 200)}`, long, true), "before [redacted]");
+    assert.equal(redactProcessOutput(`before ${longSecret.slice(0, 200)}`, long, false), `before ${longSecret.slice(0, 200)}`,
+        "completed runs keep text that only resembles a secret prefix");
+
+    const overlapping = processOutputSecrets(["DUMMY-abcDUMMY-abc"]);
+    assert.equal(redactProcessOutput("before DUMMY-abcDUMMY-abc", overlapping, true), "before [redacted]");
+    assert.equal(redactProcessOutput("before DUMMY-abcDUMMY-", overlapping, true), "before [redacted]");
+    assert.equal(redactProcessOutput("before DUMMY-DUMMY-DUMMY-", processOutputSecrets(["DUMMY-DUMMY-xyz123456789"]), true),
+        "before DUMMY-[redacted]", "a failed partial match falls back to the longest repeated prefix");
+});
+
+test("live output holds a secret split across chunks until it can be redacted whole", () => {
+    const feed = (secrets, chunks) => {
+        let held = "";
+        const emitted = [];
+        for (const chunk of chunks) {
+            const split = splitProcessOutput(held + chunk, secrets);
+            emitted.push(split.text);
+            held = split.held;
+        }
+        emitted.push(splitProcessOutput(held, secrets, true).text);
+        return emitted.join("");
+    };
+    const overlapping = processOutputSecrets(["DUMMY-", "DUMMY-super-secret-value"]);
+    assert.equal(feed(overlapping, ["DUMMY-super-", "secret-value\nafter DUMMY- done\n"]),
+        "[redacted]\nafter [redacted] done\n");
+    const longSecret = `DUMMY-${"abcdef0123456789".repeat(600)}`;
+    assert.equal(feed(processOutputSecrets([longSecret]), ["before ", longSecret.slice(0, 200), `${longSecret.slice(200)} after`]),
+        "before [redacted] after");
+});
+
+test("streamProcess rejects oversized complete lines before publishing them", async () => {
+    const lines = [];
+    const result = await new Promise((resolveResult) => {
+        streamProcess(process.execPath, [
+            "-e",
+            "process.stdout.write('x'.repeat(256) + '\\n');",
+        ], {
+            maxLineBytes: 64,
+            onLine: (line) => lines.push(line),
+            onExit: resolveResult,
+        });
+    });
+
+    assert.deepEqual(lines, []);
+    assert.match(result.error, /exceeded 64 bytes/, "the rejection is reported even if the child already exited cleanly");
+});
+
+test("live output keeps a longer secret whole when a shorter overlapping secret arrives first", async () => {
+    const chunks = [];
     const result = await runProcess(process.execPath, [
-        "-e", "process.stdout.write('before '+process.argv[1]);setTimeout(()=>{},10000);", secret,
-    ], { sensitiveValues: [secret], timeoutMs: 1_500 });
-    assert.equal(result.ok, false);
-    assert.equal(result.stdout, "before [redacted]");
+        "-e", "process.stdout.write('DUMMY-super-');setTimeout(()=>process.stdout.write('secret-value\\nafter DUMMY- done\\n'),80);",
+    ], {
+        sensitiveValues: ["DUMMY-", "DUMMY-super-secret-value"],
+        timeoutMs: 10_000,
+        onOutput: (stream, text) => chunks.push(text),
+    });
+    assert.equal(result.ok, true);
+    const live = chunks.join("");
+    assert.doesNotMatch(live, /super|secret-value/);
+    assert.equal(live, "[redacted]\nafter [redacted] done\n");
 });
 
 test("launch failures redact submitted values without hiding useful diagnostics", async () => {

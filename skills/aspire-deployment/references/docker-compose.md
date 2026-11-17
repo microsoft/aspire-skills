@@ -15,13 +15,15 @@ aspire docs get "docker-integration"
 aspire docs get "<slug>"
 ```
 
-Use API docs before editing. Search in the AppHost language you detected:
+Use API docs before editing. Search in the AppHost language you detected (`--language go` needs the 17.0 CLI):
 
 ```bash
 aspire docs api search "Docker Compose environment" --language csharp
 aspire docs api search "Docker Compose environment" --language typescript
+aspire docs api search "Docker Compose environment" --language go
 aspire docs api search "Docker Compose service customization" --language csharp
 aspire docs api search "Docker Compose service customization" --language typescript
+aspire docs api search "Docker Compose service customization" --language go
 ```
 
 ## Target setup
@@ -35,7 +37,7 @@ Expected package and AppHost environment:
 aspire add docker
 ```
 
-Add a Docker Compose environment resource using the C# or TypeScript API shape returned by Aspire docs. When a Docker Compose environment exists, compatible resources are automatically included in generated Compose output. Use the per-resource Docker Compose customization API only for customization.
+Add a Docker Compose environment resource using the C#, TypeScript, or Go API shape returned by Aspire docs. When a Docker Compose environment exists, compatible resources are automatically included in generated Compose output. Use the per-resource Docker Compose customization API only for customization.
 
 ## Code changes to make
 
@@ -56,12 +58,19 @@ Make these changes in the AppHost, not in the generated Compose output:
    const compose = await builder.addDockerComposeEnvironment("docker-compose");
    ```
 
-3. Do not add explicit compute-environment assignment for the common single-environment case. Only if the AppHost has multiple compute environments, disambiguate each Docker Compose workload; in C#, add `.WithComputeEnvironment(compose)` to each compute resource that should land in Compose.
+   Go AppHost shape (Aspire 17.0 or later):
+
+   ```go
+   compose := builder.AddDockerComposeEnvironment("docker-compose")
+   ```
+
+3. Do not add explicit compute-environment assignment for the common single-environment case. Only if the AppHost has multiple compute environments, disambiguate each Docker Compose workload; in C# or Go, add `.WithComputeEnvironment(compose)` to each compute resource that should land in Compose.
 4. For TypeScript AppHosts, verify the current language-specific docs before assuming an equivalent assignment API.
 5. Keep normal app model relationships such as `WithReference`, endpoints, parameters, and connection strings in the AppHost. They flow into Compose environment variables and service dependencies.
 6. Use customization APIs only for real Compose customization:
    - C#: `compose.ConfigureComposeFile(...)`, `compose.ConfigureEnvFile(...)`, and `resource.PublishAsDockerComposeService(...)`.
    - TypeScript: `compose.configureComposeFile(...)`, `compose.configureEnvFile(...)`, and `resource.publishAsDockerComposeService(...)`.
+   - Go: `compose.ConfigureComposeFile(...)`, `compose.ConfigureEnvFile(...)`, and `resource.PublishAsDockerComposeService(...)`.
    - Aspire 13.5 exposes shared-memory customization through the generated Compose service
      model. Verify the current property/API before setting it; do not hand-edit `shm_size`
      into generated YAML.

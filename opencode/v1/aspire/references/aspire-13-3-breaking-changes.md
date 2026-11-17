@@ -58,10 +58,11 @@ aspire agent init
 ```
 
 > **On Aspire 13.6+:** MCP configuration is strictly opt-in. Plain `aspire agent init`,
-> and the agent setup chained from `aspire new` / `aspire init`, install skills but do not
-> configure MCP. To replace a dashboard-MCP setup on 13.6+, run
+> and the agent setup chained from `aspire new` / `aspire init`, configure Aspire agent
+> guidance but do not configure MCP. To replace a dashboard-MCP setup on 13.6+, run
 > `aspire agent init --mcp`. Add `--non-interactive` for agent execution, and keep any
-> `--skills` / `--skill-locations` selections. In 13.5, select the MCP server option
+> agent setup flags already chosen: `--skills` and `--skill-locations` in 13.6, or
+> `--agents`, `--scope`, and `--skills` in 17.0 and later. In 13.5, select the MCP server option
 > in interactive `aspire agent init`.
 
 Detection covers GitHub Copilot, Claude, Cursor, and any other agent that supports skills or

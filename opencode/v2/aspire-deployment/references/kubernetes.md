@@ -32,15 +32,18 @@ aspire docs search "Azure Kubernetes Service hosting integration"
 aspire docs get "<slug>"
 ```
 
-Use API docs before editing. Search in the AppHost language you detected:
+Use API docs before editing. Search in the AppHost language you detected (`--language go` needs the 17.0 CLI):
 
 ```bash
 aspire docs api search "Kubernetes environment" --language csharp
 aspire docs api search "Kubernetes environment" --language typescript
+aspire docs api search "Kubernetes environment" --language go
 aspire docs api search "Helm" --language csharp
 aspire docs api search "Helm" --language typescript
+aspire docs api search "Helm" --language go
 aspire docs api search "Kubernetes service customization" --language csharp
 aspire docs api search "Kubernetes service customization" --language typescript
+aspire docs api search "Kubernetes service customization" --language go
 ```
 
 ## Existing or external Kubernetes cluster setup
@@ -51,7 +54,7 @@ Expected package and AppHost environment:
 aspire add kubernetes
 ```
 
-Add a Kubernetes environment resource using the C# or TypeScript API shape returned by Aspire docs.
+Add a Kubernetes environment resource using the C#, TypeScript, or Go API shape returned by Aspire docs.
 
 For vanilla Kubernetes and externally-managed clusters, a container registry is required for project/container image deployment because Aspire has no local-registry fallback for Kubernetes. Cluster nodes must pull the built images.
 
@@ -80,21 +83,28 @@ Make these changes in the AppHost:
    const k8s = await builder.addKubernetesEnvironment("k8s");
    ```
 
-3. Add a container registry for project/container images, for example `builder.AddContainerRegistry(...)` in C# or the TypeScript equivalent returned by API docs. If one registry exists, Aspire can use it as the default target; use `WithContainerRegistry(...)` / `withContainerRegistry(...)` only when a specific resource should use a specific registry.
-4. Do not add explicit compute-environment assignment for the common single-environment case. Only if the AppHost has multiple compute environments, disambiguate each Kubernetes workload; in C#, add `.WithComputeEnvironment(k8s)` to each compute resource that should deploy to this cluster.
+   Go AppHost shape (Aspire 17.0 or later):
+
+   ```go
+   k8s := builder.AddKubernetesEnvironment("k8s")
+   ```
+
+3. Add a container registry for project/container images, for example `builder.AddContainerRegistry(...)` in C# or Go, or the TypeScript equivalent returned by API docs. If one registry exists, Aspire can use it as the default target; use `WithContainerRegistry(...)` (C# or Go) / `withContainerRegistry(...)` (TypeScript) only when a specific resource should use a specific registry.
+4. Do not add explicit compute-environment assignment for the common single-environment case. Only if the AppHost has multiple compute environments, disambiguate each Kubernetes workload; in C# or Go, add `.WithComputeEnvironment(k8s)` to each compute resource that should deploy to this cluster.
 5. For TypeScript AppHosts, verify the current language-specific docs before assuming an equivalent assignment API.
-6. Use `k8s.WithHelm(...)` / `k8s.withHelm(...)` only when the user needs chart name, release name, namespace, chart version, or other Helm settings.
-7. Use `k8s.AddGateway(...)`, `k8s.AddIngress(...)`, or the TypeScript equivalents when public exposure is required. Otherwise services remain internal by default. For a simple public web frontend on a cloud Kubernetes provider, a per-resource `LoadBalancer` Service can be the direct exposure model; keep backend/internal services as `ClusterIP`.
-   - **Routed endpoints must be marked external.** Any endpoint exposed by an Ingress (`WithPath(...)`) or a Gateway (`WithRoute(...)`), or wired up via `WithDefaultBackend(...)`, must come from a resource that opts in with `.WithExternalHttpEndpoints()` (C#) or `isExternal: true` on the endpoint annotation. `aspire publish` fails fast with an `InvalidOperationException` from `EndpointRoutingValidation` if a non-external endpoint is routed, so always pair `AddIngress`/`AddGateway` plumbing with explicit external opt-in on the target resource. This applies to AKS through `AzureKubernetesEnvironment` as well.
-8. Use `PublishAsKubernetesService(...)` / `publishAsKubernetesService(...)` only for per-resource Kubernetes manifest customization.
+6. Use `k8s.WithHelm(...)` (C# or Go) / `k8s.withHelm(...)` (TypeScript) only when the user needs chart name, release name, namespace, chart version, or other Helm settings.
+7. Use `k8s.AddGateway(...)`, `k8s.AddIngress(...)` (C# or Go), or the TypeScript equivalents when public exposure is required. Otherwise services remain internal by default. For a simple public web frontend on a cloud Kubernetes provider, a per-resource `LoadBalancer` Service can be the direct exposure model; keep backend/internal services as `ClusterIP`.
+   - **Routed endpoints must be marked external.** Any endpoint exposed by an Ingress (C# `WithPath(...)`, Go `WithIngressPath(...)`) or a Gateway (C# `WithRoute(...)`, Go `WithGatewayPathRoute(...)`), or wired up via `WithDefaultBackend(...)`, must come from a resource that opts in with `.WithExternalHttpEndpoints()` (C# or Go) or `isExternal: true` on the endpoint annotation. `aspire publish` fails fast with an `InvalidOperationException` from `EndpointRoutingValidation` if a non-external endpoint is routed, so always pair `AddIngress`/`AddGateway` plumbing with explicit external opt-in on the target resource. This applies to AKS through `AzureKubernetesEnvironment` as well.
+8. Use `PublishAsKubernetesService(...)` (C# or Go) / `publishAsKubernetesService(...)` (TypeScript) only for per-resource Kubernetes manifest customization.
 
 ### Persistent volumes in Aspire 13.5
 
 Kubernetes and AKS environments can model first-class persistent volumes. Use
 `AddPersistentVolume`, then configure storage class, capacity, and access mode before
 binding it to a workload with `WithPersistentVolume`. In TypeScript, use the generated
-`addPersistentVolume` and `withKubernetesPersistentVolume...` APIs after checking the
-current API reference.
+`addPersistentVolume` and `withKubernetesPersistentVolume...` APIs. In Go, use
+`AddPersistentVolume` on the environment and `WithKubernetesPersistentVolume...` on the
+compute resource. Check the current API reference first.
 
 The compute-environment volume surface is experimental under `ASPIRECOMPUTE002`. Binding
 a persistent volume promotes the workload to a StatefulSet; it is not a durable
@@ -109,7 +119,7 @@ Expected package and AppHost environment:
 aspire add azure-kubernetes
 ```
 
-Add an Azure Kubernetes Service (AKS) environment resource using the C# or TypeScript API shape returned by Aspire docs.
+Add an Azure Kubernetes Service (AKS) environment resource using the C#, TypeScript, or Go API shape returned by Aspire docs.
 
 Azure Kubernetes Service (AKS) deployment provisions Azure infrastructure, including Azure Kubernetes Service (AKS), ACR, managed identity, and Azure resources modeled in the AppHost.
 
@@ -134,10 +144,16 @@ Make these changes in the AppHost:
    const aks = await builder.addAzureKubernetesEnvironment("aks");
    ```
 
-3. Do not add explicit compute-environment assignment for the common single-environment case. Only if the AppHost has multiple compute environments, disambiguate each Azure Kubernetes Service (AKS) workload; in C#, add `.WithComputeEnvironment(aks)` to each compute resource that should deploy there.
+   Go AppHost shape (Aspire 17.0 or later):
+
+   ```go
+   aks := builder.AddAzureKubernetesEnvironment("aks")
+   ```
+
+3. Do not add explicit compute-environment assignment for the common single-environment case. Only if the AppHost has multiple compute environments, disambiguate each Azure Kubernetes Service (AKS) workload; in C# or Go, add `.WithComputeEnvironment(aks)` to each compute resource that should deploy there.
 4. Do not add a plain `AddKubernetesEnvironment` next to `AddAzureKubernetesEnvironment` for the same target. The Azure Kubernetes Service (AKS) environment owns the inner Kubernetes/Helm environment.
 5. Let the integration create the default Azure Container Registry unless the user needs a specific registry. If they do, use the Azure Kubernetes registry customization API from current docs.
-6. Use node pool/subnet/customization APIs only when required, for example `WithSystemNodePool(...)`, `AddNodePool(...)`, `WithSubnet(...)`, or the TypeScript equivalents returned by API docs.
+6. Use node pool/subnet/customization APIs only when required, for example `WithSystemNodePool(...)`, `AddNodePool(...)`, `WithSubnet(...)` (C# or Go), or the TypeScript equivalents returned by API docs.
 7. Use Kubernetes Gateway/Ingress APIs for public exposure; do not assume every service becomes public.
 
 ## Preflight
@@ -237,7 +253,7 @@ Use values files or `--set` for environment-specific image tags and settings.
 
 ## Exposure and TLS
 
-By default, generated services use the Kubernetes environment's default service type, which is `ClusterIP`. Public access requires an explicit exposure mechanism such as Ingress, Gateway API, or service type customization. For cloud Kubernetes providers without an ingress controller configured, a frontend `LoadBalancer` Service is often the fastest public smoke-test path, while backend services should usually remain `ClusterIP`. Verify exact APIs in docs before editing because C# and TypeScript AppHost shapes differ.
+By default, generated services use the Kubernetes environment's default service type, which is `ClusterIP`. Public access requires an explicit exposure mechanism such as Ingress, Gateway API, or service type customization. For cloud Kubernetes providers without an ingress controller configured, a frontend `LoadBalancer` Service is often the fastest public smoke-test path, while backend services should usually remain `ClusterIP`. Verify exact APIs in docs before editing because C#, TypeScript, and Go AppHost shapes differ.
 
 Gateway/Ingress TLS can add extra deployment steps for bootstrap secrets, FQDN discovery, and field ownership cleanup. If a deployment fails around TLS or Gateway resources, inspect the listed pipeline steps and the generated manifests before changing the AppHost.
 

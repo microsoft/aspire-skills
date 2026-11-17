@@ -16,7 +16,9 @@ registerHooks({
 });
 
 const workspacePath = await mkdtemp(join(tmpdir(), "aspireify-treatments-"));
-const session = (globalThis.__aspireifyTestSession = { workspacePath, messages: [] });
+const session = (globalThis.__aspireifyTestSession = {
+    workspacePath, messages: [], confirm: async () => true,
+});
 await import("../../extensions/aspireify/extension.mjs");
 
 test.after(() => rm(workspacePath, { recursive: true, force: true }));

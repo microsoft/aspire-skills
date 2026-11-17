@@ -6,7 +6,7 @@ Use this reference when the user opts in to adding OpenTelemetry instrumentation
 
 ```bash
 # Use the repo's package manager (npm/pnpm/yarn)
-npm install @opentelemetry/sdk-node @opentelemetry/auto-instrumentations-node @opentelemetry/exporter-otlp-grpc
+npm install @opentelemetry/sdk-node @opentelemetry/auto-instrumentations-node @opentelemetry/sdk-metrics @opentelemetry/exporter-trace-otlp-grpc @opentelemetry/exporter-metrics-otlp-grpc
 # or: pnpm add ...
 # or: yarn add ...
 ```
@@ -16,21 +16,25 @@ Create an instrumentation file (e.g., `instrumentation.ts` or `instrumentation.j
 ```typescript
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-otlp-grpc';
-import { OTLPMetricExporter } from '@opentelemetry/exporter-otlp-grpc';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-grpc';
+import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-grpc';
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 
 const sdk = new NodeSDK({
   traceExporter: new OTLPTraceExporter(),
-  metricReader: new PeriodicExportingMetricReader({
-    exporter: new OTLPMetricExporter(),
-  }),
+  metricReaders: [
+    new PeriodicExportingMetricReader({
+      exporter: new OTLPMetricExporter(),
+    }),
+  ],
   instrumentations: [getNodeAutoInstrumentations()],
   serviceName: process.env.OTEL_SERVICE_NAME,
 });
 
 sdk.start();
 ```
+
+Do not install `@opentelemetry/exporter-otlp-grpc`: it is deprecated, stuck at 0.26.0 and its exporters are not type-compatible with current `@opentelemetry/sdk-node`. Use the signal-specific exporters above. `NodeSDK` takes `metricReaders` (an array) from `@opentelemetry/sdk-node` 0.204.0, which deprecated the singular `metricReader`, and 0.300.0 removed it; keep `metricReader` only if the repo already pins `sdk-node` below 0.204.0. Keep all `@opentelemetry/*` packages on matching release lines.
 
 Then ensure the service loads it early — either via `--require`/`--import` in the start script or by importing it as the first line of the entry point.
 

@@ -106,8 +106,8 @@ aspire wait apiservice
 # ✅ Wait with extended timeout for slow resources
 aspire wait postgres --timeout 120
 
-# ✅ Wait then interact
-aspire wait apiservice && curl $(aspire describe apiservice --format Json | jq -r '.endpoints[0].url')
+# ✅ Wait then interact; jq -e stops the chain when there is no external URL
+aspire wait apiservice && ENDPOINT=$(aspire describe apiservice --format Json | jq -er '[.resources[0].urls[]? | select(.isInternal | not) | .url][0] // empty') && curl "$ENDPOINT"
 ```
 
 ### Machine-Readable Output

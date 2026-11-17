@@ -13,8 +13,19 @@ export async function joinSession(options) {
     session.canvas = options.canvases[0];
     return {
         workspacePath: session.workspacePath,
-        log() {},
+        get capabilities() {
+            return { ui: { elicitation: typeof session.confirm === "function" } };
+        },
+        ui: {
+            confirm(message) {
+                return session.confirm(message);
+            },
+        },
+        async log() {},
         async send(message) {
+            if (session.sendError) {
+                throw session.sendError;
+            }
             session.messages.push(message.prompt);
         },
         rpc: { canvas: { list: async () => ({ canvases: [] }), open: async () => {} } },
