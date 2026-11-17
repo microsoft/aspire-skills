@@ -11,14 +11,29 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   wiring and deployment CI. Guidance for the first-party `Aspire.Hosting.Go`
   integration distinguishes preview packages from Aspire 13.4 and stable packages
   from Aspire 17.0.
+- Added `AddGoApp` private-module (`WithGoPrivate`) and Delve debugging
+  (`WithDelveServer`) guidance to Aspireify's Go authoring reference, and the AppHosts
+  canvas now recognizes `apphost.go` and labels its language as Go.
 
 ### Changed
+- Documented Aspire 17.0 agent setup, which registers the aspire-skills plugin instead of
+  copying skills, plus client reloads, automatic updates, and version pins. Project-local
+  skill overrides now apply to copies from Aspire 13.6 and earlier. On 17.0 and later,
+  skills treat copies as stale and point to `aspire doctor`.
+- Removed Community Toolkit guidance from Aspireify and orchestration. Go services use
+  the first-party `Aspire.Hosting.Go` integration (`AddGoApp`); resource wiring now
+  prefers first-party packages and falls back to raw executables or containers.
 - The Aspireify proposal canvas no longer opens when you ask to edit an AppHost
   that already declares resources. Connecting or wiring a resource, adding a single
   integration or API, running a one-off `aspire add`, and repairing the TypeScript
   toolchain now stay in chat. The canvas still opens to wire an unwired AppHost, or
   when you ask to aspireify, re-scan, or re-propose the whole resource graph.
 - AppHosts now reports an error when it cannot switch to the requested AppHost.
+- Redesigned the AppHosts canvas as a compact companion to the Aspire Dashboard,
+  with an **Output** panel for AppHost command output.
+- AppHosts no longer has a Relationships tab. The resource inspector now lists
+  **Depends on** and **Used by**, waiting resources name what they are waiting for,
+  and parameters appear in their own collapsible section without showing values.
 - Aspireify now prompts you in Copilot to approve the AppHost plan you reviewed.
   Starting over requires separate approval and preserves the previous review.
 - Aspireify marks the agent's findings and recommendations as unverified.

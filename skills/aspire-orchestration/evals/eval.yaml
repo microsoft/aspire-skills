@@ -681,8 +681,8 @@ stimuli:
         name: hands-off-to-aspireify
         config:
           prompt: Does the assistant's response explicitly hand the AppHost wiring step off to the `aspireify`
-            skill (in-plugin sibling at `../aspireify/SKILL.md`, OR the project-local
-            `.agents/skills/aspireify/SKILL.md` if installed by `aspire init`)? The orchestration
+            skill (in-plugin sibling at `../aspireify/SKILL.md`, OR a project-local
+            `.agents/skills/aspireify/SKILL.md` installed by Aspire 13.6 or earlier)? The orchestration
             skill itself should defer scanning the repo, choosing resources, and editing the AppHost
             to aspireify. Answer based on intent.
       - type: prompt
@@ -690,7 +690,7 @@ stimuli:
         config:
           prompt: Does the assistant's response acknowledge that if a project-local
             `.agents/skills/aspireify/SKILL.md` exists, the agent should defer to it (with a warning
-            to the user) instead of using the in-plugin sibling?
+            to the user) on Aspire 13.6 and earlier, but treat it as stale on Aspire 17.0 and later?
       - type: output-not-contains
         config:
           substring: I'll write the AppHost
@@ -1073,8 +1073,8 @@ stimuli:
         name: hands-off-to-aspireify-2
         config:
           prompt: After running `aspire init`, does the assistant's response hand the wiring step off to the
-            `aspireify` skill (the in-plugin sibling skill, or the project-local
-            `.agents/skills/aspireify/SKILL.md` installed by `aspire init` in 13.3)? The
+            `aspireify` skill (the in-plugin sibling skill, or a project-local
+            `.agents/skills/aspireify/SKILL.md` installed by Aspire 13.6 or earlier)? The
             orchestration skill should explicitly defer to `aspireify` for repo scanning, resource
             selection, ServiceDefaults / OTel wiring, and validation.
       - type: prompt
@@ -1082,7 +1082,7 @@ stimuli:
         config:
           prompt: "Does the assistant's response describe (or reference, via aspireify) the wiring workflow:
             scanning the repository, selecting services, adding resources to the AppHost using the
-            3-tier API preference (first-party Aspire.Hosting.* > Community Toolkit > raw
+            2-tier API preference (first-party Aspire.Hosting.* > raw
             fallbacks), and validating with `aspire start`?"
       - type: output-not-contains
         config:
@@ -1323,9 +1323,7 @@ stimuli:
             17.0. This AppHost uses Aspire.AppHost.Sdk 13.5.3, so recommend discovering a
             compatible preview and obtaining approval before adding it with aspire add go
             --version; do not claim a stable 13.5.3 package exists or upgrade implicitly.
-            Community Toolkit CommunityToolkit.Aspire.Hosting.Golang (AddGolangApp) is the
-            older Tier 2 alternative, with AddExecutable as the Tier 3 fallback. The agent should
-            prefer higher tiers when available. Answer based on intent.
+            AddExecutable is the Tier 2 fallback. The agent should prefer Tier 1 when available. Answer based on intent.
       - type: prompt
         name: uses-aspire-docs
         config:
