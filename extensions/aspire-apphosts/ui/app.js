@@ -2108,7 +2108,9 @@ async function executeNodeAction(action, node) {
         try {
             const result = await api("/api/copilot-context", { method: "POST", body: { nodeId: node.id } });
             showToast(
-                result.ok ? `Added ${node.label} to chat. Finish your question in the composer.` : result.error,
+                result.ok
+                    ? `Requested ${node.label} context. Check for its attachment in the composer before sending.`
+                    : result.error,
                 !result.ok,
             );
         } catch (error) {

@@ -101,8 +101,9 @@ bounded request bodies.
   structured logs, traces, and metrics.
 - Resources that explicitly advertise terminal support can open an attached
   terminal canvas.
-- Sanitized AppHost or resource context can be added to the Copilot composer as
-  an attachment; the user writes and sends the actual question.
+- **Add to chat** requests a sanitized context attachment from the Copilot host;
+  check for its attachment in the composer before writing and sending the question.
+  The SDK acknowledges the request, not end-to-end message delivery.
 - AppHost-defined command forms with validation and command-result feedback.
 - Provider-owned dynamic command metadata remains authoritative through
   validation and execution. Loads for one command are serialized and stale

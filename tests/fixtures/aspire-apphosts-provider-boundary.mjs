@@ -239,6 +239,7 @@ async function harness(t, {
     workingDirectory = process.cwd(),
     browserCanvases = [{ canvasId: "browser", extensionId: "host:builtins" }],
     browserListAvailable = true, browserListError, browserOpenError, systemBrowserError,
+    composerAvailable = true, attachmentGate,
 } = {}) {
     const servers = [];
     const intervals = new Set();
@@ -321,10 +322,12 @@ async function harness(t, {
             return {
                 log: (message) => logs.push(message),
                 rpc: {
-                    extensions: { sendAttachmentsToMessage: async (payload) => {
+                    extensions: { ...(composerAvailable ? { sendAttachmentsToMessage: async (payload) => {
                         if (controls.attachError) throw controls.attachError;
+                        controls.attachStarted = true;
+                        await attachmentGate?.promise;
                         attachments.push(clone(payload));
-                    } },
+                    } } : {}) },
                     canvas: {
                         ...(browserListAvailable ? { list: async () => {
                             if (browserListError) throw browserListError;
@@ -622,6 +625,44 @@ async function sse(h, open) {
         close() { response.destroy(); request.destroy(); },
     };
 }
+
+test("attachment handoff awaits the SDK and binds the slim payload to the originating canvas", async (t) => {
+    const gate = deferred();
+    const h = await harness(t, { attachmentGate: gate });
+    t.after(() => gate.resolve());
+    const open = await h.open("attachment-origin");
+    const { state } = await h.request(open, "/api/state");
+    const node = allNodes(state.roots).find((candidate) => candidate.kind === "resource");
+    await h.request(open, "/api/selection", { nodeId: node.id });
+    const context = clone(await h.action("get_selected_context", {}, "attachment-origin"));
+    let completed = false;
+    const request = h.request(open, "/api/copilot-context", { nodeId: node.id })
+        .then((result) => { completed = true; return result; });
+    await waitUntil(() => h.controls.attachStarted);
+    assert.equal(completed, false);
+    assert.equal(h.attachments.length, 0);
+    gate.resolve();
+    assert.equal((await request).ok, true);
+    // The SDK stamps provenance; its void acknowledgement is not host-delivery evidence.
+    assert.deepEqual(h.attachments, [{
+        instanceId: "attachment-origin",
+        attachments: [{ type: "extension_context", title: `Aspire: ${context.label}`, payload: context }],
+    }]);
+});
+
+test("attachment requests reject missing host support and stale selections explicitly", async (t) => {
+    const h = await harness(t, { composerAvailable: false });
+    const open = await h.open();
+    const { state } = await h.request(open, "/api/state");
+    const node = allNodes(state.roots).find((candidate) => candidate.kind === "resource");
+    const unavailable = await h.request(open, "/api/copilot-context", { nodeId: node.id });
+    assert.equal(unavailable.status, 400);
+    assert.equal(unavailable.error, "The Copilot composer is not available.");
+    const missing = await h.request(open, "/api/copilot-context", { nodeId: "no-longer-present" });
+    assert.equal(missing.status, 400);
+    assert.equal(missing.error, "The selected canvas item is no longer available.");
+    assert.deepEqual(h.attachments, []);
+});
 
 test("context is owner-specific, fresh/stale-aware, and carries resource dependencies through HTTP and SDK", async (t) => {
     const h = await harness(t);

@@ -503,6 +503,36 @@ test("Global scope stays marked in the header and Add to chat follows the resour
         "Add to chat sits after the state and health pills");
 });
 
+test("Add to chat acknowledges only the host handoff, not message delivery", async () => {
+    const renderer = await boot();
+    selectApi(renderer);
+    renderer.document.querySelector(".inspector-ask").click();
+    const request = renderer.request("/api/copilot-context");
+    assert.equal(request.body.nodeId, "host-a:resource:api");
+    assert.equal(renderer.document.getElementById("toast-region").textContent, "",
+        "do not acknowledge before the SDK request completes");
+    await renderer.respond(request, { ok: true, title: "Public API" });
+    const message = renderer.document.getElementById("toast-region").textContent;
+    assert.equal(message, "Requested Public API context. Check for its attachment in the composer before sending.");
+    assert.doesNotMatch(message, /Added .* to chat|delivered|attached/i);
+});
+
+for (const failure of ["Composer unavailable", "Network unavailable"]) {
+    test(`Add to chat surfaces ${failure} without a success acknowledgement`, async () => {
+        const renderer = await boot();
+        selectApi(renderer);
+        renderer.document.querySelector(".inspector-ask").click();
+        const request = renderer.request("/api/copilot-context");
+        if (failure === "Composer unavailable") {
+            await renderer.respond(request, { ok: false, error: failure }, 400);
+        } else {
+            await renderer.fail(request, failure);
+        }
+        assert.equal(renderer.document.querySelector(".toast.is-error").textContent, failure);
+        assert.equal(renderer.document.querySelectorAll(".toast").length, 1);
+    });
+}
+
 test("a running AppHost without a dashboard URL explains why Open dashboard is unavailable", async () => {
     const renderer = createRenderer();
     const state = snapshot();

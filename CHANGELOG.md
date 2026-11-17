@@ -16,6 +16,8 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   canvas now recognizes `apphost.go` and labels its language as Go.
 
 ### Changed
+- AppHosts **Add to chat** now asks you to check the composer attachment instead
+  of treating the host's request acknowledgement as proof of message delivery.
 - Documented Aspire 17.0 agent setup, which registers the aspire-skills plugin instead of
   copying skills, plus client reloads, automatic updates, and version pins. Project-local
   skill overrides now apply to copies from Aspire 13.6 and earlier. On 17.0 and later,
