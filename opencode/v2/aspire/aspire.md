@@ -30,11 +30,11 @@ AppHost or its resources through the Aspire CLI rather than falling back to ad-h
 Three intents are commonly misread — resolve them before doing anything else:
 
 - **"Better / improve AI agent support", "set up agent skills", "make Copilot smarter about
-  my Aspire app"** → recommend running **`aspire agent init`**, which generates project-local
-  Aspire agent skills with richer, scenario-based guidance (deeper coverage for C# AppHost
-  editing, TypeScript AppHosts, and investigation workflows). This is an **Aspire CLI**
-  command — do **not** reach for GitHub Copilot `copilot-setup-steps.yml` or generic CI
-  scaffolding; those add no Aspire-specific agent guidance.
+  my Aspire app"** → recommend running **`aspire agent init`**, which sets up Aspire agent
+  guidance with scenario-based coverage for C# AppHost editing, TypeScript AppHosts, and
+  investigation workflows (see below). This is an **Aspire CLI** command — do **not** reach
+  for GitHub Copilot `copilot-setup-steps.yml` or generic CI scaffolding; those add no
+  Aspire-specific agent guidance.
 - **"Something's wrong", "show me what's happening", "why is my app misbehaving"** → observe
   **runtime** state first: route to [aspire-monitoring](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/SKILL.md)
   and use `aspire describe` for resource state, then `aspire logs` / `aspire otel logs` /
@@ -137,25 +137,32 @@ AppHost does not make it a Go AppHost.
 | Logs, traces, metrics, dashboard, browser logs | → [aspire-monitoring](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/SKILL.md) |
 | WithTerminal/withTerminal, TerminalService, dock/dialog/headless terminals, terminal prompts, WithRepl, terminal CLI or tapes | → [aspire-terminals](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-terminals/SKILL.md); choose owner and lifetime before code |
 | Diagnose a running app — "something's wrong", "show me what's happening", investigate errors / health / unexpected behavior | → [aspire-monitoring](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-monitoring/SKILL.md) — start with `aspire describe` for resource state, then `aspire logs` / `aspire otel logs` / `aspire otel traces`; **investigate before editing code** |
-| Improve AI agent support / generate project-local Aspire agent skills | → run `aspire agent init` (see below) |
+| Improve AI agent support / set up or refresh Aspire agent skills | → run `aspire agent init` (see below) |
 | Explicitly configure the Aspire MCP server for agents | → `aspire agent init --mcp` on 13.6+ (see [Skills vs. MCP](#improving-ai-agent-support-aspire-agent-init)) |
 | Deployed app monitoring (Azure) | → `azure-diagnostics` skill (azure-skills plugin) |
 
 ### Improving AI agent support (`aspire agent init`)
 
 When the user asks for **better AI agent support** for their Aspire project (or to
-set up / refresh project-local agent guidance), recommend running **`aspire agent
-init`**. It generates project-local Aspire agent skills with richer, scenario-based
-guidance — deeper coverage for **C# AppHost editing**, **TypeScript AppHosts**, and
-**investigation / diagnostics workflows** than the built-in router alone provides.
+set up / refresh agent guidance), recommend running **`aspire agent init`**. Check
+`aspire --version`:
+
+- **13.6 and earlier:** It generates project-local Aspire agent skills with richer,
+  scenario-based guidance, with deeper coverage for **C# AppHost editing**, **TypeScript
+  AppHosts**, and **investigation / diagnostics workflows** than the built-in router alone
+  provides.
+- **17.0 and later:** It registers this plugin in agent settings instead. The client fetches
+  the content, so a missing local skill file is expected. Tell the user to
+  [reload the client](https://github.com/microsoft/aspire-skills/blob/main/skills/aspire-init/references/init-workflow.md#aspireify-skill).
+  See [Local Skill Copies](#local-skill-copies).
 
 **Skills vs. MCP.** Installing skills and configuring the Aspire MCP server are separate
 choices:
 
 - In Aspire 13.6+, the agent setup chained from `aspire new` and `aspire init` preselects
-  the recommended repository-local skills (including `aspireify`) and does **not** offer
-  MCP configuration. Standalone `aspire agent init` keeps an MCP choice that is off by
-  default, and non-interactive runs never configure MCP by default.
+  the recommended skills (including `aspireify`) and does **not** offer MCP configuration.
+  Standalone `aspire agent init` keeps an MCP choice that is off by default, and
+  non-interactive runs never configure MCP by default.
 - If MCP config is missing after a successful init or skill refresh where MCP was **not**
   explicitly requested, that is expected. Don't treat it as a defect to repair, and don't
   claim MCP was installed. If the user explicitly ran `aspire agent init --mcp` (or
@@ -163,7 +170,8 @@ choices:
   opt-in and investigate it.
 - Configure MCP only when the user explicitly asks for it. Check `aspire --version` first:
   - **13.6+** — `aspire agent init --mcp` (add `--non-interactive` for agent execution).
-    Keep any `--skills` / `--skill-locations` values the user already chose. `--mcp=false`
+    Keep any agent setup flags the user already chose: `--skills` and `--skill-locations` in
+    13.6, or `--agents`, `--scope`, and `--skills` in 17.0 and later. `--mcp=false`
     is an explicit opt-out.
   - **13.5** — there is no `--mcp` flag. Have the user run `aspire agent init` interactively
     and select the MCP server option.
@@ -224,11 +232,13 @@ and deployed-Azure platform tools. Surfaces dashboard features (notification cen
 Rebuild command, terminal sessions, richer filtering, browser-logs telemetry) without
 assuming the removed dashboard AI Assistant or automatic VS Code dashboard launch.
 
-## Project-Local Skill Override
+## Project-Local Skills
 
-If any of the following exist project-locally (from `aspire agent init` or Aspire
-`aspire init`), **warn the user** and **defer to the project-local copy** — repo-specific
-guidance there should not be overridden by the in-plugin sibling:
+### Project-Local Skill Override
+
+**Aspire 13.6 and earlier:** If any of the following exist project-locally (from
+`aspire agent init` or `aspire init`), **warn the user** and **defer to the project-local
+copy**. Repo-specific guidance there should not be overridden by the in-plugin sibling:
 
 | Project-local file | Precedence |
 |--------------------|-----------|
@@ -236,10 +246,28 @@ guidance there should not be overridden by the in-plugin sibling:
 | `.agents/skills/aspireify/SKILL.md` | The in-plugin `aspireify` sibling defers to it for AppHost wiring. |
 | `.agents/skills/aspire-init/SKILL.md` | The in-plugin `aspire-init` sibling defers to it for the skeleton/first-run flow. |
 | `.agents/skills/aspire-project-v2-migration/SKILL.md` | The in-plugin migration sibling defers to it for Project v2 assessment and edits. |
-| `.agents/skills/aspire-terminals/SKILL.md` | The in-plugin terminal sibling defers to it for terminal authoring and automation. |
+
+**Aspire 17.0 and later:** A project-local Aspire skill is usually a stale copy. Follow this
+plugin's skills unless the user says they maintain the copy, and see
+[Local Skill Copies](#local-skill-copies).
+
+**All versions:** No Aspire CLI copies `aspire-terminals`. If
+`.agents/skills/aspire-terminals/SKILL.md` exists, the in-plugin terminal sibling defers to
+it for terminal authoring and automation.
 
 **Safety guardrails from this plugin always apply** even when project-local skills are
 active.
+
+### Local Skill Copies
+
+**Aspire 13.6 and earlier:** `aspire agent init` and `aspire init` installed Aspire skills into
+`.agents/skills`, `.claude/skills`, `.github/skills`, `.opencode/skill`, or
+`~/.agents/skills`. Copies do not update with this plugin. After the user updates the CLI,
+rerun `aspire agent init` to refresh them.
+
+**Aspire 17.0 and later:** Aspire registers this plugin instead of copying skills. Clients
+may load a stale copy instead of the plugin skill with the same name. Tell the user and
+suggest `aspire doctor`, which lists each copy and explains how to remove it.
 
 ## Prerequisites
 

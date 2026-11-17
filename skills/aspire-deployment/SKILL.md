@@ -245,7 +245,12 @@ Prefer surfacing prompt-driving values up front (target subscription/region/reso
 
 ## Project-Local Skill Override
 
-If `.agents/skills/aspire-deployment/SKILL.md` exists (dropped by `aspire agent init`),
-prefer it over this plugin skill — it is the authoritative project-local version with
-content version-aligned to the consumer's Aspire CLI. This plugin skill is the always-on
-safety net for repos that have not yet run `aspire agent init`.
+If `.agents/skills/aspire-deployment/SKILL.md` exists, check `aspire --version`.
+
+- **Aspire 13.6 and earlier:** `aspire agent init` installed it. Prefer it over this plugin
+  skill. It is the authoritative project-local version, with content version-aligned to the
+  user's Aspire CLI. This plugin skill is the always-on safety net for repos that have not
+  yet run `aspire agent init`.
+- **Aspire 17.0 and later:** Aspire registers this plugin instead, so treat the copy as
+  stale unless the user says they maintain it. Use this skill, tell the user the copy is
+  stale, and suggest `aspire doctor`, which lists each copy and explains how to remove it.

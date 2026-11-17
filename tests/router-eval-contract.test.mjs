@@ -22,6 +22,8 @@ const named = {
   "router-init-001": ["aspire"],
   "router-agent-init-default-no-mcp-136-001": ["aspire"],
   "router-agent-init-explicit-mcp-136-001": ["aspire"],
+  "router-agent-init-registers-sources-17-001": ["aspire"],
+  "router-stale-skill-copy-17-001": ["aspire"],
   "router-azdiag-001": ["aspire", "aspire-monitoring"],
   "router-deploy-001": ["aspire-deployment"],
   "router-mon-001": ["aspire-monitoring"],

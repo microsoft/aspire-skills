@@ -38,9 +38,9 @@ Choose the path that matches your agent host.
 
 ### Aspire CLI
 
-Aspire's first-party agent setup installs Aspire skill files and extension files into detected agent environments. Aspire MCP server configuration is separate and opt-in.
+Aspire's first-party agent setup installs Aspire skill files and extension files into detected agent environments in Aspire 13.6 and earlier. In Aspire 17.0 and later, it registers the aspire-skills plugin in agent settings instead. Aspire MCP server configuration is separate and opt-in.
 
-- In Aspire 13.6 and later, the agent setup that `aspire new` and `aspire init` run preselects the recommended repository-local skills, including `aspireify`. It doesn't offer MCP configuration.
+- In Aspire 13.6 and later, the agent setup that `aspire new` and `aspire init` run preselects the recommended skills, including `aspireify`. It doesn't offer MCP configuration.
 - Standalone `aspire agent init` keeps an MCP choice that's off by default. It doesn't configure MCP in non-interactive runs unless you pass `--mcp`.
 
 **Create a new Aspire app** and opt into agent guidance when prompted:
@@ -61,6 +61,12 @@ aspire init
 aspire agent init
 ```
 
+In Aspire 17.0 and later, pass `--scope project` (default) or `--scope global`. The default
+source is the [`microsoft/aspire-skills` repository](https://github.com/microsoft/aspire-skills).
+Aspire `skillSources` settings can add, override, or disable sources, so review each source
+before you enable it. Skills copied by older CLIs can take precedence. Run `aspire doctor` to
+find them. See also [Automatic updates and version pinning](#automatic-updates-and-version-pinning).
+
 **Configure the Aspire MCP server** only when you want it (Aspire 13.6+):
 
 ```bash
@@ -68,13 +74,6 @@ aspire agent init --mcp
 ```
 
 In Aspire 13.5, run `aspire agent init` interactively and select the MCP server option; 13.5 has no `--mcp` flag.
-
-The generated skills bundle selects `aspire-terminals` by default alongside
-`aspire`, `aspireify` and `aspire-deployment`. Shipping this in Aspire also requires
-refreshing the CLI's embedded `aspire-skills` archive and metadata in
-`microsoft/aspire`, and aligning `AspireSkillsInstaller` with the published bundle
-version. Repository changes alone do not update an installed CLI's embedded skills;
-verify `aspire agent init` selection with the refreshed CLI before release.
 
 ### GitHub Copilot app
 
@@ -249,6 +248,19 @@ npx skills add https://github.com/microsoft/aspire-skills/tree/main/skills \
 ```
 
 In that command, `-a github-copilot` selects the target agent, `-g` installs globally, and `-y` accepts prompts.
+
+## Automatic updates and version pinning
+
+The Aspire CLI registers skill sources but does not fetch or update their
+content. Agent clients handle acquisition and updates. Aspire preserves matching
+registrations and existing client-side pins when you run `aspire agent init`.
+Re-running the command does not move a pin to a newer version.
+
+If your agent client supports automatic updates, keep them enabled to receive
+security and bug fixes.
+
+If your client supports pinning, you can pin a release tag or specific version
+instead. Monitor security notices and update the pin manually to receive fixes.
 
 ## Repository layout
 
