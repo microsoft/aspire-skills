@@ -14,6 +14,10 @@ import {
     operationFailureChannel,
     selectionFocusTarget,
 } from "./interaction-model.js";
+import {
+    projectConnectionsTree,
+    visibleConnectionTreeNodes,
+} from "./connections-tree.js";
 
 const apiToken = new URLSearchParams(window.location.search).get("token") || "";
 
@@ -68,6 +72,12 @@ const elements = {
     snapshot: document.getElementById("snapshot"),
     planContent: document.getElementById("plan-content"),
     resourcePlanPanel: document.getElementById("resource-plan-panel"),
+    resourcesView: document.getElementById("resources-view"),
+    connectionsTreeView: document.getElementById("connections-tree-view"),
+    resourceDetailsView: document.getElementById("resource-details-view"),
+    connectionsTreePanel: document.getElementById("connections-tree-panel"),
+    connectionsTree: document.getElementById("connections-tree"),
+    connectionsTreeState: document.getElementById("connections-tree-state"),
     compactResources: document.getElementById("compact-resources"),
     compactAddResource: document.getElementById("compact-add-resource"),
     relationshipWorkspace: document.getElementById("relationship-workspace"),
@@ -140,6 +150,10 @@ let restartSnapshot;
 let eventsConnected = false;
 let activeViewTransition;
 let selectedResourceId = "";
+let proposalView = "resources";
+let connectionsTree;
+let focusedTreeKey = "";
+const expandedTreeKeys = new Set();
 const fieldDrafts = new Map();
 const fieldOperations = createFieldOperationCoordinator();
 const detailTextareaWidths = new WeakMap();
@@ -180,6 +194,9 @@ document.addEventListener("DOMContentLoaded", () => {
     elements.undo.addEventListener("click", () => void applyHistoryChange("undo", elements.undo));
     elements.redo.addEventListener("click", () => void applyHistoryChange("redo", elements.redo));
     elements.compactAddResource.addEventListener("click", () => openAddResourceDialog("all"));
+    elements.resourcesView.addEventListener("click", () => switchProposalView("resources"));
+    elements.connectionsTreeView.addEventListener("click", () => switchProposalView("tree"));
+    elements.connectionsTree.addEventListener("keydown", handleConnectionsTreeKeydown);
     elements.addResourceForm.addEventListener("submit", addResource);
     elements.addResourceType.addEventListener("change", () => {
         elements.addResourceType.setCustomValidity("");
@@ -527,6 +544,9 @@ function render(nextSnapshot) {
             fieldDrafts.clear();
             fieldOperations.clear();
             selectedResourceId = "";
+            proposalView = "resources";
+            focusedTreeKey = "";
+            expandedTreeKeys.clear();
             pendingRemoval = undefined;
             connectionRowSequence = 0;
             for (const dialog of [
@@ -600,6 +620,16 @@ function renderResourcePlan() {
     const edges = proposal.edges.filter((edge) => names.has(edge.from) && names.has(edge.to));
     const resourceIssues = proposalValidation().resourceIssues;
     elements.resourcePlanPanel.hidden = false;
+    const treeView = proposalView === "tree";
+    elements.resourcesView.setAttribute("aria-pressed", String(!treeView));
+    elements.connectionsTreeView.setAttribute("aria-pressed", String(treeView));
+    elements.resourceDetailsView.hidden = treeView;
+    elements.connectionsTreePanel.hidden = !treeView;
+    elements.compactAddResource.hidden = snapshot.confirmed || treeView;
+    if (treeView) {
+        renderConnectionsTree(resources, edges);
+        return;
+    }
     elements.compactResources.replaceChildren();
     elements.planOverview.replaceChildren();
     elements.planInspector.replaceChildren();
@@ -659,6 +689,159 @@ function renderResourcePlan() {
         resourceIssues,
     );
     renderRelationshipList(edges, false);
+}
+
+function switchProposalView(view) {
+    if (proposalView === view) return;
+    unobserveDetailTextareas();
+    proposalView = view;
+    renderResourcePlan();
+}
+
+function treeNodeId(key) {
+    return `connection-tree-${domIdToken(key)}`;
+}
+
+function renderConnectionsTree(resources, edges) {
+    const hadFocus = elements.connectionsTree.contains(document.activeElement);
+    connectionsTree = projectConnectionsTree(resources, edges);
+    for (const key of expandedTreeKeys) {
+        if (!connectionsTree.nodes.has(key)) expandedTreeKeys.delete(key);
+    }
+    const visible = visibleConnectionTreeNodes(connectionsTree, expandedTreeKeys);
+    if (!visible.some((node) => node.key === focusedTreeKey)) {
+        focusedTreeKey = visible[0]?.key ?? "";
+    }
+    elements.connectionsTree.replaceChildren();
+    elements.connectionsTree.hidden = resources.length === 0;
+    elements.connectionsTreeState.hidden = resources.length > 0 && edges.length > 0;
+    elements.connectionsTreeState.textContent = resources.length === 0
+        ? "No resources are included in this proposal. Switch to Resources to add one."
+        : "No connections in this proposal. All resources are listed below.";
+    const groups = new Map();
+    for (const node of visible) {
+        const expanded = node.children.length > 0 && expandedTreeKeys.has(node.key);
+        const relationship = node.edge
+            ? `${node.edge.from} → ${EDGE_LABELS[node.edge.kind]?.outgoing ?? node.edge.kind} ${node.edge.to}`
+            : "";
+        const state = node.reference === "cycle"
+            ? "Cycle reference · same resource; Enter to follow original"
+            : node.reference === "shared"
+              ? "Shared reference · same resource; Enter to follow original"
+              : node.disconnected
+                ? "No connections"
+                : !node.children.length ? "No outgoing connections" : "";
+        const item = createElement("li", {
+            className: `connection-tree-item resource-${resourceKind(node.resource)}`,
+            attrs: {
+                id: treeNodeId(node.key),
+                role: "treeitem",
+                tabindex: node.key === focusedTreeKey ? "0" : "-1",
+                "data-tree-key": node.key,
+                "data-resource-id": node.resource.id,
+                "aria-label": [relationship, `${node.resource.name}, ${node.resource.type}`, state]
+                    .filter(Boolean).join(". "),
+                ...(node.children.length ? { "aria-expanded": String(expanded) } : {}),
+            },
+        });
+        const row = createElement("div", { className: "connection-tree-row" });
+        row.append(createElement("span", {
+            className: "connection-tree-toggle",
+            text: node.children.length ? expanded ? "▾" : "▸" : "·",
+            attrs: { "aria-hidden": "true" },
+        }));
+        const copy = createElement("div", { className: "connection-tree-copy" });
+        if (relationship) {
+            copy.append(createElement("span", {
+                className: "connection-tree-relationship muted",
+                text: relationship,
+            }));
+        }
+        copy.append(createResourceTitleLine(node.resource));
+        if (state) copy.append(createElement("span", { className: "muted", text: state }));
+        row.append(copy);
+        item.append(row);
+        row.addEventListener("click", () => {
+            focusedTreeKey = node.key;
+            activateTreeNode(node);
+        });
+        item.addEventListener("focus", () => {
+            focusedTreeKey = node.key;
+            for (const peer of elements.connectionsTree.querySelectorAll("[role='treeitem']")) {
+                peer.tabIndex = peer === item ? 0 : -1;
+            }
+        });
+        (groups.get(node.parentKey) ?? elements.connectionsTree).append(item);
+        if (expanded) {
+            const group = createElement("ul", { attrs: { role: "group" } });
+            item.append(group);
+            groups.set(node.key, group);
+        }
+    }
+    if (hadFocus) focusTreeNode(focusedTreeKey);
+}
+
+function focusTreeNode(key) {
+    focusedTreeKey = key;
+    document.getElementById(treeNodeId(key))?.focus();
+}
+
+function redrawConnectionsTree() {
+    renderResourcePlan();
+    focusTreeNode(focusedTreeKey);
+}
+
+function activateTreeNode(node) {
+    if (node.reference) {
+        let target = connectionsTree.nodes.get(node.targetKey);
+        focusedTreeKey = target.key;
+        while (target.parentKey) {
+            expandedTreeKeys.add(target.parentKey);
+            target = connectionsTree.nodes.get(target.parentKey);
+        }
+    } else if (node.children.length) {
+        if (expandedTreeKeys.has(node.key)) expandedTreeKeys.delete(node.key);
+        else expandedTreeKeys.add(node.key);
+    }
+    redrawConnectionsTree();
+}
+
+function handleConnectionsTreeKeydown(event) {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const key = event.target.closest("[role='treeitem']")?.dataset.treeKey;
+    const node = connectionsTree?.nodes.get(key);
+    if (!node) return;
+    const visible = visibleConnectionTreeNodes(connectionsTree, expandedTreeKeys);
+    const index = visible.indexOf(node);
+    let targetKey;
+    switch (event.key) {
+        case "ArrowDown": targetKey = visible[Math.min(index + 1, visible.length - 1)].key; break;
+        case "ArrowUp": targetKey = visible[Math.max(index - 1, 0)].key; break;
+        case "Home": targetKey = visible[0].key; break;
+        case "End": targetKey = visible[visible.length - 1].key; break;
+        case "ArrowRight":
+            if (node.children.length && !expandedTreeKeys.has(key)) {
+                activateTreeNode(node);
+            } else if (node.children.length) {
+                targetKey = node.children[0];
+            }
+            break;
+        case "ArrowLeft":
+            if (node.children.length && expandedTreeKeys.has(key)) activateTreeNode(node);
+            else targetKey = node.parentKey;
+            break;
+        case "Enter":
+        case " ":
+            activateTreeNode(node);
+            break;
+        default:
+            if (event.key.length !== 1) return;
+            targetKey = [...visible.slice(index + 1), ...visible.slice(0, index + 1)]
+                .find((candidate) => candidate.resource.name.toLowerCase()
+                    .startsWith(event.key.toLowerCase()))?.key;
+    }
+    event.preventDefault();
+    if (targetKey) focusTreeNode(targetKey);
 }
 
 const NOT_PROPOSED_TREATMENT_LABELS = {

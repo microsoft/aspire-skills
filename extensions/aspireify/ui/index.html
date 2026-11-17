@@ -137,6 +137,22 @@
                                     Add resource
                                 </button>
                             </div>
+                            <div class="proposal-view-switch" role="group" aria-label="Proposal view">
+                                <button class="btn btn-outline btn-sm" id="resources-view" type="button" aria-pressed="true" aria-controls="resource-details-view">Resources</button>
+                                <button class="btn btn-outline btn-sm" id="connections-tree-view" type="button" aria-pressed="false" aria-controls="connections-tree-panel">Connections tree</button>
+                            </div>
+                            <section id="connections-tree-panel" aria-label="Resource connections" hidden>
+                                <p id="connections-tree-help" class="relationship-help muted">
+                                    Follow outgoing connections from source → target. Each resource
+                                    expands once; shared and cycle references point to that same
+                                    resource, not a copy. Use ↑/↓ to navigate, →/← to expand or
+                                    collapse, and Enter to follow a reference. Switch to Resources
+                                    for details and editing.
+                                </p>
+                                <p id="connections-tree-state" class="muted" hidden></p>
+                                <ul id="connections-tree" class="connections-tree" role="tree" aria-label="Proposed resource connections" aria-describedby="connections-tree-help"></ul>
+                            </section>
+                            <div id="resource-details-view">
                             <div class="compact-resources" id="compact-resources" hidden></div>
                             <div class="relationship-guide" id="relationship-guide" hidden>
                                 <strong>Reading connections</strong>
@@ -173,6 +189,7 @@
                                 </p>
                                 <div class="relationship-list" id="relationship-list"></div>
                             </details>
+                            </div>
                         </section>
                     </div>
                 </div>

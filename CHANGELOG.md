@@ -5,6 +5,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [0.0.6](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.6)
 
 ### Added
+- Added a keyboard-accessible resource connections tree to Aspireify's Step 3
+  review, alongside the existing resource views, with explicit shared and cycle
+  references and unchanged proposal confirmation.
 - Added Go AppHost guidance (Aspire 17.0+) to the `aspire`,
   `aspire-orchestration`, `aspire-init`, `aspire-deployment` and `aspireify`
   skills, covering detection, authoring, `aspire init --language go`, `AddGoApp`

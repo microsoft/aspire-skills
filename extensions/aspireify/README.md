@@ -68,6 +68,24 @@ Connections are directed: `from` references, waits for, or is a child of `to`.
 Each selected resource shows both outgoing and incoming relationships, while an
 expanded canonical list presents every connection once.
 
+Use **Resources / Connections tree** to switch between the existing compact
+cards or overview/inspector and an expandable, read-only projection of the same
+proposal. The tree starts with resources that have no incoming connections, then
+adds roots for remaining components, including cycles and disconnected resources.
+It follows outgoing connections and shows their source, target, and relationship
+type. Each resource expands once; **Shared reference** and **Cycle reference**
+entries point to that same resource rather than duplicating it or expanding
+indefinitely. No resources or connections are inferred.
+
+In the tree, use Up/Down, Home/End, and first-letter navigation to move focus;
+Right expands or enters a branch, Left collapses or moves to its parent, and
+Enter/Space toggles a branch or follows a reference to the original resource.
+The view and expanded branches survive normal snapshot updates; changing the
+AppHost resets them. Switch to **Resources** for the existing editing controls.
+Switching views never changes the proposal, saved confirmation, pending edits,
+or confirmation eligibility. The same confirmation and chat-handoff controls
+apply in both views, including when exploring an already-confirmed snapshot.
+
 The AppHost style is read-only in this surface. Loading only indicates that the
 generated proposal snapshot is being received. Scanning, clarification, proposal
 generation, implementation, startup, and validation remain in the Aspireify skill
