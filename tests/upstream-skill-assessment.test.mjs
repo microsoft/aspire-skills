@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { parse } from "yaml";
 import {
   assessCandidate, assessmentInstructions, assessmentWindow, collectEvidence, destination,
-  discoverPulls, eligibleBranch, finishAssessment, limits, parseResponse, prepareAssessment,
+  discoverPulls, eligibleBranch, finishAssessment, limits, mergeStates, parseResponse, prepareAssessment,
   readJson, relevantPath, safeSkillPath, skillDocuments, sourceIdentity,
   validateDraft, validatePatch, validateRouting, validateState
 } from "../scripts/upstream-skill-assessment.mjs";
@@ -103,6 +103,26 @@ function scratch(t) {
   return directory;
 }
 
+async function executeStateSelection(github, runId = 101) {
+  const workflow = parse(readFileSync(join(root, ".github", "workflows", "upstream-skill-assessment.yml"), "utf8"));
+  const step = workflow.jobs.assess.steps.find(step => step.id === "source");
+  const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
+  const script = new AsyncFunction("github", "context", "core", step.with.script);
+  const outputs = {};
+  const previous = process.env.GITHUB_WORKSPACE;
+  process.env.GITHUB_WORKSPACE = root;
+  try {
+    await script(github, {
+      repo: { owner: "microsoft", repo: "aspire-skills" }, runId,
+      payload: { repository: { default_branch: "main" } }
+    }, { setOutput: (key, value) => { outputs[key] = value; } });
+  } finally {
+    if (previous === undefined) delete process.env.GITHUB_WORKSPACE;
+    else process.env.GITHUB_WORKSPACE = previous;
+  }
+  return outputs;
+}
+
 test("polling defaults to a frozen 48-hour window and manual windows are bounded", () => {
   assert.deepEqual(assessmentWindow({}, clock), {
     since: "2026-11-15T20:00:00.000Z", until: "2026-11-17T20:00:00.000Z"
@@ -193,6 +213,39 @@ test("irrelevant merges are no-ops without model calls, content reads or draft p
   assert.equal(relevantPath("src/Aspire.Hosting.JavaScript/Extensions.cs"), true);
   assert.equal(relevantPath("src/Aspire.Cli/Commands/TerminalCommand.cs"), true);
   assert.equal(relevantPath("src/Aspire.AppHost.Sdk/Sdk.targets"), true);
+});
+
+test("renames touching either monitored path or extension produce human triage, never completed no-ops", async () => {
+  for (const [previous_filename, filename] of [
+    ["src/Aspire.Hosting/LegacyApi.cs", "src/Shared/LegacyApi.cs"],
+    ["src/Shared/LegacyApi.cs", "src/Aspire.Hosting/LegacyApi.cs"],
+    ["src/Aspire.Hosting/LegacyApi.cs", "src/Aspire.Hosting/LegacyApi.md"],
+    ["src/Aspire.Hosting/LegacyApi.md", "src/Aspire.Hosting/LegacyApi.cs"],
+    ["src/Aspire.Cli/LegacyCommand.cs", "src/Aspire.Cli/LegacyCommand.bin"],
+    ["src/Aspire.Cli/LegacyCommand.bin", "src/Aspire.Cli/LegacyCommand.cs"]
+  ]) {
+    const github = api({ pulls: [pr({ changed_files: 1 })] });
+    github.rest.pulls.listFiles = async () => ({ data: [{ filename, previous_filename, status: "renamed" }] });
+    const prepared = await prepare(github);
+    assert.equal(prepared.sources.length, 0, `${previous_filename} -> ${filename}`);
+    const result = await finishAssessment(prepared, () => assert.fail("Rename reached the model."));
+    assert.equal(result.reports[0].status, "triage");
+    assert.match(result.reports[0].questions[0], /Renames touching monitored API\/CLI source/);
+    assert.equal(result.state.entries[0].status, "triage");
+    assert.equal(github.calls.some(([kind]) => kind === "content"), false);
+  }
+  const unrelated = api({ pulls: [pr({ changed_files: 1 })] });
+  unrelated.rest.pulls.listFiles = async () => ({ data: [{
+    filename: "docs/new-name.md", previous_filename: "docs/old-name.md", status: "renamed"
+  }] });
+  assert.equal((await prepare(unrelated)).reports[0].status, "noop");
+  for (const previous_filename of [undefined, "../src/Aspire.Hosting/LegacyApi.cs", "src\\Aspire.Hosting\\LegacyApi.cs"]) {
+    const malformed = api({ pulls: [pr({ changed_files: 1 })] });
+    malformed.rest.pulls.listFiles = async () => ({ data: [{
+      filename: "docs/new-name.md", previous_filename, status: "renamed"
+    }] });
+    assert.equal((await prepare(malformed)).reports[0].status, "triage");
+  }
 });
 
 test("source evidence uses canonical PR URLs, immutable merge SHA, full source/test content and blob digests", async () => {
@@ -365,6 +418,91 @@ test("state is bounded, deduplicated, validated, and retains only a fourteen-day
   ]) assert.throws(() => validateState(state, clock));
 });
 
+test("state merging chooses the newest assessment per identity, independent of artifact order", () => {
+  const source = sourceIdentity(pr());
+  const old = { key: source.key, mergedAt: source.mergedAt, assessedAt: "2026-11-17T18:00:00Z", status: "noop" };
+  const recent = { ...old, assessedAt: "2026-11-17T19:00:00Z", status: "triage" };
+  const other = { ...old, key: "f".repeat(64) };
+  const latest = { schema: 1, entries: [recent] };
+  const previous = { schema: 1, entries: [old, other] };
+  for (const states of [[latest, previous], [previous, latest]]) {
+    const merged = mergeStates(states, clock);
+    assert.deepEqual(merged.entries.find(entry => entry.key === source.key), recent);
+    assert.deepEqual(merged.entries.find(entry => entry.key === other.key), other);
+  }
+  for (const entries of [[old, recent], [recent, old]]) {
+    assert.deepEqual(validateState({ schema: 1, entries }, clock).entries, [recent]);
+  }
+  assert.deepEqual(mergeStates([], clock), emptyState());
+});
+
+test("actual workflow state-selection script merges blocked A with newer successful B when rerunning A", async () => {
+  const completedB = await finishAssessment(await prepare(), async () =>
+    JSON.stringify({ status: "noop", reason: "Source already assessed by successful B." }));
+  const states = { 101: emptyState(), 202: completedB.state };
+  const calls = [];
+  const availableArtifact = { name: "upstream-assessment-state", expired: false };
+  const successful = {
+    head_branch: "main", conclusion: "success", event: "schedule", updated_at: "2026-11-17T20:00:00Z"
+  };
+  const github = { rest: {
+    repos: { getBranch: async () => ({ data: { commit: { sha: target } } }) },
+    actions: {
+      getWorkflowRun: async () => ({ data: { created_at: "2026-11-17T19:00:00Z" } }),
+      listWorkflowRunArtifacts: async options => {
+        calls.push(["artifacts", options]);
+        return { data: { artifacts: options.run_id === 303 ? [{ ...availableArtifact, expired: true }] : [availableArtifact] } };
+      },
+      listWorkflowRuns: async options => {
+        calls.push(["runs", options]);
+        return { data: { workflow_runs: [
+          { ...successful, id: 99, updated_at: "2026-11-17T18:00:00Z" },
+          { ...successful, id: 202 },
+          { ...successful, id: 303, updated_at: "2026-11-17T21:00:00Z" },
+          { ...successful, id: 404, head_branch: "dev", updated_at: "2026-11-17T22:00:00Z" },
+          { ...successful, id: 505, event: "pull_request", updated_at: "2026-11-17T22:00:00Z" },
+          { ...successful, id: 606, conclusion: "failure", updated_at: "2026-11-17T22:00:00Z" },
+          { ...successful, id: 101, updated_at: "2026-11-17T23:00:00Z" }
+        ] } };
+      }
+    }
+  } };
+  const outputs = await executeStateSelection(github);
+  assert.equal(outputs.previous, "101");
+  assert.equal(outputs.latest, "202");
+  assert.equal(outputs.clock, "2026-11-17T19:00:00Z");
+  const [, request] = calls.find(([kind]) => kind === "runs");
+  assert.equal(request.workflow_id, "upstream-skill-assessment.yml");
+  assert.equal(request.branch, "main");
+  assert.equal(request.status, "success");
+  assert.equal(request.per_page, 20);
+  assert.deepEqual(calls.filter(([kind]) => kind === "artifacts").map(([, request]) => request.run_id),
+    [101, 303, 202], "Expired/wrong-branch/non-successful states must not win.");
+  const ledger = mergeStates([states[outputs.latest], states[outputs.previous]], clock);
+  const repeated = await finishAssessment(await prepareAssessment({
+    github: api(), inputs: { reassess: "false" }, now: outputs.clock, stateNow: clock,
+    ledger, targetSha: outputs.target, documents
+  }),
+    () => assert.fail("Blocked A must not erase completed B and re-run the agent."));
+  assert.equal(repeated.reports[0].status, "duplicate");
+  assert.deepEqual(repeated.state, completedB.state);
+});
+
+test("workflow state-selection still searches successful runs with no previous-attempt artifact", async () => {
+  const calls = [];
+  const outputs = await executeStateSelection({ rest: {
+    repos: { getBranch: async () => ({ data: { commit: { sha: target } } }) },
+    actions: {
+      getWorkflowRun: async () => ({ data: { created_at: clock } }),
+      listWorkflowRunArtifacts: async request => { calls.push(request); return { data: { artifacts: [] } }; },
+      listWorkflowRuns: async () => ({ data: { workflow_runs: [] } })
+    }
+  } });
+  assert.equal(outputs.previous, "");
+  assert.equal(outputs.latest, "");
+  assert.equal(calls.length, 1);
+});
+
 test("routing permits only exact tracked canonical paths and at most six documents", () => {
   assert.deepEqual(validateRouting({ status: "inspect", paths: [skillPath, referencePath] }, documents).paths,
     [skillPath, referencePath]);
@@ -469,7 +607,7 @@ test("the functional agent prompt is loaded from the fixed text asset, not a wor
 test("the SDK has no tools, config discovery, skills, shared store, or permission escalation", async () => {
   const configuration = readOnlySession("test-model");
   assert.deepEqual(configuration.availableTools, []);
-  assert.deepEqual(configuration.excludedTools, ["*"]);
+  assert.equal(configuration.excludedTools, undefined);
   assert.equal(configuration.enableConfigDiscovery, false);
   assert.equal(configuration.enableSkills, false);
   assert.equal(configuration.enableSessionStore, false);
@@ -500,6 +638,33 @@ test("the SDK has no tools, config discovery, skills, shared store, or permissio
   });
   await assert.rejects(askWithClient(client, "test-model", "evidence"));
   assert.equal(disconnected, true);
+});
+
+test("session configuration, model authentication, transport and empty-response failures remain retryable blocked", async () => {
+  const clients = [
+    { createSession: async () => { throw new Error("Invalid SDK session configuration"); } },
+    { createSession: async () => { throw new Error("Model authentication failed"); } },
+    { createSession: async () => ({
+      sendAndWait: async () => { throw new Error("Runtime request timed out"); }, disconnect: async () => {}
+    }) },
+    { createSession: async () => ({
+      sendAndWait: async () => undefined, disconnect: async () => {}
+    }) }
+  ];
+  for (const client of clients) {
+    const result = await finishAssessment(await prepare(), prompt => askWithClient(client, "test-model", prompt));
+    assert.equal(result.reports[0].status, "blocked");
+    assert.equal(result.reports[0].edits, undefined);
+    assert.deepEqual(result.state, emptyState(), "Infrastructure failures must not become completed semantic triage.");
+    assert.equal((await prepare(api(), {}, result.state)).sources.length, 1);
+  }
+  let requests = 0;
+  const secondPass = await finishAssessment(await prepare(), async () => {
+    if (requests++ === 0) return JSON.stringify({ status: "inspect", paths: [skillPath] });
+    throw new Error("Second session could not be created");
+  });
+  assert.equal(secondPass.reports[0].status, "blocked");
+  assert.deepEqual(secondPass.state, emptyState());
 });
 
 test("disabled runtime produces persistent blocked artifacts, without changing any skill files", async t => {
@@ -584,6 +749,20 @@ test("workflow is independent of reverse telemetry, opt-in, read-only and incapa
     assert.equal(checkout.with["persist-credentials"], false);
   }
   assert.ok(steps.some(step => step.with?.overwrite === true && step.with?.name === "upstream-assessment-state"));
+  const downloads = steps.filter(step => step.uses?.startsWith("actions/download-artifact@"));
+  assert.equal(downloads.length, 2);
+  assert.deepEqual(downloads.map(step => step.with["run-id"]), [
+    "${{ steps.source.outputs.previous }}", "${{ steps.source.outputs.latest }}"
+  ]);
+  assert.deepEqual(downloads.map(step => step.with.path), [
+    ".test-artifacts/upstream-assessment-previous", ".test-artifacts/upstream-assessment-latest"
+  ]);
+  const collect = steps.find(step => step.name === "Collect bounded, immutable upstream evidence");
+  assert.equal(collect.env.PREVIOUS_RUN, "${{ steps.source.outputs.previous }}");
+  assert.equal(collect.env.LATEST_STATE_RUN, "${{ steps.source.outputs.latest }}");
+  assert.match(collect.with.script, /mergeStates\(states, stateNow\)/);
+  assert.ok(steps.some(step => step.run === "node --test tests/upstream-sdk-contract.test.mjs" &&
+    step.env.UPSTREAM_SKILL_SDK_ROOT === ".test-artifacts/upstream-agent-tools"));
   assert.match(text, /run.created_at/);
   assert.doesNotMatch(text, /update-aspire|telemetry-workflow|pull_request_target|secrets\.|git push|gh pr create|issues: write|contents: write/);
   assert.equal(destination.branch, "dev");

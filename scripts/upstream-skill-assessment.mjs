@@ -17,6 +17,7 @@ const shaPattern = /^[a-f0-9]{40}$/;
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
 class PolicyError extends Error {}
+class AssessmentRuntimeError extends Error {}
 
 function requireValue(condition, message) {
   if (!condition) throw new PolicyError(message);
@@ -119,11 +120,49 @@ export function validateState(value, now = new Date()) {
       Number.isFinite(Date.parse(entry.mergedAt)) &&
       Number.isFinite(Date.parse(entry.assessedAt)) &&
       Date.parse(entry.assessedAt) <= new Date(now).getTime(), "Invalid assessment state entry.");
-    if (Date.parse(entry.assessedAt) >= cutoff) entries.set(entry.key, {
-      key: entry.key, status: entry.status, mergedAt: entry.mergedAt, assessedAt: entry.assessedAt
-    });
+    const previous = entries.get(entry.key);
+    if (Date.parse(entry.assessedAt) >= cutoff &&
+        (!previous || Date.parse(entry.assessedAt) > Date.parse(previous.assessedAt))) {
+      entries.set(entry.key, {
+        key: entry.key, status: entry.status, mergedAt: entry.mergedAt, assessedAt: entry.assessedAt
+      });
+    }
   }
   return { schema: 1, entries: [...entries.values()] };
+}
+
+export function mergeStates(states, now = new Date()) {
+  const entries = new Map();
+  for (const state of states) {
+    for (const entry of validateState(state, now).entries) {
+      const previous = entries.get(entry.key);
+      if (!previous || Date.parse(entry.assessedAt) > Date.parse(previous.assessedAt)) entries.set(entry.key, entry);
+    }
+  }
+  requireValue(entries.size <= limits.stateEntries, "Merged assessment state exceeds capacity.");
+  return { schema: 1, entries: [...entries.values()] };
+}
+
+export async function selectStateRuns(github, context) {
+  const repo = context.repo;
+  const hasState = async run_id => {
+    const { data } = await github.rest.actions.listWorkflowRunArtifacts({ ...repo, run_id, per_page: 100 });
+    return data.artifacts.some(artifact => artifact.name === "upstream-assessment-state" && !artifact.expired);
+  };
+  const previous = await hasState(context.runId) ? String(context.runId) : "";
+  // Never let an old attempt short-circuit newer successful-run state.
+  const { data } = await github.rest.actions.listWorkflowRuns({
+    ...repo, workflow_id: "upstream-skill-assessment.yml",
+    branch: context.payload.repository.default_branch, status: "success", per_page: 20
+  });
+  const eligible = data.workflow_runs.filter(run =>
+    run.id !== context.runId && run.head_branch === context.payload.repository.default_branch &&
+    run.conclusion === "success" && ["schedule", "workflow_dispatch"].includes(run.event)
+  ).sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at) || b.id - a.id);
+  for (const run of eligible) {
+    if (await hasState(run.id)) return { previous, latest: String(run.id) };
+  }
+  return { previous, latest: "" };
 }
 
 export function readJson(path, maximum = 4 * 1024 * 1024) {
@@ -206,10 +245,14 @@ export async function collectEvidence(github, pr, source, fullSnapshots = true) 
     ...upstream, pull_number: source.number, per_page: limits.files, page: 1
   });
   requireValue(Array.isArray(files) && files.length === pr.changed_files &&
-    files.every(file => safeSourcePath(file.filename)) &&
+    files.every(file => safeSourcePath(file.filename) &&
+      (file.previous_filename === undefined || safeSourcePath(file.previous_filename)) &&
+      (file.status !== "renamed" || safeSourcePath(file.previous_filename))) &&
     new Set(files.map(file => file.filename)).size === files.length, "Incomplete or malformed PR file evidence.");
-  const sources = files.filter(file => relevantPath(file.filename));
+  const sources = files.filter(file => relevantPath(file.filename) || relevantPath(file.previous_filename));
   if (!sources.length) return { status: "noop", reason: "No API/CLI source paths changed." };
+  requireValue(!sources.some(file => file.status === "renamed" || file.previous_filename !== undefined),
+    "Renames touching monitored API/CLI source require human triage.");
   const tests = files.filter(file => testPath(file.filename));
   requireValue(sources.length <= limits.sourceFiles && tests.length <= limits.testFiles,
     "Too many relevant source/test files. Human scoping is required.");
@@ -412,7 +455,14 @@ export const assessmentInstructions = readFileSync(
 ).trim();
 
 export async function assessCandidate(candidate, documents, ask) {
-  const route = validateRouting(parseResponse(await ask(`${assessmentInstructions}
+  const request = async prompt => {
+    try {
+      return await ask(prompt);
+    } catch {
+      throw new AssessmentRuntimeError();
+    }
+  };
+  const route = validateRouting(parseResponse(await request(`${assessmentInstructions}
 Select up to six documents needing inspection, including relevant references, using
 {"status":"inspect","paths":["skills/.../SKILL.md"]}, or return noop/triage.
 Inventory and entrypoints: ${JSON.stringify({
@@ -422,7 +472,7 @@ Inventory and entrypoints: ${JSON.stringify({
 Upstream evidence: ${JSON.stringify(candidate)}`)), documents);
   if (route.status !== "inspect") return route;
   const selected = Object.fromEntries(route.paths.map(path => [path, documents[path]]));
-  return validateDraft(parseResponse(await ask(`${assessmentInstructions}
+  return validateDraft(parseResponse(await request(`${assessmentInstructions}
 If a change is grounded in the supplied authoritative source and tests, propose:
 {"status":"draft","reason":"impact and rationale","api":"affected API or CLI command",
 "citations":[{"path":"src/...","quote":"exact source quote, >=20 characters"},
@@ -444,8 +494,10 @@ export async function finishAssessment(prepared, ask) {
     else {
       try {
         result = await assessCandidate(candidate, prepared.documents, ask);
-      } catch {
-        result = {
+      } catch (error) {
+        result = error instanceof AssessmentRuntimeError ? {
+          status: "blocked", reason: "Agent configuration, authentication or runtime request failed. Correct setup and retry."
+        } : {
           status: "triage", reason: "Agent failed or returned an unsupported/ungrounded assessment.",
           questions: ["Review immutable source evidence manually; no guidance was changed."]
         };

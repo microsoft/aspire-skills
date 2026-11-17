@@ -7,7 +7,7 @@ import { finishAssessment, readJson } from "./upstream-skill-assessment.mjs";
 // Empty-mode defaults and the deny handler are deliberately independent defenses.
 export function readOnlySession(model) {
   return {
-    model, availableTools: [], excludedTools: ["*"], tools: [], mcpServers: {},
+    model, availableTools: [], tools: [], mcpServers: {},
     customAgents: [], enableConfigDiscovery: false, enableSkills: false,
     enableSessionStore: false, infiniteSessions: { enabled: false },
     onPermissionRequest: () => ({ kind: "reject", feedback: "This assessment has no tool permissions." }),
@@ -19,7 +19,10 @@ export async function askWithClient(client, model, prompt) {
   const session = await client.createSession(readOnlySession(model));
   try {
     const response = await session.sendAndWait({ prompt }, 120_000);
-    return response?.data.content;
+    if (typeof response?.data.content !== "string" || !response.data.content.trim()) {
+      throw new Error("The runtime returned no assessment.");
+    }
+    return response.data.content;
   } finally {
     await session.disconnect();
   }

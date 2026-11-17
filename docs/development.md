@@ -93,9 +93,11 @@ change. It has **no write/publish job**, and does not apply skill patches, open
 PRs/issues, or mark evaluations as passing. Validated JSON shape and exact source
 quotes are provenance checks, not proof of API semantics or passing skill evals.
 The bounded, tool-free agent adapter uses the SDK/runtime versions already used
-by the skill-evaluation stack; its mocked contract tests are not a hosted smoke
-test. Maintainers must verify runtime/authentication before treating its output
-as an operational assessment.
+by the skill-evaluation stack. Its offline contract test exercises the actual
+pinned SDK's tool-filter normalization and empty-mode defaults without starting
+the runtime or making a model request. This is not a hosted smoke test.
+Maintainers must verify runtime/authentication before treating its output as an
+operational assessment.
 The functional agent prompt is
 [`upstream-skill-assessment.txt`](../.github/prompts/upstream-skill-assessment.txt);
 the workflow is standard YAML, with no new Markdown workflow or design files.
@@ -124,7 +126,7 @@ explicitly blocked, not replaced with keyword-derived guidance.
    webhook, PAT, GitHub App, or cross-repository write access. Repository Actions
    policy, organization Copilot/model access and billing must permit this token
    and pinned runtime installation. These settings are **not assumed configured**.
-   Missing runtime/auth/model support blocks or triages the assessment; it never
+   Missing runtime/auth/model support blocks the assessment for retry; it never
    permits publication. No existing telemetry App secrets are used.
 
 Runtime and activation contracts:
@@ -159,7 +161,8 @@ kept in the review artifact.
   test files, 48 KiB per full source/test file, 256 KiB combined full evidence,
   128 KiB combined patches and a 16 KiB PR body. Unsupported, removed, renamed,
   binary, missing or oversized evidence goes to human triage, never truncated
-  semantic inference.
+  semantic inference. Rename detection checks both current and previous paths,
+  including moves out of monitored directories or to unmonitored extensions.
 - Evidence records canonical source PR links, reported base/head SHAs, immutable
   merge SHA and merge time, target main/release branch, full source/test snapshots,
   blob SHAs, content digests and commit-pinned source links. `main` is unreleased;
@@ -176,12 +179,16 @@ kept in the review artifact.
   `noop`, `triage`, `blocked`, `duplicate`, or **unvalidated draft** outcomes.
   Uncertain items include maintainer questions, not invented guidance or automatic
   issues. Maintainers must inspect these artifacts; no notification service is
-  configured. A failed runtime request produces triage, not a passing assessment.
+  configured. Configuration/authentication/session/transport failures and missing
+  runtime responses are retryable **blocked** outcomes, not completed semantic
+  triage. Malformed or ungrounded model responses still require human triage.
 - `upstream-assessment-state` retains completed source identities (repository,
   PR, merge SHA and target branch) via a hash for fourteen days after assessment, capped
-  at 2,000 entries. The latest available successful default-branch run is restored;
-  prior-attempt state takes precedence on reruns. Runs are serialized. Main and
-  release backports remain distinct. Explicit `reassess=true` revisits recorded
+  at 2,000 entries. State from the newest eligible successful default-branch run
+  is merged with any prior-attempt state, taking the latest assessment timestamp
+  for each identity. An older blocked rerun cannot erase newer completed work.
+  Runs are serialized. Main and release backports remain distinct.
+  Explicit `reassess=true` revisits recorded
   triage/no-op/draft outcomes. Blocked setup/budget outcomes remain retryable.
   Artifacts expire after 90 days; missing/expired state can repeat **analysis**,
   but cannot duplicate PRs because there is no publisher. Poll delays, outages
@@ -216,3 +223,14 @@ Local deterministic checks (no model credentials or upstream writes):
 ```powershell
 node --test tests/upstream-skill-assessment.test.mjs
 ```
+
+After installing the opt-in pinned runtime, its offline SDK contract check can
+also run locally (the agent workflow requires this check before model invocation):
+
+```powershell
+$env:UPSTREAM_SKILL_SDK_ROOT = ".test-artifacts\upstream-agent-tools"
+node --test tests\upstream-sdk-contract.test.mjs
+```
+
+The normal test run explicitly skips this optional SDK check when that runtime
+is absent; setting `UPSTREAM_SKILL_SDK_ROOT` makes a missing/wrong SDK fail.

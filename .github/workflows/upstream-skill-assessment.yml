@@ -59,24 +59,12 @@ jobs:
             core.setOutput("target", branch.commit.sha);
             const { data: run } = await github.rest.actions.getWorkflowRun({ ...repo, run_id: context.runId });
             core.setOutput("clock", run.created_at);
-            // A prior attempt of this run takes precedence over earlier successful runs.
-            const { data: current } = await github.rest.actions.listWorkflowRunArtifacts({ ...repo, run_id: context.runId, per_page: 100 });
-            if (current.artifacts.some(a => a.name === "upstream-assessment-state" && !a.expired)) {
-              core.setOutput("previous", String(context.runId));
-            } else {
-              const { data } = await github.rest.actions.listWorkflowRuns({
-                ...repo, workflow_id: "upstream-skill-assessment.yml",
-                branch: context.payload.repository.default_branch, status: "success", per_page: 20
-              });
-              for (const prior of data.workflow_runs) {
-                if (!["schedule", "workflow_dispatch"].includes(prior.event) || prior.id === context.runId) continue;
-                const { data: artifacts } = await github.rest.actions.listWorkflowRunArtifacts({ ...repo, run_id: prior.id, per_page: 100 });
-                if (artifacts.artifacts.some(a => a.name === "upstream-assessment-state" && !a.expired)) {
-                  core.setOutput("previous", String(prior.id));
-                  break;
-                }
-              }
-            }
+            const { join } = await import("node:path");
+            const { pathToFileURL } = await import("node:url");
+            const { selectStateRuns } = await import(pathToFileURL(join(process.env.GITHUB_WORKSPACE, "scripts", "upstream-skill-assessment.mjs")).href);
+            const states = await selectStateRuns(github, context);
+            core.setOutput("previous", states.previous);
+            core.setOutput("latest", states.latest);
 
       - uses: actions/download-artifact@v8.0.2
         if: steps.source.outputs.previous != ''
@@ -85,6 +73,14 @@ jobs:
           path: .test-artifacts/upstream-assessment-previous
           github-token: ${{ github.token }}
           run-id: ${{ steps.source.outputs.previous }}
+
+      - uses: actions/download-artifact@v8.0.2
+        if: steps.source.outputs.latest != ''
+        with:
+          name: upstream-assessment-state
+          path: .test-artifacts/upstream-assessment-latest
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.source.outputs.latest }}
 
       - name: Checkout pinned skill guidance (never execute upstream source)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -99,20 +95,23 @@ jobs:
           ASSESSMENT_CLOCK: ${{ steps.source.outputs.clock }}
           ASSESSMENT_TARGET: ${{ steps.source.outputs.target }}
           PREVIOUS_RUN: ${{ steps.source.outputs.previous }}
+          LATEST_STATE_RUN: ${{ steps.source.outputs.latest }}
         with:
           script: |
             const { mkdirSync, writeFileSync } = await import("node:fs");
             const { join } = await import("node:path");
             const root = process.env.GITHUB_WORKSPACE;
-            const { prepareAssessment, readJson, skillDocuments } = await import(`${root}/scripts/upstream-skill-assessment.mjs`);
+            const { prepareAssessment, mergeStates, readJson, skillDocuments } = await import(`${root}/scripts/upstream-skill-assessment.mjs`);
             const output = join(root, ".test-artifacts", "upstream-assessment");
             mkdirSync(output, { recursive: true });
-            const ledger = process.env.PREVIOUS_RUN
-              ? readJson(join(root, ".test-artifacts", "upstream-assessment-previous", "state.json"), 1024 * 1024)
-              : undefined;
+            const states = [];
+            if (process.env.LATEST_STATE_RUN) states.push(readJson(join(root, ".test-artifacts", "upstream-assessment-latest", "state.json"), 1024 * 1024));
+            if (process.env.PREVIOUS_RUN) states.push(readJson(join(root, ".test-artifacts", "upstream-assessment-previous", "state.json"), 1024 * 1024));
+            const stateNow = new Date();
+            const ledger = mergeStates(states, stateNow);
             const prepared = await prepareAssessment({
               github, inputs: context.payload.inputs ?? {}, now: process.env.ASSESSMENT_CLOCK,
-              stateNow: new Date(),
+              stateNow,
               targetSha: process.env.ASSESSMENT_TARGET, ledger,
               documents: skillDocuments(join(root, ".test-artifacts", "upstream-skills-base"))
             });
@@ -123,6 +122,12 @@ jobs:
         run: |
           npm install --ignore-scripts --no-audit --no-fund --prefix .test-artifacts/upstream-agent-tools @github/copilot-sdk@1.0.11 @github/copilot-linux-x64@1.0.80
           test -f .test-artifacts/upstream-agent-tools/node_modules/@github/copilot-linux-x64/index.js
+
+      - name: Check pinned SDK tool-free contract (no model call)
+        if: vars.UPSTREAM_SKILL_AGENT_ENABLED == 'true' && vars.UPSTREAM_SKILL_MODEL != ''
+        env:
+          UPSTREAM_SKILL_SDK_ROOT: .test-artifacts/upstream-agent-tools
+        run: node --test tests/upstream-sdk-contract.test.mjs
 
       - name: Assess without tools or repository writes
         env:

@@ -7,7 +7,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ### Added
 - Added opt-in, bounded upstream Aspire main/release-branch skill-impact
   assessment with immutable source evidence, replay deduplication and human
-  triage. This preparatory workflow produces read-only review artifacts, not
+  triage, including monitored-source renames and retryable agent setup failures.
+  Reruns merge newer completed assessments instead of replacing them with older
+  attempt state. This preparatory workflow produces read-only review artifacts, not
   published guidance or PRs; proposed edits still require maintainer validation.
 - Added Go AppHost guidance (Aspire 17.0+) to the `aspire`,
   `aspire-orchestration`, `aspire-init`, `aspire-deployment` and `aspireify`
