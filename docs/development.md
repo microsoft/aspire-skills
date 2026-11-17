@@ -96,10 +96,16 @@ The bounded, tool-free agent adapter uses the SDK/runtime versions already used
 by the skill-evaluation stack; its mocked contract tests are not a hosted smoke
 test. Maintainers must verify runtime/authentication before treating its output
 as an operational assessment.
+The functional agent prompt is
+[`upstream-skill-assessment.txt`](../.github/prompts/upstream-skill-assessment.txt);
+the workflow is standard YAML, with no new Markdown workflow or design files.
+Deterministic source-path checks only prefilter evidence. When enabled, Copilot
+performs the two-pass routing/semantic assessment; without it, candidates are
+explicitly blocked, not replaced with keyword-derived guidance.
 
 ### Activation and credentials
 
-1. Land the workflow and helper scripts on the repository's **default branch**.
+1. Land the workflow, helper scripts and text prompt on the repository's **default branch**.
    Scheduled workflows only run there; `workflow_dispatch` must also exist there
    before GitHub exposes it. This workflow additionally rejects non-default-branch
    runs, so merging to dev alone does **not** activate it or permit a first smoke

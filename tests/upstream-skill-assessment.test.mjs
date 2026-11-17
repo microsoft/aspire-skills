@@ -459,6 +459,13 @@ test("the bounded two-pass agent treats source text as data and emits only draft
   assert.ok(!prompts[1].includes(documents[referencePath]), "Second pass is scoped to selected guidance.");
 });
 
+test("the functional agent prompt is loaded from the fixed text asset, not a workflow Markdown file", () => {
+  const prompt = readFileSync(join(root, ".github", "prompts", "upstream-skill-assessment.txt"), "utf8").trim();
+  assert.equal(assessmentInstructions, prompt);
+  assert.match(prompt, /Use full immutable source AND test evidence/);
+  assert.match(prompt, /impact is uncertain/);
+});
+
 test("the SDK has no tools, config discovery, skills, shared store, or permission escalation", async () => {
   const configuration = readOnlySession("test-model");
   assert.deepEqual(configuration.availableTools, []);
