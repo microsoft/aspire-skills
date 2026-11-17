@@ -191,6 +191,7 @@ const dynamicLoadGenerations = new Map();
 const dynamicLoadingIds = new Set();
 const dynamicLoadFailedIds = new Set();
 const pendingSecretDependencies = new Set();
+const uncommittedSecretDependencies = new Map();
 const commandControlSchemas = new WeakMap();
 
 function element(tag, properties = {}, children = []) {
@@ -367,12 +368,18 @@ function acceptState(state) {
     const currentCommand = activeCommandId ? findNode(activeCommandId) : undefined;
     if (currentCommand && JSON.stringify(previousCommand?.command?.argumentInputs)
         !== JSON.stringify(currentCommand.command.argumentInputs)) {
-        cancelDynamicInputsLoad(currentCommand.id);
+        const hasUncommittedSecrets = (uncommittedSecretDependencies.get(currentCommand.id)?.size ?? 0) > 0;
+        cancelDynamicInputsLoad(currentCommand.id, { preservePendingSecretDependency: hasUncommittedSecrets });
         commandInputs.delete(currentCommand.id);
         const inputs = commandInputList(currentCommand);
         prepareCommandDraft(currentCommand, inputs);
         if (inputs.some((input) => input.dynamicLoading)) {
-            void reloadDynamicInputs(currentCommand);
+            if (!hasUncommittedSecrets) {
+                void reloadDynamicInputs(currentCommand);
+            }
+        } else {
+            pendingSecretDependencies.delete(currentCommand.id);
+            uncommittedSecretDependencies.delete(currentCommand.id);
         }
     }
     render();
@@ -2411,13 +2418,16 @@ function discardSensitiveCommandDraft(node, nodeId = node?.id) {
     commandValidationErrors.delete(nodeId);
 }
 
-function cancelDynamicInputsLoad(nodeId) {
+function cancelDynamicInputsLoad(nodeId, { preservePendingSecretDependency = false } = {}) {
     clearTimeout(dynamicLoadTimers.get(nodeId));
     dynamicLoadTimers.delete(nodeId);
     dynamicLoadGenerations.set(nodeId, (dynamicLoadGenerations.get(nodeId) ?? 0) + 1);
     dynamicLoadingIds.delete(nodeId);
     dynamicLoadFailedIds.delete(nodeId);
-    pendingSecretDependencies.delete(nodeId);
+    if (!preservePendingSecretDependency) {
+        pendingSecretDependencies.delete(nodeId);
+        uncommittedSecretDependencies.delete(nodeId);
+    }
 }
 
 function clearActiveCommand() {
@@ -2566,9 +2576,23 @@ function updateCommandDraft(node, input, value, { committed = false } = {}) {
         && (changed || (committed && pendingSecretDependencies.has(node.id)))) {
         if (input.inputType.toLowerCase().includes("secret")) {
             if (changed) {
+                let uncommitted = uncommittedSecretDependencies.get(node.id);
+                if (!uncommitted) {
+                    uncommitted = new Set();
+                    uncommittedSecretDependencies.set(node.id, uncommitted);
+                }
+                uncommitted.add(input.name);
                 beginDynamicInputsLoad(node, { render: false, deferred: true });
             }
             if (committed) {
+                const uncommitted = uncommittedSecretDependencies.get(node.id);
+                uncommitted?.delete(input.name);
+                if (uncommitted?.size === 0) {
+                    uncommittedSecretDependencies.delete(node.id);
+                }
+                if (uncommittedSecretDependencies.has(node.id)) {
+                    return;
+                }
                 clearTimeout(dynamicLoadTimers.get(node.id));
                 dynamicLoadTimers.set(node.id, setTimeout(() => {
                     dynamicLoadTimers.delete(node.id);
@@ -2577,7 +2601,11 @@ function updateCommandDraft(node, input, value, { committed = false } = {}) {
             }
             return;
         }
-        const generation = beginDynamicInputsLoad(node, { render: false });
+        const deferred = (uncommittedSecretDependencies.get(node.id)?.size ?? 0) > 0;
+        const generation = beginDynamicInputsLoad(node, { render: false, deferred });
+        if (deferred) {
+            return;
+        }
         dynamicLoadTimers.set(node.id, setTimeout(() => {
             dynamicLoadTimers.delete(node.id);
             void reloadDynamicInputs(findNode(node.id) ?? node, generation);

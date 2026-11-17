@@ -1336,6 +1336,26 @@ test("live base schema changes reload an open form and supersede pending old-sch
     assert.equal(button(renderer.document.body, "Run command").disabled, false);
 });
 
+test("live schema changes defer metadata reloads while a secret dependency is uncommitted", async () => {
+    const renderer = await boot();
+    const fields = await openSecretDependentCommand(renderer);
+    enterField(renderer, "environment", "partial-secret");
+    const updatedFields = structuredClone(fields);
+    updatedFields[1].label = "Updated target";
+    await renderer.push({ type: "state", state: commandSnapshot(3, updatedFields) });
+    await renderer.advance(1000);
+    assert.equal(renderer.requests.filter((request) => request.path === "/api/command-inputs").length, 1);
+    assert.equal(renderer.document.querySelector('[name="environment"]').value, "partial-secret");
+    assert.equal(renderer.document.querySelector(".command-form").textContent.includes("Updated target"), true);
+
+    renderer.document.querySelector('[name="environment"]').dispatch("change");
+    await renderer.advance(250);
+    const load = renderer.request("/api/command-inputs");
+    assert.equal(load.body.arguments.environment, "partial-secret");
+    await renderer.respond(load, { ok: true, inputs: updatedFields });
+    assert.equal(button(renderer.document.body, "Run command").disabled, false);
+});
+
 test("live schemas that remove dynamic inputs cancel pending metadata without blocking ordinary commands", async () => {
     const renderer = await boot();
     clickCommand(renderer);
