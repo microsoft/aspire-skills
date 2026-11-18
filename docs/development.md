@@ -127,6 +127,19 @@ The telemetry workflow above runs in the opposite direction and is not reused.
    drafts remain retryable. After a successful manual run, setting
    `UPSTREAM_SKILL_ASSESSMENT_ENABLED=true` enables six-hourly polling.
 
+**Hosted setup remains blocked until a maintainer completes these steps.**
+Read-only inspection on 2026-11-18 found no `upstream-skill-publication`
+environment and no repository variable names. The existing `copilot` environment
+had no reviewers and allowed administrator bypass; `github-pages` had only a
+branch policy. Neither satisfies this publisher's human-approval gate.
+Only the secret names `ASPIRE_BOT_APP_ID`, `ASPIRE_BOT_PRIVATE_KEY` and
+`COPILOT_GITHUB_TOKEN` were visible; no values were read. Reading the repository's
+workflow-permissions policy returned HTTP 403, so no PR-creation policy was
+verified. The writer deliberately uses a scoped App token, not an assumed
+write-capable workflow token; its actual installation and write access still
+require maintainer verification. Local/mock verification is not a successful
+hosted publication smoke, and none of these findings authorizes settings changes.
+
 The assessment/validation job has `contents: read`, `pull-requests: read`,
 `actions: read` (state artifacts), and `copilot-requests: write` (inference).
 Upstream public evidence needs no webhook or cross-repository credential.
