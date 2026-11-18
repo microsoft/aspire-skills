@@ -179,6 +179,48 @@ test("capability probe preserves pinned inputs and restore failures stay diagnos
   assert.match(probe, /Never add blanket SourceLink suppression/);
 });
 
+test("restore answers include actual failure evidence and a scope-bounded success handoff", () => {
+  const skill = readFileSync(new URL("../skills/aspire-project-v2-migration/SKILL.md", import.meta.url), "utf8");
+  const bootstrap = skill.slice(
+    skill.indexOf("### 1a. Fresh polyglot worktree / capability bootstrap"),
+    skill.indexOf("### 2. Classify and propose")
+  );
+  assert.match(bootstrap, /exact failed command, working directory, exit code and actual\s+diagnostic \*\*in the answer\*\*/);
+  assert.match(bootstrap, /not merely a promise to report/);
+  assert.match(bootstrap, /IntegrationRestore\.csproj[\s\S]*SourceRoot\.RevisionId/);
+  assert.match(bootstrap, /64-character SHA-256[\s\S]*microsoft\/aspire\/issues\/21735/);
+  assert.match(bootstrap, /capability verification remains blocked/);
+  assert.match(bootstrap, /no retries, generated-target edits, SourceLink suppression or toolchain changes/);
+  assert.match(bootstrap, /On success,[\s\S]*read-only\s+within the user's permitted scope/);
+  assert.match(bootstrap, /successful restore is not capability proof/);
+  assert.match(bootstrap, /offline restore plan, describe both conditional outcomes without executing/);
+  assert.match(bootstrap, /separately\s+approved disposable probing if Dotnet is absent/);
+  assert.match(bootstrap, /user limits the task to\s+the restore alone, leave capability inspection pending/);
+  const reference = readFileSync(new URL("../skills/aspire-project-v2-migration/references/compatibility-and-validation.md", import.meta.url), "utf8");
+  assert.match(reference, /Quote the actual diagnostic rather than only telling the user to report it/);
+  assert.match(reference, /user-supplied offline result from a command you executed/);
+  assert.match(reference, /Explicitly state that toolchains remain unchanged/);
+});
+
+test("restore scope grading accepts equivalent shell paths without relaxing behavioral gates", () => {
+  const spec = parse(readFileSync(new URL("../skills/aspire-project-v2-migration/evals/eval.yaml", import.meta.url), "utf8"));
+  const stimulus = spec.stimuli.find(item => item.name === "project-v2-polyglot-restore-scope");
+  const grader = stimulus.graders.find(item => item.name === "polyglot-restore-scope-stays-bounded");
+  assert.equal(spec.scoring.threshold, 1);
+  assert.equal(grader.config.scoring, "binary");
+  for (const path of [".\\apphost.mts", "./apphost.mts"]) {
+    assert.ok(stimulus.rubric[0].includes(path));
+    assert.ok(grader.config.prompt.includes(path));
+  }
+  assert.match(grader.config.prompt, /shell-appropriate/);
+  assert.match(grader.config.prompt, /equivalent paths to the same selected AppHost/);
+  assert.match(grader.config.prompt, /once-approved restore/);
+  assert.match(grader.config.prompt, /read-only\s+capability inspection or reporting the actual failure/);
+  assert.match(grader.config.prompt, /separate\s+approval required for a probe, migration edits and runtime\/publish/);
+  assert.match(stimulus.rubric[1], /separately approved disposable probing, not an in-place package addition/);
+  assert.match(stimulus.prompt, /do not execute it here/);
+});
+
 test("bootstrap evals guard every approval phase against edits and command execution", () => {
   const spec = parse(readFileSync(new URL("../skills/aspire-project-v2-migration/evals/eval.yaml", import.meta.url), "utf8"));
   const phases = ["fresh", "restore-scope", "missing-integration", "resume", "failure"];

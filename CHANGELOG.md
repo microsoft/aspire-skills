@@ -7,7 +7,8 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ### Changed
 - Project v2 migration now explains fresh polyglot generated-state absence and
   guides separately approved restore/capability preparation before exact migration
-  edits, preserving pinned toolchains and surfacing upstream restore diagnostics.
+  edits, preserving pinned toolchains, reporting exact upstream restore failures,
+  and explaining the conditional read-only capability handoff within user scope.
 
 ## [0.0.6](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.6)
 

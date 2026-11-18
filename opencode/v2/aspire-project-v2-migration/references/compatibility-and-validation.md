@@ -33,6 +33,12 @@ absent, request separate approval for a disposable-copy probe, not package chang
 in the application. Identify the copy location, exact AppHost, integration/version
 to add, commands, expected downloads/generated writes, and cleanup scope.
 
+For a restore-only command plan, describe the failure stop and the conditional
+read-only success handoff; do not claim the restore or inspection ran. Inspect
+resolved capabilities only within the user's permitted scope, otherwise report
+that inspection as pending. Neither outcome authorizes an in-place integration
+addition or execution of a disposable probe.
+
 - Preserve the pinned SDK, integrations, channel and feeds, including effective
   `global.json`, NuGet and package-manager configuration and relevant ancestor
   settings. A copy outside those settings must carry equivalent configuration;
@@ -53,13 +59,19 @@ to add, commands, expected downloads/generated writes, and cleanup scope.
   approval. Preparation never authorizes starting resources or publishing.
 
 At either restore failure, report the command, exit code and actual diagnostic,
-leaving application source/configuration unchanged. In particular,
+including the working directory and exact failed command in the final answer.
+Quote the actual diagnostic rather than only telling the user to report it;
+distinguish a user-supplied offline result from a command you executed.
+Leave application source/configuration unchanged. In particular,
 `IntegrationRestore.csproj` can fail with a SourceLink `SourceRoot.RevisionId`
 invalid-commit-hash error for a valid 64-character SHA-256 Git revision. This is
 the upstream failure tracked by [microsoft/aspire#21735](https://github.com/microsoft/aspire/issues/21735),
 not proof that application source or the generated SDK is missing. Preserve that
 diagnostic and stop; do not retry unchanged commands or edit generated targets.
 Never add blanket SourceLink suppression or silently change toolchains to bypass it.
+Explicitly state that toolchains remain unchanged and capability verification is
+blocked; restore approval does not authorize package/migration edits or runtime
+and publish actions.
 
 ## Unsupported and decision-required patterns
 

@@ -116,9 +116,16 @@ label as proof of the installed API.
    ```
 
    Use the actual selected entry point, not another AppHost. If restore fails, stop
-   and surface the actual diagnostic; do not loop restore or invent a workaround.
-3. Inspect the resolved integration graph and generated API read-only. Restoring
-   existing integrations may not expose `addDotnetProject` when
+   and report the exact failed command, working directory, exit code and actual
+   diagnostic **in the answer**, not merely a promise to report them. For the
+   `IntegrationRestore.csproj` SourceLink `SourceRoot.RevisionId` invalid-commit-hash
+   failure with a valid 64-character SHA-256 revision, identify
+   [microsoft/aspire#21735](https://github.com/microsoft/aspire/issues/21735), not
+   missing application source. State that capability verification remains blocked:
+   no retries, generated-target edits, SourceLink suppression or toolchain changes.
+3. On success, inspect the resolved integration graph and generated API read-only
+   within the user's permitted scope. A successful restore is not capability proof.
+   Restoring existing integrations may not expose `addDotnetProject` when
    `Aspire.Hosting.Dotnet` is not referenced. That is not yet a handle-only API
    failure. Request a separately approved capability probe using the supported
    add/restore flow in a disposable copy, preserving the app's pins and channel.
@@ -131,6 +138,11 @@ label as proof of the installed API.
 
 Preparation approval is not migration-edit, runtime, or publish approval. Run only
 the approved preparation; never hand-edit generated modules or upgrade implicitly.
+For an offline restore plan, describe both conditional outcomes without executing
+either: failure reporting and the read-only success handoff, including separately
+approved disposable probing if Dotnet is absent. If the user limits the task to
+the restore alone, leave capability inspection pending rather than extending the
+task. Never turn a plan or a failure report into permission for additional actions.
 
 ### 2. Classify and propose
 

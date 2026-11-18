@@ -209,7 +209,7 @@ stimuli:
     tags: { priority: p0, area: capability-bootstrap, phase: restore-scope }
     environment: { files: *fresh_polyglot }
     rubric:
-      - The response gives aspire restore --apphost .\apphost.mts --non-interactive from app/Migration.TypeScriptAppHost, once, without changing its inputs.
+      - The response gives aspire restore --apphost .\apphost.mts --non-interactive (or the shell-equivalent ./apphost.mts path) from app/Migration.TypeScriptAppHost, once, without changing its inputs.
       - The response stops on actual restore failure or inspects resolved capabilities on success; missing Dotnet requires separately approved disposable probing, not an in-place package addition.
       - Preparation is kept separate from migration-edit and runtime/publish approvals; the offline exercise executes no command and changes no files.
     graders:
@@ -223,9 +223,11 @@ stimuli:
           scoring: binary
           prompt: >
             Does the assistant's response give the exact once-approved restore
-            command and directory, then limit subsequent work to read-only
-            capability inspection or reporting the actual failure, with separate
-            approval required for a probe, migration edits and runtime/publish?
+            command and directory (accept shell-appropriate .\apphost.mts and
+            ./apphost.mts as equivalent paths to the same selected AppHost), then
+            limit subsequent work to read-only capability inspection or reporting
+            the actual failure, with separate approval required for a probe,
+            migration edits and runtime/publish?
             This is command planning, not an executed restore.
 
   - name: project-v2-polyglot-missing-dotnet-integration

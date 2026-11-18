@@ -69,6 +69,10 @@ The five bootstrap cases are offline decision/command-planning stimuli with
 empty-diff and no-command trace guards. Reported restore/probe results are inputs,
 not executed installation evidence. These cases do not qualify a real Aspire
 restore or reproduce the upstream SourceLink SHA-256 failure.
+Restore-command grading accepts `.\apphost.mts` and `./apphost.mts` as
+shell-equivalent paths to the same selected AppHost from its directory. This does
+not relax the once-only restore, unchanged inputs, conditional capability handoff,
+separate approvals, empty-diff, no-execution or all-graders-pass requirements.
 
 The generated TypeScript third argument is optional, not nullable.
 `{ launchProfileName: null }` is valid and selects the default profile; literal
