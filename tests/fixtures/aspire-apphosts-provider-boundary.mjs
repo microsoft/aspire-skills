@@ -784,6 +784,54 @@ test("an in-flight Add to chat request cannot cross a foreground session change"
     assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 0);
 });
 
+test("an in-flight Clear cannot delete replacement-session context queued after reopening", async (t) => {
+    const nonce = "synthetic-replacement-context-166-841f7d";
+    const h = await harness(t, { cliOverride: (args) => {
+        if (args[0] !== "describe") return;
+        const payload = describe(h.controls.inputs, h.controls.state);
+        payload.resources[0].displayName = nonce;
+        return ok(payload);
+    } });
+    const open = await h.open();
+    const { state } = await h.request(open, "/api/state");
+    const node = allNodes(state.roots).find((candidate) => candidate.kind === "resource" && candidate.resourceName === "api");
+    await h.request(open, "/api/copilot-context", { nodeId: node.id });
+    const entered = deferred();
+    h.servers[0].once("request", () => entered.resolve());
+    let request;
+    const pending = new Promise((done, reject) => {
+        request = http.request(new URL("/api/copilot-context/clear", open.url), {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-aspire-apphosts-token": new URL(open.url).searchParams.get("token") },
+        }, (response) => {
+            const chunks = [];
+            response.on("data", (chunk) => chunks.push(chunk));
+            response.once("end", () => done({ status: response.statusCode, ...JSON.parse(Buffer.concat(chunks).toString("utf8")) }));
+        });
+        request.once("error", reject);
+        request.write("{");
+    });
+    await entered.promise;
+    h.startSession({ sessionId: "replacement-foreground" });
+    h.controls.state = "Stopped";
+    await h.open();
+    await h.request(open, "/api/state");
+    const queued = await h.request(open, "/api/copilot-context", { nodeId: node.id });
+    assert.equal(queued.pendingContext.count, 1);
+    request.end("}");
+    const result = await pending;
+    assert.equal(result.status, 409);
+    assert.match(result.error, /foreground context changed/);
+    assert.deepEqual((await h.request(open, "/api/state")).state.pendingContext, queued.pendingContext,
+        "the old Clear must not mutate the replacement session's queue or revision");
+    assert.equal(h.submit(), undefined, "the old session cannot consume replacement context");
+    const delivered = h.submit({ sessionId: "replacement-foreground" }).additionalContext;
+    assert.ok(delivered.includes(nonce));
+    assert.match(delivered, /"state":"Stopped"/);
+    assert.equal(h.submit({ sessionId: "replacement-foreground" }), undefined);
+    assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 0);
+});
+
 test("pending context bounds reject overflow and oversized replacements without dropping queued snapshots", async (t) => {
     let urlCount = 0;
     const h = await harness(t, { cliOverride: (args) => args[0] === "describe" ? ok({

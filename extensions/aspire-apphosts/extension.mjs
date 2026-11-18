@@ -2254,6 +2254,9 @@ async function handleRequest(entry, req, res) {
         return sendJson(res, result.ok ? 202 : result.status ?? 400, result);
     }
     if (url.pathname === "/api/copilot-context/clear") {
+        if (requestContextEpoch !== contextSessionEpoch || requestWorkingDirectory !== entry.workingDirectory) {
+            return sendJson(res, 409, { ok: false, error: "The foreground context changed. Review pending context in the current canvas before clearing." });
+        }
         clearPendingContext(entry);
         return sendJson(res, 200, { ok: true, pendingContext: pendingContextMetadata(entry) });
     }
