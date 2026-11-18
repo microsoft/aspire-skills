@@ -153,11 +153,11 @@ function githubApi(target, originals = new Map([[skillPath, original]])) {
   return { reader, writer, calls, prs, refs, environment, run, advance: () => { branchSha = "9".repeat(40); } };
 }
 
-async function assessment(fixture, github) {
+async function assessment(fixture, github, proposal = modelDraft) {
   const prepared = await prepareAssessment({
     github, inputs: { pr_number: "77" }, now: clock, targetSha: fixture.target.sha, documents: skillDocuments(fixture.root)
   });
-  const responses = [{ status: "inspect", paths: [skillPath] }, modelDraft];
+  const responses = [{ status: "inspect", paths: [skillPath] }, proposal];
   const review = await finishAssessment(prepared, async () => JSON.stringify(responses.shift()));
   return { prepared, review };
 }
@@ -184,11 +184,11 @@ function offlineCommands(command, options) {
   return execute(command, options);
 }
 
-async function validatedFixture(t, runCommand = offlineCommands) {
+async function validatedFixture(t, runCommand = offlineCommands, proposal = modelDraft) {
   const data = fixture(t);
   const api = githubApi(data.target, new Map([...data.repo.files(data.target.sha)].map(([path]) =>
     [path, data.repo.read(data.target.sha, path).toString("utf8")])));
-  const { prepared, review } = await assessment(data, api.reader);
+  const { prepared, review } = await assessment(data, api.reader, proposal);
   const output = join(data.directory, "validation");
   const result = await validateCandidates({
     root: data.root, output, prepared, review, binding, github: api.reader, runCommand
@@ -200,7 +200,7 @@ function publisherFixture(t) {
   const output = scratch(t);
   const target = { repository: binding.repository, branch: "dev", sha };
   const api = githubApi(target);
-  const content = original.replace(modelDraft.edits[0].before, modelDraft.edits[0].after);
+  const content = original.replace(modelDraft.edits[0].before, () => modelDraft.edits[0].after);
   const oldLines = original.trimEnd().split("\n");
   const newLines = content.trimEnd().split("\n");
   const item = {
@@ -247,6 +247,48 @@ test("offline end-to-end contract applies exact docs in an isolated pinned clone
   assert.equal(request.body, item.preview.body);
   assert.equal(request.head, publicationBranch(source));
   assert.ok(data.calls.find(([kind]) => kind === "tree")[1].tree.every(file => file.mode === "100644"));
+});
+
+test("literal dollar sequences survive validated draft, isolated application, catalog mirrors, bundle hashing and publisher preview verification", async t => {
+  const after = [
+    "Proposed terminal guidance.",
+    "Shell PID: $$.",
+    "Literal match marker: $&.",
+    "Literal preceding-document marker: $`.",
+    "Literal following-document marker: $'.",
+    "Shell command: echo $$"
+  ].join("\n");
+  const before = modelDraft.edits[0].before;
+  const offset = original.indexOf(before);
+  const expected = original.slice(0, offset) + after + original.slice(offset + before.length);
+  const proposal = { ...modelDraft, edits: [{ path: skillPath, before, after }] };
+  let applicationChecks = 0;
+  const data = await validatedFixture(t, (command, options) => {
+    if (command[0] === "npm" && command[1] === "run" && command[2] === "catalog") {
+      assert.deepEqual(readFileSync(join(options.cwd, skillPath)), Buffer.from(expected),
+        "Isolated application must preserve replacement Markdown bytes, not expand dollar directives.");
+      applicationChecks++;
+    }
+    return offlineCommands(command, options);
+  }, proposal);
+  assert.equal(applicationChecks, 1);
+  const item = data.publication.items[0];
+  assert.equal(item.status, "validated");
+  assert.equal(item.report.edits[0].after, after);
+  for (const file of item.files.filter(file => file.path.endsWith(".md"))) {
+    assert.deepEqual(Buffer.from(file.content), Buffer.from(expected), file.path);
+    assert.equal(file.digest, digest(Buffer.from(expected)));
+    assert.equal(file.content.split("# Fixture").length - 1, 1, "Do not reinsert the preceding document.");
+    assert.equal(file.content.includes(before), false, "Do not substitute the original match for $&.");
+    for (const sequence of ["$$", "$&", "$`", "$'"]) assert.ok(file.content.includes(sequence));
+  }
+  assert.equal(data.digest, digest(readFileSync(join(data.output, "publication.json"))));
+  const publication = readPublication(join(data.output, "publication.json"), data.digest, binding);
+  await verifyPreviewFiles(data.reader, publication);
+  await publish({ reader: data.reader, writer: data.writer, publication });
+  const tree = data.calls.find(([kind]) => kind === "tree")[1].tree;
+  assert.equal(tree.find(file => file.path === skillPath).content, expected);
+  assert.equal(readFileSync(join(data.root, skillPath), "utf8"), original);
 });
 
 test("actual command failure is persistent and retryable; no pretend eval or publish success", async t => {

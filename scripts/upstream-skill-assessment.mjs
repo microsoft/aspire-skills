@@ -433,6 +433,10 @@ export function validateRouting(value, documents) {
   return value;
 }
 
+export function replaceLiteral(content, before, after) {
+  return content.replace(before, () => after);
+}
+
 export function validateDraft(value, candidate, documents) {
   if (value?.status !== "draft") return terminalOutcome(value);
   keys(value, ["status", "reason", "api", "citations", "edits"]);
@@ -463,7 +467,7 @@ export function validateDraft(value, candidate, documents) {
     const content = documents[edit.path];
     requireValue(edit.before !== edit.after && content.split(edit.before).length === 2,
       "Draft must replace one exact occurrence and make a real change.");
-    requireValue(Buffer.byteLength(content.replace(edit.before, edit.after)) <= limits.documentBytes,
+    requireValue(Buffer.byteLength(replaceLiteral(content, edit.before, edit.after)) <= limits.documentBytes,
       "Proposed skill exceeds the document bound.");
     return edit;
   });

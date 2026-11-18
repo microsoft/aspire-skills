@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { lstatSync, readFileSync } from "node:fs";
-import { immutableSha, safeSkillPath } from "./upstream-skill-assessment.mjs";
+import { immutableSha, replaceLiteral, safeSkillPath } from "./upstream-skill-assessment.mjs";
 import { applyPreviewDiff } from "./upstream-skill-patch.mjs";
 import {
   allowedPublicationPaths, assertFresh, digest, previewFor,
@@ -101,7 +101,7 @@ export async function verifyPreviewFiles(github, publication) {
     for (const edit of item.report.edits) {
       const before = originals.get(edit.path);
       assert.ok(typeof before === "string" && before.split(edit.before).length === 2);
-      assert.equal(patched.get(edit.path), before.replace(edit.before, edit.after), "The approved replacement and preview disagree.");
+      assert.equal(patched.get(edit.path), replaceLiteral(before, edit.before, edit.after), "The approved replacement and preview disagree.");
     }
   }
 }

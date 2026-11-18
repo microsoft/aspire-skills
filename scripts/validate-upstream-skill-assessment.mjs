@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Repository } from "./release-git.mjs";
 import { checkEvalResults } from "./check-eval-results.mjs";
-import { immutableSha, safeSkillPath, skillDocuments, sourceIdentity, validateDraft } from "./upstream-skill-assessment.mjs";
+import { immutableSha, replaceLiteral, safeSkillPath, skillDocuments, sourceIdentity, validateDraft } from "./upstream-skill-assessment.mjs";
 
 export const digest = value => createHash("sha256").update(value).digest("hex");
 export const publicationEnvironment = "upstream-skill-publication";
@@ -172,7 +172,7 @@ export async function validateCandidates({ root, output, prepared, review, bindi
       assert.equal(isolated.sha("HEAD"), review.target.sha);
       const current = skillDocuments(work);
       assert.deepEqual(current, prepared.documents, "The supplied guidance is not the pinned dev checkout.");
-      for (const edit of checked.edits) writeFileSync(join(work, edit.path), current[edit.path].replace(edit.before, edit.after));
+      for (const edit of checked.edits) writeFileSync(join(work, edit.path), replaceLiteral(current[edit.path], edit.before, edit.after));
       const plan = validationPlan(work, checked.edits);
       const scratch = join(work, ".upstream-tmp");
       mkdirSync(scratch);
@@ -220,7 +220,7 @@ export async function validateCandidates({ root, output, prepared, review, bindi
         }
         item.trials = trials;
         for (const edit of checked.edits) {
-          assert.equal(readFileSync(join(work, edit.path), "utf8"), current[edit.path].replace(edit.before, edit.after),
+          assert.equal(readFileSync(join(work, edit.path), "utf8"), replaceLiteral(current[edit.path], edit.before, edit.after),
             "Validation altered the exact proposed Markdown replacement.");
         }
         const changed = isolated.run(["diff", "--name-only", "-z", "--no-ext-diff", review.target.sha]).split("\0").filter(Boolean);

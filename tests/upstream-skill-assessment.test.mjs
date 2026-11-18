@@ -575,6 +575,20 @@ test("drafts preserve provenance but remain unvalidated and cannot alter source-
   assert.throws(() => validateDraft(draft(), item, { ...documents, [skillPath]: "Current terminal guidance.\nCurrent terminal guidance." }));
 });
 
+test("draft byte limits measure literal dollar replacements without collapsing or expanding them", async () => {
+  const item = await candidate();
+  const edit = { path: skillPath, before: "TARGET", after: "$$$$$$$$" };
+  const oversized = "x".repeat(limits.documentBytes - 8) + edit.before + "\n";
+  assert.equal(Buffer.byteLength(oversized), limits.documentBytes - 1);
+  assert.throws(() => validateDraft(draft({ edits: [edit] }), item, { [skillPath]: oversized }),
+    /Proposed skill exceeds the document bound/);
+  const exact = "x".repeat(limits.documentBytes - 9) + edit.before + "\n";
+  assert.equal(Buffer.byteLength(exact) - edit.before.length + edit.after.length, limits.documentBytes);
+  assert.doesNotThrow(() => validateDraft(draft({ edits: [edit] }), item, { [skillPath]: exact }));
+  assert.doesNotThrow(() => validateDraft(draft({ edits: [{ ...edit, after: "$`" }] }), item, { [skillPath]: exact }),
+    "A literal prefix marker must not expand the document and cause a false size rejection.");
+});
+
 test("uncertain semantics, missing tests, fabricated citations, malformed and oversized model output become human triage", async () => {
   const uncertain = { status: "triage", reason: "Release behavior is not established.", questions: ["Which release first contains this API?"] };
   const result = await finishAssessment(await prepare(), async () => JSON.stringify(uncertain));
