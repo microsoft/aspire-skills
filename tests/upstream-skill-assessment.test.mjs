@@ -609,18 +609,30 @@ test("malformed model edit shapes become policy triage and remaining candidates 
     const responses = [
       JSON.stringify({ status: "inspect", paths: [skillPath] }),
       JSON.stringify(draft({ edits })),
-      JSON.stringify({ status: "noop", reason: "The next upstream change is already covered." })
+      JSON.stringify({ status: "inspect", paths: [skillPath] }),
+      JSON.stringify(draft())
     ];
     const result = await finishAssessment(prepared, async () => {
       assert.ok(responses.length, "Unexpected extra model request.");
       return responses.shift();
     });
     assert.deepEqual(result.reports.map(report => report.source.number), [77, 78]);
-    assert.deepEqual(result.reports.map(report => report.status), ["triage", "noop"]);
+    assert.deepEqual(result.reports.map(report => report.status), ["triage", "draft"]);
     assert.equal(result.reports[0].edits, undefined);
-    assert.deepEqual(result.state.entries.map(entry => entry.status), ["triage", "noop"]);
+    assert.deepEqual(result.state.entries.map(entry => entry.status), ["triage"]);
+    assert.equal(result.reports[1].edits[0].path, skillPath);
     assert.equal(responses.length, 0, "The remaining candidate must still be processed.");
   }
+});
+
+test("old preparatory draft state is not completed publication and remains retryable", async () => {
+  const identity = sourceIdentity(pr());
+  const state = { schema: 1, entries: [{ key: identity.key, mergedAt: identity.mergedAt, assessedAt: clock, status: "draft" }] };
+  const prepared = await prepare(api(), {}, state);
+  assert.equal(prepared.sources.length, 1);
+  const result = await finishAssessment(prepared);
+  assert.equal(result.reports[0].status, "blocked");
+  assert.equal(result.state.entries.length, 0);
 });
 
 test("the bounded two-pass agent treats source text as data and emits only draft handoffs", async () => {
@@ -729,7 +741,7 @@ test("runtime initialization and request failures always clean up allocated clie
           return {
             sendAndWait: async () => {
               if (phase === "request") throw failure;
-              return { data: { content: '{"status":"noop","reason":"Already covered."}' } };
+              return { data: { content: '{"status":"noop","reason":"hosted tool-free smoke"}' } };
             },
             disconnect: async () => { calls.push("disconnect"); }
           };
@@ -760,7 +772,9 @@ test("successful runtime assessment persists results only after cleanup complete
   }, async () => ({
     start: async () => {},
     createSession: async () => ({
-      sendAndWait: async () => ({ data: { content: '{"status":"noop","reason":"Already covered."}' } }),
+      sendAndWait: async ({ prompt }) => ({ data: { content: JSON.stringify({
+        status: "noop", reason: prompt.startsWith("Hosted setup") ? "hosted tool-free smoke" : "Already covered."
+      }) } }),
       disconnect: async () => {}
     }),
     stop: async () => {
@@ -771,6 +785,7 @@ test("successful runtime assessment persists results only after cleanup complete
   }));
   assert.equal(stopped, true);
   assert.equal(result.runtime, "started");
+  assert.equal(result.smoke, "passed");
   assert.equal(readJson(join(directory, "state.json")).entries[0].status, "noop");
 });
 
@@ -779,7 +794,7 @@ test("disabled runtime produces persistent blocked artifacts, without changing a
   const prepared = await prepare();
   writeFileSync(join(directory, "evidence.json"), JSON.stringify(prepared));
   const result = await run(directory, {}, async () => assert.fail("Disabled assessment must not initialize a runtime."));
-  assert.equal(result.scope, "preparatory");
+  assert.equal(result.scope, "assessment");
   assert.equal(result.runtime, "disabled");
   assert.equal(result.reports[0].status, "blocked");
   assert.deepEqual(readJson(join(directory, "state.json")), emptyState());
@@ -799,6 +814,30 @@ test("an enabled runtime without a configured model stays blocked and retryable"
   assert.equal(result.runtime, "disabled");
   assert.equal(result.reports[0].status, "blocked");
   assert.equal(result.state.entries.length, 0);
+});
+
+test("irrelevant or duplicate-only batches make no model calls unless hosted smoke is explicitly requested", async t => {
+  const directory = scratch(t);
+  const prepared = await prepare(api({ paths: ["docs/other.md", "docs/unrelated.md"] }));
+  writeFileSync(join(directory, "evidence.json"), JSON.stringify(prepared));
+  const result = await run(directory, { UPSTREAM_SKILL_AGENT_ENABLED: "true", UPSTREAM_SKILL_MODEL: "test-model" },
+    async () => assert.fail("A no-op batch must not start a runtime or make a model request."));
+  assert.equal(result.runtime, "not-needed");
+  assert.equal(result.smoke, "not-run");
+  let requests = 0;
+  await run(directory, {
+    UPSTREAM_SKILL_AGENT_ENABLED: "true", UPSTREAM_SKILL_MODEL: "test-model", UPSTREAM_SKILL_SMOKE_ONLY: "true"
+  }, async () => ({
+    start: async () => {}, stop: async () => [],
+    createSession: async () => ({
+      sendAndWait: async () => {
+        requests++;
+        return { data: { content: '{"status":"noop","reason":"hosted tool-free smoke"}' } };
+      },
+      disconnect: async () => {}
+    })
+  }));
+  assert.equal(requests, 1);
 });
 
 test("skill context uses only tracked regular canonical markdown; assets, evals and mirrors are excluded", t => {
@@ -835,7 +874,7 @@ test("JSON artifacts reject symlinks before reading their targets", { skip: proc
   assert.throws(() => readJson(join(directory, "link.json")));
 });
 
-test("workflow is independent of reverse telemetry, opt-in, read-only and incapable of publication", () => {
+test("assessment stays read-only and independent; publication has a separate protected writer", () => {
   const text = readFileSync(join(root, ".github", "workflows", "upstream-skill-assessment.yml"), "utf8");
   const workflow = parse(text);
   assert.deepEqual(workflow.on.schedule, [{ cron: "23 */6 * * *" }]);
@@ -872,7 +911,14 @@ test("workflow is independent of reverse telemetry, opt-in, read-only and incapa
   assert.ok(steps.some(step => step.run === "node --test tests/upstream-sdk-contract.test.mjs" &&
     step.env.UPSTREAM_SKILL_SDK_ROOT === ".test-artifacts/upstream-agent-tools"));
   assert.match(text, /run.created_at/);
-  assert.doesNotMatch(text, /update-aspire|telemetry-workflow|pull_request_target|secrets\.|git push|gh pr create|issues: write|contents: write/);
+  assert.doesNotMatch(JSON.stringify(workflow.jobs.assess), /secrets\.|git push|gh pr create|contents: write/);
+  assert.doesNotMatch(text, /update-aspire|telemetry-workflow|pull_request_target|issues: write/);
+  assert.equal(workflow.jobs.publish.environment.name, "upstream-skill-publication");
+  assert.equal(workflow.jobs.publish.permissions["copilot-requests"], undefined);
+  const writer = workflow.jobs.publish.steps.find(step => step.id === "writer");
+  assert.equal(writer.with.repositories, "aspire-skills");
+  assert.equal(writer.with["permission-contents"], "write");
+  assert.equal(writer.with["permission-pull-requests"], "write");
   assert.equal(destination.branch, "dev");
   assert.equal(destination.repository, "microsoft/aspire-skills");
   const adapter = readFileSync(join(root, "scripts", "run-upstream-skill-assessment.mjs"), "utf8");

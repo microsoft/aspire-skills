@@ -331,12 +331,12 @@ export function skillDocuments(directory) {
 }
 
 export async function prepareAssessment({
-  github, inputs = {}, now = new Date(), stateNow = now, ledger, targetSha, documents
+  github, inputs = {}, now = new Date(), stateNow = now, ledger, targetSha, documents, findPublished
 }) {
   immutableSha(targetSha);
   const window = assessmentWindow(inputs, now);
   const state = validateState(ledger ?? { schema: 1, entries: [] }, stateNow);
-  const seen = new Set(state.entries.map(entry => entry.key));
+  const seen = new Set(state.entries.filter(entry => entry.status !== "draft").map(entry => entry.key));
   const sources = [];
   const reports = [];
   const replay = inputs.reassess === true || inputs.reassess === "true";
@@ -370,6 +370,15 @@ export async function prepareAssessment({
   } else {
     for (let index = sources.length - 1; index >= 0; index--) {
       const candidate = sources[index];
+      const published = findPublished ? await findPublished(candidate.source) : null;
+      if (published) {
+        reports.push({
+          source: candidate.source, status: "duplicate",
+          reason: "An open or closed source proposal already exists.", proposal: published
+        });
+        sources.splice(index, 1);
+        continue;
+      }
       try {
         candidate.evidence = await hydrateEvidence(github, candidate.source, candidate.evidence);
       } catch (error) {
@@ -379,7 +388,7 @@ export async function prepareAssessment({
     }
   }
   return {
-    schema: 1, scope: "preparatory", assessedAt: new Date(stateNow).toISOString(),
+    schema: 1, scope: "assessment", assessedAt: new Date(stateNow).toISOString(),
     window, target: { ...destination, sha: targetSha },
     sources, documents, reports, state
   };
@@ -511,16 +520,17 @@ export async function finishAssessment(prepared, ask) {
     }
     reports.push({ source: candidate.source, ...result });
   }
-  const entries = new Map(prepared.state.entries.map(entry => [entry.key, entry]));
+  const entries = new Map(prepared.state.entries.filter(entry => entry.status !== "draft").map(entry => [entry.key, entry]));
   for (const report of reports) {
-    if (["noop", "triage", "draft"].includes(report.status)) entries.set(report.source.key, {
+    // A proposed draft is not completed work: validation, approval or publication can still fail.
+    if (["noop", "triage"].includes(report.status)) entries.set(report.source.key, {
       key: report.source.key, mergedAt: report.source.mergedAt, status: report.status, assessedAt: prepared.assessedAt
     });
   }
   requireValue(entries.size <= limits.stateEntries, "State capacity exceeded; narrow the polling history.");
   return {
-    schema: 1, scope: "preparatory", target: prepared.target, window: prepared.window,
+    schema: 1, scope: "assessment", assessedAt: prepared.assessedAt, target: prepared.target, window: prepared.window,
     reports, state: { schema: 1, entries: [...entries.values()] },
-    publication: "disabled: maintainers must validate actual patches and preview a draft PR before publishing"
+    publication: "pending isolated validation and approval of the exact draft PR preview"
   };
 }

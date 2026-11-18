@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { finishAssessment, readJson } from "./upstream-skill-assessment.mjs";
+import { finishAssessment, parseResponse, readJson, terminalOutcome } from "./upstream-skill-assessment.mjs";
 
 // Empty-mode defaults and the deny handler are deliberately independent defenses.
 export function readOnlySession(model) {
@@ -49,21 +49,32 @@ async function createRuntimeClient(environment) {
   });
 }
 
+export async function smokeRuntime(client, model) {
+  const result = terminalOutcome(parseResponse(await askWithClient(client, model,
+    'Hosted setup smoke test. Do not call tools. Return exactly {"status":"noop","reason":"hosted tool-free smoke"}.')));
+  if (result.status !== "noop" || result.reason !== "hosted tool-free smoke") {
+    throw new Error("Hosted runtime smoke returned an unexpected response.");
+  }
+}
+
 export async function run(directory, environment = process.env, createClient = createRuntimeClient) {
   const prepared = readJson(join(directory, "evidence.json"));
   let client;
   let result;
   try {
     let ask;
-    let runtime = "disabled";
-    if (environment.UPSTREAM_SKILL_AGENT_ENABLED === "true" && environment.UPSTREAM_SKILL_MODEL) {
+    const configured = environment.UPSTREAM_SKILL_AGENT_ENABLED === "true" && Boolean(environment.UPSTREAM_SKILL_MODEL);
+    let runtime = configured ? "not-needed" : "disabled";
+    if (configured && (prepared.sources.length > 0 || environment.UPSTREAM_SKILL_SMOKE_ONLY === "true")) {
       client = await createClient(environment);
       await client.start();
+      await smokeRuntime(client, environment.UPSTREAM_SKILL_MODEL);
       ask = prompt => askWithClient(client, environment.UPSTREAM_SKILL_MODEL, prompt);
       runtime = "started";
     }
     result = await finishAssessment(prepared, ask);
     result.runtime = runtime;
+    result.smoke = runtime === "started" ? "passed" : "not-run";
   } finally {
     if (client) {
       const errors = await client.stop();
@@ -79,5 +90,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   const result = await run(resolve(".test-artifacts", "upstream-assessment"));
   const counts = {};
   for (const report of result.reports) counts[report.status] = (counts[report.status] ?? 0) + 1;
-  console.log(JSON.stringify({ scope: result.scope, runtime: result.runtime, counts, publication: "disabled" }));
+  console.log(JSON.stringify({ scope: result.scope, runtime: result.runtime, smoke: result.smoke, counts }));
 }

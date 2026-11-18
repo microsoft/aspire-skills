@@ -78,170 +78,176 @@ It creates draft proposals with one isolated build/test attempt. Candidate build
 and test failures are reported in the draft or no-op summary; verifier setup,
 isolation, and security failures block publication.
 
-## Upstream Aspire skills assessment (preparatory)
+## Upstream Aspire skills assessment
 
-Issue #77 has a separate, **upstream-to-skills** workflow:
+Issue #77 uses the separate **upstream-to-skills**
 [`upstream-skill-assessment.yml`](../.github/workflows/upstream-skill-assessment.yml).
-It polls merged PRs in `microsoft/aspire` targeting `main` or `release/*` and
-assesses guidance here, against an immutable snapshot of `aspire-skills` **dev**.
-The telemetry workflow above runs in the **opposite** direction; neither its
-trigger nor its publisher is reused.
+It polls merged `microsoft/aspire` PRs targeting `main` or `release/*`, assesses
+immutable guidance from **dev**, validates grounded documentation replacements,
+and offers **draft PRs to dev** behind an exact-preview approval gate.
+The telemetry workflow above runs in the opposite direction and is not reused.
 
-**Readiness boundary:** this is a draft-scoped preparatory implementation.
-No authenticated, end-to-end hosted agent run has been verified as part of this
-change. It has **no write/publish job**, and does not apply skill patches, open
-PRs/issues, or mark evaluations as passing. Validated JSON shape and exact source
-quotes are provenance checks, not proof of API semantics or passing skill evals.
-The bounded, tool-free agent adapter uses the SDK/runtime versions already used
-by the skill-evaluation stack. Its offline contract test exercises the actual
-pinned SDK's tool-filter normalization and empty-mode defaults without starting
-the runtime or making a model request. This is not a hosted smoke test.
-Maintainers must verify runtime/authentication before treating its output as an
-operational assessment.
-The functional agent prompt is
-[`upstream-skill-assessment.txt`](../.github/prompts/upstream-skill-assessment.txt);
-the workflow is standard YAML, with no new Markdown workflow or design files.
-Deterministic source-path checks only prefilter evidence. When enabled, Copilot
-performs the two-pass routing/semantic assessment; without it, candidates are
-explicitly blocked, not replaced with keyword-derived guidance.
+### Activation, hosted smoke and credentials
 
-### Activation and credentials
+1. Follow the normal reviewed **dev → release branch → main** release flow.
+   The workflow and helpers must reach the repository's **default branch**
+   before schedules or dispatch can activate them. Merging to dev alone does
+   **not** activate anything. Non-default-branch runs are rejected; do not bypass
+   this using `pull_request_target` or an upstream webhook.
+2. Leave `UPSTREAM_SKILL_ASSESSMENT_ENABLED` and `UPSTREAM_SKILL_PUBLISH_ENABLED`
+   unset initially. Configure `UPSTREAM_SKILL_AGENT_ENABLED=true` and
+   `UPSTREAM_SKILL_MODEL` to an organization-enabled Copilot model.
+   Repository Actions policy, Copilot/model access and billing must allow the
+   pinned SDK/runtime and `GITHUB_TOKEN` inference. These are external setup
+   requirements, not assumed capabilities.
+3. Manually dispatch one historical merged source PR with `smoke_only=true`.
+   This executes a real tool-free model request, checks its response, and then
+   assesses the source without applying patches or publishing. Require
+   `runtime: started` and `smoke: passed` in the review artifact. An offline SDK
+   contract test is **not** evidence of successful hosted authentication.
+4. Configure the `upstream-skill-publication` environment **before** enabling
+   publication: required maintainer/team reviewers, prevent self-review,
+   administrator bypass disabled, and selected deployment branches restricted
+   to exactly the default branch (branch rule, not tag rule). The read-only
+   preflight checks these settings through GitHub APIs and fails if absent,
+   unreadable or permissive; it does not create/configure an environment.
+5. The publisher uses the existing `ASPIRE_BOT_APP_ID` and
+   `ASPIRE_BOT_PRIVATE_KEY` secret naming convention. Its GitHub App installation
+   must include **aspire-skills** with contents and pull requests write access.
+   The issued installation token is narrowed to **only aspire-skills** and those
+   two permissions, is obtained only after environment approval, and is revoked
+   by the token action. No upstream write access, general PAT, workflow write
+   permission or model credential is given to the writer. Existing secret names
+   do not prove that the installation has the required access.
+6. Dispatch again without `smoke_only`. Inspect actual validation logs and the
+   exact `preview.txt` title/body/diff. Set `UPSTREAM_SKILL_PUBLISH_ENABLED=true`
+   only when ready for gated draft creation. Approve the artifact-linked
+   environment deployment **only after reviewing that exact run/attempt and
+   publication.json SHA-256**. Disabled/missing gates fail explicitly; candidate
+   drafts remain retryable. After a successful manual run, setting
+   `UPSTREAM_SKILL_ASSESSMENT_ENABLED=true` enables six-hourly polling.
 
-1. Land the workflow, helper scripts and text prompt on the repository's **default branch**.
-   Scheduled workflows only run there; `workflow_dispatch` must also exist there
-   before GitHub exposes it. This workflow additionally rejects non-default-branch
-   runs, so merging to dev alone does **not** activate it or permit a first smoke
-   run. Do not bypass this with `pull_request_target` or an upstream webhook.
-2. Leave `UPSTREAM_SKILL_ASSESSMENT_ENABLED` unset until a maintainer has inspected
-   a manual run. Manual dispatch is allowed independently; setting this repository
-   variable to `true` enables six-hourly polling, with a 48-hour overlapping window.
-3. Without `UPSTREAM_SKILL_AGENT_ENABLED=true` **and** a nonempty
-   `UPSTREAM_SKILL_MODEL` repository variable naming an enabled Copilot model,
-   manual runs only collect evidence and produce **blocked** handoffs. They do
-   not pretend an agent ran or record candidates as completed. After enabling,
-   verify a small manual PR assessment before enabling polling.
-4. The workflow uses `GITHUB_TOKEN` with `contents: read`, `pull-requests: read`,
-   `actions: read` (prior state artifacts), and `copilot-requests: write` (model
-   inference only, as in Skill Eval). Public upstream reads need no upstream
-   webhook, PAT, GitHub App, or cross-repository write access. Repository Actions
-   policy, organization Copilot/model access and billing must permit this token
-   and pinned runtime installation. These settings are **not assumed configured**.
-   Explicitly disabled/unconfigured inference remains blocked. Once enabled and
-   configured, runtime/auth/model setup errors fail the run without writing a
-   completed ledger, so a later run can retry. No existing telemetry App secrets
-   are used, and failures never permit publication.
+The assessment/validation job has `contents: read`, `pull-requests: read`,
+`actions: read` (state artifacts), and `copilot-requests: write` (inference).
+Upstream public evidence needs no webhook or cross-repository credential.
+The writer runs on a **fresh runner**, checks out only the trusted workflow SHA,
+downloads only the current run/attempt artifact, and verifies its digest,
+repository, workflow, event, branch, run, attempt and SHA before obtaining a
+writer token. A pure-data patch applier verifies the exact preview against
+commit-pinned base blobs and every outbound file; a digest alone cannot hide
+different content behind a reviewed diff. The writer repeats origin/gate,
+preview and stale-source/base checks before writes.
+It never executes downloaded files, generated commands, source code, tests,
+package installers or models with that credential. Git Data APIs create only
+the approved Markdown/catalog blobs, a commit, a new branch and a draft PR.
+There is no merge, ready-for-review, release/tag or force-push operation.
 
-Runtime and activation contracts:
-[pinned Copilot SDK](https://github.com/github/copilot-sdk/blob/v1.0.11/nodejs/README.md),
-[Actions events/default-branch rules](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows),
-and [GITHUB_TOKEN permissions](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token).
+Runtime/API contracts:
+[Copilot SDK](https://github.com/github/copilot-sdk/blob/v1.0.11/nodejs/README.md),
+[default-branch event rules](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows),
+[environment protection](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments),
+and [workflow permissions](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token).
 
-The agent receives only bounded snapshots, with no tools, MCP servers, loaded
-skills/config discovery, shared session store, logged-in-user fallback, or
-permission approvals. Upstream code is **read**, never checked out or executed.
-PR text/diffs and source files are untrusted evidence, not instructions. Model
-responses cannot name arbitrary paths, execute commands, or grant permissions.
-Only fixed summary counters appear in the run summary; raw model/source text is
-kept in the review artifact.
+### Evidence, bounds and triage
 
-### Bounds, replay and human handoff
-
-- Manual input selects **one merged upstream PR**, including historical PRs, or
-  both `since` and `until` UTC timestamps (`YYYY-MM-DDTHH:mm:ssZ`), spanning at most
-  seven days and ending in the past. With neither, it uses 48 hours. The run's
-  original creation time freezes the default window on reruns.
-- One complete search response is limited to 100 merged PRs. Incomplete/truncated
-  search fails closed with instructions to narrow the window. Search hits are
-  re-read and checked for repository, merged state, branch, timestamp and SHA.
-  At most five relevant PRs enter the agent; larger batches are blocked for manual
-  scoping, not presented as an exhaustive assessment.
+- Manual input selects one merged upstream PR, or both `since`/`until` UTC
+  timestamps (`YYYY-MM-DDTHH:mm:ssZ`) spanning at most seven past days. Otherwise
+  the window is 48 hours, frozen at the original run creation time on reruns.
+  At most 100 search hits and five relevant candidates are accepted; incomplete
+  discovery or larger batches fail closed and require narrower manual scoping.
 - Only `src/Aspire.Cli/`, `src/Aspire.Hosting*/` and `src/Aspire.AppHost.Sdk/`
-  source changes are candidates. Other merges are recorded as no-ops without
-  model calls or PR noise. This intentionally conservative path classifier can
-  miss changes elsewhere: maintainers must review its coverage as Aspire evolves.
-  Each PR is limited to 100 changed files, six relevant source files, four changed
-  test files, 48 KiB per full source/test file, 256 KiB combined full evidence,
-  128 KiB combined patches and a 16 KiB PR body. Unsupported, removed, renamed,
-  binary, missing or oversized evidence goes to human triage, never truncated
-  semantic inference. Rename detection checks both current and previous paths,
-  including moves out of monitored directories or to unmonitored extensions.
-- Evidence records canonical source PR links, reported base/head SHAs, immutable
-  merge SHA and merge time, target main/release branch, full source/test snapshots,
-  blob SHAs, content digests and commit-pinned source links. `main` is unreleased;
-  a release branch **does not establish a published version**. Release evidence
-  explicitly leaves shipping release unknown. Advice needing an unknown release
-  or uncertain behavior must become a triage question.
-- Routing sees the canonical Markdown inventory and skill entrypoints, then
-  selects at most six documents for assessment. Draft suggestions are limited to
-  three exact replacements in existing selected skill Markdown files. Each
-  requires exact quotes from **both full source and changed tests** at the merge
-  SHA. Diff-only claims, fabricated citations, stale original text, unsafe paths,
-  unknown output types and malformed/oversized model responses cannot become drafts.
+  source changes are candidates. Other merges become no-ops without model calls.
+  This conservative classifier can miss changes elsewhere; maintainers must
+  review its coverage. Each source PR is limited to 100 changed files, six source
+  files, four tests, 48 KiB per full file, 256 KiB combined full evidence,
+  128 KiB patches and a 16 KiB PR body. Removed/renamed, binary, incomplete or
+  oversized evidence becomes human triage, never truncated semantic inference.
+  Rename checks include both paths, including moves out of monitored directories.
+- Evidence includes canonical PR links, base/head/merge SHAs, target branch,
+  merge time, full implementation/test snapshots, blob SHAs, digests and
+  commit-pinned citations. `main` is unreleased; a release branch is **not**
+  proof of a published version. Shipping version stays explicitly unknown.
+- The tool-free, two-pass assessor sees bounded evidence and canonical Markdown;
+  it has no tools, MCP, config/skill discovery, shared session store,
+  logged-in-user fallback or permission approvals. Source text is untrusted
+  evidence, not instructions, and is never executed. It selects at most six
+  documents and proposes at most three exact replacements in existing selected
+  Markdown files. Both immutable implementation **and changed tests** must
+  contain the quoted evidence. Missing semantics or required version knowledge
+  produce maintainer questions, not invented guidance.
 - `upstream-assessment-review` contains `evidence.json` and `review.json` with
-  `noop`, `triage`, `blocked`, `duplicate`, or **unvalidated draft** outcomes.
-  Uncertain items include maintainer questions, not invented guidance or automatic
-  issues. Maintainers must inspect these artifacts; no notification service is
-  configured. Configuration/authentication/session/transport failures, missing
-  runtime responses and unexpected implementation errors **fail the run** without
-  writing new review/completed-state artifacts. Allocated clients are stopped
-  in a finally block, including partial-start failures; artifacts are written
-  only after cleanup succeeds. Missing enabled/model variables remain explicit
-  blocked handoffs. Only expected evidence/response policy
-  violations and malformed model-response JSON become semantic triage.
-  Structurally identified GitHub HTTP read failures produce sanitized, retryable
-  blocked handoffs, including auth/rate-limit/service failures; unknown read errors
-  propagate. Remote error bodies, request credentials and opaque error messages
-  are never copied into review artifacts.
-- `upstream-assessment-state` retains completed source identities (repository,
-  PR, merge SHA and target branch) via a hash for fourteen days after assessment, capped
-  at 2,000 entries. State from the newest eligible successful default-branch run
-  is merged with any prior-attempt state, taking the latest assessment timestamp
-  for each identity. An older blocked rerun cannot erase newer completed work.
-  Runs are serialized. Main and release backports remain distinct.
-  Explicit `reassess=true` revisits recorded
-  triage/no-op/draft outcomes. Explicitly blocked configuration/budget/HTTP
-  outcomes and failed runtime runs remain retryable.
-  Artifacts expire after 90 days; missing/expired state can repeat **analysis**,
-  but cannot duplicate PRs because there is no publisher. Poll delays, outages
-  beyond 48 hours, or older historical replays require a manual window/PR.
+  no-op, triage, blocked, duplicate or unvalidated-draft outcomes. Read these
+  artifacts for triage; there is no automatic issue/comment/notification.
+  Runtime/auth/session/transport and unexpected implementation failures fail
+  without completing sources. Expected evidence/model-response policy failures
+  become triage. Recognized GitHub HTTP read failures are sanitized, blocked and
+  retryable; unknown errors propagate. Clients are cleaned up before review/state
+  persistence.
 
-### Turning a handoff into a reviewed change
+### Isolated validation and exact publication preview
 
-1. Inspect the complete source PR, commit-pinned implementation/tests, target
-   branch/release evidence and proposed replacements. Resolve triage questions
-   with an Aspire maintainer or authoritative documentation; do not infer missing
-   semantics or a shipping version from PR prose alone.
-2. On a contributor branch from the recorded dev base (or reassess if stale),
-   apply only confirmed guidance updates. Add relevant regression tests/evals,
-   regenerate catalogs (`npm run catalog`), and run the applicable existing Node
-   tests, skill lint, catalog checks and affected-skill agent-host evals described
-   above and in CONTRIBUTING.md. Record exact commands/results; suggestions in an
-   artifact are **not** executed validation.
-3. Preview the **exact outbound title/body/diff** with the maintainer before any
-   publication. The eventual **draft PR to dev** must link source PR(s), source
-   merge SHA(s), branch/release evidence, affected API/CLI command and compatibility
-   range (or explicitly unknown), rationale, and actual test/eval results. Search
-   existing open **and closed** PRs for the source identity before creating one;
-   update the existing handoff rather than duplicating it.
-4. Require maintainer review and normal repository checks before merging. Existing
-   release flow, not this assessor, publishes skill updates. Automated patch
-   application/draft-PR creation is deliberately deferred until a separate,
-   validated, least-privilege writer with durable open/closed-PR deduplication
-   and an approved outbound preview is implemented and verified.
+Each proposed source change gets its own fresh local clone at the recorded dev
+SHA. The validator rechecks the canonical source and current dev, validates the
+selected tracked regular Markdown files, and applies only exact replacements.
+It runs these existing checks, stopping on nonzero results:
 
-Local deterministic checks (no model credentials or upstream writes):
+- `npm ci --ignore-scripts --no-audit --no-fund`;
+- `npm run catalog`, then an isolated local commit of only skills/catalogs;
+- `npm test`, `vally lint skills`, affected root/nested eval-spec lint;
+- `npm run catalog:check` against the **new candidate commit**, not old dev;
+- affected-skill `vally eval --require-pass --runs 1 --max-retries 2`,
+  all root/nested specs, `--tag priority=p0,p1 --workers 1`;
+- `node scripts/check-eval-results.mjs` for every expected affected skill, plus
+  independent nonempty spec coverage and passing-grade checks.
+
+Missing checks, missing/empty evals, unavailable models, failed grades, stale
+sources/base, modified candidate code or out-of-scope generated files block
+publication. The final tracked candidate must be unchanged after validation.
+Clones are removed even on failure. Only canonical edited Markdown, matching V1
+and V2 mirrors and their catalog indexes may be included in the publication.
+
+`upstream-publication-<run>-<attempt>` retains actual command argv/exit statuses
+and logs, `publication.json`, and `preview.txt` for 90 days. The preview contains
+the **exact PR title, body and complete diff**, including catalog changes.
+The body records source PR/SHA/branch/release scope, affected API/CLI command,
+rationale, exact citations and actual validation/eval results. The assessment
+summary publishes only fixed labels, counters, artifact URL and SHA-256; raw
+model/source text is kept in artifacts. A failed gate does not erase the preview.
+Maintainers must review normal PR checks before merge; only the existing release
+flow publishes skill updates.
+
+### Durable idempotency and retries
+
+Source identity hashes repository, source PR, merge SHA and target branch, so
+main and release backports remain distinct. Before analysis and before PR
+creation, the workflow looks for **open and closed** destination PRs by a stable
+source branch and a source-identity body marker. Truncated/incomplete search fails
+closed. Closed/merged proposals are not reopened or duplicated, and existing
+maintainer work is never silently overwritten. A branch created before a failed
+PR request can be reused only when its base and tree still match the approved
+preview; otherwise maintainers must reconcile it. There are no force pushes.
+After a partial hosted failure, use **Re-run all jobs**: failed-job-only reruns
+cannot substitute a previous attempt's artifact for the current attempt's exact
+preview and approval. A new approved attempt still reuses matching orphan branches
+or recognizes an existing PR.
+
+The fourteen-day, 2,000-entry state artifact is only an analysis optimization for
+completed no-op/triage outcomes, merged with newer successful-run and prior-attempt
+state. Drafts (including old preparatory draft entries), blocked checks and failed
+publication are **not completed** by that ledger. Expired artifacts may repeat
+analysis but cannot bypass durable PR deduplication. `reassess=true` revisits
+triage/no-op results, not existing PRs. Runs are serialized. Poll gaps beyond
+48 hours require a manual historical PR/window.
+
+Local deterministic checks:
 
 ```powershell
-node --test tests/upstream-skill-assessment.test.mjs
+node --test tests/upstream-skill-assessment.test.mjs tests/upstream-skill-publication.test.mjs tests/upstream-sdk-contract.test.mjs
 ```
 
-After installing the opt-in pinned runtime, its offline SDK contract check can
-also run locally (the agent workflow requires this check before model invocation):
-
-```powershell
-$env:UPSTREAM_SKILL_SDK_ROOT = ".test-artifacts\upstream-agent-tools"
-node --test tests\upstream-sdk-contract.test.mjs
-```
-
-The normal test run explicitly skips this optional SDK check when that runtime
-is absent; setting `UPSTREAM_SKILL_SDK_ROOT` makes a missing/wrong SDK fail.
+The publication tests really clone/apply, run Node tests, regenerate and check
+committed catalogs; model responses/eval records and outbound GitHub writes are
+explicit **offline contract fixtures**, not hosted/model evidence. The SDK
+contract test exercises the actual pinned SDK when installed (set
+`UPSTREAM_SKILL_SDK_ROOT=.test-artifacts\upstream-agent-tools` to require it).
+A hosted smoke and approved live draft still require the external setup above.
