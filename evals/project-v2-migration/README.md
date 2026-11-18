@@ -1,7 +1,7 @@
 # Project v2 migration evaluations
 
 These fixtures are **legacy inputs**, not hand-written successful agent outputs.
-The migration spec loads all eight sibling skills and contains 20 read-only cases
+The migration spec loads all eight sibling skills and contains 21 read-only cases
 and seven actual-edit cases.
 
 ## Source and approval gates
@@ -65,7 +65,7 @@ The separate `clientpublish` Dockerfile annotation remains unchanged.
 | Assessment/routing | No implicit edits, upgrades, or missing-capability workarounds; ordinary wiring routes to `aspireify` |
 | Fresh polyglot bootstrap | Normal generated-state absence; bounded unchanged-AppHost restore approval; separately approved pinned disposable add/restore probe; return to exact migration-edit approval; honest upstream restore-failure reporting |
 
-The five bootstrap cases are offline decision/command-planning stimuli with
+The six bootstrap cases are offline decision/command-planning stimuli with
 empty-diff and no-command trace guards. Reported restore/probe results are inputs,
 not executed installation evidence. These cases do not qualify a real Aspire
 restore or reproduce the upstream SourceLink SHA-256 failure.
@@ -73,6 +73,9 @@ Restore-command grading accepts `.\apphost.mts` and `./apphost.mts` as
 shell-equivalent paths to the same selected AppHost from its directory. This does
 not relax the once-only restore, unchanged inputs, conditional capability handoff,
 separate approvals, empty-diff, no-execution or all-graders-pass requirements.
+Paired restore plans explicitly permit read-only capability inspection after
+success or expressly forbid it and require inspection to remain pending; neither
+case executes the plan.
 
 The generated TypeScript third argument is optional, not nullable.
 `{ launchProfileName: null }` is valid and selects the default profile; literal

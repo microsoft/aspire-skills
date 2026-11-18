@@ -215,16 +215,56 @@ test("restore scope grading accepts equivalent shell paths without relaxing beha
   assert.match(grader.config.prompt, /shell-appropriate/);
   assert.match(grader.config.prompt, /equivalent paths to the same selected AppHost/);
   assert.match(grader.config.prompt, /once-approved restore/);
-  assert.match(grader.config.prompt, /read-only\s+capability inspection or reporting the actual failure/);
-  assert.match(grader.config.prompt, /separate\s+approval required for a probe, migration edits and runtime\/publish/);
+  assert.match(grader.config.prompt, /both conditional outcomes/);
+  assert.match(grader.config.prompt, /report the actual failure and stop without retrying/);
+  assert.match(grader.config.prompt, /read-only inspection of the resolved integration graph and generated API/);
+  assert.match(grader.config.prompt, /separately approved disposable probe, not an in-place package addition/);
+  assert.match(grader.config.prompt, /migration edits and runtime\/publish also require separate approval/);
   assert.match(stimulus.rubric[1], /separately approved disposable probing, not an in-place package addition/);
   assert.match(stimulus.prompt, /do not execute it here/);
 });
 
+test("paired restore plans require inspection only with explicit permission", () => {
+  const spec = parse(readFileSync(new URL("../skills/aspire-project-v2-migration/evals/eval.yaml", import.meta.url), "utf8"));
+  const inspection = spec.stimuli.find(item => item.name === "project-v2-polyglot-restore-scope");
+  const restoreOnly = spec.stimuli.find(item => item.name === "project-v2-polyglot-restore-only");
+  assert.ok(inspection);
+  assert.ok(restoreOnly);
+  assert.equal(spec.scoring.threshold, 1);
+  assert.deepEqual(inspection.environment, restoreOnly.environment);
+  assert.match(inspection.prompt, /plus read-only capability inspection of\s+its resolved integration graph and generated API if that restore succeeds/);
+  assert.match(inspection.prompt, /both conditional outcomes and the capability handback/);
+  assert.match(restoreOnly.prompt, /expressly forbid post-restore\s+capability inspection/);
+  assert.match(restoreOnly.prompt, /even if restore succeeds, stop before inspecting/);
+  assert.match(restoreOnly.prompt, /Leave that inspection\s+pending until I separately approve it/);
+  assert.match(restoreOnly.prompt, /not generated bindings or resolved metadata/);
+  for (const stimulus of [inspection, restoreOnly]) {
+    assert.equal(stimulus.tags.priority, "p0");
+    assert.ok(stimulus.rubric.every(criterion => typeof criterion === "string" && criterion.length > 0));
+    assert.ok(stimulus.graders.some(grader => grader.type === "diff-empty"));
+    assert.ok(stimulus.graders.some(grader => grader.type === "tool-calls"));
+    const grader = stimulus.graders.find(item => item.type === "prompt");
+    assert.equal(grader.config.scoring, "binary");
+    for (const path of [".\\apphost.mts", "./apphost.mts"]) {
+      assert.ok(stimulus.rubric[0].includes(path));
+      assert.ok(grader.config.prompt.includes(path));
+    }
+    assert.match(grader.config.prompt, /not an executed restore or inspection/);
+  }
+  const successGrader = inspection.graders.find(item => item.type === "prompt");
+  assert.match(successGrader.config.prompt, /Stopping before that authorized inspection on success is incomplete/);
+  assert.match(successGrader.config.prompt, /report capability evidence\/status/);
+  const stopGrader = restoreOnly.graders.find(item => item.type === "prompt");
+  assert.match(stopGrader.config.prompt, /either success or failure/);
+  assert.match(stopGrader.config.prompt, /leave capability inspection pending for separate approval/);
+  assert.match(stopGrader.config.prompt, /must not plan or perform resolved integration graph or generated API inspection/);
+});
+
 test("bootstrap evals guard every approval phase against edits and command execution", () => {
   const spec = parse(readFileSync(new URL("../skills/aspire-project-v2-migration/evals/eval.yaml", import.meta.url), "utf8"));
-  const phases = ["fresh", "restore-scope", "missing-integration", "resume", "failure"];
+  const phases = ["fresh", "restore-scope", "restore-only", "missing-integration", "resume", "failure"];
   const stimuli = spec.stimuli.filter(stimulus => stimulus.tags?.area === "capability-bootstrap");
+  const byPhase = Object.fromEntries(stimuli.map(stimulus => [stimulus.tags.phase, stimulus]));
   assert.deepEqual(stimuli.map(stimulus => stimulus.tags.phase), phases);
   for (const stimulus of stimuli) {
     assert.equal(stimulus.tags.priority, "p0");
@@ -253,15 +293,17 @@ test("bootstrap evals guard every approval phase against edits and command execu
       assert.ok(!disallowed(name), `${stimulus.name} must permit ${name}`);
     }
   }
-  assert.match(stimuli[1].prompt, /offline command-planning exercise/);
-  assert.match(stimuli[2].prompt, /not approved adding integrations or making migration edits/);
-  assert.match(stimuli[3].prompt, /not approved any application edits or runtime\/publish validation/);
-  assert.match(stimuli[4].prompt, /exited 6/);
+  for (const phase of ["restore-scope", "restore-only"]) {
+    assert.match(byPhase[phase].prompt, /offline command-planning exercise/);
+  }
+  assert.match(byPhase["missing-integration"].prompt, /not approved adding integrations or making migration edits/);
+  assert.match(byPhase.resume.prompt, /not approved any application edits or runtime\/publish validation/);
+  assert.match(byPhase.failure.prompt, /exited 6/);
   const config = JSON.parse(readFileSync(join(fixturesRoot, "runnable-csharp/Migration.TypeScriptAppHost/aspire.config.json"), "utf8"));
   assert.equal(config.sdk.version, config.packages["Aspire.Hosting.AppHost"]);
   assert.equal(config.packages["Aspire.Hosting.Dotnet"], undefined);
   assert.ok(!existsSync(join(fixturesRoot, "runnable-csharp/Migration.TypeScriptAppHost/.aspire/modules")));
-  assert.ok(!stimuli[0].environment.files.some(file => file.src.endsWith("capability-evidence.json")));
+  assert.ok(!byPhase.fresh.environment.files.some(file => file.src.endsWith("capability-evidence.json")));
 });
 
 test("gateway image decisions have read-only controls and a separately approved edit case", () => {
