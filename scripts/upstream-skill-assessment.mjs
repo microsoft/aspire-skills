@@ -443,10 +443,11 @@ export function validateDraft(value, candidate, documents) {
     return { ...citation, url: snapshot.url, commit: snapshot.commit, blob: snapshot.blob, digest: snapshot.digest };
   });
   requireValue(kinds.has("source") && kinds.has("test"), "Authoritative source AND tests are required for draft guidance.");
-  requireValue(Array.isArray(value.edits) && value.edits.length > 0 && value.edits.length <= limits.edits &&
-    new Set(value.edits.map(edit => edit.path)).size === value.edits.length, "Invalid draft edit count.");
+  requireValue(Array.isArray(value.edits) && value.edits.length > 0 && value.edits.length <= limits.edits,
+    "Invalid draft edit count.");
+  for (const edit of value.edits) keys(edit, ["path", "before", "after"]);
+  requireValue(new Set(value.edits.map(edit => edit.path)).size === value.edits.length, "Duplicate draft edit paths.");
   const edits = value.edits.map(edit => {
-    keys(edit, ["path", "before", "after"]);
     requireValue(safeSkillPath(edit.path) && Object.hasOwn(documents, edit.path), "Unsafe or unselected skill path.");
     boundedText(edit.before, limits.documentBytes, "original guidance");
     boundedText(edit.after, limits.documentBytes, "proposed guidance");

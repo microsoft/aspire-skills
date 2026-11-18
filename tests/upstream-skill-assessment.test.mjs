@@ -603,6 +603,26 @@ test("uncertain semantics, missing tests, fabricated citations, malformed and ov
   assert.equal(failure.reports[0].status, "triage");
 });
 
+test("malformed model edit shapes become policy triage and remaining candidates are still assessed", async () => {
+  for (const edits of [[null], [draft().edits[0], null], [7], [[]], [{}]]) {
+    const prepared = await prepare(api({ pulls: [pr(), pr({ number: 78 })] }));
+    const responses = [
+      JSON.stringify({ status: "inspect", paths: [skillPath] }),
+      JSON.stringify(draft({ edits })),
+      JSON.stringify({ status: "noop", reason: "The next upstream change is already covered." })
+    ];
+    const result = await finishAssessment(prepared, async () => {
+      assert.ok(responses.length, "Unexpected extra model request.");
+      return responses.shift();
+    });
+    assert.deepEqual(result.reports.map(report => report.source.number), [77, 78]);
+    assert.deepEqual(result.reports.map(report => report.status), ["triage", "noop"]);
+    assert.equal(result.reports[0].edits, undefined);
+    assert.deepEqual(result.state.entries.map(entry => entry.status), ["triage", "noop"]);
+    assert.equal(responses.length, 0, "The remaining candidate must still be processed.");
+  }
+});
+
 test("the bounded two-pass agent treats source text as data and emits only draft handoffs", async () => {
   const item = await candidate();
   const prompts = [];
