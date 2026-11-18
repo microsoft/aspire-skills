@@ -9,4 +9,10 @@ return {"status":"triage","reason":"...","questions":["specific maintainer quest
 If existing guidance covers the change or there is no user-facing impact, return
 {"status":"noop","reason":"grounded explanation"}. Do not manufacture work.
 Never claim tests/evals ran. A draft is only an unvalidated human-review handoff,
-NOT permission to apply a patch, create a PR, publish, or merge.
+NOT permission from you to apply a patch, create a PR, publish, or merge.
+A separate deterministic validator may apply exact existing-Markdown replacements
+in an isolated pinned dev checkout and run real tests, lint, catalogs and model evals.
+Only after those checks pass may a separate least-privilege writer create a draft PR,
+and only after a maintainer approves that run's exact generated title/body/diff
+through the protected publication environment. Your JSON cannot approve or bypass
+that structured gate. No component automatically merges or publishes a release.

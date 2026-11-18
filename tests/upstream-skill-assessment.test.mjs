@@ -659,6 +659,10 @@ test("the functional agent prompt is loaded from the fixed text asset, not a wor
   assert.equal(assessmentInstructions, prompt);
   assert.match(prompt, /Use full immutable source AND test evidence/);
   assert.match(prompt, /impact is uncertain/);
+  assert.match(prompt, /separate deterministic validator/);
+  assert.match(prompt, /exact generated title\/body\/diff/);
+  assert.match(prompt, /cannot approve or bypass/);
+  assert.match(prompt, /No component automatically merges or publishes a release/);
 });
 
 test("the SDK has no tools, config discovery, skills, shared store, or permission escalation", async () => {

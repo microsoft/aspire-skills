@@ -251,3 +251,9 @@ explicit **offline contract fixtures**, not hosted/model evidence. The SDK
 contract test exercises the actual pinned SDK when installed (set
 `UPSTREAM_SKILL_SDK_ROOT=.test-artifacts\upstream-agent-tools` to require it).
 A hosted smoke and approved live draft still require the external setup above.
+Keep the SDK and runtime pins compatible: a newer globally installed CLI can use
+a different RPC protocol and is not necessarily a drop-in replacement. A local
+tool-free smoke with the existing user's login and a public synthetic fixture
+can verify the model/session contract without inspecting or copying tokens, but
+does not verify Actions-token authentication or hosted environment approvals.
+The production adapter intentionally keeps logged-in-user fallback disabled.
