@@ -17,7 +17,7 @@ description: >-
 license: MIT
 metadata:
   author: Microsoft
-  version: "0.0.6"
+  version: "0.0.7"
 ---
 
 # Aspire Project v2 migration
