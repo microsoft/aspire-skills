@@ -5,8 +5,11 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [0.0.7](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.7)
 
 ### Changed
-- AppHosts **Add to chat** now asks you to check the composer attachment instead
-  of treating the host's request acknowledgement as proof of message delivery.
+- AppHosts **Add to chat** now queues bounded, visible, clearable snapshots in
+  memory for the next user message's submit hook instead of relying on the
+  native attachment push acknowledgement. Nothing sends automatically or
+  creates a native composer pill; snapshots are consumed once at the hook
+  boundary and cleared on canvas close or foreground session start.
 
 ## [0.0.6](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.6)
 

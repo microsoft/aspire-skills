@@ -78,6 +78,15 @@
             <button class="button button-secondary button-small" id="status-action" type="button">Try again</button>
         </div>
 
+        <section class="pending-context" id="pending-context" aria-label="Pending selected context" hidden>
+            <div class="pending-context-copy">
+                <p id="pending-context-summary" role="status" aria-live="polite"></p>
+                <ul id="pending-context-items" aria-label="Selected snapshots"></ul>
+                <p class="pending-context-note">Used once by the next message's submit hook. Nothing is sent automatically.</p>
+            </div>
+            <button class="button button-secondary button-small" id="pending-context-clear" type="button">Clear pending context</button>
+        </section>
+
         <main class="canvas-surface">
             <section class="loading-tree" id="loading-tree" aria-label="Loading AppHosts">
                 <div class="skeleton skeleton-host"></div>

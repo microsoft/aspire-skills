@@ -101,9 +101,19 @@ bounded request bodies.
   structured logs, traces, and metrics.
 - Resources that explicitly advertise terminal support can open an attached
   terminal canvas.
-- **Add to chat** requests a sanitized context attachment from the Copilot host;
-  check for its attachment in the composer before writing and sending the question.
-  The SDK acknowledges the request, not end-to-end message delivery.
+- **Add to chat** captures a sanitized snapshot in memory. A visible **Pending
+  selected context** area lists the snapshots; **Clear pending context** cancels
+  them. Merely selecting an item never queues context. Nothing is sent
+  automatically, and no native composer attachment pill is created.
+  The next nonempty user message in the same foreground session consumes these
+  snapshots once through the supported `onUserPromptSubmitted.additionalContext`
+  hook, framed as untrusted data. Consumption means handoff to that runtime hook,
+  not proof of model delivery: if another hook blocks the turn, re-add the context.
+  Repeated clicks update the snapshot for that item. Limits are 16 snapshots,
+  16 KiB per snapshot, and 64 KiB total across open AppHosts canvases; rejected
+  additions never discard existing snapshots. Only queue metadata reaches the UI.
+  Closing the owning canvas or starting a foreground session clears its pending
+  context; nothing is persisted to disk. Subagent hooks cannot consume it.
 - AppHost-defined command forms with validation and command-result feedback.
 - Provider-owned dynamic command metadata remains authoritative through
   validation and execution. Loads for one command are serialized and stale

@@ -347,7 +347,34 @@ function laterTimestamp(current, incoming) {
         : incoming;
 }
 
+let pendingContextState = { revision: -1, count: 0, items: [] };
+
+function acceptPendingContext(pending) {
+    if (!Number.isInteger(pending?.revision) || pending.revision <= pendingContextState.revision) return;
+    pendingContextState = pending;
+    const region = document.getElementById("pending-context");
+    const hadFocus = region.contains(document.activeElement);
+    region.hidden = pending.count === 0;
+    document.getElementById("pending-context-summary").textContent =
+        `${pending.count} selected snapshot${pending.count === 1 ? "" : "s"} pending for your next message`;
+    document.getElementById("pending-context-items").replaceChildren(
+        ...pending.items.map((item) => element("li", { text: item.label, dataset: { pendingId: item.id } })),
+    );
+    if (region.hidden && hadFocus) els.searchInput.focus();
+}
+
+document.getElementById("pending-context-clear").addEventListener("click", async () => {
+    try {
+        const result = await api("/api/copilot-context/clear", { method: "POST", body: {} });
+        if (result.ok) acceptPendingContext(result.pendingContext);
+        else showToast(result.error, true);
+    } catch (error) {
+        showToast(error.message, true);
+    }
+});
+
 function acceptState(state) {
+    acceptPendingContext(state?.pendingContext);
     if (!Number.isInteger(state?.revision) || state.revision < 0
         || state.revision < (modelState?.revision ?? -1)) {
         return false;
@@ -2107,9 +2134,10 @@ async function executeNodeAction(action, node) {
     if (action === "ask") {
         try {
             const result = await api("/api/copilot-context", { method: "POST", body: { nodeId: node.id } });
+            if (result.ok) acceptPendingContext(result.pendingContext);
             showToast(
                 result.ok
-                    ? `Requested ${node.label} context. Check for its attachment in the composer before sending.`
+                    ? `${node.label} snapshot pending for your next message. You can clear it above.`
                     : result.error,
                 !result.ok,
             );
@@ -3133,6 +3161,10 @@ function connectEvents() {
         }
         if (message.type === "freshness" && modelState) {
             acceptFreshness(message);
+            return;
+        }
+        if (message.type === "pending-context") {
+            acceptPendingContext(message.pendingContext);
             return;
         }
         if (message.type === "browser-error") {

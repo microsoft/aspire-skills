@@ -503,27 +503,73 @@ test("Global scope stays marked in the header and Add to chat follows the resour
         "Add to chat sits after the state and health pills");
 });
 
-test("Add to chat acknowledges only the host handoff, not message delivery", async () => {
+const pendingContext = (revision, count = 1) => ({
+    revision, state: count ? "pending" : "empty", count,
+    items: count ? [{ id: "snapshot-one", label: "Public API" }] : [],
+});
+
+test("Add to chat shows visible clearable pending context without claiming native composer delivery", async () => {
     const renderer = await boot();
     selectApi(renderer);
     renderer.document.querySelector(".inspector-ask").click();
     const request = renderer.request("/api/copilot-context");
     assert.equal(request.body.nodeId, "host-a:resource:api");
     assert.equal(renderer.document.getElementById("toast-region").textContent, "",
-        "do not acknowledge before the SDK request completes");
-    await renderer.respond(request, { ok: true, title: "Public API" });
+        "do not acknowledge before the queue request completes");
+    await renderer.respond(request, { ok: true, pendingContext: pendingContext(1) });
     const message = renderer.document.getElementById("toast-region").textContent;
-    assert.equal(message, "Requested Public API context. Check for its attachment in the composer before sending.");
-    assert.doesNotMatch(message, /Added .* to chat|delivered|attached/i);
+    assert.equal(message, "Public API snapshot pending for your next message. You can clear it above.");
+    assert.doesNotMatch(message, /composer|delivered|attached/i);
+    const region = renderer.document.getElementById("pending-context");
+    assert.equal(region.hidden, false);
+    assert.match(region.textContent, /1 selected snapshot pending for your next message/);
+    assert.equal(renderer.document.querySelectorAll("#pending-context-items li").length, 1);
+    renderer.document.querySelector(".inspector-ask").click();
+    await renderer.respond(renderer.request("/api/copilot-context"), { ok: true, pendingContext: pendingContext(2) });
+    assert.equal(renderer.document.querySelectorAll("#pending-context-items li").length, 1, "repeated clicks do not duplicate the indicator");
+    const clear = renderer.document.getElementById("pending-context-clear");
+    clear.focus();
+    clear.click();
+    await renderer.respond(renderer.request("/api/copilot-context/clear"), { ok: true, pendingContext: pendingContext(3, 0) });
+    assert.equal(region.hidden, true);
+    assert.equal(renderer.document.activeElement.id, "search-input", "clearing keeps keyboard focus on a visible control");
+    assert.equal(renderer.state().revision, 1, "queue updates never alter content revision");
 });
 
-for (const failure of ["Composer unavailable", "Network unavailable"]) {
+test("hook consumption updates pending UI through SSE and old polls cannot resurrect it", async () => {
+    const renderer = await boot();
+    await renderer.push({ type: "pending-context", pendingContext: pendingContext(5) });
+    const clear = renderer.document.getElementById("pending-context-clear");
+    clear.focus();
+    await renderer.push({ type: "pending-context", pendingContext: pendingContext(6, 0) });
+    assert.equal(renderer.document.getElementById("pending-context").hidden, true);
+    assert.equal(renderer.document.activeElement.id, "search-input");
+    await renderer.push({ type: "state", state: snapshot(1, { pendingContext: pendingContext(5) }) });
+    assert.equal(renderer.document.getElementById("pending-context").hidden, true);
+    await renderer.push({ type: "state", state: snapshot(0, { pendingContext: pendingContext(7) }) });
+    assert.equal(renderer.document.getElementById("pending-context").hidden, false, "pending metadata has its own monotonic revision");
+    assert.equal(renderer.state().revision, 1, "stale tree state remains rejected");
+});
+
+test("a failed clear leaves the pending indicator and keyboard focus intact", async () => {
+    const renderer = await boot();
+    await renderer.push({ type: "pending-context", pendingContext: pendingContext(1) });
+    const clear = renderer.document.getElementById("pending-context-clear");
+    clear.focus();
+    clear.click();
+    await renderer.fail(renderer.request("/api/copilot-context/clear"));
+    assert.equal(renderer.document.getElementById("pending-context").hidden, false);
+    assert.equal(renderer.document.activeElement, clear);
+    assert.equal(renderer.document.querySelector(".toast.is-error").textContent, "Network unavailable");
+});
+
+for (const failure of ["Pending context is full", "Network unavailable"]) {
     test(`Add to chat surfaces ${failure} without a success acknowledgement`, async () => {
         const renderer = await boot();
         selectApi(renderer);
         renderer.document.querySelector(".inspector-ask").click();
         const request = renderer.request("/api/copilot-context");
-        if (failure === "Composer unavailable") {
+        if (failure === "Pending context is full") {
             await renderer.respond(request, { ok: false, error: failure }, 400);
         } else {
             await renderer.fail(request, failure);

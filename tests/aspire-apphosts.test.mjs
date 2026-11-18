@@ -1378,8 +1378,10 @@ test("canvas source carries the confirmed direction and protected data routes", 
     assert.match(client, /"Depends on"/);
     assert.match(client, /"Used by"/);
     assert.match(provider, /CommandInputMetadataStore/);
-    assert.match(provider, /sendAttachmentsToMessage/);
-    assert.match(provider, /type: "extension_context"/);
+    assert.doesNotMatch(provider, /sendAttachmentsToMessage|modifiedPrompt|type: "extension_context"/);
+    assert.match(provider, /hooks: \{ onSessionStart, onUserPromptSubmitted \}/);
+    assert.match(provider, /return \{ additionalContext \}/);
+    assert.match(html, /id="pending-context-clear"/);
     assert.match(provider, /canvasId: "browser"/);
     assert.match(provider, /canvasId: "terminal"/);
     assert.match(provider, /buildDashboardViewUrl/);
