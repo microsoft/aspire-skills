@@ -1399,6 +1399,54 @@ test("live schema changes defer metadata reloads while a secret dependency is un
     assert.equal(button(renderer.document.body, "Run command").disabled, false);
 });
 
+test("live schema changes clear tracking for removed secret dependencies", async () => {
+    const renderer = await boot();
+    const fields = await openSecretDependentCommand(renderer);
+    enterField(renderer, "environment", "partial-secret");
+    const updatedFields = [
+        { name: "region", label: "Region", inputType: "Text", value: "east" },
+        { ...fields[1], dynamicLoading: { dependsOnInputs: ["region"] } },
+    ];
+    await renderer.push({ type: "state", state: commandSnapshot(3, updatedFields) });
+    const schemaLoad = renderer.request("/api/command-inputs");
+    assert.deepEqual(schemaLoad.body.arguments, { region: "east", target: "east" });
+    await renderer.respond(schemaLoad, { ok: true, inputs: updatedFields });
+
+    enterField(renderer, "region", "west");
+    assert.equal(button(renderer.document.body, "Loading inputs...").disabled, true);
+    await renderer.advance(250);
+    const dependencyLoad = renderer.request("/api/command-inputs");
+    assert.equal(dependencyLoad.body.arguments.region, "west");
+});
+
+test("successful secret commands clear uncommitted dependency tracking", async () => {
+    const renderer = await boot();
+    const fields = inputs();
+    fields[0] = { ...fields[0], inputType: "SecretText" };
+    fields[1].dynamicLoading.dependsOnInputs = ["environment", "region"];
+    fields.push({ name: "region", label: "Region", inputType: "Text", value: "east" });
+    await renderer.push({ type: "state", state: commandSnapshot(2, fields) });
+    clickCommand(renderer);
+    await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
+    button(renderer.document.body, "Continue").click();
+
+    enterField(renderer, "environment", "first-secret");
+    renderer.document.querySelector('[name="environment"]').dispatch("change");
+    await renderer.advance(250);
+    await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
+    button(renderer.document.body, "Run command").click();
+    const command = renderer.request("/api/command");
+    enterField(renderer, "environment", "later-secret");
+    await renderer.respond(command, { ok: true });
+    await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
+
+    enterField(renderer, "region", "west");
+    assert.equal(button(renderer.document.body, "Loading inputs...").disabled, true);
+    await renderer.advance(250);
+    const dependencyLoad = renderer.request("/api/command-inputs");
+    assert.equal(dependencyLoad.body.arguments.region, "west");
+});
+
 test("live schemas that remove dynamic inputs cancel pending metadata without blocking ordinary commands", async () => {
     const renderer = await boot();
     clickCommand(renderer);

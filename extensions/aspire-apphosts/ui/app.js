@@ -368,13 +368,28 @@ function acceptState(state) {
     const currentCommand = activeCommandId ? findNode(activeCommandId) : undefined;
     if (currentCommand && JSON.stringify(previousCommand?.command?.argumentInputs)
         !== JSON.stringify(currentCommand.command.argumentInputs)) {
-        const hasUncommittedSecrets = (uncommittedSecretDependencies.get(currentCommand.id)?.size ?? 0) > 0;
+        const uncommittedSecrets = uncommittedSecretDependencies.get(currentCommand.id);
+        const hasUncommittedSecrets = (uncommittedSecrets?.size ?? 0) > 0;
         cancelDynamicInputsLoad(currentCommand.id, { preservePendingSecretDependency: hasUncommittedSecrets });
         commandInputs.delete(currentCommand.id);
         const inputs = commandInputList(currentCommand);
+        const allInputs = [...(currentCommand.command.argumentInputs ?? []), ...inputs];
+        const secretDependencies = new Set(allInputs
+            .flatMap((input) => input.dynamicLoading?.dependsOnInputs ?? [])
+            .filter((name) => allInputs.some((input) =>
+                input.name === name && !input.disabled && input.inputType.toLowerCase().includes("secret"))));
+        for (const name of uncommittedSecrets ?? []) {
+            if (!secretDependencies.has(name)) {
+                uncommittedSecrets.delete(name);
+            }
+        }
+        if (uncommittedSecrets?.size === 0) {
+            uncommittedSecretDependencies.delete(currentCommand.id);
+            pendingSecretDependencies.delete(currentCommand.id);
+        }
         prepareCommandDraft(currentCommand, inputs);
         if (inputs.some((input) => input.dynamicLoading)) {
-            if (!hasUncommittedSecrets) {
+            if ((uncommittedSecrets?.size ?? 0) === 0) {
                 void reloadDynamicInputs(currentCommand);
             }
         } else {
@@ -2869,6 +2884,7 @@ async function submitResourceCommand(node, form) {
             const inputs = commandInputList(node);
             if (inputs.some((input) => input.inputType.toLowerCase().includes("secret"))) {
                 commandDrafts.delete(node.id);
+                uncommittedSecretDependencies.delete(node.id);
                 if (activeCommandId === node.id
                     && [...(node.command.argumentInputs ?? []), ...inputs].some((input) => input.dynamicLoading)) {
                     void reloadDynamicInputs(findNode(node.id) ?? node);
