@@ -999,6 +999,24 @@ test("editing another input during a secret load requires review", async () => {
     assert.deepEqual(renderer.request("/api/command").body.arguments, { environment: "secret", target: "west" });
 });
 
+test("a live schema change during a secret submission reloads inputs without running", async () => {
+    const renderer = await boot();
+    const fields = await openSecretDependentCommand(renderer);
+    enterField(renderer, "environment", "secret");
+    renderer.document.querySelector(".command-form").requestSubmit();
+    const stale = renderer.request("/api/command-inputs");
+    const updatedFields = structuredClone(fields);
+    updatedFields[1].label = "Updated target";
+    await renderer.push({ type: "state", state: commandSnapshot(3, updatedFields) });
+    await renderer.respond(stale, { ok: true, inputs: fields });
+    const reload = renderer.request("/api/command-inputs");
+    assert.equal(reload.body.arguments.environment, "secret");
+    await renderer.respond(reload, { ok: true, inputs: updatedFields });
+    assert.equal(renderer.requests.filter((request) => request.path === "/api/command").length, 0);
+    button(renderer.document.body, "Run command").click();
+    assert.equal(renderer.request("/api/command").body.arguments.environment, "secret");
+});
+
 test("closing the form during a secret load cancels the pending command", async () => {
     const renderer = await boot();
     const fields = await openSecretDependentCommand(renderer);

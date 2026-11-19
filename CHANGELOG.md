@@ -17,7 +17,8 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 
 ### Changed
 - The AppHosts canvas preserves focused command inputs during live refreshes and
-  loads secret-dependent inputs when you leave the field or run the command.
+  loads inputs that depend on a typed secret when you leave the field or run the
+  command.
 - Documented Aspire 17.0 agent setup, which registers the aspire-skills plugin instead of
   copying skills, plus client reloads, automatic updates, and version pins. Project-local
   skill overrides now apply to copies from Aspire 13.6 and earlier. On 17.0 and later,

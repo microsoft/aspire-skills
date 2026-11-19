@@ -104,8 +104,9 @@ bounded request bodies.
 - Sanitized AppHost or resource context can be added to the Copilot composer as
   an attachment; the user writes and sends the actual question.
 - AppHost-defined command forms with validation and command-result feedback.
-- Live refreshes preserve the focused command input and cursor. Secret dependency
-  edits stay in the form until you leave the field or run the command. Dependent
+- Live refreshes preserve the focused command input and cursor. Typed secret
+  dependencies stay in the form until you leave the field or run the command;
+  secret choices load when the selection changes. Dependent
   inputs load before execution; if they change, review them before running.
 - Provider-owned dynamic command metadata remains authoritative through
   validation and execution. Loads for one command are serialized and stale

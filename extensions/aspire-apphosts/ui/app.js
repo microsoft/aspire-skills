@@ -2798,6 +2798,8 @@ async function submitResourceCommand(node, form) {
     if (pendingSecretDependencies.has(node.id)) {
         const previousInputs = JSON.stringify(commandInputList(node));
         const previousDraft = { ...commandDraft(node) };
+        // Run commits the current secret values; later edits are tracked as new changes.
+        uncommittedSecretDependencies.delete(node.id);
         const loaded = await reloadDynamicInputs(node);
         if (!loaded || activeCommandId !== node.id || dynamicLoadingIds.has(node.id)
             || pendingSecretDependencies.has(node.id)) {
