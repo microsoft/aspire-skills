@@ -28,7 +28,7 @@ Heuristics for the **scan** and **propose** phases of `aspireify`.
 | `package.json` has `"vite"` + `.output/server/index.mjs` (TanStack/SvelteKit) | `AddViteApp` (dev) + `PublishAsNodeServer` (publish) |
 | `package.json` has Remix / Astro / Nitro Next | `PublishAsPackageScript` |
 | `pyproject.toml` with FastAPI/Flask | `AddPythonApp` (or model under TS AppHost) |
-| `go.mod` with a `main` package (a Go service, not the AppHost's own `go.mod`) | `AddGoApp` (`aspire add go`): preview from 13.4, stable from 17.0; on 13.x require approval and an explicit compatible preview version. Aspire older than 13.4, or Toolkit `AddGolangApp` already in the AppHost: keep the Toolkit; never migrate it unprompted |
+| `go.mod` with a `main` package (a Go service, not the AppHost's own `go.mod`) | `AddGoApp` (`aspire add go`): preview from 13.4, stable from 17.0; on 13.x require approval and an explicit compatible preview version. |
 | `Program.cs` reads `ConnectionStrings:Postgres*` / DI calls `AddNpgsql*` | `AddPostgres('pg').AddDatabase('appdb')` + `WithReference` |
 | `Program.cs` calls `AddStackExchangeRedisCache` | `AddRedis('cache')` + `WithReference` |
 | MongoClient / `MongoDB.Driver` | `AddMongoDB('mongo')` |
@@ -82,7 +82,6 @@ Bun, Yarn, and pnpm are first-class in TS AppHosts (npm remains the default).
 | Pattern | Add |
 |---------|-----|
 | Go module with a `main` package, preview from 13.4 / stable from 17.0 | `AddGoApp("api", "./api")` after `aspire add go` (TS: `addGoApp('api', '../api')`; Go AppHost: `builder.AddGoApp("api", "./api")`). On 13.x, get approval and select a compatible preview with `--version`. |
-| Aspire older than 13.4, or Toolkit already in the AppHost | Toolkit `AddGolangApp` (`aspire add communitytoolkit-golang`); do not migrate unprompted |
 
 ### AI / Foundry
 
@@ -140,10 +139,11 @@ secret values or authenticated URLs.
 
 Map proposal resources with `externalDependencyId`, not `serviceId`. For unmapped
 dependencies, pass `set_proposal.externalDependencyTreatments`: `not-modeled`
-with a `reason`, or `deferred` with a `reason` and `unresolved`. Without a decision,
-leave the item **Not assessed**. Resolve tradeoffs in chat; do not invent resources
-merely for visibility or change configuration, SDK/authentication, health-check,
-or startup ownership.
+with a `reason`, or `deferred` with a `reason` and `unresolved`. If no mapping or
+treatment is supplied, the canvas shows the item as **Not assessed**. Before
+confirmation, every significant in-scope dependency should have a mapping or a
+treatment. Resolve tradeoffs in chat; do not invent resources merely for visibility
+or change configuration, SDK/authentication, health-check, or startup ownership.
 
 Carry `get_confirmation.externalDependencies`, including its `resourceMappings`
 and decisions, into implementation. Omitting inventory or treatments preserves

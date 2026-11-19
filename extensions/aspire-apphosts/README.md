@@ -3,7 +3,7 @@
 A GitHub Copilot App canvas extension that brings Aspire AppHosts into a
 canvas-native workbench: Workspace and Global discovery, a focused AppHost
 switcher, live resource state, parented resources, endpoints, health checks,
-commands, Dashboard-backed diagnostics, and a read-only relationship graph.
+commands, parameters, resource dependencies, and Dashboard-backed diagnostics.
 
 Open the canvas with `open_aspire_apphosts`, or use canvas ID `aspire-apphosts`
 with `open_canvas`.
@@ -54,6 +54,8 @@ The provider projects an explicit allow-list of resource fields. It never sends
 environment values, arbitrary resource properties, connection strings, volumes,
 source paths, parameter values, or the token-bearing dashboard URL to the
 renderer or Copilot. Endpoint userinfo, query strings, and fragments are removed.
+Machine-readable commands can publish formatted allow-listed projections to the
+Output panel, but their raw stdout remains provider-side.
 Secret command inputs are redacted from command results and never persisted.
 Redaction happens before output is truncated. Duplicate AppHosts use a bounded
 directory-name hint and stable ID to distinguish targets, not a full source path.
@@ -73,36 +75,33 @@ bounded request bodies.
 
 - Workspace mode with a compact AppHost switcher and running hosts first.
 - When CLI discovery is unavailable, the bounded filesystem fallback recognizes
-  `apphost.cs`, `apphost.ts`, and `apphost.mts` case-insensitively in the workspace
+  `apphost.cs`, `apphost.ts`, `apphost.mts`, and `apphost.go` case-insensitively in the workspace
   root and its immediate child directories, preserving the actual file spelling.
 - Global mode with every running machine AppHost available from the same
   switcher and a bounded describe fanout of four.
-- A responsive resource board that removes explorer-style nesting while
-  preserving parent ownership.
-- A second **Graph** tab visualizes Parent, Reference, and WaitFor relationships
-  from dependencies and parents toward the resources that use them. Graph nodes
-  are deliberately read-only; all operations remain in the default Resources
-  card view. Multiple semantics between the same pair collapse into one labeled
-  connector, and long edges route through column gutters rather than through
-  intermediate resources. Incoming connectors use separate attachment points
-  with straight final approaches so their arrowheads remain distinguishable.
-  A read-only relationship list supports selection and
-  sanitized Copilot context without enabling graph editing. Filtered graph
-  summaries distinguish hidden relationships from an AppHost with none declared.
-- Resource cards keep natural content-driven heights instead of stretching to
-  match neighboring cards.
-- Team App-style resource cards with compact labeled Endpoints and Health rows,
+- A responsive resource board with a nested resource roster beside a resource
+  inspector. Narrow panels show one pane at a time with a Back control.
+- The roster has collapsible **Resources** and **Parameters** sections. Parameters
+  appear only when the AppHost declares them, and parameter values are never
+  shown. Parameters with a missing value count toward resources that need
+  attention because they block startup.
+- Parent relationships drive roster nesting. The resource inspector lists
+  **Depends on** and **Used by** with each related resource's state, merging
+  Reference and WaitFor into one row per resource. Selecting a related name
+  opens that resource.
+- A resource in the Waiting state names the resources it is waiting for in its
+  roster row.
+- The resource inspector has compact labeled Endpoints and Health rows,
   endpoint name plus sanitized host/port, natural-width semantic health pills, and
-  a distinct unlabeled command footer inside the resource that owns them.
+  the commands the selected resource owns.
 - Endpoint links prefer GitHub Copilot's registered integrated browser and use
   the default system browser in CLI hosts without that canvas. They expose a
   separate copy-URL control. Browser discovery and launch failures remain visible
   and do not trigger a fallback. System-browser requests acknowledge a detached
   opener without waiting for the browser to exit; later launcher failures appear
   as error notifications and in the provider log.
-- Resource overflow opens authenticated Dashboard details, console logs,
-  structured logs, traces, and metrics without adding a separate diagnostics
-  row to every card.
+- The resource inspector opens authenticated Dashboard details, console logs,
+  structured logs, traces, and metrics.
 - Resources that explicitly advertise terminal support can open an attached
   terminal canvas.
 - Sanitized AppHost or resource context can be added to the Copilot composer as
@@ -125,7 +124,12 @@ bounded request bodies.
   cannot silently hide preserved defaults. The provider validates and converts
   the displayed value before execution.
 - Explicit Run, Stop, Deploy, Publish, and pipeline-step actions, with blocked
-  operations explained in place and high-impact actions confirmed inline.
+  operations explained in place. Stop, Deploy, and Publish are confirmed inline.
+  If the last Run failed, the AppHost shows **Start failed** with links to its
+  output and a retry.
+- The **Output** panel shows commands for the selected AppHost. Check
+  **All AppHosts** to see every AppHost, or **Show automatic refreshes** to include
+  background status checks.
 - **View dashboard** opens the authenticated Aspire Dashboard in the registered
   integrated browser, or the default system browser when the host has no browser
   canvas.

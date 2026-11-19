@@ -16,7 +16,7 @@ description: >-
 license: MIT
 metadata:
   author: Microsoft
-  version: "0.0.6"
+  version: "0.0.7"
 ---
 
 # Aspire Monitoring
@@ -225,8 +225,13 @@ The Aspire CLI talks to a *running AppHost* through a local backchannel socket a
 
 ## Project-Local Skill Routing
 
-If `.agents/skills/aspire/SKILL.md` exists (from `aspire agent init`), see its
-`references/monitoring.md` for deeper telemetry workflow guidance.
+If `.agents/skills/aspire/SKILL.md` exists, check `aspire --version`.
+
+- **Aspire 13.6 and earlier:** `aspire agent init` installed it. See its
+  `references/monitoring.md` for deeper telemetry workflow guidance.
+- **Aspire 17.0 and later:** Aspire registers this plugin instead, so treat the copy as
+  stale unless the user says they maintain it. Use this skill, tell the user the copy is
+  stale, and suggest `aspire doctor`, which lists each copy and explains how to remove it.
 
 ## References
 

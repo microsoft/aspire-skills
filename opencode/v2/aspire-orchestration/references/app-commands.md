@@ -55,21 +55,25 @@ aspire init --language go     # Aspire 17.0 or later
 ## After `aspire init` — Hand Off to `aspireify`
 
 `aspire init` drops a minimal AppHost skeleton + AppHost configuration into the
-repo and installs the **`aspireify`** agent skill alongside it. `aspire init` itself does not
-wire resources, projects, or integrations. Hand off the wiring step to:
+repo and sets up the **`aspireify`** agent skill alongside it. Aspire 13.6 and earlier install
+the skill. Aspire 17.0 and later register the aspire-skills plugin, which includes it.
+`aspire init` itself does not wire resources, projects, or integrations. Hand off the wiring
+step to:
 
 1. The in-plugin sibling skill: [`../../aspireify/SKILL.md`](https://github.com/microsoft/aspire-skills/blob/main/skills/aspireify/SKILL.md), or
-2. The project-local `.agents/skills/aspireify/SKILL.md` if `aspire init` installed it
-   (project-local wins — defer to it and warn the user).
+2. The project-local `.agents/skills/aspireify/SKILL.md` if Aspire 13.6 or earlier
+   installed it (project-local wins, so defer to it and warn the user). On 17.0 and later,
+   treat the copy as stale unless the user says they maintain it. Use the in-plugin skill,
+   tell the user the copy is stale, and suggest `aspire doctor`, which lists each copy and
+   explains how to remove it.
 
 The aspireify workflow:
 
 1. **Scan** the repository — discover .NET projects, Node.js apps, Python/Go services, docker-compose files
 2. **Present findings** — confirm with user which services to include
-3. **Wire the AppHost** — add resources using 3-tier API preference:
+3. **Wire the AppHost** — add resources using 2-tier API preference:
    - Tier 1: First-party `Aspire.Hosting.*` (e.g., `AddPostgres`, `AddRedis`, `AddViteApp`, `AddNextJsApp`; for a Go application, `AddGoApp` from `Aspire.Hosting.Go` via `aspire add go`: preview from 13.4, stable from 17.0; require approval and an explicit compatible preview version on 13.x)
-   - Tier 2: Community Toolkit `CommunityToolkit.Aspire.Hosting.*` (e.g., `AddGolangApp` via `aspire add communitytoolkit-golang` for Go applications on Aspire older than 13.4 or when the user deliberately uses it; never migrate an existing Toolkit-based AppHost implicitly)
-   - Tier 3: Raw fallbacks (`AddExecutable`, `AddDockerfile`, `AddContainer`)
+   - Tier 2: Raw fallbacks (`AddExecutable`, `AddDockerfile`, `AddContainer`)
 4. **Configure dependencies** — ServiceDefaults for .NET, OTel for non-.NET
 5. **Validate** — `aspire start` until all resources are healthy
 
