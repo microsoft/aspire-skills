@@ -220,7 +220,7 @@ function element(tag, properties = {}, children = []) {
         if (child === undefined || child === null) {
             continue;
         }
-        node.appendChild(typeof child === "string" ? document.createTextNode(child) : child);
+        Node.prototype.appendChild.call(node, typeof child === "string" ? document.createTextNode(child) : child);
     }
     return node;
 }
@@ -2023,6 +2023,10 @@ function treeContains(nodes, nodeId) {
     return nodes.some((node) => node.id === nodeId || treeContains(node.children ?? [], nodeId));
 }
 
+const nodeParentElement = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement").get;
+const nodeChildNodes = Object.getOwnPropertyDescriptor(Node.prototype, "childNodes").get;
+const elementTagName = Object.getOwnPropertyDescriptor(Element.prototype, "tagName").get;
+
 function replaceTreePreservingCommandInput(nextTree) {
     const active = document.activeElement;
     const nextControl = active?.closest?.(".command-form") && active.name
@@ -2030,7 +2034,7 @@ function replaceTreePreservingCommandInput(nextTree) {
         : null;
     const branch = (node, root) => {
         const nodes = [];
-        for (; node && node !== root; node = node.parentElement) nodes.unshift(node);
+        for (; node && node !== root; node = nodeParentElement.call(node)) nodes.unshift(node);
         return node === root ? nodes : [];
     };
     const currentBranch = branch(active, els.tree);
@@ -2040,7 +2044,8 @@ function replaceTreePreservingCommandInput(nextTree) {
         || commandControlSchemas.get(active) !== commandControlSchemas.get(nextControl)
         || active.value !== nextControl.value || active.checked !== nextControl.checked
         || currentBranch.length !== nextBranch.length
-        || currentBranch.some((node, index) => node.tagName !== nextBranch[index].tagName)) {
+        || currentBranch.some((node, index) =>
+            elementTagName.call(node) !== elementTagName.call(nextBranch[index]))) {
         els.tree.replaceChildren(nextTree);
         return;
     }
@@ -2050,20 +2055,24 @@ function replaceTreePreservingCommandInput(nextTree) {
     for (let index = 0; index < currentBranch.length; index++) {
         const current = currentBranch[index];
         const next = nextBranch[index];
-        for (const name of current.getAttributeNames()) {
-            if (!next.hasAttribute(name)) current.removeAttribute(name);
+        for (const name of Element.prototype.getAttributeNames.call(current)) {
+            if (!Element.prototype.hasAttribute.call(next, name)) {
+                Element.prototype.removeAttribute.call(current, name);
+            }
         }
-        for (const name of next.getAttributeNames()) current.setAttribute(name, next.getAttribute(name));
-        for (const sibling of [...parent.childNodes]) {
-            if (sibling !== current) sibling.remove();
+        for (const name of Element.prototype.getAttributeNames.call(next)) {
+            Element.prototype.setAttribute.call(current, name, Element.prototype.getAttribute.call(next, name));
+        }
+        for (const sibling of [...nodeChildNodes.call(parent)]) {
+            if (sibling !== current) Node.prototype.removeChild.call(parent, sibling);
         }
         const nextParent = index === 0 ? null : nextBranch[index - 1];
-        const siblings = nextParent ? [...nextParent.childNodes] : [nextTree];
+        const siblings = nextParent ? [...nodeChildNodes.call(nextParent)] : [nextTree];
         let before = true;
         for (const sibling of siblings) {
             if (sibling === next) before = false;
-            else if (before) parent.insertBefore(sibling, current);
-            else parent.appendChild(sibling);
+            else if (before) Node.prototype.insertBefore.call(parent, sibling, current);
+            else Node.prototype.appendChild.call(parent, sibling);
         }
         parent = current;
     }

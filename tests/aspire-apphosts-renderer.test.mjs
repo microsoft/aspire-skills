@@ -285,10 +285,31 @@ function createRenderer({ transitions = false } = {}) {
     const streams = [];
     const queuedTransitions = [];
     const copied = [];
+    const nodePrototype = {
+        appendChild: TestElement.prototype.appendChild,
+        insertBefore: TestElement.prototype.insertBefore,
+        removeChild(child) {
+            if (child.parentElement !== this) throw new Error("The node is not a child.");
+            child.remove();
+            return child;
+        },
+    };
+    Object.defineProperties(nodePrototype, {
+        parentElement: { get() { return this.parentElement; } },
+        childNodes: { get() { return this.children; } },
+    });
+    const elementPrototype = {
+        getAttribute: TestElement.prototype.getAttribute,
+        getAttributeNames: TestElement.prototype.getAttributeNames,
+        hasAttribute: TestElement.prototype.hasAttribute,
+        removeAttribute: TestElement.prototype.removeAttribute,
+        setAttribute: TestElement.prototype.setAttribute,
+    };
+    Object.defineProperty(elementPrototype, "tagName", { get() { return this.tagName; } });
     let nextTimer = 0;
     let now = 0;
     const context = vm.createContext({
-        document, URLSearchParams,
+        document, URLSearchParams, Node: { prototype: nodePrototype }, Element: { prototype: elementPrototype },
         HTMLFormElement: { prototype: { requestSubmit: TestElement.prototype.requestSubmit } },
         window: {
             location: { search: "?token=test-renderer" }, innerWidth: 480, innerHeight: 720,
@@ -1301,6 +1322,60 @@ test("native browser submits secret-dependent commands when an input is named re
     ], { timeout: 30_000, maxBuffer: 2_000_000 });
     assert.equal(stdout.match(/data-secret-submit-regression="([^"]*)"/)?.[1], "passed",
         "Native-browser secret submission regression failed.");
+});
+
+test("native browser preserves focused input when names shadow DOM members", {
+    skip: !process.env.CHROME_BIN && "Set CHROME_BIN to a Chromium executable for native-browser regressions.",
+}, async (t) => {
+    const directory = await mkdtemp(join(tmpdir(), "apphosts-dom-member-browser-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const fields = [
+        "getAttributeNames", "setAttribute", "getAttribute", "hasAttribute", "removeAttribute",
+        "childNodes", "parentElement", "insertBefore", "appendChild", "remove", "tagName",
+    ].map((name) => ({ name, label: name, inputType: "Text" }));
+    const setup = `
+        window.fetch = () => new Promise(() => {});
+        window.EventSource = class { addEventListener() {} };
+    `;
+    const regression = `
+        try {
+            const fields = ${JSON.stringify(fields)};
+            const state = ${JSON.stringify(commandSnapshot(1, fields))};
+            acceptState(state);
+            selectedResourceId = "host-a:resource:api";
+            activeCommandId = ${JSON.stringify(commandId)};
+            renderTree();
+            const control = document.querySelector('[name="getAttributeNames"]');
+            control.focus();
+            let blurCount = 0;
+            control.addEventListener("blur", () => blurCount++);
+            const nextState = structuredClone(state);
+            nextState.revision++;
+            nextState.roots[0].children[0].children[0].statusLabel = "Stopped";
+            acceptState(nextState);
+            if (document.activeElement !== control || !control.isConnected || blurCount
+                || !document.querySelector(".resource-roster").textContent.includes("Stopped")) {
+                throw new Error("DOM member names disrupted focused input reconciliation");
+            }
+            document.body.dataset.domMemberRegression = "passed";
+        } catch (error) {
+            document.body.dataset.domMemberRegression = error.message;
+        }
+    `;
+    const script = (source) => `<script>${source.replaceAll("</script", "<\\/script")}</script>`;
+    const html = markup.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+        .replace(/<link\b[^>]*>/gi, "")
+        .replace("</body>", `${script(setup)}${script(rendererSource)}${script(regression)}</body>`);
+    const file = join(directory, "dom-members.html");
+    await writeFile(file, html);
+    const { stdout } = await promisify(execFile)(process.env.CHROME_BIN, [
+        "--headless", "--disable-gpu",
+        ...(process.getuid?.() === 0 ? ["--no-sandbox"] : []),
+        `--user-data-dir=${join(directory, "profile")}`,
+        "--virtual-time-budget=1000", "--dump-dom", pathToFileURL(file).href,
+    ], { timeout: 30_000, maxBuffer: 2_000_000 });
+    assert.equal(stdout.match(/data-dom-member-regression="([^"]*)"/)?.[1], "passed",
+        "Native-browser DOM member shadowing regression failed.");
 });
 
 test("committing a text edit normalizes it without trimming spaces while typing", async () => {
