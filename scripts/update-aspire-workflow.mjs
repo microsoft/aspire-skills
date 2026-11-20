@@ -151,14 +151,43 @@ const supersededGuidance = "microsoft/aspire-skills main moved again during sync
   "so the Aspire catalog may not reflect current main. If no later run publishes the catalog, " +
   "dispatch this workflow from main with the pr_number of a PR merged into main whose merge commit main still contains.";
 
-// Superseded results are retried once against newer main, so only the final attempt reports them.
+async function reportToSourcePr(github, source, result) {
+  const marker = "<!-- aspire-skills-telemetry-sync -->";
+  let message;
+  if (["created", "updated"].includes(result.status)) {
+    if (!result.url) throw new Error("The telemetry proposal is missing its URL.");
+    const action = result.status === "created" ? "Opened a" : "Updated the";
+    message = `${action} draft [PR in microsoft/aspire](${result.url}) to update the telemetry catalog.`;
+  } else if (["unchanged", "closed", "cleaned"].includes(result.status)) {
+    message = "No Aspire telemetry update needed. The catalog already matches aspire-skills main.";
+  } else {
+    throw new Error(`Cannot report an unknown telemetry outcome: ${result.status}`);
+  }
+  const body = `${marker}\n\n${message}`;
+  const comments = await github.paginate(github.rest.issues.listComments, {
+    ...sourceRepository, issue_number: source.number, per_page: 100
+  });
+  const existing = comments.find(comment =>
+    comment.user?.login === "github-actions[bot]" && comment.body?.startsWith(marker)
+  );
+  if (existing) {
+    if (existing.body !== body) {
+      await github.rest.issues.updateComment({ ...sourceRepository, comment_id: existing.id, body });
+    }
+  } else {
+    await github.rest.issues.createComment({ ...sourceRepository, issue_number: source.number, body });
+  }
+}
+
+// Superseded results are retried once against newer main; a final superseded attempt fails the run.
 export async function runTelemetrySync({ github, sourceGithub, core, directory, source, final }) {
   const result = await syncTelemetryCatalog({ github, sourceGithub, directory, source });
   core.setOutput("status", result.status);
   core.info(`Telemetry catalog: ${result.status}`);
   if (result.status === "superseded" && !final) return result;
-  if (result.status === "superseded") core.warning(supersededGuidance);
   await core.summary.addRaw(telemetrySummary(result), true).write();
+  if (result.status === "superseded") throw new Error(supersededGuidance);
+  if (!source.dryRun) await reportToSourcePr(sourceGithub, source, result);
   return result;
 }
 
@@ -166,15 +195,8 @@ async function deleteBranch(github) {
   try {
     await github.rest.git.deleteRef({ ...targetRepository, ref: `heads/${branch}` });
   } catch (error) {
-    if (error.status === 422) {
-      try {
-        await github.rest.git.getRef({ ...targetRepository, ref: `heads/${branch}` });
-      } catch (lookupError) {
-        if (lookupError.status === 404) return;
-        throw lookupError;
-      }
-    }
-    if (error.status !== 404) throw error;
+    // A branch deleted concurrently can surface as 404 or 422.
+    if (![404, 422].includes(error.status) || await branchExists(github)) throw error;
   }
 }
 
@@ -237,22 +259,26 @@ async function ensureProposalLabels(github, proposal) {
   });
 }
 
+// A proposal can be closed or deleted between listing and updating it; each attempt replaces it.
+const maxProposalAttempts = 3;
+
 async function upsertProposal(github, proposals, fields, base) {
   let candidate = proposals[0];
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < maxProposalAttempts; attempt++) {
     if (candidate) {
+      let proposal;
       try {
-        const { data: proposal } = await github.rest.pulls.update({
+        ({ data: proposal } = await github.rest.pulls.update({
           ...targetRepository, pull_number: candidate.number, ...fields
-        });
-        if (proposal.state === "open") {
-          await ensureProposalLabels(github, proposal);
-          return { status: "updated", proposal };
-        }
-        if (proposal.state !== "closed") throw new Error("Updated telemetry proposal has an unknown state.");
+        }));
       } catch (error) {
         if (error.status !== 404) throw error;
       }
+      if (proposal?.state === "open") {
+        await ensureProposalLabels(github, proposal);
+        return { status: "updated", proposal };
+      }
+      if (proposal && proposal.state !== "closed") throw new Error("Updated telemetry proposal has an unknown state.");
       candidate = undefined;
     }
 
@@ -278,7 +304,7 @@ async function upsertProposal(github, proposals, fields, base) {
     await ensureProposalLabels(github, proposal);
     return { status: "created", proposal };
   }
-  throw new Error("Unable to keep a telemetry proposal open after 3 attempts.");
+  throw new Error(`Unable to keep a telemetry proposal open after ${maxProposalAttempts} attempts.`);
 }
 
 // Returns undefined when Aspire main moved and the caller should restart.
@@ -344,8 +370,7 @@ async function publishAgainstBase({ github, content, source, base, unchanged }) 
 
   const title = "[telemetry] Sync aspire-skills catalog";
   const body = [
-    `Sync the telemetry catalog with [microsoft/aspire-skills#${source.number}](${source.url})`,
-    `at \`${source.commit}\`.`,
+    `Sync the telemetry catalog with [microsoft/aspire-skills#${source.number}](${source.url}).`,
     "",
     "Generated from canonical `skills/` directories and their `references/` files.",
     "",
@@ -377,7 +402,7 @@ export async function syncTelemetryCatalog({ github, sourceGithub, directory, so
     if (created && result.status === "updated") result.status = "created";
     // Source main moved during publication, so the retry republishes the newer inventory.
     if (await mainCommit(sourceGithub) !== source.commit) {
-      return { ...result, status: "superseded", published: result.status };
+      return { ...result, status: "superseded" };
     }
     return result;
   }

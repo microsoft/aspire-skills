@@ -75,9 +75,10 @@ The [update-aspire workflow](../.github/workflows/update-aspire.yml) generates
 Aspire's telemetry catalog from the canonical skills and their references. It runs
 when a same-repository PR merges into main and creates or updates a draft PR in
 `microsoft/aspire`. If the catalog is unchanged, it closes any open proposal.
+It comments on the source PR with the proposal link or a no-change result.
 Do not edit the generated `update-aspire-telemetry-catalog` branch by hand.
 
 To run it manually, select main and provide a `pr_number`. A merged PR syncs the
 current main snapshot; an unmerged PR requires `dry_run` and previews its head in
-the Actions summary. Use a manual run with a merged PR after a fork PR merges or
-a direct push to main.
+the Actions summary. Use a manual run with a merged PR after a fork PR merges, a
+direct push to main, or a run that fails because main kept moving during the sync.

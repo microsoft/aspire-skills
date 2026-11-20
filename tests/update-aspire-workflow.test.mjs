@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { test } from "node:test";
 import { parse } from "yaml";
 import {
@@ -56,10 +56,41 @@ const expected = {
 };
 
 function sourceClient(main = commit) {
-  return { rest: { git: { getRef: async args => {
-    assert.deepEqual(args, { owner: "microsoft", repo: "aspire-skills", ref: "heads/main" });
-    return { data: { object: { sha: main } } };
-  } } } };
+  const comments = [];
+  const calls = [];
+  const issues = {};
+  for (const [name, result] of Object.entries({
+    listComments: () => comments,
+    createComment: args => {
+      const comment = { id: comments.length + 1, body: args.body, user: { login: "github-actions[bot]" } };
+      comments.push(comment);
+      return comment;
+    },
+    updateComment: args => {
+      const comment = comments.find(comment => comment.id === args.comment_id);
+      assert.ok(comment);
+      comment.body = args.body;
+      return comment;
+    }
+  })) {
+    issues[name] = async args => {
+      assert.equal(args.owner, "microsoft");
+      assert.equal(args.repo, "aspire-skills");
+      calls.push({ name, args });
+      return { data: result(args) };
+    };
+  }
+  return {
+    comments, calls,
+    paginate: async (method, args) => (await method(args)).data,
+    rest: {
+      issues,
+      git: { getRef: async args => {
+        assert.deepEqual(args, { owner: "microsoft", repo: "aspire-skills", ref: "heads/main" });
+        return { data: { object: { sha: main } } };
+      } }
+    }
+  };
 }
 
 function publisher({
@@ -245,27 +276,128 @@ test("a snapshot superseded by newer main performs no mutations", async t => {
   }
 });
 
-test("superseded first attempts defer reporting, and final attempts recommend a manual dispatch", async t => {
+test("superseded first attempts defer reporting, and final attempts fail with manual dispatch guidance", async t => {
   const directory = fixture(t);
   for (const final of [false, true]) {
     const f = publisher({ existing: true, main: newer });
     const outputs = {};
-    const warnings = [];
     const summaries = [];
     const core = {
       setOutput: (name, value) => { outputs[name] = value; },
       info: () => {},
-      warning: message => warnings.push(message),
+      warning: message => assert.fail(message),
       summary: { addRaw: value => ({ write: async () => summaries.push(value) }) }
     };
-    const result = await runTelemetrySync({ ...f, core, directory, source, final });
-    assert.equal(result.status, "superseded");
+    const run = runTelemetrySync({ ...f, core, directory, source, final });
+    if (final) {
+      await assert.rejects(run, /dispatch this workflow from main with the pr_number of a PR merged into main/);
+    } else {
+      assert.equal((await run).status, "superseded");
+    }
     assert.deepEqual(outputs, { status: "superseded" });
     assert.deepEqual(f.calls.map(call => call.name), ["git.getRef", "repos.getContent"]);
     assert.equal(summaries.length, final ? 1 : 0);
-    assert.equal(warnings.length, final ? 1 : 0);
-    if (final) assert.match(summaries[0], /dispatch this workflow from main with the pr_number of a PR merged into main/);
+    assert.equal(f.sourceGithub.calls.length, 0);
+    if (final) assert.match(summaries[0], /Telemetry catalog: superseded/);
   }
+});
+
+test("completed syncs comment on the source PR with the proposal link or a no-change result", async t => {
+  const directory = fixture(t);
+  const content = `${JSON.stringify(expected, null, 2)}\n`;
+  for (const [status, options, message, orphan] of [
+    ["created", {}, /Opened a draft/],
+    ["updated", { existing: true }, /Updated the draft/],
+    ["unchanged", { current: content }, /No Aspire telemetry update needed/],
+    ["closed", { current: content, existing: true }, /No Aspire telemetry update needed/],
+    ["cleaned", { current: content }, /No Aspire telemetry update needed/, true]
+  ]) {
+    await t.test(status, async () => {
+      const f = publisher(options);
+      if (orphan) {
+        const getRef = f.github.rest.git.getRef;
+        f.github.rest.git.getRef = async args => args.ref === "heads/main"
+          ? getRef(args)
+          : { data: { object: { sha: head } } };
+      }
+      const core = {
+        setOutput: () => {}, info: () => {}, warning: message => assert.fail(message),
+        summary: { addRaw: () => ({ write: async () => {} }) }
+      };
+      const result = await runTelemetrySync({ ...f, core, directory, source, final: false });
+      assert.equal(result.status, status);
+      assert.deepEqual(f.sourceGithub.calls.map(call => call.name), ["listComments", "createComment"]);
+      const comment = f.sourceGithub.calls[1].args;
+      assert.equal(comment.issue_number, source.number);
+      assert.match(comment.body, message);
+      assert.ok(!comment.body.includes(source.commit));
+      if (["created", "updated"].includes(status)) {
+        assert.ok(comment.body.includes(`[PR in microsoft/aspire](${result.url})`));
+      } else {
+        assert.doesNotMatch(comment.body, /draft|\/pull\//);
+      }
+    });
+  }
+});
+
+test("reruns update the bot's source comment without editing another user's comment or creating duplicates", async t => {
+  const directory = fixture(t);
+  const f = publisher();
+  trackProposalState(f);
+  const unrelated = {
+    id: 100, body: "<!-- aspire-skills-telemetry-sync -->\n\nA user's comment.", user: { login: "someone" }
+  };
+  f.sourceGithub.comments.push(unrelated);
+  const core = {
+    setOutput: () => {}, info: () => {}, warning: message => assert.fail(message),
+    summary: { addRaw: () => ({ write: async () => {} }) }
+  };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await runTelemetrySync({ ...f, core, directory, source, final: false });
+  }
+  assert.equal(f.sourceGithub.calls.filter(call => call.name === "createComment").length, 1);
+  const updates = f.sourceGithub.calls.filter(call => call.name === "updateComment");
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0].args.comment_id, f.sourceGithub.comments[1].id);
+  assert.match(f.sourceGithub.comments[1].body, /Updated the draft/);
+  assert.equal(unrelated.body, "<!-- aspire-skills-telemetry-sync -->\n\nA user's comment.");
+});
+
+test("dry runs summarize the generated catalog and never comment on the source PR", async t => {
+  const directory = fixture(t);
+  const content = `${JSON.stringify(expected, null, 2)}\n`;
+  for (const [current, status] of [["{}", "preview"], [content, "unchanged"]]) {
+    const f = publisher({ current });
+    const summaries = [];
+    const core = {
+      setOutput: () => {}, info: () => {}, warning: message => assert.fail(message),
+      summary: { addRaw: value => ({ write: async () => summaries.push(value) }) }
+    };
+    await runTelemetrySync({ ...f, core, directory, source: { ...source, dryRun: true }, final: false });
+    assert.equal(summaries.length, 1);
+    assert.match(summaries[0], new RegExp(`<h2>Telemetry catalog: ${status}</h2>`));
+    assert.ok(summaries[0].includes(content.replaceAll('"', "&quot;")));
+    assert.equal(f.sourceGithub.calls.length, 0);
+  }
+});
+
+test("source comment failures propagate while preserving the publication summary", async t => {
+  const directory = fixture(t);
+  const f = publisher();
+  const failure = Object.assign(new Error("Comment permission denied"), { status: 403 });
+  f.sourceGithub.rest.issues.createComment = async () => { throw failure; };
+  const summaries = [];
+  const core = {
+    setOutput: () => {}, info: () => {}, warning: message => assert.fail(message),
+    summary: { addRaw: value => ({ write: async () => summaries.push(value) }) }
+  };
+  await assert.rejects(
+    runTelemetrySync({ ...f, core, directory, source, final: false }),
+    error => error === failure
+  );
+  assert.equal(f.calls.filter(call => call.name === "pulls.create").length, 1);
+  assert.equal(summaries.length, 1);
+  assert.match(summaries[0], /https:\/\/github\.com\/microsoft\/aspire\/pull\/42/);
 });
 
 test("a superseded run publishes the newly resolved main inventory on retry", async t => {
@@ -299,6 +431,7 @@ test("a superseded run publishes the newly resolved main inventory on retry", as
   assert.equal(superseded.status, "superseded");
   assert.deepEqual(f.calls.map(call => call.name), ["git.getRef", "repos.getContent"]);
   assert.equal(summaries.length, 0);
+  assert.equal(sourceGithub.calls.length, 0);
 
   const retry = await resolveTelemetrySource({ github: sourceGithub, context });
   const result = await runTelemetrySync({
@@ -314,6 +447,9 @@ test("a superseded run publishes the newly resolved main inventory on retry", as
   });
   assert.deepEqual(outputs, [["status", "superseded"], ["status", "created"]]);
   assert.equal(summaries.length, 1);
+  assert.equal(sourceGithub.calls.filter(call => call.name === "createComment").length, 1);
+  assert.ok(sourceGithub.comments[0].body.includes(`[PR in microsoft/aspire](${result.url})`));
+  assert.ok(!sourceGithub.comments[0].body.includes(newer));
 });
 
 test("unmerged PR head snapshots can only be previewed", async t => {
@@ -393,8 +529,13 @@ test("changed inventory creates a draft Aspire PR whose commit changes only the 
   assert.equal(pr.draft, true);
   assert.equal(pr.base, "main");
   assert.equal(pr.head, "update-aspire-telemetry-catalog");
-  assert.match(pr.body, new RegExp(source.commit));
-  assert.match(pr.body, /microsoft\/aspire-skills#123/);
+  assert.equal(pr.body, [
+    `Sync the telemetry catalog with [microsoft/aspire-skills#123](${source.url}).`,
+    "",
+    "Generated from canonical `skills/` directories and their `references/` files.",
+    "",
+    "<!-- aspire-skills-telemetry-catalog -->"
+  ].join("\n"));
 });
 
 test("subsequent inventory updates replace only the automation branch and reuse its open PR", async t => {
@@ -425,6 +566,15 @@ test("a label failure is retried when an existing proposal is synchronized again
   await assert.rejects(syncTelemetryCatalog({ ...f, directory, source }), /Temporary label failure/);
   assert.equal((await syncTelemetryCatalog({ ...f, directory, source })).status, "updated");
   assert.equal(attempts, 2);
+});
+
+test("a missing label on an open proposal surfaces instead of replacing the proposal", async t => {
+  const directory = fixture(t);
+  const f = publisher({ existing: true });
+  const failure = Object.assign(new Error("Label not found"), { status: 404 });
+  f.github.rest.issues.addLabels = async () => { throw failure; };
+  await assert.rejects(syncTelemetryCatalog({ ...f, directory, source }), error => error === failure);
+  assert.ok(!f.calls.some(call => call.name === "pulls.create"));
 });
 
 test("a ready proposal is returned to draft before its branch is updated", async t => {
@@ -462,6 +612,20 @@ test("repeated publication reuses the already generated commit", async t => {
   const f = publisher({ existing: true, identicalHead: true });
   assert.equal((await syncTelemetryCatalog({ ...f, directory, source })).status, "updated");
   assert.ok(!f.calls.some(call => ["git.createCommit", "git.updateRef", "git.createRef"].includes(call.name)));
+});
+
+test("an identical tree on a stale or merge commit is rebuilt on current Aspire main", async t => {
+  const directory = fixture(t);
+  for (const parents of [[{ sha: moved }], [{ sha: base }, { sha: moved }]]) {
+    const f = publisher({ existing: true, identicalHead: true });
+    const getCommit = f.github.rest.git.getCommit;
+    f.github.rest.git.getCommit = async args => args.commit_sha === head
+      ? { data: { tree: { sha: "generated-tree" }, parents } }
+      : getCommit(args);
+    assert.equal((await syncTelemetryCatalog({ ...f, directory, source })).status, "updated");
+    assert.deepEqual(f.calls.find(call => call.name === "git.createCommit").args.parents, [base]);
+    assert.equal(f.calls.find(call => call.name === "git.updateRef").args.force, true);
+  }
 });
 
 test("publication fails explicitly on permission failures instead of treating them as a missing branch", async t => {
@@ -547,14 +711,12 @@ test("source main moving during publication supersedes the published proposal fo
   sourceSequence(f, [commit, newer]);
   const result = await syncTelemetryCatalog({ ...f, directory, source });
   assert.equal(result.status, "superseded");
-  assert.equal(result.published, "created");
   assert.equal(result.url, "https://github.com/microsoft/aspire/pull/42");
   assert.ok(f.calls.some(call => call.name === "pulls.create"));
 
-  const warnings = [];
   const summaries = [];
   const core = {
-    setOutput: () => {}, info: () => {}, warning: message => warnings.push(message),
+    setOutput: () => {}, info: () => {}, warning: message => assert.fail(message),
     summary: { addRaw: value => ({ write: async () => summaries.push(value) }) }
   };
   const g = publisher({ existing: true });
@@ -562,9 +724,9 @@ test("source main moving during publication supersedes the published proposal fo
   assert.equal((await runTelemetrySync({ ...g, core, directory, source, final: false })).status, "superseded");
   assert.equal(summaries.length, 0);
   sourceSequence(g, [commit, newer]);
-  assert.equal((await runTelemetrySync({ ...g, core, directory, source, final: true })).status, "superseded");
-  assert.equal(warnings.length, 1);
+  await assert.rejects(runTelemetrySync({ ...g, core, directory, source, final: true }), /may not reflect current main/);
   assert.match(summaries[0], /may not reflect current main/);
+  assert.match(summaries[0], /https:\/\/github\.com\/microsoft\/aspire\/pull\/42/);
 });
 
 test("Aspire main moving before closure re-evaluates the catalog instead of closing the proposal", async t => {
@@ -644,7 +806,7 @@ test("a source superseded during publication retries with the new inventory", as
     skills: ["alpha", "beta", "zeta"],
     references: [...expected.references, "beta/references/new.md"]
   });
-  assert.match(f.calls.find(call => call.name === "pulls.update").args.body, new RegExp(newer));
+  assert.ok(!f.calls.find(call => call.name === "pulls.update").args.body.includes(newer));
   assert.deepEqual(outputs, ["superseded", "updated"]);
 });
 
@@ -769,6 +931,20 @@ test("a proposal closed or removed before update is replaced by one new draft PR
   assert.ok(!f.calls.some(call => call.name === "pulls.create"));
 });
 
+test("a leftover branch from a closed proposal is reset and gets one new draft PR", async t => {
+  const directory = fixture(t);
+  const f = publisher({ existing: true });
+  f.github.rest.pulls.list = async args => {
+    f.calls.push({ name: "pulls.list", args });
+    return { data: [] };
+  };
+  const result = await syncTelemetryCatalog({ ...f, directory, source });
+  assert.equal(result.status, "created");
+  assert.equal(f.calls.find(call => call.name === "git.updateRef").args.force, true);
+  assert.ok(!f.calls.some(call => call.name === "git.createRef" || call.name === "pulls.update"));
+  assert.equal(f.calls.filter(call => call.name === "pulls.create").length, 1);
+});
+
 test("a proposal opened concurrently is reused instead of duplicated", async t => {
   const directory = fixture(t);
   const f = publisher();
@@ -823,21 +999,23 @@ test("repeatedly closed competing proposals fail instead of reporting success", 
   await assert.rejects(syncTelemetryCatalog({ ...f, directory, source }), /Unable to keep a telemetry proposal open/);
 });
 
-function sourceGithubFor({ merged, mergeSha = commit, main = newer, status = "ahead", calls = [] }) {
-  return { rest: {
-    pulls: { get: async args => {
-      assert.deepEqual(args, { owner: "microsoft", repo: "aspire-skills", pull_number: 123 });
-      return { data: {
-        base: { ref: "main", repo: { full_name: "microsoft/aspire-skills" } },
-        merged, merge_commit_sha: mergeSha, head: { sha: head }
-      } };
-    } },
-    git: { getRef: async () => ({ data: { object: { sha: main } } }) },
-    repos: { compareCommits: async args => {
-      calls.push(args);
-      return { data: { status } };
-    } }
+function sourceGithubFor({
+  merged, mergeSha = commit, main = newer, status = "ahead", calls = [],
+  baseRef = "main", baseRepo = "microsoft/aspire-skills"
+}) {
+  const github = sourceClient(main);
+  github.rest.pulls = { get: async args => {
+    assert.deepEqual(args, { owner: "microsoft", repo: "aspire-skills", pull_number: 123 });
+    return { data: {
+      base: { ref: baseRef, repo: { full_name: baseRepo } },
+      merged, merge_commit_sha: mergeSha, head: { sha: head }
+    } };
   } };
+  github.rest.repos = { compareCommits: async args => {
+    calls.push(args);
+    return { data: { status } };
+  } };
+  return github;
 }
 
 function sourceContext({ manual = false, dryRun = false, ref = "refs/heads/main" } = {}) {
@@ -897,6 +1075,36 @@ test("manual runs, including previews, require the main workflow ref", async () 
   }
 });
 
+test("source resolution rejects malformed PR numbers, non-main targets, and mutable source refs", async () => {
+  for (const value of ["12abc", "0", "-1", "1e2", "012", " 123", "", "9007199254740993", undefined]) {
+    const github = sourceGithubFor({ merged: true });
+    const get = github.rest.pulls.get;
+    let fetched = false;
+    github.rest.pulls.get = async args => { fetched = true; return get(args); };
+    const context = sourceContext({ manual: true });
+    context.payload.inputs.pr_number = value;
+    await assert.rejects(resolveTelemetrySource({ github, context }), /pr_number must be a positive integer/, String(value));
+    assert.equal(fetched, false);
+  }
+  for (const [options, message] of [
+    [{ baseRef: "release/1.0" }, /must target microsoft\/aspire-skills main/],
+    [{ baseRepo: "example/aspire-skills" }, /must target microsoft\/aspire-skills main/],
+    [{ main: "main" }, /immutable commit SHA/],
+    [{ main: "A".repeat(40) }, /immutable commit SHA/],
+    [{ main: undefined }, /immutable commit SHA/]
+  ]) {
+    for (const manual of [false, true]) {
+      const calls = [];
+      const github = sourceGithubFor({ merged: true, calls, ...options });
+      if ("main" in options && options.main === undefined) {
+        github.rest.git.getRef = async () => ({ data: { object: {} } });
+      }
+      await assert.rejects(resolveTelemetrySource({ github, context: sourceContext({ manual }) }), message);
+      assert.deepEqual(calls, []);
+    }
+  }
+});
+
 test("job summary escapes source-controlled catalog content", () => {
   const summary = telemetrySummary({
     status: "preview", url: 'https://example.test/"><x>',
@@ -908,6 +1116,7 @@ test("job summary escapes source-controlled catalog content", () => {
 });
 
 test("workflow retains activation and separates trusted scripts from read-only source evidence", () => {
+  assert.deepEqual(workflow.permissions, { contents: "read", "pull-requests": "write" });
   assert.deepEqual(workflow.on.pull_request, { branches: ["main"], types: ["closed"] });
   assert.equal(workflow.on.workflow_dispatch.inputs.dry_run.default, false);
   assert.equal(workflow.concurrency, undefined);
@@ -963,4 +1172,26 @@ test("workflow retains activation and separates trusted scripts from read-only s
   const retrySteps = workflow.jobs.sync.steps.slice(workflow.jobs.sync.steps.indexOf(sync) + 1);
   assert.equal(retrySteps.length, 3);
   for (const step of retrySteps) assert.equal(step.if, "steps.sync.outputs.status == 'superseded'");
+});
+
+test("resolve steps set every source output that later workflow steps read", async () => {
+  const steps = workflow.jobs.sync.steps;
+  const text = JSON.stringify(steps);
+  const AsyncFunction = (async () => {}).constructor;
+  // A file URL keeps the workflow's `${GITHUB_WORKSPACE}/scripts/...` import valid on Windows too.
+  const process = { env: { GITHUB_WORKSPACE: pathToFileURL(root).href } };
+  for (const id of ["source", "retry-source"]) {
+    const reads = new Set([...text.matchAll(new RegExp(`steps\\.${id}\\.outputs\\.([\\w-]+)`, "g"))].map(match => match[1]));
+    assert.ok(reads.size > 0, id);
+    const script = new AsyncFunction("github", "context", "core", "process", steps.find(step => step.id === id).with.script);
+    for (const [options, dryRun] of [[{}, false], [{ manual: true, dryRun: true }, true]]) {
+      const outputs = {};
+      const core = { setOutput: (name, value) => { outputs[name] = value; } };
+      await script(sourceGithubFor({ merged: true }), sourceContext(options), core, process);
+      for (const name of reads) assert.ok(name in outputs, `${id} must set ${name}`);
+      assert.equal(outputs.commit, newer);
+      assert.deepEqual(JSON.parse(outputs.source), { ...source, commit: newer, dryRun });
+      if ("dry-run" in outputs) assert.equal(outputs["dry-run"], String(dryRun));
+    }
+  }
 });
