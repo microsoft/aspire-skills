@@ -45,26 +45,45 @@ remote dependencies: explain the inventory and exclusions, and clarify material
 scope in chat before confirmation. If evidence is insufficient, ask or agree to
 defer the investigation rather than fabricate an endpoint or resource.
 
-### Choose a disposition, not an automatic resource
+### Choose a disposition and canvas treatment
 
 Apply the [external modeling policy](apphost-wiring.md#external-dependency-modeling).
-Importance alone neither requires nor rules out `AddExternalService`.
+Importance alone neither requires nor rules out `AddExternalService`. Record each
+disposition with the canvas treatment it maps to; the disposition is the evidence-backed
+rationale, not a separate status.
 
-| Disposition | Evidence-backed rationale to present |
-|-------------|--------------------------------------|
-| **Proposed resource** | Name the concrete benefit: descriptive-only dashboard visibility, a consumer that understands discovery, deliberate endpoint wiring, or meaningful opt-in diagnostics. State what ownership and behavior remain unchanged. |
-| **Retained configuration/SDK ownership** | Explain why existing configuration or SDK-selected endpoints/authentication/transport/recovery are more accurate; an optional URL parameter is still configuration, not a service. |
-| **Agreed deferred investigation** | State the missing evidence, the question to resolve, and the user's agreement to defer; do not silently treat an unassessed item as excluded. |
+| Disposition (rationale) | Canvas treatment | Evidence-backed rationale to present |
+|-------------------------|------------------|--------------------------------------|
+| **Proposed resource** | `externalDependencyId` mapping | Name the concrete benefit: descriptive-only dashboard visibility, a consumer that understands discovery, deliberate endpoint wiring, or meaningful opt-in diagnostics. State what ownership and behavior remain unchanged. |
+| **Retained configuration/SDK ownership** | `not-modeled`; `reason` names what keeps ownership | Explain why existing configuration or SDK-selected endpoints/authentication/transport/recovery are more accurate; an optional URL parameter is still configuration, not a service. |
+| **Outside the agreed scope** | `not-modeled`; `reason` names the agreed scope boundary | Cite the scope decision from chat that excludes it (for example, a separately owned feature or environment). |
+| **Agreed deferred investigation** | `deferred`; `reason` plus `unresolved` (the missing evidence or open question) | State the missing evidence, the question to resolve, and the user's agreement to defer. |
+| (none supplied) | `not-assessed` | Shown by the canvas when no mapping or treatment exists; it must not remain at confirmation. |
 
-Before confirmation, every significant in-scope dependency needs one of these
-dispositions and a rationale tied to evidence. Resolve material scope and behavior
+Before confirmation, every significant discovered dependency needs a mapping or a
+treatment with a rationale tied to evidence; out-of-scope dependencies are
+`not-modeled`, never left `not-assessed`. Resolve material scope and behavior
 questions in chat first (including whether a resource is descriptive-only, whether
 configuration moves, and whether diagnostics or startup behavior changes).
 
-Keep this accounting separate from the runnable resource graph. Use only fields
-supported by the current canvas action schemas; keep unsupported inventory details
-and decisions in chat. Do not put external dependencies in runnable `services` or
-fabricate resource types/edges to make the accounting fit.
+### Send the canvas payload
+
+Keep this accounting separate from the runnable resource graph:
+
+- Send discovered external APIs, WebSocket streams, and SDK-selected endpoints through
+  `load_discovery.externalDependencies`. Do not put external dependencies in runnable
+  `services` or fabricate resource types/edges to make the accounting fit. Use the
+  action schemas for fields; supply configuration key names and evidence, never
+  secret values or authenticated URLs.
+- Map proposal resources with `externalDependencyId`, not `serviceId`.
+- For unmapped dependencies, pass `set_proposal.externalDependencyTreatments`:
+  `not-modeled` with a `reason`, or `deferred` with a `reason` and `unresolved`.
+  Keep only the rationale discussion in chat.
+- Do not invent resources merely for visibility or change configuration,
+  SDK/authentication, health-check, or startup ownership.
+- Carry `get_confirmation.externalDependencies`, including its `resourceMappings`
+  and decisions, into implementation. Omitting inventory or treatments preserves
+  them within the current run; explicit empty arrays clear them.
 
 ## Heuristics
 
@@ -192,5 +211,6 @@ QUESTIONS BEFORE I EDIT
      be deferred with SDK ownership unchanged, or should we resolve it before approval?
 ```
 
-Resolve these questions and complete the dependency dispositions, then wait for
-confirmation before editing. The external dependencies above are not runnable services.
+Resolve these questions and complete the dependency dispositions and canvas
+treatments, then wait for confirmation before editing. The external dependencies
+above are not runnable services.

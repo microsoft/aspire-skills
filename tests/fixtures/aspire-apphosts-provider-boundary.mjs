@@ -1588,12 +1588,13 @@ test("closing a panel does not cancel its already-started explicit operation", {
     const h = await harness(t);
     h.controls.inputs = [];
     const open = await h.open();
+    h.servers[0].keepAliveTimeout = 60_000;
     const request = await requestFor(h, open);
     const started = deferred();
     const release = deferred();
     h.controls.executor = async () => { started.resolve(); await release.promise; return ok({ completed: true }); };
     const operation = h.request(open, "/api/command", { ...request, arguments: {} });
-    await started.promise;
+    assert.equal(await Promise.race([started.promise.then(() => "started"), operation]), "started");
     const closing = h.close();
     release.resolve();
     assert.equal((await operation).ok, true);

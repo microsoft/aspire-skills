@@ -6,9 +6,17 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 
 ### Changed
 - Aspireify now inventories significant external APIs, WebSocket streams and
-  SDK-selected dependencies, requires evidence-backed dispositions before approval,
+  SDK-selected dependencies, requires an evidence-backed canvas mapping or
+  not-modeled/deferred treatment (including out-of-scope items) before approval,
   and distinguishes useful external-service visibility from configuration/SDK
   ownership without adding unsafe health checks or startup gates.
+- Kept skill-supplied external APIs, streams, and SDK-owned dependencies visible
+  in the Aspireify canvas without treating them as runnable services. Resource
+  mappings, not-modeled or deferred reasons, and unassessed items now survive
+  reload, immutable confirmation, and the chat handoff. Regenerated proposals
+  honor removals and withdraw obsolete mappings; discovery refreshes clear
+  stale references without losing removal history if dependencies disappear and
+  return.
 
 ## [0.0.6](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.6)
 

@@ -247,12 +247,15 @@ Present a resource graph **before editing**. Ask clarifying questions:
 - "Your React app hardcodes `http://localhost:5000` — replace with Aspire service discovery (`endpoint.url`)?"
 - "Your API has an `/admin` endpoint — exclude it from `WithReference()` so consumers don't see it?"
 
-Before confirmation, account for every significant in-scope dependency with an
-evidence-backed disposition: **proposed resource**, **retained configuration/SDK
-ownership**, or **agreed deferred investigation**. Resolve material scope and behavior
-questions in chat first, including exclusions from a local-process-only graph.
-Keep external dependencies distinct from runnable services; use only supported canvas
-schema fields, with remaining rationale in chat. See the
+Before confirmation, account for every significant discovered dependency with a
+canvas treatment backed by an evidence-based disposition: an `externalDependencyId`
+mapping for a **proposed resource**; `not-modeled` for **retained configuration/SDK
+ownership** or a dependency **outside the agreed scope**; or `deferred` (with
+`unresolved`) for an **agreed deferred investigation**. Nothing may remain
+`not-assessed`. Resolve material scope and behavior questions in chat first,
+including exclusions from a local-process-only graph. Keep external dependencies
+distinct from runnable services: send them through `load_discovery.externalDependencies`
+and `set_proposal.externalDependencyTreatments`, keeping only the rationale in chat. See the
 [external modeling policy](references/apphost-wiring.md#external-dependency-modeling).
 
 ### 3. Edit
