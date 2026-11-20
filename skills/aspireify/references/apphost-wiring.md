@@ -222,10 +222,10 @@ api.WithEnvironment("Catalog__BaseUrl", catalog);
 Use the existing approved configuration source to supply the parameter, without
 printing its value. Only use credential-free URLs for external resources: dashboard
 URLs are visible, and making a parameter secret does not make a rendered URL safe.
-The inspected API accepts an absolute URL or URL parameter and rejects query
-strings and fragments. Do not strip required signed query parameters to force a fit;
-retain the client's configuration instead. Check the installed version and language
-before translating examples to TypeScript or Go; do not assume identical overloads.
+Use API lookup to verify URL/parameter overloads and URI restrictions for the
+installed version and language. Do not strip required signed query parameters to
+force a fit; retain the client's configuration instead. Do not assume identical
+overloads when translating examples to TypeScript or Go.
 
 ### Preserve client behavior and opt in to diagnostics
 
@@ -247,20 +247,6 @@ External-service startup gates are **off by default**. Do not add `WaitFor` mere
 because a dependency is important or referenced. Only propose a gate after
 establishing a meaningful readiness contract and explicit agreement; a
 descriptive-only resource's state does not prove availability.
-
-### Authoritative API evidence
-
-Inspected official `microsoft/aspire` source at
-[`e3008dc09c8aa26b666c6557165178c4a0bb9b5e`](https://github.com/microsoft/aspire/commit/e3008dc09c8aa26b666c6557165178c4a0bb9b5e)
-(2026-11-17; evidence, not a target-version requirement):
-
-- [ExternalServiceBuilderExtensions.cs](https://github.com/microsoft/aspire/blob/e3008dc09c8aa26b666c6557165178c4a0bb9b5e/src/Aspire.Hosting/ExternalServiceBuilderExtensions.cs):
-  URL/parameter overloads, dashboard state and opt-in HTTP-only health checks.
-- [ExternalServiceResource.cs](https://github.com/microsoft/aspire/blob/e3008dc09c8aa26b666c6557165178c4a0bb9b5e/src/Aspire.Hosting/ExternalServiceResource.cs):
-  absolute-URI validation, query/fragment restrictions.
-- [ResourceBuilderExtensions.cs](https://github.com/microsoft/aspire/blob/e3008dc09c8aa26b666c6557165178c4a0bb9b5e/src/Aspire.Hosting/ResourceBuilderExtensions.cs):
-  `WithReference` injects connection/discovery information; `WithEnvironment`
-  accepts parameter and external-service builders for explicit key mapping.
 
 ## Endpoints and ports
 
@@ -401,10 +387,10 @@ var api = builder.AddCSharpApp("api", "../src/Api")
     .WaitFor(db);  // Don't start api until db is healthy
 ```
 
-Pair `WithReference()` with `WaitFor()` for AppHost-managed infrastructure dependencies
-(databases, caches, queues) when the consumer needs them at startup. For local services,
-use their actual readiness contract. External dependencies are not startup gates by
-default; follow the [external modeling policy](#external-dependency-modeling).
+Always pair `WithReference()` with `WaitFor()` for local infrastructure dependencies
+(databases, caches, queues). Local services that depend on other local services should
+generally also wait for them. External dependencies are the exception: they are not
+startup gates by default; follow the [external modeling policy](#external-dependency-modeling).
 
 **`WaitForCompletion()`** — wait for a resource to run to completion (exit successfully). Use for init containers, database migrations, or seed data scripts:
 

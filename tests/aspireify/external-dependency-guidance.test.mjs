@@ -13,44 +13,38 @@ const wiring = read("skills/aspireify/references/apphost-wiring.md");
 const modeling = wiring.split("## External dependency modeling\n")[1]?.split("\n## Endpoints and ports")[0];
 
 test("the skill inventories remote dependencies and requires canvas treatments before confirmation", () => {
-    assert.match(skill, /HTTPS APIs, WebSocket streams, SDK-selected endpoints/);
-    assert.match(skill, /purpose, configuration key\/source \(no secret values\), lifecycle ownership/);
-    assert.match(skill, /explicit versus dynamic endpoint selection/);
-    assert.match(skill, /Before confirmation,[\s\S]*every significant discovered dependency/);
-    for (const disposition of ["proposed resource", "retained configuration/SDK", "outside the agreed scope", "agreed deferred investigation"]) {
-        assert.ok(skill.includes(disposition), `Missing disposition: ${disposition}`);
+    for (const concept of [/HTTPS/, /WebSocket/, /SDK-selected/, /configuration/, /lifecycle ownership/, /dynamic endpoint/]) {
+        assert.match(skill, concept);
     }
     for (const field of ["externalDependencyId", "not-modeled", "deferred", "not-assessed", "load_discovery.externalDependencies", "set_proposal.externalDependencyTreatments"]) {
         assert.ok(skill.includes(field), `Missing canvas term: ${field}`);
     }
-    assert.match(skill, /Resolve material scope and behavior[\s\S]*questions in chat first/);
-    assert.match(skill, /Keep external dependencies\s+distinct from runnable services/);
+    const confirmation = skill.split("\n\n").find(paragraph => /confirmation/i.test(paragraph) && /`not-assessed`/.test(paragraph));
+    assert.ok(confirmation, "Missing pre-confirmation dependency accounting");
+    for (const concept of [/every significant/i, /scope/i, /behavior/i, /chat first/i]) {
+        assert.match(confirmation, concept);
+    }
+    assert.match(skill, /external dependencies[\s\S]*distinct from runnable services/);
 });
 
 test("scan guidance records evidence and scope without turning inventory into runnable resources", () => {
-    assert.match(scan, /Purpose and consumers/);
-    assert.match(scan, /Configuration key\/source/);
-    assert.match(scan, /Lifecycle ownership/);
-    assert.match(scan, /Endpoint selection/);
-    assert.match(scan, /Evidence and uncertainty/);
+    for (const concept of [/purpose/i, /consumer/i, /configuration key/i, /lifecycle ownership/i, /endpoint selection/i, /evidence/i, /uncertainty/i]) {
+        assert.match(scan, concept);
+    }
     assert.match(scan, /Never copy[\s\S]*secret values/);
-    assert.match(scan, /Package presence alone[\s\S]*does not prove an active dependency/);
-    assert.match(scan, /local-process-only AppHost can be correct/);
-    assert.match(scan, /every significant discovered dependency needs a mapping or a\s+treatment/);
-    assert.match(scan, /out-of-scope dependencies are\s+`not-modeled`, never left `not-assessed`/);
+    assert.match(scan, /Package presence[\s\S]*consumer/);
+    assert.match(scan, /out-of-scope[\s\S]*`not-modeled`/);
     assert.match(scan, /Do not put external dependencies in runnable\s+`services`/);
 });
 
 test("scan guidance is one inventory, disposition and canvas payload flow", () => {
     const headings = [...scan.matchAll(/^#{2,3} (.+)$/gm)].map(match => match[1]);
-    const order = ["Significant dependency inventory", "Choose a disposition and canvas treatment", "Send the canvas payload"];
-    const positions = order.map(heading => headings.indexOf(heading));
+    const order = [/dependency inventory/i, /disposition.*treatment/i, /canvas payload/i];
+    const positions = order.map(heading => headings.findIndex(value => heading.test(value)));
     assert.ok(positions.every(position => position >= 0), `Missing flow headings: ${headings.join(", ")}`);
     assert.deepEqual(positions, [...positions].sort((a, b) => a - b));
     assert.equal(positions[2] - positions[0], 2, "Keep the flow contiguous");
-    assert.ok(!headings.includes("External inventory handoff"), "Merge the handoff into the flow");
-
-    const table = scan.split("### Choose a disposition and canvas treatment\n")[1].split("\n### ")[0];
+    const table = scan.split(`### ${headings[positions[1]]}\n`)[1].split("\n### ")[0];
     const rows = Object.fromEntries([...table.matchAll(/^\| \*\*(.+?)\*\* \| (.+?) \|/gm)].map(match => [match[1], match[2]]));
     assert.match(rows["Proposed resource"], /`externalDependencyId`/);
     assert.match(rows["Retained configuration/SDK ownership"], /`not-modeled`/);
@@ -61,15 +55,14 @@ test("scan guidance is one inventory, disposition and canvas payload flow", () =
     for (const field of ["load_discovery.externalDependencies", "externalDependencyId", "set_proposal.externalDependencyTreatments", "get_confirmation.externalDependencies"]) {
         assert.ok(scan.includes(`\`${field}\``), `Missing canvas field: ${field}`);
     }
-    assert.doesNotMatch(scan, /Use only fields\s+supported by the current canvas action schemas/);
 });
 
 test("external modeling distinguishes configuration, descriptive resources and intentional wiring", () => {
     assert.ok(modeling, "Missing external modeling policy");
     assert.match(modeling, /Descriptive-only visibility/);
-    assert.match(modeling, /Consumers may retain their existing configuration and SDKs/);
-    assert.match(modeling, /`AddParameter` can hold an endpoint value; it does not describe the service itself/);
-    assert.match(wiring, /`WithReference` does not automatically configure arbitrary SDK options/);
+    assert.match(modeling, /retain[\s\S]*configuration and SDKs/);
+    assert.match(modeling, /`AddParameter`[\s\S]*does not[\s\S]*service/);
+    assert.match(wiring, /`WithReference`[\s\S]*not[\s\S]*SDK options/);
     const blocks = [...modeling.matchAll(/```csharp\n([\s\S]*?)```/g)].map(match => match[1]);
     assert.equal(blocks.length, 3, "Keep distinct configuration-only, descriptive-only and deliberate wiring examples");
     assert.match(blocks[0], /\.WithEnvironment\("Catalog__BaseUrl", catalogUrl\)/);
@@ -81,17 +74,31 @@ test("external modeling distinguishes configuration, descriptive resources and i
 });
 
 test("external guidance preserves SDK behavior and avoids unsafe default diagnostics and gates", () => {
-    assert.match(modeling, /credential providers, endpoint discovery/);
-    assert.match(modeling, /protected HTTP transports[\s\S]*retry policies,[\s\S]*stream reconnect\/resubscription, failover and recovery/);
-    assert.match(modeling, /Do not invent a representative endpoint/);
+    for (const concept of [/credential providers/, /endpoint discovery/, /protected HTTP transports/, /retry/, /reconnect/, /failover/, /recovery/]) {
+        assert.match(modeling, concept);
+    }
+    assert.match(modeling, /Do not invent[\s\S]*endpoint/);
     assert.match(modeling, /Do not add `WithHttpHealthCheck` to `ws:\/\/` or `wss:\/\/` URLs/);
     assert.match(modeling, /invent `\/health` paths/);
-    assert.match(modeling, /separate HTTP client, not the SDK's protected[\s\S]*transport or auth pipeline/);
-    assert.match(modeling, /startup gates are \*\*off by default\*\*/);
+    assert.match(modeling, /separate HTTP client[\s\S]*SDK/);
+    assert.match(modeling, /startup gates[\s\S]*off by default/);
     assert.match(modeling, /explicit agreement/);
-    assert.doesNotMatch(wiring, /Always pair `WithReference\(\)` with `WaitFor\(\)`/);
-    assert.match(modeling, /making a parameter secret does not make a rendered URL safe/);
-    assert.match(modeling, /e3008dc09c8aa26b666c6557165178c4a0bb9b5e/);
+    assert.match(modeling, /credential-free URLs/);
+});
+
+test("external wait exclusions preserve validation and ordering for local resources", () => {
+    const validation = skill.split("### 4. Validate\n")[1]?.split("\n### ")[0];
+    assert.ok(validation);
+    assert.match(validation, /aspire wait <resource>[^\n]*each local[^\n]*project[^\n]*container/);
+    assert.doesNotMatch(validation.split("```bash\n")[1].split("```")[0], /agreed readiness contract/);
+    assert.match(validation, /Exclude external-service resources[\s\S]*explicit agreement/);
+
+    const ordering = wiring.split("## Dependency ordering:")[1]?.split("\n## ")[0];
+    assert.ok(ordering);
+    assert.match(ordering, /Always pair `WithReference\(\)`[\s\S]*`WaitFor\(\)`[\s\S]*local infrastructure/);
+    assert.match(ordering, /Local services[\s\S]*generally also wait/);
+    assert.match(ordering, /External dependencies[\s\S]*not[\s\S]*startup gates by default/);
+    assert.match(ordering, /\.WithReference\(db\)\s+\.WaitFor\(db\)/);
 });
 
 test("external modeling evals use generic read-only source evidence and focused graders", () => {

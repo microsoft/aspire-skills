@@ -207,7 +207,7 @@ command matrix and resolver details.
 1. SCAN     → discover projects, services, dependencies, integration candidates
 2. PROPOSE  → resource graph + integration list, confirm with user
 3. EDIT     → wire AppHost, add ServiceDefaults + OTel + health checks
-4. VALIDATE → aspire start --non-interactive → aspire wait <runnable resources>
+4. VALIDATE → aspire start --non-interactive → aspire wait <each local resource>
 5. DEACTIVATE → confirm clean start, hand off to aspire-orchestration
 ```
 
@@ -266,9 +266,13 @@ Apply the proposed graph. Use the right authoring style for the AppHost language
 
 ```bash
 aspire start --non-interactive --format Json
-aspire wait <resource>          # for runnable resources with an agreed readiness contract
+aspire wait <resource>          # repeat for each local project, container, and other runnable resource
 aspire describe --format Json   # sanity check graph
 ```
+
+Exclude external-service resources from default validation waits; their readiness
+checks and startup gates require explicit agreement under the
+[external modeling policy](references/apphost-wiring.md#external-dependency-modeling).
 
 Full validation flow + recovery in [references/validation.md](references/validation.md).
 
