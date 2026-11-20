@@ -1,0 +1,45 @@
+name: Changelog check
+
+on:
+  pull_request:
+    branches:
+      - dev
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - edited
+  push:
+    branches:
+      - dev
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  changelog-check:
+    name: Changelog check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout checked commit
+        if: github.event_name != 'merge_group' || github.event.merge_group.base_ref == 'refs/heads/dev'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node
+        if: github.event_name != 'merge_group' || github.event.merge_group.base_ref == 'refs/heads/dev'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: "22"
+
+      - name: Reject changelog entries in released versions
+        if: github.event_name != 'merge_group' || github.event.merge_group.base_ref == 'refs/heads/dev'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: |
+          npm ci --ignore-scripts
+          node scripts/release-automation.mjs check-changelog "$BASE_SHA"

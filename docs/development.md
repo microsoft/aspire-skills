@@ -30,44 +30,57 @@ See [Shared canvas UI](canvas-ui.md) for token ownership, typography, icons,
 standalone packages, plugin mirrors, and visual review.
 
 The **Tests** workflow runs its three-OS matrix on PRs targeting main, dev, or
-release branches, and on pushes to main or dev. Release-branch pushes rely on PR
-checks instead of triggering a duplicate matrix.
+release branches, on pushes to main or dev, and on merge-queue candidates.
+Release-branch pushes rely on PR checks instead of triggering a duplicate matrix.
 
 The **OpenCode catalog check** runs on every PR, including stacked PRs, on
-main/dev/release pushes, and on merge-queue candidates.
+main/dev/release pushes, and on merge-queue candidates. It rejects missing,
+extra, or stale catalog files.
+
+The **Changelog check** runs on PRs into `dev`, `dev` pushes, and merge-queue
+candidates. It rejects edits to published or shipped changelog entries, and new
+entries under a version that has a release branch once `dev` has moved past it.
 
 The **Release branch check** fails any PR into main unless its head is a
-`release/<version>` branch in this repository.
+`release/<version>` branch in this repository. It also requires the branch
+name, coordinated versions, and newest changelog heading to agree on a version
+newer than main's, finalized notes for that version, and unchanged entries for
+published releases.
 
-## Expected release flow
+## Release flow
 
-1. **Cut the release.** Create `release/<version>` at the chosen dev commit.
-2. **Advance dev.** Create `bump-dev/<next-version>` from current dev, run
-   `npm run version:dev -- <next-version>`, and open a PR to dev. The command
-   updates coordinated versions, adds the new changelog heading without changing
-   existing entries, and regenerates catalogs.
-3. **Prepare the candidate.** Backport needed fixes, finalize the changelog,
-   regenerate catalogs with `npm run catalog`, and run `npm test`.
-4. **Release to main.** Open the release PR to main. Maintainers approve and
-   merge it; the publisher tags the exact merged commit, creates the GitHub
-   release from the approved changelog notes, and uploads no generated archives.
-5. **Merge back to dev.** Create `backport/pr-<release-pr>-to-dev` from current
-   dev and merge main into it. Keep dev's next version and newer work, preserve
-   non-version manifest changes and dev's current changelog entry, update earlier
-   entries from main's approved changelog, and regenerate catalogs. Open a PR to dev
-   and merge it with a merge commit.
+1. **Prepare.** Run **Prepare release** from `main` with a full `dev` commit
+   SHA and the next dev version. It opens a `release/<version>` PR to `main`
+   at that commit, using that commit's version, and a `bump-dev/<next>` PR that
+   advances `dev`. Until the bump PR merges, keep adding entries under the
+   release version. After each merge into `dev`, **Sync changelog** rebuilds the
+   bump PR on the latest `dev` and moves entries added after the cut to the next
+   version.
+2. **Backport fixes.** Comment `/backport to release/<version>` on merged `dev`
+   PRs. Resolve any conflicts manually.
+3. **Publish.** Finalize the notes on the release branch and merge the release
+   PR. The publisher tags the merged commit and creates the GitHub release.
+4. **Merge back.** Open a PR from `main` to `dev`, keep dev's version and newer
+   work, and merge it with a merge commit.
 
-## Publication
+After the bump merges, the **Changelog check** rejects PRs that add entries
+under an older version. Because `dev` requires branches to be up to date, PRs
+that passed before the bump rerun the check when they update.
 
-`.github/workflows/publish.yml` runs when a same-repository `release/*` PR
-merges into main. It uses the event's `merge_commit_sha`, reruns the source,
-catalog, and version checks, then tags that commit and creates a source-only
-GitHub release from the approved changelog notes.
+## Automation setup
 
-Publishing uses `GITHUB_TOKEN`; no repo bot or stored automation credentials
-are needed. Maintainers create PRs and approve merges. Tags and releases are
-published in the same run because workflow-token tag pushes do not trigger
-another workflow. Reruns must preserve the tag's commit and approved notes.
+Install the Aspire repository GitHub App with write access to contents, pull
+requests, and workflows. Add its `ASPIRE_BOT_APP_ID` and
+`ASPIRE_BOT_PRIVATE_KEY` as Actions secrets.
+
+**Prepare release**, **Sync changelog**, and the backport workflow use the app
+token. Prepare release and backport run from `main`, so prepare the first
+release manually: cut `release/<version>` from `dev`, open a PR to `main`, and
+advance `dev` with `npm run version:dev -- <next-version>`.
+
+Require **OpenCode catalog check** and the three **Test** jobs on `main` and
+`dev`, **Changelog check** on `dev`, and **Release branch check** on `main`.
+On `dev`, also enable **Require branches to be up to date before merging**.
 
 ## Aspire telemetry maintenance
 

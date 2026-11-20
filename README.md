@@ -292,12 +292,9 @@ committed skill source, including file lists and SHA-512 content versions.
 
 ### Publishing releases
 
-Merging a same-repository `release/<version>` PR into `main` runs
-[the publisher](.github/workflows/publish.yml). It tags the exact merged commit,
-copies the approved changelog notes into a source-only GitHub release, and uploads
-no generated archives. It uses `GITHUB_TOKEN`, not a repo bot or stored personal
-token. Reruns preserve the tag's commit and notes.
-See [the development guide](docs/development.md) for the release flow.
+Merging a `release/<version>` PR from this repository into `main` publishes a
+GitHub release. See the [development guide](docs/development.md) for the
+release process.
 
 ## Contributing
 
