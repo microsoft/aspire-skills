@@ -7,6 +7,8 @@ import { Repository, fullSha } from "./release-git.mjs";
 import { expectedCatalog, validateCatalog } from "./release-catalog.mjs";
 import { compareVersions, parseVersion, updateVersion, versionSnapshot } from "./release-versions.mjs";
 import { developmentVersionFiles } from "./version-development.mjs";
+import { Changelog } from "./release-changelog.mjs";
+import { ReleaseOperation } from "./release-operation.mjs";
 
 export function remoteHead(repo, branch) {
   repo.run(["check-ref-format", `refs/heads/${branch}`]);
@@ -62,47 +64,18 @@ export function releaseVersion(branch) {
   return version;
 }
 
-function changelogSections(text) {
-  const normalized = text.replaceAll("\r\n", "\n");
-  const start = normalized.search(/^## /m);
-  if (start < 0) throw new Error("CHANGELOG.md needs a version heading.");
-  const sections = normalized.slice(start).split(/(?=^## )/m).filter(Boolean);
-  const result = new Map();
-  for (const section of sections) {
-    const version = /^## \[([^\]]+)\]\(https:\/\/github\.com\/microsoft\/aspire-skills\/releases\/tag\/v\1\)\n/.exec(section)?.[1];
-    if (!version || result.has(version)) throw new Error("Invalid or duplicate changelog heading.");
-    parseVersion(version);
-    result.set(version, section);
-  }
-  return { prefix: normalized.slice(0, start), sections: result };
-}
-
-export function mergeChangelogs(targetText, sourceText) {
-  const target = changelogSections(targetText);
-  const source = changelogSections(sourceText);
-  const sections = new Map([...target.sections, ...source.sections]);
-  const ordered = [...sections].sort(([left], [right]) => compareVersions(right, left));
-  return Buffer.from(
-    target.prefix + ordered.map(([, section]) => section.trimEnd()).join("\n\n") + "\n"
-  );
-}
-
 export function assertPublishedHistory(repo, candidate, main) {
-  const approved = changelogSections(repo.read(main, "CHANGELOG.md").toString("utf8")).sections;
-  const proposed = changelogSections(repo.read(candidate, "CHANGELOG.md").toString("utf8")).sections;
-  for (const [version, text] of approved) {
-    if (proposed.get(version)?.trimEnd() !== text.trimEnd()) {
-      throw new Error(`Approved changelog history changed or is missing: ${version}`);
-    }
-  }
+  Changelog.read(repo, candidate).assertPreserves(Changelog.read(repo, main),
+    version => `Approved changelog history changed or is missing: ${version}`);
 }
 
-export function validateRelease(repo, candidate, base, branch) {
+export function validateRelease(repo, candidate, base, branch, { requireNotes = false } = {}) {
   const version = versionSnapshot(repo, candidate).version;
   if (branch && releaseVersion(branch) !== version) throw new Error("Release branch and coordinated versions disagree.");
   if (compareVersions(version, versionSnapshot(repo, base).version) <= 0) throw new Error("Release version must be newer than main.");
-  const sections = changelogSections(repo.read(candidate, "CHANGELOG.md").toString("utf8")).sections;
-  if (sections.keys().next().value !== version) throw new Error("Release version and newest changelog heading disagree.");
+  const changelog = Changelog.read(repo, candidate);
+  if (changelog.newest !== version) throw new Error("Release version and newest changelog heading disagree.");
+  if (requireNotes && !changelog.notes(version)) throw new Error("Release changelog notes must be finalized before merging.");
   assertPublishedHistory(repo, candidate, base);
   validateCatalog(repo, candidate, expectedCatalog(repo, candidate));
   return version;
@@ -117,13 +90,9 @@ export function releaseFiles(repo, source, version, main) {
     return developmentVersionFiles(repo, source, version).files;
   }
   const files = new Map([...snapshot.manifests].map(([path, bytes]) => [path, updateVersion(bytes, path, version)]));
-  const text = repo.read(source, "CHANGELOG.md").toString("utf8");
-  const parsed = changelogSections(text);
-  if (parsed.sections.keys().next().value !== snapshot.version) throw new Error("Source version and newest changelog heading disagree.");
-  files.set("CHANGELOG.md", Buffer.from(text.replace(
-    `## [${snapshot.version}](https://github.com/microsoft/aspire-skills/releases/tag/v${snapshot.version})`,
-    `## [${version}](https://github.com/microsoft/aspire-skills/releases/tag/v${version})`
-  )));
+  const changelog = Changelog.read(repo, source);
+  if (changelog.newest !== snapshot.version) throw new Error("Source version and newest changelog heading disagree.");
+  files.set("CHANGELOG.md", changelog.withNewestRenamed(version).toBuffer());
   return files;
 }
 
@@ -159,17 +128,6 @@ export function ensurePullRequest(api, repository, { branch, base, title, body, 
   });
 }
 
-const releaseSourceTrailer = "Aspire-Release-Source";
-
-function operationMarker(source, version, nextVersion) {
-  return `${releaseSourceTrailer}: ${source}\nAspire-Release-Version: ${version}\nAspire-Next-Version: ${nextVersion}`;
-}
-
-export function releaseSources(messages) {
-  const pattern = new RegExp(`^(?:<!-- )?${releaseSourceTrailer}: ([0-9a-f]{40})$`, "gm");
-  return new Set([...messages.replaceAll("\r\n", "\n").matchAll(pattern)].map(match => match[1]));
-}
-
 function isAncestor(repo, ancestor, descendant) {
   try {
     repo.run(["merge-base", "--is-ancestor", ancestor, descendant]);
@@ -179,14 +137,86 @@ function isAncestor(repo, ancestor, descendant) {
   }
 }
 
-export function prepareRelease(repo, source, version, nextVersion, {
+export function assertRepository(repository) {
+  if (typeof repository !== "string" || !/^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/.test(repository)) {
+    throw new Error("Repository must be an owner/name pair.");
+  }
+  return repository;
+}
+
+function fetchedRemoteHead(repo, branch) {
+  const commit = remoteHead(repo, branch);
+  if (commit) repo.run(["fetch", "--no-tags", "origin", commit]);
+  return commit;
+}
+
+function planEntry(entry) {
+  return Object.freeze({ ...entry, existing: entry.existing !== null, commit: entry.existing ?? entry.commit });
+}
+
+function planRelease(repo, operation, main, findPull) {
+  const { source, version } = operation;
+  const branch = `release/${version}`;
+  const pull = findPull(branch, "main");
+  let expected = commitFiles(repo, source, releaseFiles(repo, source, version, main), `Prepare release ${version}`);
+  assertPublishedHistory(repo, expected, main);
+  expected = commitFiles(repo, expected, expectedCatalog(repo, expected),
+    `Generate release ${version} catalogs`, { replace: ["opencode"] });
+  validateRelease(repo, expected, main, branch);
+  const existing = fetchedRemoteHead(repo, branch);
+  if (existing) {
+    if (!isAncestor(repo, source, existing)) {
+      throw new Error(`Existing branch does not descend from this operation's source: ${branch}`);
+    }
+    if (!pull && repo.run(["rev-parse", `${existing}^{tree}`]) !== repo.run(["rev-parse", `${expected}^{tree}`])) {
+      throw new Error(`Existing branch has no matching PR and contains unexpected changes: ${branch}`);
+    }
+    validateRelease(repo, existing, main, branch);
+  }
+  return planEntry({
+    kind: "release", branch, base: "main", baseCommit: main, commit: expected, existing,
+    title: `Release ${version}`,
+    description: "Finalize the release notes and merge after required checks pass."
+  });
+}
+
+function planDevBump(repo, operation, dev, findPull) {
+  const { nextVersion } = operation;
+  const branch = `bump-dev/${nextVersion}`;
+  findPull(branch, "dev");
+  const existing = fetchedRemoteHead(repo, branch);
+  let expected = null;
+  if (existing) {
+    // The bump may predate newer dev commits, so identify it by its recorded operation, not its base.
+    const recorded = repo.run(["log", "--format=%B%x00", existing, "--not", dev]).split("\0").map(ReleaseOperation.parse);
+    if (!recorded.some(candidate => operation.equals(candidate))) {
+      throw new Error(`Existing branch does not match this operation: ${branch}`);
+    }
+    if (versionSnapshot(repo, existing).version !== nextVersion) {
+      throw new Error(`Existing branch has an unexpected development version: ${branch}`);
+    }
+  } else {
+    const { files } = developmentVersionFiles(repo, dev, nextVersion);
+    expected = commitFiles(repo, dev, files, `Advance dev to ${nextVersion}\n\n${operation.trailer()}`);
+    expected = commitFiles(repo, expected, expectedCatalog(repo, expected),
+      `Generate dev ${nextVersion} catalogs`, { replace: ["opencode"] });
+  }
+  return planEntry({
+    kind: "bump-dev", branch, base: "dev", baseCommit: dev, commit: expected, existing,
+    title: `Advance dev to ${nextVersion}`,
+    description: "Advances coordinated versions, adds the next changelog heading, and regenerates catalogs."
+  });
+}
+
+// Computes, without pushing, the release and dev-bump branches for one release operation.
+// Existing branches are reused only when they match the operation and any open PR records its marker.
+export function prepareRelease(repo, request, {
   api = githubRequest,
   repository = process.env.GITHUB_REPOSITORY
 } = {}) {
-  fullSha(source);
-  parseVersion(version);
-  parseVersion(nextVersion);
-  if (compareVersions(nextVersion, version) <= 0) throw new Error("Next dev version must be newer than the release.");
+  const operation = ReleaseOperation.create(request ?? {});
+  assertRepository(repository);
+  const { source, version, nextVersion } = operation;
   repo.run(["fetch", "--no-tags", "origin", "main", "dev"]);
   const main = repo.sha("refs/remotes/origin/main");
   const dev = repo.sha("refs/remotes/origin/dev");
@@ -196,58 +226,22 @@ export function prepareRelease(repo, source, version, nextVersion, {
   if (repo.run(["ls-remote", "--tags", "origin", `refs/tags/v${version}`]).trim()) {
     throw new Error("This release version already has a published tag.");
   }
-  const marker = operationMarker(source, version, nextVersion);
-  const branches = [];
-  for (const kind of ["release", "bump-dev"]) {
-    const branch = `${kind}/${kind === "release" ? version : nextVersion}`;
-    const base = kind === "release" ? "main" : "dev";
-    let expected;
-    if (kind === "release") {
-      expected = commitFiles(repo, source, releaseFiles(repo, source, version, main),
-        `Prepare release ${version}`);
-      assertPublishedHistory(repo, expected, main);
-      expected = commitFiles(repo, expected, expectedCatalog(repo, expected),
-        `Generate release ${version} catalogs`, { replace: ["opencode"] });
-      validateRelease(repo, expected, main, branch);
-    } else {
-      const { files } = developmentVersionFiles(repo, dev, nextVersion);
-      expected = commitFiles(repo, dev, files, `Advance dev to ${nextVersion}\n\n${marker}`);
-      expected = commitFiles(repo, expected, expectedCatalog(repo, expected),
-        `Generate dev ${nextVersion} catalogs`, { replace: ["opencode"] });
-    }
-    const pull = repository ? matchingPullRequest(api, repository, {
-      branch, base, marker: `<!-- ${marker} -->`
-    }) : null;
-    let commit = remoteHead(repo, branch);
-    const existing = commit !== null;
-    if (commit) {
-      repo.run(["fetch", "--no-tags", "origin", commit]);
-      const operationBase = kind === "release" ? source : dev;
-      if (!isAncestor(repo, operationBase, commit)) {
-        throw new Error(`Existing branch does not descend from this operation's source: ${branch}`);
-      }
-      if (!pull && repo.run(["rev-parse", `${commit}^{tree}`]) !== repo.run(["rev-parse", `${expected}^{tree}`])) {
-        throw new Error(`Existing branch has no matching PR and contains unexpected changes: ${branch}`);
-      }
-      if (kind === "release") validateRelease(repo, commit, main, branch);
-      else if (versionSnapshot(repo, commit).version !== nextVersion) {
-        throw new Error(`Existing branch has an unexpected development version: ${branch}`);
-      }
-    } else {
-      commit = expected;
-    }
-    branches.push({ branch, base, commit, baseCommit: base === "main" ? main : dev, existing });
-  }
-  return { marker: `<!-- ${marker} -->`, branches };
+  const marker = operation.comment();
+  const findPull = (branch, base) => matchingPullRequest(api, repository, { branch, base, marker });
+  return Object.freeze({
+    operation, marker,
+    branches: Object.freeze([planRelease(repo, operation, main, findPull), planDevBump(repo, operation, dev, findPull)])
+  });
 }
-
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const repo = new Repository(process.cwd());
     const [command, ...args] = process.argv.slice(2);
     let result;
-    if (command === "prepare" && args.length === 3) result = prepareRelease(repo, ...args);
-    else throw new Error("Usage: release-automation.mjs prepare <sha> <version> <next-version>");
+    if (command === "prepare" && args.length === 3) {
+      const [source, version, nextVersion] = args;
+      result = prepareRelease(repo, { source, version, nextVersion });
+    } else throw new Error("Usage: release-automation.mjs prepare <sha> <version> <next-version>");
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
     console.error(error.message);

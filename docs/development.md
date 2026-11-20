@@ -48,6 +48,8 @@ The **Release branch check** fails any PR into main unless its head is a
    steps for preparing commits, pushing branches, and opening PRs; the push
    and PR steps use the Aspire App token. Links to both PRs appear in the run
    summary. Both PRs require review.
+   Merge the dev version-bump PR before the release PR. The automatic release
+   backport requires dev to have advanced to the next version.
 2. **Prepare candidate fixes.** Run **Backport PR to branch** from main with a
    merged dev PR number and its target `release/<version>`. The copied
    Arcade-derived workflow from `microsoft/aspire` builds the patch locally
@@ -71,12 +73,13 @@ version. Manifest content edits still apply, but a release cannot overwrite the
 target's version. The release PR body records its dev source commit; backports
 start there so they do not replay older dev history. The marker also identifies
 the operation on reruns, so release preparation does not need an empty commit.
-Main-to-dev backports also merge main's approved release notes while preserving
-dev's current changelog entry and newer work. Patch conflicts or
-preservation-check failures stop the operation and post a source-PR comment
-with the workflow link; they may occur before a PR is opened. Resolve those
-backports manually, preserving these invariants, rather than accepting one side
-wholesale.
+Main-to-dev backports merge approved release notes while preserving dev's
+current changelog entry. If a previously recorded changelog section changed
+after the release source was selected, the backport stops rather than replacing
+those notes. Patch conflicts and preservation-check failures post a source-PR
+comment with the workflow link; resolve them manually rather than accepting one
+side wholesale. If the release PR was merged before the version bump, merge the
+bump and rerun the failed backport.
 
 Reruns reuse matching open PRs and can recover from a branch push followed by a
 PR-creation failure. They do not reopen closed PRs, replace maintainer edits, or
@@ -87,25 +90,6 @@ instead of force-pushing over it.
 The `release-automation.mjs prepare` command only prepares local commits and
 prints a JSON plan. It does not push branches or call the GitHub PR API; those
 operations belong to the workflow.
-
-### Pre-merge live validation
-
-The temporary **Test release preparation** workflow runs on pushes to
-`ellahathaway-release-catalog-automation`. It calls **Prepare release** from the
-same commit, checks out that exact branch commit, and uses the Aspire App token
-to push branches and open both PRs. Production manual runs still require main
-and check out main.
-
-The test inputs are pinned in `.github/workflows/prepare-release-test.yml`:
-dev source `c04950a72509426059081fca518797194025acd1`, release `0.0.6`, and
-next dev version `0.0.7`. It opens draft `[Test]` PRs from `release/0.0.6` to
-main and from `bump-dev/0.0.7` to dev. These are real repository branches and
-PRs, not a dry run. Do not merge them. Reruns reuse matching open PRs.
-
-This push trigger does not need the workflow on the default branch. It does
-not run for forks, other branches, or PR events. Remove the temporary test
-workflow and its branch exception from **Prepare release** before merging
-the automation.
 
 ## Automation setup
 

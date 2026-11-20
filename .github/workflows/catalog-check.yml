@@ -51,5 +51,7 @@ jobs:
           import {Repository, fullSha} from "./scripts/release-git.mjs";
           import {validateRelease} from "./scripts/release-automation.mjs";
           const repo = new Repository(process.cwd());
-          validateRelease(repo, repo.sha("HEAD"), fullSha(process.env.BASE_SHA), process.env.RELEASE_BRANCH || undefined);
+          validateRelease(repo, repo.sha("HEAD"), fullSha(process.env.BASE_SHA), process.env.RELEASE_BRANCH || undefined, {
+            requireNotes: true
+          });
           NODE

@@ -87,9 +87,13 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           SOURCE_PR: ${{ github.event.pull_request.number || inputs.source_pr }}
-          TARGET_BRANCH: ${{ github.event_name == 'pull_request' && 'dev' || inputs.target_branch }}
-          MODE: ${{ github.event_name == 'pull_request' && 'automatic' || 'manual' }}
-        run: node scripts/backport.mjs "$SOURCE_PR" "$TARGET_BRANCH" "$MODE"
+          TARGET_BRANCH: ${{ inputs.target_branch }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            node scripts/backport.mjs "$SOURCE_PR" automatic
+          else
+            node scripts/backport.mjs "$SOURCE_PR" manual "$TARGET_BRANCH"
+          fi
       - name: Re-lock source PR comments
         if: always() && steps.source-pr.outputs.unlocked == 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3

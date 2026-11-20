@@ -4,9 +4,11 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Repository, fullSha } from "./release-git.mjs";
-import { updateVersion, versionManifests, versionSnapshot } from "./release-versions.mjs";
+import { compareVersions, updateVersion, versionManifests, versionSnapshot } from "./release-versions.mjs";
 import { expectedCatalog } from "./release-catalog.mjs";
-import { assertPublishedHistory, commitFiles, ensurePullRequest, githubRequest, guardedPush, mergeChangelogs, releaseSources, releaseVersion, remoteHead } from "./release-automation.mjs";
+import { assertPublishedHistory, assertRepository, commitFiles, ensurePullRequest, githubRequest, guardedPush, releaseVersion, remoteHead } from "./release-automation.mjs";
+import { Changelog } from "./release-changelog.mjs";
+import { ReleaseOperation } from "./release-operation.mjs";
 
 export function validateBackport(repo, before, after, source, target) {
   const original = versionSnapshot(repo, before);
@@ -14,12 +16,10 @@ export function validateBackport(repo, before, after, source, target) {
     throw new Error("The patch changes the target's coordinated version. Resolve manually without changing its version.");
   }
   if (target === "dev") {
-    const heading = `## [${original.version}](https://github.com/microsoft/aspire-skills/releases/tag/v${original.version})`;
     const currentEntry = sha => {
-      const text = repo.read(sha, "CHANGELOG.md").toString("utf8").replaceAll("\r\n", "\n");
-      const start = text.indexOf(`${heading}\n`);
-      if (start < 0 || text.search(/^## /m) !== start) throw new Error("Dev's current changelog heading must be preserved.");
-      return text.slice(start).split(/(?=^## )/m)[0].trimEnd();
+      const changelog = Changelog.read(repo, sha);
+      if (changelog.newest !== original.version) throw new Error("Dev's current changelog heading must be preserved.");
+      return changelog.section(original.version);
     };
     if (currentEntry(before) !== currentEntry(after)) throw new Error("The patch changes dev's current changelog notes; resolve manually.");
     assertPublishedHistory(repo, after, source);
@@ -47,17 +47,26 @@ function fetchHead(repo, number, head) {
 
 // GitHub diffs a release PR against main, which spans all dev work since the last release.
 // Diff from the recorded dev source instead.
-function patchBase(repo, head, releaseBody, source, targetTip) {
-  const recorded = releaseSources(releaseBody ?? "");
-  if (recorded.size > 1) throw new Error("The source PR records more than one release source; backport manually.");
-  if (recorded.size === 1) {
-    const [base] = recorded;
-    if (!isAncestor(repo, base, head) || !isAncestor(repo, base, targetTip)) {
-      throw new Error("The source PR and target do not share the recorded release source; backport manually.");
-    }
-    return base;
+function patchBase(repo, head, operation, source, targetTip) {
+  if (!operation) return fullSha(repo.run(["merge-base", head, `${source}^1`]).trim());
+  if (!isAncestor(repo, operation.source, head) || !isAncestor(repo, operation.source, targetTip)) {
+    throw new Error("The source PR and target do not share the recorded release source; backport manually.");
   }
-  return fullSha(repo.run(["merge-base", head, `${source}^1`]).trim());
+  return operation.source;
+}
+
+// A release PR may return to dev only after dev carries the operation's next version,
+// and only when dev has not edited changelog sections that existed at the release source.
+function assertReleaseBackportable(repo, pr, operation, targetTip) {
+  if (!operation) throw new Error("The release PR must record its release operation in the PR body; backport manually.");
+  if (operation.version !== releaseVersion(pr.head.ref)) {
+    throw new Error("The release PR records a different release version than its branch; backport manually.");
+  }
+  if (compareVersions(versionSnapshot(repo, targetTip).version, operation.nextVersion) < 0) {
+    throw new Error(`Merge the dev version bump to ${operation.nextVersion} before backporting this release.`);
+  }
+  Changelog.read(repo, targetTip).assertPreserves(Changelog.read(repo, operation.source),
+    version => `Dev changelog section ${version} changed after the release source; resolve manually.`);
 }
 
 // Both sides use the target's version so the patch carries manifest content changes without version changes.
@@ -85,12 +94,30 @@ function backportPatch(repo, pr, base, head, version) {
   return repo.run(["format-patch", "--stdout", "--binary", "-1", commit], { binary: true });
 }
 
-export function runBackport(repo, { repository, number, target, automatic = false, api = githubRequest }) {
+// Backport requests are one of two shapes, chosen by the workflow trigger:
+//   { mode: "automatic" }                       copies a merged main PR to dev.
+//   { mode: "manual", target: "release/<v>" }   copies a merged dev PR to a release branch.
+// Automatic requests cannot name a target, so a trigger cannot redirect them.
+const backportModes = Object.freeze({
+  automatic: Object.freeze({ sourceBase: "main", target: target => {
+    if (target !== undefined) throw new Error("Automatic backports always target dev.");
+    return "dev";
+  } }),
+  manual: Object.freeze({ sourceBase: "dev", target: target => {
+    if (typeof target !== "string" || !target.startsWith("release/")) throw new Error("Invalid backport target.");
+    releaseVersion(target);
+    return target;
+  } })
+});
+
+export function runBackport(repo, { repository, number, mode, target: requestedTarget, api = githubRequest }) {
+  assertRepository(repository);
   if (!/^[1-9]\d*$/.test(String(number))) throw new Error("Source PR must be a positive integer.");
-  if (automatic ? target !== "dev" : !target.startsWith("release/")) throw new Error("Invalid backport target.");
-  if (!automatic) releaseVersion(target);
+  if (!Object.hasOwn(backportModes, mode)) throw new Error('Backport mode must be "manual" or "automatic".');
+  const automatic = mode === "automatic";
+  const { sourceBase: expectedBase, target: resolveTarget } = backportModes[mode];
+  const target = resolveTarget(requestedTarget);
   const pr = api(`repos/${repository}/pulls/${number}`);
-  const expectedBase = automatic ? "main" : "dev";
   if (!pr.merged || pr.base.ref !== expectedBase || pr.base.repo.full_name !== repository) {
     throw new Error(`Source PR must be merged into this repository's ${expectedBase}.`);
   }
@@ -115,16 +142,18 @@ export function runBackport(repo, { repository, number, target, automatic = fals
       repo.run(["checkout", "--detach", targetTip]);
       const head = fullSha(pr.head.sha);
       fetchHead(repo, number, head);
-      const patch = backportPatch(repo, pr, patchBase(repo, head, pr.body, source, targetTip), head, versionSnapshot(repo, targetTip).version);
+      // Only release PRs carry an authoritative marker; other bodies may quote one.
+      const releasePr = automatic && pr.head.ref.startsWith("release/");
+      const operation = releasePr ? ReleaseOperation.parse(pr.body) : null;
+      if (releasePr) assertReleaseBackportable(repo, pr, operation, targetTip);
+      const sourceBase = patchBase(repo, head, operation, source, targetTip);
+      const patch = backportPatch(repo, pr, sourceBase, head, versionSnapshot(repo, targetTip).version);
       // Generated catalogs are rebuilt for the target instead of patched.
       const applyArgs = ["am", "--3way", "--empty=keep", "--ignore-whitespace", "--keep-non-patch", "--exclude=opencode/*"];
       let mergedChangelog;
       if (automatic) {
         // Release snapshots must not replace dev's changelog entry.
-        mergedChangelog = mergeChangelogs(
-          repo.read(targetTip, "CHANGELOG.md").toString("utf8"),
-          repo.read(source, "CHANGELOG.md").toString("utf8")
-        );
+        mergedChangelog = Changelog.read(repo, targetTip).mergedWith(Changelog.read(repo, source)).toBuffer();
         applyArgs.push("--exclude=CHANGELOG.md");
       }
       if (patch) repo.run(applyArgs, { input: patch });
@@ -156,10 +185,10 @@ export function runBackport(repo, { repository, number, target, automatic = fals
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const [number, target, mode, ...rest] = process.argv.slice(2);
-    if (rest.length || !["manual", "automatic"].includes(mode)) throw new Error("Usage: backport.mjs <PR> <target> <manual|automatic>");
+    const [number, mode, target, ...rest] = process.argv.slice(2);
+    if (rest.length || !mode) throw new Error("Usage: backport.mjs <PR> automatic | backport.mjs <PR> manual <release/version>");
     const result = runBackport(new Repository(process.cwd()), {
-      repository: process.env.GITHUB_REPOSITORY, number, target, automatic: mode === "automatic"
+      repository: process.env.GITHUB_REPOSITORY, number, mode, target
     });
     console.log(result.html_url);
   } catch (error) {
