@@ -410,9 +410,32 @@ body.is-loading .progress > span {
 
 .connection-tree-copy {
     display: grid;
+    flex: 1 1 auto;
     min-width: 0;
     gap: 4px;
     overflow-wrap: anywhere;
+}
+
+.connection-tree-item.connection-reference > .connection-tree-row,
+.connection-tree-item.connection-wait > .connection-tree-row,
+.connection-tree-item.connection-parent > .connection-tree-row {
+    box-shadow: inset 3px 0 0 var(--relationship-color);
+}
+
+.connection-tree-edit {
+    flex: 0 0 auto;
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--accent);
+    font: inherit;
+    font-size: var(--text-meta);
+    cursor: pointer;
+}
+
+.connection-tree-edit:hover {
+    border-color: var(--relationship-color, var(--accent));
 }
 
 .connection-tree-copy > .muted {
@@ -629,8 +652,9 @@ body.is-loading .progress > span {
     align-items: start;
 }
 
-.relationship-guide {
+.connection-legend {
     display: flex;
+    flex-wrap: wrap;
     align-items: baseline;
     gap: 6px 10px;
     margin-bottom: 10px;
@@ -643,9 +667,31 @@ body.is-loading .progress > span {
     line-height: var(--leading-meta);
 }
 
-.relationship-guide strong {
+.connection-legend strong {
     flex: 0 0 auto;
     color: var(--text);
+}
+
+.connection-legend-kinds {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.connection-legend-kinds li {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.connection-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    background: var(--relationship-color);
 }
 
 .relationship-workspace.is-confirmed {
@@ -861,20 +907,6 @@ button.overview-node:hover {
     width: auto;
 }
 
-.relationship-list-disclosure {
-    margin-top: 16px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-}
-
-.relationship-list-disclosure > summary {
-    padding: 10px 12px;
-    font-size: var(--text-detail);
-    font-weight: var(--weight-semibold);
-    cursor: pointer;
-}
-
 .relationship-help {
     max-width: 72ch;
     margin: 0;
@@ -988,44 +1020,6 @@ button.overview-node:hover {
     .external-dependency-details > summary {
         min-height: 44px;
     }
-}
-
-.relationship-list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 0 8px 8px;
-}
-
-.relationship-row {
-    --relationship-color: var(--relation-reference);
-    display: grid;
-    width: 100%;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    gap: 10px;
-    align-items: center;
-    padding: 8px 10px;
-    border: 1px solid transparent;
-    border-radius: var(--radius);
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    text-align: left;
-}
-
-button.relationship-row {
-    cursor: pointer;
-}
-
-button.relationship-row:hover {
-    border-color: color-mix(in srgb, var(--relationship-color) 32%, var(--border-soft));
-    background: color-mix(in srgb, var(--relationship-color) 6%, var(--surface-raised));
-}
-
-.relationship-kind {
-    color: var(--muted);
-    font-size: var(--text-meta);
-    line-height: var(--leading-meta);
 }
 
 .resource-mapping {
@@ -1754,7 +1748,7 @@ dialog form {
         margin: -6px 0 -4px;
     }
 
-    .relationship-guide {
+    .connection-legend {
         align-items: flex-start;
         flex-direction: column;
         margin-bottom: 12px;
@@ -1789,13 +1783,9 @@ dialog form {
     }
 
     .connection-chip,
-    button.relationship-row,
+    .connection-tree-edit,
     .proposal-diagnostics > summary {
         min-height: 44px;
-    }
-
-    .relationship-list-disclosure {
-        margin-top: 12px;
     }
 }
 
@@ -1927,11 +1917,6 @@ dialog form {
 
     .resource-inspector {
         padding: 12px;
-    }
-
-    .relationship-row {
-        grid-template-columns: minmax(0, 1fr);
-        gap: 2px;
     }
 }
 

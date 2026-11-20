@@ -10,12 +10,15 @@ test("proposal view markup preserves tree semantics, help associations and panel
     const { document } = createCanvasTestDom(html);
     const node = (id) => document.getElementById(id);
     assert.equal(node("connections-tree").getAttribute("role"), "tree");
-    assert.equal(node("connections-tree").getAttribute("aria-describedby"), "connections-tree-help");
+    assert.equal(node("connections-tree").getAttribute("aria-describedby"), "connection-legend connections-tree-help");
+    assert.equal(node("connection-legend").parentElement, node("resource-plan-panel"));
+    assert.equal(node("relationship-guide"), null);
+    assert.equal(node("relationship-list-disclosure"), null);
     assert.equal(node("connections-tree-help").parentElement, node("connections-tree-panel"));
     assert.equal(node("connections-tree").parentElement, node("connections-tree-panel"));
     assert.equal(node("connections-tree-panel").parentElement, node("resource-plan-panel"));
     assert.equal(node("resource-details-view").parentElement, node("resource-plan-panel"));
-    for (const id of ["compact-resources", "relationship-guide", "relationship-workspace", "relationship-list-disclosure"]) {
+    for (const id of ["compact-resources", "relationship-workspace"]) {
         assert.equal(node(id).parentElement, node("resource-details-view"));
     }
     assert.equal(node("resources-view").getAttribute("aria-controls"), "resource-details-view");

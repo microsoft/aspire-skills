@@ -7,7 +7,10 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ### Added
 - Added a keyboard-accessible resource connections tree to Aspireify's Step 3
   review, alongside the existing resource views, with explicit shared and cycle
-  references and unchanged proposal confirmation.
+  references and unchanged proposal confirmation. The tree replaces the
+  separate "All relationships" list as the one place listing every connection
+  with unambiguous endpoints, keeps click-to-edit (or F2), and shares a single
+  connection legend.
 
 ### Changed
 - Kept skill-supplied external APIs, streams, and SDK-owned dependencies visible

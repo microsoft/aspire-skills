@@ -82,12 +82,8 @@ const elements = {
     compactResources: document.getElementById("compact-resources"),
     compactAddResource: document.getElementById("compact-add-resource"),
     relationshipWorkspace: document.getElementById("relationship-workspace"),
-    relationshipGuide: document.getElementById("relationship-guide"),
     planOverview: document.getElementById("plan-overview"),
     planInspector: document.getElementById("plan-inspector"),
-    relationshipListDisclosure: document.getElementById("relationship-list-disclosure"),
-    relationshipListSummary: document.getElementById("relationship-list-summary"),
-    relationshipList: document.getElementById("relationship-list"),
     proposalStateCopy: document.getElementById("proposal-state-copy"),
     proposalGeneratedAt: document.getElementById("proposal-generated-at"),
     proposalGeneration: document.getElementById("proposal-generation"),
@@ -638,25 +634,19 @@ function renderResourcePlan() {
     elements.compactResources.replaceChildren();
     elements.planOverview.replaceChildren();
     elements.planInspector.replaceChildren();
-    elements.relationshipList.replaceChildren();
     elements.relationshipWorkspace.classList.toggle("is-confirmed", snapshot.confirmed);
     const compact = (snapshot.presentationMode ?? (resources.length <= 2 ? "compact" : "relationship")) ===
         "compact";
     elements.compactResources.hidden = !compact || snapshot.confirmed;
     elements.relationshipWorkspace.hidden = compact && !snapshot.confirmed;
-    elements.relationshipGuide.hidden = compact || snapshot.confirmed;
-    elements.relationshipListDisclosure.hidden = compact && !snapshot.confirmed;
     if (snapshot.confirmed) {
         selectedResourceId = "";
         renderOverview(resources, edges, resourceIssues, true);
         elements.planInspector.hidden = true;
-        renderRelationshipList(edges, true);
-        elements.relationshipListDisclosure.open = true;
         return;
     }
     if (compact) {
         elements.relationshipWorkspace.hidden = true;
-        elements.relationshipListDisclosure.hidden = true;
         if (resources.length === 0) {
             const empty = createElement("div", {
                 className: "empty-proposal",
@@ -681,7 +671,6 @@ function renderResourcePlan() {
 
     elements.relationshipWorkspace.hidden = false;
     elements.planInspector.hidden = false;
-    elements.relationshipListDisclosure.hidden = false;
     const orderedResources = resourcesInOverviewOrder(resources);
     if (!orderedResources.some((resource) => resource.id === selectedResourceId)) {
         selectedResourceId = orderedResources[0]?.id ?? "";
@@ -692,7 +681,6 @@ function renderResourcePlan() {
         edges,
         resourceIssues,
     );
-    renderRelationshipList(edges, false);
 }
 
 function switchProposalView(view) {
@@ -746,17 +734,24 @@ function renderConnectionsTree(resources, edges) {
                 : node.disconnected
                 ? "No connections"
                 : !node.children.length ? "No outgoing connections" : "";
+        const editable = Boolean(node.edge) && !snapshot.confirmed;
+        const tone = node.edge ? ` connection-${EDGE_LABELS[node.edge.kind]?.tone ?? "reference"}` : "";
         const item = createElement("li", {
-            className: `connection-tree-item resource-${resourceKind(node.resource)}`,
+            className: `connection-tree-item resource-${resourceKind(node.resource)}${tone}`,
             attrs: {
                 id: treeNodeId(node.key),
                 role: "treeitem",
                 tabindex: node.key === focusedTreeKey ? "0" : "-1",
                 "data-tree-key": node.key,
                 "data-resource-id": node.resource.id,
-                "aria-label": [relationship, `${node.resource.name}, ${node.resource.type}`, state]
-                    .filter(Boolean).join(". "),
+                "aria-label": [
+                    relationship,
+                    `${node.resource.name}, ${node.resource.type}`,
+                    state,
+                    editable ? "Press F2 to edit this connection" : "",
+                ].filter(Boolean).join(". "),
                 ...(node.children.length ? { "aria-expanded": String(expanded) } : {}),
+                ...(editable ? { "aria-keyshortcuts": "F2" } : {}),
             },
         });
         const row = createElement("div", { className: "connection-tree-row" });
@@ -775,6 +770,22 @@ function renderConnectionsTree(resources, edges) {
         copy.append(createResourceTitleLine(node.resource));
         if (state) copy.append(createElement("span", { className: "muted", text: state }));
         row.append(copy);
+        if (editable) {
+            // Pointer affordance only; keyboard and screen reader users edit with F2 so the
+            // treeitem stays the single focus stop.
+            const edit = createElement("button", {
+                className: "connection-tree-edit",
+                text: "Edit",
+                title: `Edit ${connectionKindName(node.edge.kind)} connection from ${node.edge.from} to ${node.edge.to}`,
+                attrs: { type: "button", tabindex: "-1", "aria-hidden": "true" },
+            });
+            edit.addEventListener("click", (event) => {
+                event.stopPropagation();
+                focusedTreeKey = node.key;
+                openConnectionDialog(node.edge.id);
+            });
+            row.append(edit);
+        }
         item.append(row);
         row.addEventListener("click", () => {
             focusedTreeKey = node.key;
@@ -853,6 +864,10 @@ function handleConnectionsTreeKeydown(event) {
         case "Enter":
         case " ":
             activateTreeNode(node);
+            break;
+        case "F2":
+            if (!node.edge || snapshot.confirmed) return;
+            openConnectionDialog(node.edge.id);
             break;
         default:
             if (event.key.length !== 1) return;
@@ -1281,34 +1296,6 @@ function renderInspector(resource, edges, resourceIssues) {
     }
     inspector.append(connectionSection);
     elements.planInspector.append(inspector);
-}
-
-function renderRelationshipList(edges, confirmed) {
-    elements.relationshipListSummary.textContent = `All relationships (${edges.length})`;
-    if (!edges.length) {
-        elements.relationshipList.append(
-            createElement("p", { className: "muted", text: "No relationships in this proposal." }),
-        );
-        return;
-    }
-    for (const edge of edges) {
-        const row = createElement(confirmed ? "div" : "button", {
-            className: `relationship-row connection-${EDGE_LABELS[edge.kind]?.tone ?? "reference"}`,
-            attrs: confirmed ? {} : { type: "button" },
-        });
-        row.append(
-            createElement("strong", { text: edge.from }),
-            createElement("span", {
-                className: "relationship-kind",
-                text: EDGE_LABELS[edge.kind]?.outgoing ?? edge.kind,
-            }),
-            createElement("strong", { text: edge.to }),
-        );
-        if (!confirmed) {
-            row.addEventListener("click", () => openConnectionDialog(edge.id));
-        }
-        elements.relationshipList.append(row);
-    }
 }
 
 function captureFocusToken() {

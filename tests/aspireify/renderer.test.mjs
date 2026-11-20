@@ -190,13 +190,13 @@ function graphReview(names = ["api", "worker", "db", "isolated"], edges = [
     });
 }
 
-test("the view switch preserves the existing overview, inspector, relationship list, and snapshot", async () => {
+test("the view switch preserves the existing overview, inspector, and snapshot", async () => {
     const renderer = await createRenderer(graphReview(), { renderPlan: true });
     const before = renderer.evaluate("JSON.stringify(snapshot)");
     const confirmation = renderer.node("confirm").disabled;
     assert.equal(renderer.node("plan-overview").querySelectorAll(".overview-node").length, 4);
     assert.match(renderer.node("plan-inspector").textContent, /api/);
-    assert.equal(renderer.node("relationship-list").children.length, 2);
+    assert.equal(renderer.node("connection-legend").hidden, false);
 
     renderer.switchView("tree");
     assert.equal(renderer.node("resource-details-view").hidden, true);
@@ -211,7 +211,6 @@ test("the view switch preserves the existing overview, inspector, relationship l
     assert.equal(renderer.node("resource-details-view").hidden, false);
     assert.equal(renderer.node("resources-view").getAttribute("aria-pressed"), "true");
     assert.equal(renderer.node("plan-overview").querySelectorAll(".overview-node").length, 4);
-    assert.equal(renderer.node("relationship-list").children.length, 2);
     assert.equal(renderer.node("confirm").disabled, confirmation);
     assert.equal(renderer.evaluate("JSON.stringify(snapshot)"), before);
     assert.equal(renderer.requests.length, 0);
@@ -524,4 +523,47 @@ test("empty and no-connection trees are clear and excluded resources or dangling
     assert.match(disconnected.node("connections-tree-state").textContent, /No connections/);
     assert.match(disconnected.treeItems()[0].textContent, /No connections/);
     assert.equal(disconnected.requests.length, 0);
+});
+
+test("tree connections carry kind colors and open the connection editor from Edit or F2", async () => {
+    const renderer = await createRenderer(graphReview(), { renderPlan: true });
+    renderer.switchView("tree");
+    const root = renderer.treeItems()[0];
+    root.focus();
+    assert.equal(root.querySelector(".connection-tree-edit"), null);
+    assert.equal(root.getAttribute("aria-keyshortcuts"), null);
+    renderer.press("F2", root, { prevented: false });
+    assert.equal(renderer.node("connection-dialog").open, false);
+    renderer.press("ArrowRight");
+    const reference = renderer.treeItems()[1];
+    assert.equal(reference.matches(".connection-reference"), true);
+    assert.equal(reference.getAttribute("aria-keyshortcuts"), "F2");
+    assert.match(reference.getAttribute("aria-label"), /Press F2 to edit/);
+    const edit = reference.querySelector(".connection-tree-edit");
+    assert.equal(edit.getAttribute("tabindex"), "-1");
+    assert.equal(edit.getAttribute("aria-hidden"), "true");
+    edit.listeners.get("click")({ stopPropagation() {} });
+    assert.equal(renderer.node("connection-dialog").open, true);
+    assert.equal(renderer.node("connection-id").value, "api-db");
+    renderer.node("connection-dialog").close();
+    renderer.node("connection-id").value = "";
+    reference.focus();
+    renderer.press("F2");
+    assert.equal(renderer.node("connection-dialog").open, true);
+    assert.equal(renderer.node("connection-id").value, "api-db");
+    assert.equal(renderer.requests.length, 0);
+});
+
+test("confirmed trees omit connection editing affordances", async () => {
+    const renderer = await createRenderer(graphReview(undefined, undefined, { confirmed: true }), { renderPlan: true });
+    renderer.switchView("tree");
+    renderer.treeItems()[0].focus();
+    renderer.press("ArrowRight");
+    const reference = renderer.treeItems()[1];
+    assert.equal(reference.matches(".connection-reference"), true);
+    assert.equal(reference.querySelector(".connection-tree-edit"), null);
+    assert.equal(reference.getAttribute("aria-keyshortcuts"), null);
+    reference.focus();
+    renderer.press("F2", reference, { prevented: false });
+    assert.equal(renderer.node("connection-dialog").open, false);
 });
