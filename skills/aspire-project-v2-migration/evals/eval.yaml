@@ -1,5 +1,7 @@
 name: aspire-project-v2-migration-eval
 description: Approval-first migration, actual bounded edits, capability stops, idempotence, and intent-based routing.
+# Opt-in controlled execution boundaries live in evals/project-v2-migration/execution/eval.yaml.
+# They require enforced filesystem/network isolation and are not auto-discovered here.
 version: "1.0"
 type: capability
 tags: { skill: aspire-project-v2-migration }

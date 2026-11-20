@@ -32,6 +32,9 @@ If an approved unchanged-AppHost restore succeeds but the Dotnet integration is
 absent, request separate approval for a disposable-copy probe, not package changes
 in the application. Identify the copy location, exact AppHost, integration/version
 to add, commands, expected downloads/generated writes, and cleanup scope.
+Disclose package-manager installs, possible lockfile updates and lifecycle-script
+effects, legacy configuration creation and local integration/MSBuild execution.
+Obtain approval for those effects, not only cache and generated SDK writes.
 
 For a restore-only command plan, describe the failure stop and the conditional
 read-only success handoff; do not claim the restore or inspection ran. Inspect
@@ -44,6 +47,23 @@ addition or execution of a disposable probe.
   settings. A copy outside those settings must carry equivalent configuration;
   otherwise it is not evidence for this app. Do not switch to latest/stable or
   use another SDK merely to make the probe pass.
+- Before add/restore, resolve and verify a **copy-owned effective config**:
+  place equivalent `aspire.config.json` inside the approved copy, preserve all
+  pins/channel/settings and rebase relative paths to the copied inputs. Do not
+  rely on an original ancestor config: `aspire add` can save the package to that
+  ancestor even when the AppHost itself was copied. Resolve upward from the
+  copied entry point and verify the config's real path is inside the copy, not a
+  symlink to the original. Legacy settings migration must likewise write only
+  to an explicitly approved copy-owned config path.
+- Resolve every local integration project path and its transitive build inputs
+  (project references, imported props/targets and relevant ancestor settings).
+  Include that local integration closure in the approved copy with equivalent
+  path relationships. Verify real paths, including symlink targets, before
+  execution: a relative reference can still reach an original project and run
+  its MSBuild targets. If any build input remains outside the copy, stop for
+  separate approval naming the external project/paths and build effects, or
+  expand the approved copy; disposable-probe approval alone does not permit
+  external builds. Do not drop integrations or rewrite their behavior to pass.
 - Confirm targeting/version/source flags with the selected CLI's `aspire add --help`
   and `aspire restore --help`. Use its supported add/restore flow **only in the
   approved copy**: for example, where supported,
@@ -62,7 +82,11 @@ At either restore failure, report the command, exit code and actual diagnostic,
 including the working directory and exact failed command in the final answer.
 Quote the actual diagnostic rather than only telling the user to report it;
 distinguish a user-supplied offline result from a command you executed.
-Leave application source/configuration unchanged. In particular,
+Preserve application source and integration pins. Report any approved
+configuration migration, lockfile updates, script or build effects that already
+occurred, including on failure; do not claim source/configuration stayed unchanged
+merely because restore failed, and do not silently revert those effects.
+In particular,
 `IntegrationRestore.csproj` can fail with a SourceLink `SourceRoot.RevisionId`
 invalid-commit-hash error for a valid 64-character SHA-256 Git revision. This is
 the upstream failure tracked by [microsoft/aspire#21735](https://github.com/microsoft/aspire/issues/21735),

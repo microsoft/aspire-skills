@@ -1,0 +1,5 @@
+{
+  "sdkVersion": "13.6.0-dev",
+  "channel": "dev",
+  "packages": { "Aspire.Hosting.AppHost": "13.6.0-dev" }
+}

@@ -865,7 +865,7 @@ button.overview-node:hover {
 
 .not-proposed-identity code,
 .not-proposed-status {
-    color: var(--text-color-muted, #59636e);
+    color: var(--muted);
     font-size: var(--text-meta);
 }
 
@@ -877,7 +877,52 @@ button.overview-node:hover {
 }
 
 .not-proposed-unresolved {
-    color: var(--text-color-muted, #59636e);
+    color: var(--muted);
+}
+
+.external-dependency-kind,
+.external-dependency-details {
+    font-size: var(--text-meta);
+    line-height: var(--leading-meta);
+}
+
+.external-dependency-mapping {
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+.external-dependency-details {
+    flex-basis: 100%;
+    min-width: 0;
+}
+
+.external-dependency-details > summary {
+    min-height: 32px;
+    padding-block: 6px;
+    cursor: pointer;
+}
+
+.external-dependency-facts {
+    display: flex;
+    flex-direction: column;
+    gap: 4px 8px;
+    margin: 4px 0;
+    overflow-wrap: anywhere;
+}
+
+.external-dependency-facts dt {
+    color: var(--muted);
+}
+
+.external-dependency-facts dd {
+    min-width: 0;
+    margin: 0;
+}
+
+@media (pointer: coarse) {
+    .external-dependency-details > summary {
+        min-height: 44px;
+    }
 }
 
 .relationship-list {

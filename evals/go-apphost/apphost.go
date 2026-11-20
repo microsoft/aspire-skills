@@ -20,7 +20,7 @@ func main() {
 	//   - "ConnectionStrings__cache" so the API can dial Redis.
 	//   - "OTEL_EXPORTER_OTLP_*" env vars (via WithOtlpExporter) so traces,
 	//     metrics, and logs flow to the Aspire dashboard.
-	api := builder.AddGoApp("api", "./api").
+	builder.AddGoApp("api", "./api").
 		WithModTidy().
 		WithReference(cache).
 		WaitFor(cache).

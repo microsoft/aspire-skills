@@ -77,6 +77,32 @@ Paired restore plans explicitly permit read-only capability inspection after
 success or expressly forbid it and require inspection to remain pending; neither
 case executes the plan.
 
+The separate opt-in [`execution` spec](execution/eval.yaml)
+uses a fixture-local Node mock CLI and the default all-graders-pass policy.
+It lives outside automatic CI/nightly model discovery so those jobs cannot run
+controlled commands without first satisfying its execution preconditions.
+Run model-backed execution only in an environment that enforces workspace-only
+filesystem writes and denies agent network access, with inherited personal
+instructions/hooks disabled. The trace graders detect forbidden commands after
+execution; they are not a sandbox or a permission boundary. If those execution
+constraints cannot be guaranteed on the host, run only the offline contract
+tests and report model execution as blocked.
+It permits controlled execution to test missing side-effect approval, an exact
+legacy restore that leaves configuration after failure, and a copy-owned probe
+with a transitive local integration closure. Run its lint/eval with the commands
+above, substituting `evals/project-v2-migration/execution/eval.yaml`.
+The hidden program grader inspects the actual workspace, command/cwd/target
+audit, config ownership, protected original files, copied build inputs and
+install/script markers. Grading-only hashes/configuration live in
+`bootstrap-baseline.json`, separate from the agent-visible mock and fixture;
+update that manifest when changing fixture/mock inputs (the integrity test
+detects drift, allowing only checkout line-ending normalization).
+Negative controls deliberately execute wrong-target,
+retry, inherited-config and external-build paths and require grading failure.
+The mock performs no real installs, scripts, MSBuild, network or Aspire execution;
+its generated declarations and diagnostics are synthetic, not package/runtime
+qualification or reproduction of the upstream failure.
+
 The generated TypeScript third argument is optional, not nullable.
 `{ launchProfileName: null }` is valid and selects the default profile; literal
 `null` as the third argument is not the generated API. Do not manufacture a legacy

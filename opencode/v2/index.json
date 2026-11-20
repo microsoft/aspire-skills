@@ -58,7 +58,7 @@
     },
     {
       "name": "aspire-project-v2-migration",
-      "version": "sha512-c123a34efb7cc924d25c072d3f8419f106f799bb11002646ebe2448feaee60bd4733f627aefb465917c178ceba474ce37ab793409201cded3bac2b6e224ef3b3",
+      "version": "sha512-312d7fb89bbe09df9ae1259c2d6291d79e0f04b758983af94ab0e38486b7bc36c58930d2d80dbcc27227d4e85c00ebefed98d083c948c9c455d61a01771a7b31",
       "files": [
         "aspire-project-v2-migration.md",
         "references/compatibility-and-validation.md",
@@ -78,7 +78,7 @@
     },
     {
       "name": "aspireify",
-      "version": "sha512-a92022876213c29e13b3ee932a01186ec8bbc56b0b45f2330e97f72cc5981d68e9999cb579a289a15c68e4063d68177946f0bf3482a522b2c6e26860fb8fae57",
+      "version": "sha512-85ec8bb5ab12f80e1ad53829da1e6f3305aeff00335492c0403b136984bd7fa8e0d56761582253eee18eea360c39f6cd781cdb3fc1e42f02a7f0935ebaab6838",
       "files": [
         "aspireify.md",
         "references/apphost-wiring.md",
