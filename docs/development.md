@@ -71,60 +71,13 @@ another workflow. Reruns must preserve the tag's commit and approved notes.
 
 ## Aspire telemetry maintenance
 
-The [update-aspire workflow](../.github/workflows/update-aspire.yml) deterministically
-generates Aspire's telemetry catalog from canonical `skills/<name>/` directories
-and their `references/**` files. It writes
-`src/Aspire.Cli/Agents/Hooks/telemetry-catalog.json` in `microsoft/aspire`,
-with ordinally sorted, unique `skills` and `references` arrays. Reference names use
-`<skill>/references/<path>` with forward slashes. JSON uses two-space indentation,
-LF line endings, and a trailing newline. Mirrors under `.github/plugins/`,
-`opencode/`, and `.github/skills/` are not scanned.
-The catalog must already exist in Aspire; this workflow does not introduce its reader
-or embedding.
+The [update-aspire workflow](../.github/workflows/update-aspire.yml) generates
+Aspire's telemetry catalog from the canonical skills and their references. It runs
+when a same-repository PR merges into main and creates or updates a draft PR in
+`microsoft/aspire`. If the catalog is unchanged, it closes any open proposal.
+Do not edit the generated `update-aspire-telemetry-catalog` branch by hand.
 
-The catalog is validated against Aspire's parser and telemetry-hook contracts
-before any API call: both arrays are non-empty, skill names match
-`[a-zA-Z0-9_-]+` and are at most 128 characters, entries are unique ignoring case
-and ordinally sorted, and each reference names a cataloged skill. References are
-at most 256 characters and use only ASCII letters and digits, `.`, `_`, `-`, and
-`/`, with no backslashes, `..`, or empty, `.` segments. These match the telemetry
-hook's path validation; invalid entries fail the run rather than creating a
-catalog entry the Aspire consumer would discard.
-
-The workflow runs after a PR merges into main, or manually with a source
-`pr_number`. A merged PR always publishes the current aspire-skills main commit,
-after confirming the PR merge commit is contained in it, so stale or out-of-order
-events cannot roll back newer skills or references. Publishing runs are queued and
-run one at a time. If aspire-skills main moves after a run resolves its source,
-for example through a fork merge or direct push that starts no run of its own, the
-run repeats the same source resolution, containment check, read-only checkout, and
-publication once against the newer main. Main is checked again after publication,
-so a move during publication also triggers that retry. If main moves again during
-the retry, a publication from an already-resolved snapshot may have occurred, so the
-catalog may lag main; the run summary recommends a manual dispatch. To recover
-after a direct push to main, dispatch the workflow from
-main with the `pr_number` of a PR merged into aspire-skills main whose merge commit
-main still contains; it publishes the current main snapshot. An
-unmerged PR's head can only be previewed with `dry_run`. Merge events from fork
-PRs are skipped, so use a manual run for them. All manual runs, including
-previews, must use the workflow from main. Previews run in their own concurrency group, so they cannot
-displace a pending publication.
-
-A changed catalog creates or updates one draft PR on the automation-owned
-`update-aspire-telemetry-catalog` branch in Aspire using the existing bot app.
-Each update rebuilds that branch from Aspire's current main and changes only the
-catalog file, so do not edit the generated branch by hand. If Aspire main moves
-while a run compares or publishes, the run restarts from the new main, up to three
-attempts. If main keeps moving, the run fails and may leave an outdated proposal;
-rerun it after main stabilizes. These checks cannot prevent either repository's
-main from moving after its final check. If the open proposal closes before the run
-updates it, the run opens a new draft PR; if another writer opens one first, the
-run updates it instead. A ready proposal is returned to draft before its branch is
-updated. When Aspire main already matches the generated catalog, any open bot
-proposal is closed with a comment and the branch is deleted, including an orphan
-branch left without an open proposal. Manual `dry_run` previews the generated JSON
-in the Actions summary without creating a write token or publishing changes.
-
-No agent, destination code execution, or content interpretation is needed.
-Extension tools and behavior are not part of this inventory; their telemetry cannot
-be inferred from skill and reference paths. Aspire owns its MCP tool catalog.
+To run it manually, select main and provide a `pr_number`. A merged PR syncs the
+current main snapshot; an unmerged PR requires `dry_run` and previews its head in
+the Actions summary. Use a manual run with a merged PR after a fork PR merges or
+a direct push to main.

@@ -8,7 +8,7 @@ import { parse } from "yaml";
 import {
   generateTelemetryCatalog, resolveTelemetrySource, runTelemetrySync, syncTelemetryCatalog, telemetrySummary,
   validateTelemetryCatalog
-} from "../scripts/update-aspire-telemetry.mjs";
+} from "../scripts/update-aspire-workflow.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const workflow = parse(readFileSync(join(root, ".github", "workflows", "update-aspire.yml"), "utf8"));
@@ -946,6 +946,9 @@ test("workflow retains activation and separates trusted scripts from read-only s
   const scripts = workflow.jobs.sync.steps.filter(step => step.uses?.startsWith("actions/github-script@"));
   const [resolve, sync, retryResolve, retrySync] = scripts;
   assert.equal(scripts.length, 4);
+  for (const step of scripts) {
+    assert.match(step.with.script, /\/scripts\/update-aspire-workflow\.mjs/);
+  }
   for (const step of [sync, retrySync]) {
     assert.equal(step.env.SOURCE_TOKEN, "${{ github.token }}");
     assert.match(step.with.script, /sourceGithub: getOctokit\(process\.env\.SOURCE_TOKEN\)/);
