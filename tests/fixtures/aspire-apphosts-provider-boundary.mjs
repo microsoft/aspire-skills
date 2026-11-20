@@ -365,10 +365,21 @@ async function harness(t, {
     });
     await module.evaluate();
     const opened = new Set();
+    // Every pending-context reference the harness has observed; the default prompt quotes them all.
+    const references = new Set();
+    const recordReferences = (result) => {
+        for (const item of result?.pendingContext?.items ?? result?.state?.pendingContext?.items ?? []) {
+            if (item.reference) references.add(item.reference);
+        }
+        return result;
+    };
     const h = {
+        references,
         controls, calls, servers, intervals, idleTimers, attachments, canvasOpens, systemBrowserUrls, logs,
         startSession: (input = {}) => hooks.onSessionStart({ sessionId, workingDirectory, source: "new", ...input }),
-        submit: (input = {}) => hooks.onUserPromptSubmitted({ sessionId, workingDirectory, prompt: "Inspect this synthetic snapshot.", ...input }),
+        submit: (input = {}) => hooks.onUserPromptSubmitted({
+            sessionId, workingDirectory, prompt: `Inspect this synthetic snapshot. ${[...references].join(" ")}`, ...input,
+        }),
         fireIdleTimers() {
             const due = [...idleTimers];
             idleTimers.clear();
@@ -388,7 +399,7 @@ async function harness(t, {
                 headers: { "x-aspire-apphosts-token": url.searchParams.get("token"), "content-type": "application/json" },
                 ...(body === undefined ? {} : { body: JSON.stringify(body) }),
             });
-            return { status: response.status, ...await response.json() };
+            return recordReferences({ status: response.status, ...await response.json() });
         },
         commandCalls: () => calls.filter(({ args }) => args[0] === "resource" && !args.includes("--load-arguments")),
     };
@@ -669,11 +680,13 @@ test("renderer action click through HTTP queue delivers a captured synthetic non
     button.dispatchEvent(new Event("click"));
     const acknowledgement = await acknowledged.promise;
     assert.equal(acknowledgement.error, false);
-    assert.match(acknowledgement.message, /pending for your next message/);
+    assert.match(acknowledgement.message, /Include aspire-ctx-[0-9a-f]{12} in your message/);
     assert.equal(queued.status, 202);
     assert.equal(queued.pendingContext.count, 1);
     assert.deepEqual(renderedPending, queued.pendingContext);
-    assert.deepEqual(Object.keys(queued.pendingContext.items[0]).sort(), ["id", "label"]);
+    assert.deepEqual(Object.keys(queued.pendingContext.items[0]).sort(), ["id", "label", "reference"]);
+    assert.match(queued.pendingContext.items[0].reference, /^aspire-ctx-[0-9a-f]{12}$/);
+    assert.equal(queued.reference, queued.pendingContext.items[0].reference);
     assert.equal(queued.pendingContext.items[0].label, nonce);
     assert.doesNotMatch(JSON.stringify(queued), /resourceIdentity|capturedAt|lastSuccessfulAt/);
     await stream.waitFor((event) => event.type === "pending-context" && event.pendingContext.count === 1);
@@ -726,6 +739,64 @@ test("pending snapshots deduplicate by identity, update on repeat clicks, and ca
     assert.equal(missing.status, 400);
     assert.equal(missing.error, "The selected canvas item is no longer available.");
     assert.deepEqual(h.attachments, []);
+});
+
+test("snapshots attach only to prompts that quote their reference, never to unrelated or earlier messages", async (t) => {
+    const h = await harness(t);
+    const open = await h.open();
+    const nodes = allNodes((await h.request(open, "/api/state")).state.roots)
+        .filter((node) => node.kind === "resource");
+    const first = await h.request(open, "/api/copilot-context", { nodeId: nodes[0].id });
+    const second = await h.request(open, "/api/copilot-context", { nodeId: nodes[1].id });
+    assert.notEqual(first.reference, second.reference);
+    assert.equal(h.submit({ prompt: "Rescan this workspace for Aspire integration." }), undefined,
+        "canvas-generated or unrelated root prompts cannot consume pending context");
+    assert.equal(h.submit({ prompt: `Queued before Add: aspire-ctx-${"0".repeat(12)}` }), undefined,
+        "a message written before Add cannot know its fresh reference");
+    assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 2);
+    assert.equal(h.submit({ prompt: `x${second.reference}` }), undefined, "references match only as standalone tokens");
+    assert.equal(h.submit({ prompt: `${second.reference}0` }), undefined);
+    const delivered = h.submit({ prompt: `Explain (${second.reference}).` }).additionalContext;
+    const snapshots = JSON.parse(delivered.slice(delivered.indexOf("\n") + 1));
+    assert.deepEqual(snapshots.map((snapshot) => snapshot.reference), [second.reference]);
+    const remaining = (await h.request(open, "/api/state")).state.pendingContext;
+    assert.deepEqual(remaining.items.map((item) => item.reference), [first.reference],
+        "unreferenced snapshots remain visible and clearable");
+    const updated = await h.request(open, "/api/copilot-context", { nodeId: nodes[0].id });
+    assert.notEqual(updated.reference, first.reference, "re-adding rotates the reference");
+    assert.equal(h.submit({ prompt: `Written before the update: ${first.reference}` }), undefined,
+        "a message quoting the old reference cannot receive the newer snapshot");
+    assert.ok(h.submit({ prompt: updated.reference }).additionalContext);
+    assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 0);
+});
+
+test("an Add in flight during prompt submission stays pending instead of joining that prompt", async (t) => {
+    const h = await harness(t);
+    const open = await h.open();
+    const node = allNodes((await h.request(open, "/api/state")).state.roots)
+        .find((candidate) => candidate.kind === "resource");
+    const entered = deferred();
+    h.servers[0].once("request", () => entered.resolve());
+    let request;
+    const pending = new Promise((done, reject) => {
+        request = http.request(new URL("/api/copilot-context", open.url), {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-aspire-apphosts-token": new URL(open.url).searchParams.get("token") },
+        }, (response) => {
+            const chunks = [];
+            response.on("data", (chunk) => chunks.push(chunk));
+            response.once("end", () => done({ status: response.statusCode, ...JSON.parse(Buffer.concat(chunks).toString("utf8")) }));
+        });
+        request.once("error", reject);
+        request.write('{"nodeId":');
+    });
+    await entered.promise;
+    assert.equal(h.submit({ prompt: "Submitted while Add was in flight." }), undefined);
+    request.end(`${JSON.stringify(node.id)}}`);
+    const added = await pending;
+    assert.equal(added.status, 202);
+    assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 1);
+    assert.ok(h.submit({ prompt: added.reference }).additionalContext);
 });
 
 test("pending context clears on close and root session changes, never on a subagent start", async (t) => {

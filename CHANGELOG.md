@@ -6,10 +6,13 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 
 ### Changed
 - AppHosts **Add to chat** now queues bounded, visible, clearable snapshots in
-  memory for the next user message's submit hook instead of relying on the
-  native attachment push acknowledgement. Nothing sends automatically or
-  creates a native composer pill; snapshots are consumed once at the hook
-  boundary and cleared on canvas close or foreground session start. All open
+  memory instead of relying on the native attachment push acknowledgement. Each
+  snapshot shows a fresh `aspire-ctx-…` reference; the submit hook attaches it
+  only to a message that contains that reference, so canvas-generated messages,
+  messages queued earlier, and prompts sent while an Add is in flight never pick
+  it up. Nothing sends automatically or creates a native composer pill;
+  snapshots are consumed once at the hook boundary and cleared on canvas close
+  or foreground session start. All open
   AppHosts canvases show the shared pending list; Clear targets the displayed
   revision and rejects stale requests without deleting newer selections.
 - Kept skill-supplied external APIs, streams, and SDK-owned dependencies visible

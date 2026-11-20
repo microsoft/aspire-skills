@@ -356,9 +356,12 @@ function acceptPendingContext(pending) {
     const hadFocus = region.contains(document.activeElement);
     region.hidden = pending.count === 0;
     document.getElementById("pending-context-summary").textContent =
-        `${pending.count} selected snapshot${pending.count === 1 ? "" : "s"} pending for your next message`;
+        `${pending.count} selected snapshot${pending.count === 1 ? "" : "s"} pending. Include a reference in your message to attach it.`;
     document.getElementById("pending-context-items").replaceChildren(
-        ...pending.items.map((item) => element("li", { text: item.label, dataset: { pendingId: item.id } })),
+        ...pending.items.map((item) => element("li", { dataset: { pendingId: item.id } }, [
+            element("span", { text: `${item.label} ` }),
+            element("code", { class: "pending-context-reference", text: item.reference ?? "" }),
+        ])),
     );
     if (region.hidden && hadFocus) els.searchInput.focus();
 }
@@ -2139,7 +2142,7 @@ async function executeNodeAction(action, node) {
             if (result.ok) acceptPendingContext(result.pendingContext);
             showToast(
                 result.ok
-                    ? `${node.label} snapshot pending for your next message. You can clear it above.`
+                    ? `${node.label} snapshot pending. Include ${result.reference} in your message to attach it.`
                     : result.error,
                 !result.ok,
             );

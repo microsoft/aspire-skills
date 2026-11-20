@@ -505,7 +505,7 @@ test("Global scope stays marked in the header and Add to chat follows the resour
 
 const pendingContext = (revision, count = 1) => ({
     revision, state: count ? "pending" : "empty", count,
-    items: count ? [{ id: "snapshot-one", label: "Public API" }] : [],
+    items: count ? [{ id: "snapshot-one", label: "Public API", reference: "aspire-ctx-0123456789ab" }] : [],
 });
 
 test("Add to chat shows visible clearable pending context without claiming native composer delivery", async () => {
@@ -516,16 +516,18 @@ test("Add to chat shows visible clearable pending context without claiming nativ
     assert.equal(request.body.nodeId, "host-a:resource:api");
     assert.equal(renderer.document.getElementById("toast-region").textContent, "",
         "do not acknowledge before the queue request completes");
-    await renderer.respond(request, { ok: true, pendingContext: pendingContext(1) });
+    await renderer.respond(request, { ok: true, reference: "aspire-ctx-0123456789ab", pendingContext: pendingContext(1) });
     const message = renderer.document.getElementById("toast-region").textContent;
-    assert.equal(message, "Public API snapshot pending for your next message. You can clear it above.");
+    assert.equal(message, "Public API snapshot pending. Include aspire-ctx-0123456789ab in your message to attach it.");
     assert.doesNotMatch(message, /composer|delivered|attached/i);
     const region = renderer.document.getElementById("pending-context");
     assert.equal(region.hidden, false);
-    assert.match(region.textContent, /1 selected snapshot pending for your next message/);
+    assert.match(region.textContent, /1 selected snapshot pending\. Include a reference in your message/);
     assert.equal(renderer.document.querySelectorAll("#pending-context-items li").length, 1);
+    assert.equal(renderer.document.querySelector("#pending-context-items .pending-context-reference").textContent,
+        "aspire-ctx-0123456789ab");
     renderer.document.querySelector(".inspector-ask").click();
-    await renderer.respond(renderer.request("/api/copilot-context"), { ok: true, pendingContext: pendingContext(2) });
+    await renderer.respond(renderer.request("/api/copilot-context"), { ok: true, reference: "aspire-ctx-0123456789ab", pendingContext: pendingContext(2) });
     assert.equal(renderer.document.querySelectorAll("#pending-context-items li").length, 1, "repeated clicks do not duplicate the indicator");
     const clear = renderer.document.getElementById("pending-context-clear");
     clear.focus();

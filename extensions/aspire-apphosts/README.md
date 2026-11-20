@@ -111,11 +111,19 @@ bounded request bodies.
   fails without deleting newer snapshots. Merely selecting an item never queues
   context. Nothing is sent automatically, and no native composer attachment pill
   is created.
-  The next nonempty user message in the same foreground session consumes these
-  snapshots once through the supported `onUserPromptSubmitted.additionalContext`
-  hook, framed as untrusted data. Consumption means handoff to that runtime hook,
-  not proof of model delivery: if another hook blocks the turn, re-add the context.
-  Repeated clicks update the snapshot for that item. Limits are 16 snapshots,
+  Each snapshot shows a fresh `aspire-ctx-…` reference. A root message in the
+  same foreground session that contains a snapshot's reference consumes that
+  snapshot once through the supported `onUserPromptSubmitted.additionalContext`
+  hook, framed as untrusted data; snapshots it does not reference stay pending.
+  The hook input carries no message identity, provenance, or submission time,
+  so the reference is the only binding: canvas-generated `session.send()`
+  messages, messages queued before the Add, and prompts submitted while an Add
+  is in flight cannot contain it. The reference is not authenticated authorship;
+  any root message that quotes it, including relayed text, receives the
+  snapshot. Consumption means handoff to that runtime hook, not proof of model
+  delivery: if another hook blocks the turn, re-add the context.
+  Repeated clicks update the snapshot for that item and rotate its reference, so
+  a message quoting the old reference receives nothing. Limits are 16 snapshots,
   16 KiB per snapshot, and 64 KiB total across open AppHosts canvases; rejected
   additions never discard existing snapshots. Only queue metadata reaches the UI.
   Closing the owning canvas or starting a foreground session clears its pending

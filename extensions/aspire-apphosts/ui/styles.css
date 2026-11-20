@@ -64,6 +64,10 @@ p {
     padding-left: 18px;
 }
 
+.pending-context-reference {
+    user-select: all;
+}
+
 .pending-context-note {
     color: var(--muted);
     font-size: 11px;
