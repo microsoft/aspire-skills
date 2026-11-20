@@ -58,11 +58,9 @@ published releases.
 4. **Merge back.** Open a PR from `main` to `dev`, keep dev's version and newer
    work, and merge it with a merge commit.
 
-After the bump merges, **Sync changelog** requests changes on open PRs into
-`dev` that still add entries under an older version, and dismisses its review
-once the entries move to the newest version. If an entry still lands under an
-older version, the **Changelog check** fails on `dev`; move it in a follow-up
-PR.
+After the bump merges, the **Changelog check** rejects PRs that add entries
+under an older version. Because `dev` requires branches to be up to date, PRs
+that passed before the bump rerun the check when they update.
 
 ## Automation setup
 
@@ -77,6 +75,7 @@ advance `dev` with `npm run version:dev -- <next-version>`.
 
 Require **OpenCode catalog check** and the three **Test** jobs on `main` and
 `dev`, **Changelog check** on `dev`, and **Release branch check** on `main`.
+On `dev`, also enable **Require branches to be up to date before merging**.
 
 ## Aspire telemetry maintenance
 

@@ -4,11 +4,6 @@ on:
   push:
     branches:
       - dev
-  # Re-reviews PRs when authors update them. Runs dev's workflow and only reads PR heads as git objects.
-  pull_request_target:
-    branches:
-      - dev
-    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 permissions:
@@ -44,10 +39,9 @@ jobs:
           plan=$(node scripts/release-automation.mjs sync)
           echo "plan=$(jq -c . <<< "$plan")" >> "$GITHUB_OUTPUT"
           echo "updates=$(jq '.updates | length' <<< "$plan")" >> "$GITHUB_OUTPUT"
-          echo "reviews=$(jq '.reviews | length' <<< "$plan")" >> "$GITHUB_OUTPUT"
       - name: Generate Aspire App token
         id: app-token
-        if: steps.plan.outputs.updates != '0' || steps.plan.outputs.reviews != '0'
+        if: steps.plan.outputs.updates != '0'
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
@@ -70,27 +64,3 @@ jobs:
             git -c credential.helper= -c 'credential.helper=!gh auth git-credential' \
               push "--force-with-lease=refs/heads/$branch:$current" origin "$commit:refs/heads/$branch"
           done < <(jq -c '.updates[]' <<< "$SYNC_PLAN")
-      - name: Review changelog placement
-        if: steps.plan.outputs.reviews != '0'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          SYNC_PLAN: ${{ steps.plan.outputs.plan }}
-        with:
-          github-token: ${{ steps.app-token.outputs.token }}
-          script: |
-            const {reviews} = JSON.parse(process.env.SYNC_PLAN);
-            for (const review of reviews) {
-              if (review.action === "request") {
-                await github.rest.pulls.createReview({
-                  ...context.repo, pull_number: review.pull, commit_id: review.commit, event: "REQUEST_CHANGES", body: review.body
-                });
-                core.info(`#${review.pull}: requested changes`);
-              } else {
-                for (const review_id of review.reviews) {
-                  await github.rest.pulls.dismissReview({
-                    ...context.repo, pull_number: review.pull, review_id, message: "Changelog entries are under the right version."
-                  });
-                }
-                core.info(`#${review.pull}: dismissed changelog review`);
-              }
-            }
