@@ -94,8 +94,9 @@ versions change. Ordinary feature and release-fix PRs preserve dev's current ver
 Dedicated `bump-dev/<version>` PRs advance dev's coordinated version, add its
 changelog heading, and regenerate catalogs. Entries added after the release
 commit move to the new heading. **Sync changelog** rebuilds open bump PRs after
-each `dev` merge; bot-authored `bump-dev/*` and `changelog-move/*` branches
-should not carry manual edits.
+each `dev` merge, so bot-authored `bump-dev/*` branches should not carry manual
+edits. After the bump merges, it requests changes on PRs that add entries under
+an older version.
 
 | File | Field |
 |------|-------|

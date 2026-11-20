@@ -283,57 +283,79 @@ export function prepareRelease(repo, request, {
   });
 }
 
-const moveMarker = version => `<!-- Aspire-Changelog-Move: ${version} -->`;
+export const changelogReviewMarker = "<!-- Aspire-Changelog-Review -->";
 
-// Returns null when `branch` already holds `commit`'s tree on top of `dev` and has a PR.
-function syncUpdate(repo, dev, { branch, commit, pull, ...entry }) {
-  const current = fetchedRemoteHead(repo, branch);
+// Rebuilds an open bump PR on the latest dev. Returns null when the branch already holds that tree on top of dev.
+function bumpUpdate(repo, dev, newest, pull) {
+  const operation = ReleaseOperation.parse(pull.body);
+  if (operation?.version !== newest || pull.head.ref !== `bump-dev/${operation.nextVersion}`) return null;
+  const commit = buildDevBump(repo, operation, dev);
+  const current = fetchedRemoteHead(repo, pull.head.ref);
   const tree = sha => repo.run(["rev-parse", `${sha}^{tree}`]).trim();
-  const upToDate = current !== null && isAncestor(repo, dev, current) && tree(current) === tree(commit);
-  if (upToDate && pull !== null) return null;
-  return Object.freeze({ ...entry, branch, base: "dev", current, commit: upToDate ? current : commit, pull });
+  if (current && isAncestor(repo, dev, current) && tree(current) === tree(commit)) return null;
+  return Object.freeze({ branch: pull.head.ref, current, commit, pull: pull.number });
 }
 
-// Plans the bot updates that keep dev's changelog entries out of cut releases, without pushing.
-// While a bump PR is open, it is rebuilt on the latest dev. After it merges, cut entries that still
-// land on dev get a PR that moves them to the newest version.
+// Entries `head` adds, relative to its merge base with dev, under versions older than dev's newest.
+// Sections equal to main's published notes are skipped so main-to-dev merges are not flagged.
+function lateEntries(repo, head, dev, newest, published) {
+  const changelog = Changelog.read(repo, head);
+  const base = Changelog.read(repo, repo.run(["merge-base", head, dev]).trim());
+  return changelog.versions
+    .filter(version => compareVersions(version, newest) < 0 && changelog.section(version) !== published?.section(version))
+    .flatMap(version => changelog.entryChanges(version, base).added.map(({ text }) => ({ version, text })));
+}
+
+// Requests changes while a PR adds late entries, and dismisses the bot's review once it no longer does.
+function reviewUpdate(api, repository, pull, commit, entries, newest) {
+  const active = api(`repos/${repository}/pulls/${pull.number}/reviews?per_page=100`).filter(review =>
+    review.user?.type === "Bot" && review.state === "CHANGES_REQUESTED" && review.body?.includes(changelogReviewMarker));
+  if (!entries.length) {
+    return active.length ? Object.freeze({ action: "dismiss", pull: pull.number, reviews: active.map(review => review.id) }) : null;
+  }
+  if (active.length) return null;
+  const versions = [...new Set(entries.map(entry => entry.version))];
+  const body = [
+    changelogReviewMarker,
+    `\`dev\` has advanced to ${newest}, so these entries won't ship in ${versions.join(" or ")}. Move them to ${newest}:`,
+    ...versions.map(version => `\n**${version}**\n\n${entries.filter(entry => entry.version === version).map(entry => entry.text).join("\n")}`)
+  ].join("\n");
+  return Object.freeze({ action: "request", pull: pull.number, commit, body });
+}
+
+// Plans, without writing, the bot actions that keep dev's changelog entries out of cut releases:
+// open bump PRs are rebuilt on the latest dev, and open PRs that add entries under an older version get
+// a changes-requested review until they move them.
 export function syncChangelog(repo, { api = githubRequest, repository = process.env.GITHUB_REPOSITORY } = {}) {
   assertRepository(repository);
   repo.run(["fetch", "--no-tags", "origin", "dev"]);
   const dev = repo.sha("refs/remotes/origin/dev");
-  const changelog = Changelog.read(repo, dev);
-  const newest = changelog.newest;
-  const pulls = api(`repos/${repository}/pulls?state=open&base=dev&per_page=100`)
-    .filter(pull => pull.head.repo?.full_name === repository);
+  const newest = Changelog.read(repo, dev).newest;
+  const main = fetchedRemoteHead(repo, "main");
+  const published = main ? Changelog.read(repo, main) : null;
   const updates = [];
-  for (const pull of pulls) {
-    if (!pull.head.ref.startsWith("bump-dev/")) continue;
-    const operation = ReleaseOperation.parse(pull.body);
-    if (operation?.version !== newest || pull.head.ref !== `bump-dev/${operation.nextVersion}`) continue;
-    updates.push(syncUpdate(repo, dev, {
-      kind: "bump-dev", branch: pull.head.ref, pull: pull.number, commit: buildDevBump(repo, operation, dev)
-    }));
+  const reviews = [];
+  for (const pull of api(`repos/${repository}/pulls?state=open&base=dev&per_page=100`)) {
+    if (pull.head.repo?.full_name === repository && pull.head.ref.startsWith("bump-dev/")) {
+      const update = bumpUpdate(repo, dev, newest, pull);
+      if (update) updates.push(update);
+      continue;
+    }
+    const ref = `refs/remotes/origin/pull/${pull.number}`;
+    repo.run(["fetch", "--no-tags", "origin", `+refs/pull/${pull.number}/head:${ref}`]);
+    const head = repo.sha(ref);
+    let entries;
+    try {
+      entries = lateEntries(repo, head, dev, newest, published);
+    } catch (error) {
+      // An unreadable changelog fails that PR's Changelog check; don't let it block other PRs.
+      console.warn(`Skipping #${pull.number}: ${error.message}`);
+      continue;
+    }
+    const review = reviewUpdate(api, repository, pull, head, entries, newest);
+    if (review) reviews.push(review);
   }
-  const { published, cuts } = changelogOwners(repo, dev);
-  for (const [version, cut] of cuts) {
-    const cutChangelog = Changelog.read(repo, cut);
-    if (compareVersions(version, newest) >= 0 || published?.section(version) !== undefined
-      || cutChangelog.section(version) === undefined
-      || !changelog.entryChanges(version, cutChangelog).added.length) continue;
-    const branch = `changelog-move/${version}`;
-    const marker = moveMarker(version);
-    const pull = pulls.find(candidate => candidate.head.ref === branch);
-    if (pull && !pull.body?.includes(marker)) throw new Error(`Existing PR does not match this automation operation: ${branch}`);
-    const files = new Map([["CHANGELOG.md", changelog.withLaterEntriesMoved(version, cutChangelog, newest).toBuffer()]]);
-    updates.push(syncUpdate(repo, dev, {
-      kind: "changelog-move", branch, pull: pull?.number ?? null, marker,
-      commit: commitFiles(repo, dev, files, `Move changelog entries from ${version} to ${newest}`),
-      title: `Move ${version} changelog entries to ${newest}`,
-      description: `\`release/${version}\` was cut before these changelog entries merged into \`dev\`, `
-        + `so this PR moves them from ${version} to ${newest}. Automation updates this PR when \`dev\` changes.`
-    }));
-  }
-  return Object.freeze({ updates: Object.freeze(updates.filter(Boolean)) });
+  return Object.freeze({ updates: Object.freeze(updates), reviews: Object.freeze(reviews) });
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

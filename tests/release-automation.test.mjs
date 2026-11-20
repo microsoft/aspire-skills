@@ -9,7 +9,7 @@ import { Repository } from "../scripts/release-git.mjs";
 import { expectedCatalog, validateCatalog } from "../scripts/release-catalog.mjs";
 import { developmentVersionFiles } from "../scripts/version-development.mjs";
 import { versionSnapshot } from "../scripts/release-versions.mjs";
-import { commitFiles, ensurePullRequest, guardedPush, prepareRelease, remoteHead, syncChangelog, validateChangelogPlacement, validateRelease } from "../scripts/release-automation.mjs";
+import { changelogReviewMarker, commitFiles, ensurePullRequest, guardedPush, prepareRelease, remoteHead, syncChangelog, validateChangelogPlacement, validateRelease } from "../scripts/release-automation.mjs";
 import { Changelog } from "../scripts/release-changelog.mjs";
 import { ReleaseOperation } from "../scripts/release-operation.mjs";
 
@@ -56,6 +56,7 @@ function fixture(t) {
 
 function githubFixture() {
   const pulls = [];
+  const reviews = new Map();
   const api = (path, options = {}) => {
     if (options.method === "POST") {
       const pull = {
@@ -66,12 +67,15 @@ function githubFixture() {
       pulls.push(pull);
       return pull;
     }
-    const params = new URL(`https://api.github.com/${path}`).searchParams;
+    const url = new URL(`https://api.github.com/${path}`);
+    const reviewed = /\/pulls\/(\d+)\/reviews$/.exec(url.pathname);
+    if (reviewed) return reviews.get(Number(reviewed[1])) ?? [];
+    const params = url.searchParams;
     const head = params.get("head");
     if (head) return pulls.filter(pull => pull.head.ref === head.split(":")[1]);
     return pulls.filter(pull => pull.state === params.get("state") && pull.base.ref === params.get("base"));
   };
-  return { api, pulls };
+  return { api, pulls, reviews };
 }
 
 function prepareWithGithub(f, github, source, nextVersion) {
@@ -270,24 +274,32 @@ test("changelog placement allows cut-version entries only until the bump merges"
     /release\/0\.0\.4 was cut from dev\. Add changelog entries under 0\.0\.5/);
 });
 
-test("changelog sync rebuilds the open bump PR, then moves stale cut entries in a PR", async t => {
+test("changelog sync rebuilds the open bump PR, then requests changes on PRs that add cut entries", async t => {
   const f = fixture(t);
   const github = githubFixture();
-  const sync = () => syncChangelog(f.repo, { api: github.api, repository: "example/test" }).updates;
+  const sync = () => syncChangelog(f.repo, { api: github.api, repository: "example/test" });
+  const openPull = (head, fork = "fork/test") => {
+    const number = github.pulls.length + 1;
+    github.pulls.push({ number, state: "open", body: "", head: { ref: "topic", repo: { full_name: fork } }, base: { ref: "dev" } });
+    updatePull(number, head);
+    return number;
+  };
+  const updatePull = (number, head) => f.repo.run(["push", "--quiet", "--force", "origin", `${head}:refs/pull/${number}/head`]);
   const feature = editChangelog(f.repo, f.dev, "0.0.4", "- Feature.");
   guardedPush(f.repo, "dev", feature, f.dev);
   const plan = prepareWithGithub(f, github, feature, "0.0.5");
   for (const { branch, commit } of plan.branches) guardedPush(f.repo, branch, commit, null);
   openPreparedPulls(github, plan);
-  assert.deepEqual(sync(), []);
+  const contributor = openPull(editChangelog(f.repo, feature, "0.0.4", "- Feature.\n- Contributor."));
+  assert.deepEqual(sync(), { updates: [], reviews: [] });
 
   const late = commitFiles(f.repo, editChangelog(f.repo, feature, "0.0.4", "- Feature.\n- Late."),
     new Map([["late.txt", Buffer.from("Late work.\n")]]), "Late work");
   guardedPush(f.repo, "dev", late, feature);
-  const [rebuild, ...extra] = sync();
-  assert.deepEqual(extra, []);
+  const { updates: [rebuild, ...extra], reviews } = sync();
+  assert.deepEqual([extra, reviews], [[], []]);
   assert.deepEqual({ ...rebuild, commit: undefined }, {
-    kind: "bump-dev", branch: "bump-dev/0.0.5", base: "dev", current: plan.branches[1].commit, commit: undefined, pull: 2
+    branch: "bump-dev/0.0.5", current: plan.branches[1].commit, commit: undefined, pull: 2
   });
   const bumped = Changelog.read(f.repo, rebuild.commit);
   assert.equal(bumped.notes("0.0.4"), "- Feature.");
@@ -297,48 +309,47 @@ test("changelog sync rebuilds the open bump PR, then moves stale cut entries in 
   validateCatalog(f.repo, rebuild.commit, expectedCatalog(f.repo, rebuild.commit));
   validateChangelogPlacement(f.repo, rebuild.commit, late);
   guardedPush(f.repo, rebuild.branch, rebuild.commit, rebuild.current);
-  assert.deepEqual(sync(), []);
+  assert.deepEqual(sync(), { updates: [], reviews: [] });
 
   guardedPush(f.repo, "dev", rebuild.commit, late);
   github.pulls[1].state = "closed";
-  assert.deepEqual(sync(), []);
-  const stale = editChangelog(f.repo, rebuild.commit, "0.0.4", "- Feature.\n- Stale.");
-  guardedPush(f.repo, "dev", stale, rebuild.commit);
-  const [move] = sync();
-  assert.deepEqual({ ...move, commit: undefined }, {
-    kind: "changelog-move", branch: "changelog-move/0.0.4", base: "dev", current: null, commit: undefined, pull: null,
-    marker: "<!-- Aspire-Changelog-Move: 0.0.4 -->", title: "Move 0.0.4 changelog entries to 0.0.5",
-    description: "`release/0.0.4` was cut before these changelog entries merged into `dev`, so this PR moves them "
-      + "from 0.0.4 to 0.0.5. Automation updates this PR when `dev` changes."
+  const published = editChangelog(f.repo, feature, "0.0.4", "- Feature.\n- Release fix.");
+  guardedPush(f.repo, "main", published, f.main);
+  openPull(published, "example/test");
+  const broken = openPull(commitFiles(f.repo, f.dev, new Map([["CHANGELOG.md", Buffer.from("No versions.\n")]]), "Break changelog"));
+  const warn = t.mock.method(console, "warn", () => {});
+  const [request, ...others] = sync().reviews;
+  assert.deepEqual(others, []);
+  assert.match(warn.mock.calls[0].arguments[0], new RegExp(`^Skipping #${broken}: `));
+  assert.deepEqual({ ...request, body: undefined }, {
+    action: "request", pull: contributor, commit: f.repo.sha(`refs/remotes/origin/pull/${contributor}`), body: undefined
   });
-  const moved = Changelog.read(f.repo, move.commit);
-  assert.equal(moved.notes("0.0.4"), "- Feature.");
-  assert.equal(moved.notes("0.0.5"), "- Late.\n- Stale.");
-  validateChangelogPlacement(f.repo, move.commit, stale);
-  guardedPush(f.repo, move.branch, move.commit, null);
+  assert.equal(request.body, [
+    changelogReviewMarker,
+    "`dev` has advanced to 0.0.5, so these entries won't ship in 0.0.4. Move them to 0.0.5:",
+    "\n**0.0.4**\n\n- Contributor."
+  ].join("\n"));
 
   const workflow = parse(readFileSync(new URL("../.github/workflows/sync-changelog.yml", import.meta.url), "utf8"));
-  const script = workflow.jobs.sync.steps.find(step => step.name === "Open changelog PRs").with.script;
+  const script = workflow.jobs.sync.steps.find(step => step.name === "Review changelog placement").with.script;
   const run = new (Object.getPrototypeOf(async function () {}).constructor)("github", "context", "core", "process", script);
-  const created = [];
-  const updates = [move, { ...rebuild, pull: 2 }];
-  await run({ rest: { pulls: { async create(pull) {
-    created.push(pull);
-    github.api("repos/example/test/pulls", { method: "POST", body: pull });
-    return { data: { html_url: "https://github.com/example/test/pull/3" } };
-  } } } }, { repo: { owner: "example", repo: "test" } }, { info() {} }, {
-    env: { SYNC_PLAN: JSON.stringify({ updates }) }
-  });
-  assert.deepEqual(created.map(({ head, base }) => ({ head, base })), [{ head: "changelog-move/0.0.4", base: "dev" }]);
-  assert.ok(created[0].body.startsWith(`${move.marker}\n\n`));
-  assert.deepEqual(sync(), []);
+  const review = reviews => run({ rest: { pulls: {
+    async createReview({ pull_number, commit_id, event, body }) {
+      github.reviews.set(pull_number, [{ id: 7, commit_id, state: event === "REQUEST_CHANGES" ? "CHANGES_REQUESTED" : event, body, user: { type: "Bot" } }]);
+    },
+    async dismissReview({ pull_number, review_id }) {
+      github.reviews.get(pull_number).find(item => item.id === review_id).state = "DISMISSED";
+    }
+  } } }, { repo: { owner: "example", repo: "test" } }, { info() {} }, { env: { SYNC_PLAN: JSON.stringify({ reviews }) } });
+  await review([request]);
+  assert.deepEqual(sync().reviews, []);
 
-  const newer = commitFiles(f.repo, stale, new Map([["newer.txt", Buffer.from("Newer.\n")]]), "Newer work");
-  guardedPush(f.repo, "dev", newer, stale);
-  const [refresh] = sync();
-  assert.equal(refresh.current, move.commit);
-  assert.equal(refresh.pull, 3);
-  assert.equal(f.repo.read(refresh.commit, "newer.txt").toString(), "Newer.\n");
+  updatePull(contributor, editChangelog(f.repo, rebuild.commit, "0.0.5", "- Late.\n- Contributor."));
+  const [dismiss] = sync().reviews;
+  assert.deepEqual(dismiss, { action: "dismiss", pull: contributor, reviews: [7] });
+  await review([dismiss]);
+  assert.equal(github.reviews.get(contributor)[0].state, "DISMISSED");
+  assert.deepEqual(sync().reviews, []);
 });
 
 test("release validation rejects changes to published notes", t => {
@@ -455,13 +466,15 @@ test("release workflow wiring keeps preparation unprivileged and bot checks on c
     /validate-release "\$BASE_SHA" "\$RELEASE_BRANCH"/);
   const sync = workflow("sync-changelog");
   assert.deepEqual(sync.permissions, { contents: "read", "pull-requests": "read" });
+  assert.deepEqual(sync.on.pull_request_target.branches, ["dev"]);
   assert.match(sync.jobs.sync.if, /microsoft\/aspire-skills/);
   const syncSteps = sync.jobs.sync.steps;
+  assert.equal(syncSteps.find(step => step.uses?.startsWith("actions/checkout@")).with.ref, "dev");
   assert.equal(syncSteps.find(step => step.id === "plan").env.GH_TOKEN, "${{ github.token }}");
-  const syncPush = syncSteps.find(step => step.name === "Push changelog branches");
+  const syncPush = syncSteps.find(step => step.name === "Rebuild bump PRs");
   assert.equal(syncPush.env.GH_TOKEN, "${{ steps.app-token.outputs.token }}");
   assert.match(syncPush.run, /push "--force-with-lease=refs\/heads\/\$branch:\$current"/);
-  assert.equal(syncSteps.find(step => step.name === "Open changelog PRs").with["github-token"], "${{ steps.app-token.outputs.token }}");
+  assert.equal(syncSteps.find(step => step.name === "Review changelog placement").with["github-token"], "${{ steps.app-token.outputs.token }}");
   const publisher = workflow("publish").jobs.publish.steps.find(step => step.name === "Check release contents");
   assert.match(publisher.run, /npm run catalog:check/);
 });

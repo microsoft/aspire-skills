@@ -58,9 +58,11 @@ published releases.
 4. **Merge back.** Open a PR from `main` to `dev`, keep dev's version and newer
    work, and merge it with a merge commit.
 
-If a PR that was opened before the bump merges still lands an entry under the
-release version, **Sync changelog** opens a `changelog-move/<version>` PR that
-moves it to the newest version.
+After the bump merges, **Sync changelog** requests changes on open PRs into
+`dev` that still add entries under an older version, and dismisses its review
+once the entries move to the newest version. If an entry still lands under an
+older version, the **Changelog check** fails on `dev`; move it in a follow-up
+PR.
 
 ## Automation setup
 
