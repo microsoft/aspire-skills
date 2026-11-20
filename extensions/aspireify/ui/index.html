@@ -153,7 +153,8 @@
                             </div>
                             <section id="connections-tree-panel" aria-label="Resource connections" hidden>
                                 <p id="connections-tree-help" class="relationship-help muted">
-                                    Each connection with unambiguous endpoints appears once. Each resource expands once;
+                                    Each connection appears once; connections whose endpoints
+                                    cannot be placed are listed below the tree. Each resource expands once;
                                     shared and cycle references point to that same resource, not
                                     a copy. Keys: ↑/↓ move, →/← expand or collapse, Home/End go to
                                     the first or last item, and typing a letter finds a resource.
@@ -162,6 +163,10 @@
                                 </p>
                                 <p id="connections-tree-state" class="muted" hidden></p>
                                 <ul id="connections-tree" class="connections-tree" role="tree" aria-label="Proposed resource connections" aria-describedby="connection-legend connections-tree-help"></ul>
+                                <div id="connections-unplaced" class="connections-unplaced" hidden>
+                                    <p id="connections-unplaced-summary" class="muted"></p>
+                                    <ul id="connections-unplaced-list" aria-labelledby="connections-unplaced-summary"></ul>
+                                </div>
                             </section>
                             <div id="resource-details-view">
                             <div class="compact-resources" id="compact-resources" hidden></div>

@@ -9,12 +9,15 @@ export function projectConnectionsTree(resources, edges) {
     const ambiguous = new Set();
     const ambiguousPeers = new Set();
     const endpoint = (edge, side) => {
-        if (edge[`${side}Id`] !== undefined) return byId.get(edge[`${side}Id`]);
+        // Empty IDs mean "unset", matching the server's name fallback.
+        if (edge[`${side}Id`]) return byId.get(edge[`${side}Id`]);
         if (byName.get(edge[side]) === null) ambiguous.add(edge[side]);
         return byName.get(edge[side]);
     };
     const outgoing = new Map(resources.map((resource) => [resource.id, []]));
     const incoming = new Set();
+    // Edges that cannot be attached stay listed so no connection disappears.
+    const unplaced = [];
     edges.forEach((edge, index) => {
         const from = endpoint(edge, "from");
         const to = endpoint(edge, "to");
@@ -22,7 +25,9 @@ export function projectConnectionsTree(resources, edges) {
             if (from) ambiguousPeers.add(from.id);
             if (to) ambiguousPeers.add(to.id);
         }
-        if (from && to) {
+        if (!from || !to) {
+            unplaced.push({ edge, index, reason: from === null || to === null ? "ambiguous" : "missing" });
+        } else {
             outgoing.get(from.id).push({ edge, target: to, index });
             incoming.add(to.id);
         }
@@ -84,7 +89,7 @@ export function projectConnectionsTree(resources, edges) {
             }
         }
     }
-    return { roots, nodes };
+    return { roots, nodes, unplaced };
 }
 
 export function visibleConnectionTreeNodes(tree, expandedKeys) {

@@ -443,6 +443,38 @@ body.is-loading .progress > span {
     line-height: var(--leading-meta);
 }
 
+.connections-unplaced {
+    margin-top: 12px;
+}
+
+.connections-unplaced > ul {
+    display: grid;
+    gap: 4px;
+    margin: 6px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.connections-unplaced-item {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    align-items: center;
+    padding: 4px 8px;
+}
+
+.connections-unplaced-item::before {
+    content: "";
+    flex: 0 0 10px;
+    height: 10px;
+    border-radius: 2px;
+    background: var(--relationship-color, var(--muted));
+}
+
+.connections-unplaced-item > .muted {
+    font-size: var(--text-meta);
+}
+
 .is-confirmed .editing-guidance {
     display: none;
 }

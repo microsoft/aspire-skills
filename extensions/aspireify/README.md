@@ -70,9 +70,9 @@ mounted shares, and local aliases to remote storage are not detected.
 
 Connections are directed: `from` references, waits for, or is a child of `to`.
 Each selected resource shows both outgoing and incoming relationships, and the
-connections tree is the single surface listing every connection with
-unambiguous endpoints once. One legend, shared by both views, explains
-direction and the color of each connection kind.
+connections tree is the single surface listing every connection once. One
+legend, shared by both views, explains direction and the color of each
+connection kind.
 
 Use **Resources / Connections tree** to switch between the existing compact
 cards or overview/inspector and an expandable projection of the same proposal.
@@ -83,8 +83,10 @@ It follows outgoing connections and shows their source, target, and relationship
 type. Each resource expands once; **Shared reference** and **Cycle reference**
 entries point to that same resource rather than duplicating it or expanding
 indefinitely. Endpoint IDs keep connections attached to the correct resource
-even while names collide. Legacy name-only connections with ambiguous endpoints
-are not attached; affected resources are marked as ambiguous. No resources or
+even while names collide. Legacy name-only connections with ambiguous endpoints,
+and connections whose endpoint ID no longer matches a resource, are not attached; affected
+resources are marked as ambiguous, and those connections are listed below the
+tree (with **Edit** before confirmation). No resources or
 connections are inferred.
 
 In the tree, use Up/Down, Home/End, and first-letter navigation to move focus;

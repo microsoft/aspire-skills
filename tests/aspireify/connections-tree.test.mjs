@@ -68,12 +68,13 @@ test("a diamond and parallel relationship kinds point to the same canonical depe
 });
 
 test("empty, disconnected, and out-of-scope endpoints do not invent resources or edges", () => {
-    assert.deepEqual(projectConnectionsTree([], []), { roots: [], nodes: new Map() });
+    assert.deepEqual(projectConnectionsTree([], []), { roots: [], nodes: new Map(), unplaced: [] });
     const tree = projectConnectionsTree(["a", "b"].map(resource), [
         edge("a", "missing"), edge("missing", "b"),
     ]);
     assert.equal(tree.roots.length, 2);
     assert.ok([...tree.nodes.values()].every((node) => node.disconnected && !node.edge));
+    assert.deepEqual(tree.unplaced.map(({ reason }) => reason), ["missing", "missing"]);
     assert.equal(visibleConnectionTreeNodes(tree, new Set()).length, 2);
 });
 
@@ -113,6 +114,13 @@ test("endpoint IDs disambiguate duplicate resource names and never fall back fro
     assert.equal(canonical(tree).find((node) => node.resource.id === "cache-b").disconnected, true);
     const missing = projectConnectionsTree(resources, [{ ...connection, toId: "missing" }]);
     assert.ok([...missing.nodes.values()].every((node) => !node.edge));
+    assert.deepEqual(missing.unplaced.map(({ index, reason }) => [index, reason]), [[0, "missing"]]);
+    assert.deepEqual(tree.unplaced, []);
+    const blank = { ...edge("api", "cache"), fromId: "", toId: "" };
+    assert.deepEqual(projectConnectionsTree(resources, [blank]).unplaced, [{ edge: blank, index: 0, reason: "ambiguous" }]);
+    const unique = projectConnectionsTree([resource("a"), resource("b")], [{ ...edge("a", "b"), fromId: "", toId: "" }]);
+    assert.deepEqual(unique.unplaced, []);
+    assert.equal([...unique.nodes.values()].filter((node) => node.edge).length, 1);
 });
 
 test("name-only ambiguous endpoints are marked instead of attached to an arbitrary resource", () => {
@@ -124,6 +132,7 @@ test("name-only ambiguous endpoints are marked instead of attached to an arbitra
     for (const connection of [edge("api", "cache"), edge("cache", "api")]) {
         const tree = projectConnectionsTree(resources, [connection]);
         assert.ok([...tree.nodes.values()].every((node) => !node.edge));
+        assert.deepEqual(tree.unplaced, [{ edge: connection, index: 0, reason: "ambiguous" }]);
         const caches = canonical(tree).filter((node) => node.resource.name === "cache");
         assert.ok(caches.every((node) => node.ambiguous && !node.disconnected));
         const api = canonical(tree).find((node) => node.resource.name === "api");

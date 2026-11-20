@@ -14,6 +14,8 @@ test("proposal view markup preserves tree semantics, help associations and panel
     assert.equal(node("connection-legend").parentElement, node("resource-plan-panel"));
     assert.equal(node("relationship-guide"), null);
     assert.equal(node("relationship-list-disclosure"), null);
+    assert.equal(node("connections-unplaced").hidden, true);
+    assert.equal(node("connections-unplaced-list").getAttribute("aria-labelledby"), "connections-unplaced-summary");
     assert.equal(node("connections-tree-help").parentElement, node("connections-tree-panel"));
     assert.equal(node("connections-tree").parentElement, node("connections-tree-panel"));
     assert.equal(node("connections-tree-panel").parentElement, node("resource-plan-panel"));

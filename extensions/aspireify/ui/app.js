@@ -79,6 +79,9 @@ const elements = {
     connectionsTreePanel: document.getElementById("connections-tree-panel"),
     connectionsTree: document.getElementById("connections-tree"),
     connectionsTreeState: document.getElementById("connections-tree-state"),
+    connectionsUnplaced: document.getElementById("connections-unplaced"),
+    connectionsUnplacedSummary: document.getElementById("connections-unplaced-summary"),
+    connectionsUnplacedList: document.getElementById("connections-unplaced-list"),
     compactResources: document.getElementById("compact-resources"),
     compactAddResource: document.getElementById("compact-add-resource"),
     relationshipWorkspace: document.getElementById("relationship-workspace"),
@@ -805,7 +808,43 @@ function renderConnectionsTree(resources, edges) {
             groups.set(node.key, group);
         }
     }
+    renderUnplacedConnections(connectionsTree.unplaced);
     if (hadFocus) focusTreeNode(focusedTreeKey);
+}
+
+function renderUnplacedConnections(unplaced) {
+    elements.connectionsUnplaced.hidden = unplaced.length === 0;
+    elements.connectionsUnplacedList.replaceChildren();
+    elements.connectionsUnplacedSummary.textContent = unplaced.length
+        ? `Not placed in the tree (${unplaced.length}): endpoints are ambiguous or missing.`
+        : "";
+    for (const { edge, reason } of unplaced) {
+        const relationship = `${edge.from} → ${relationshipText({ edge, direction: "outgoing", peer: edge.to })}`;
+        const status = reason === "ambiguous"
+            ? "Ambiguous endpoint; resource names must be unique"
+            : "Endpoint resource not found";
+        const item = createElement("li", {
+            className: `connections-unplaced-item connection-${EDGE_LABELS[edge.kind]?.tone ?? "reference"}`,
+        });
+        item.append(
+            createElement("span", { text: relationship }),
+            createElement("span", { className: "muted", text: status }),
+        );
+        if (!snapshot.confirmed) {
+            const edit = createElement("button", {
+                className: "connection-tree-edit",
+                text: "Edit",
+                attrs: {
+                    id: `connections-unplaced-edit-${domIdToken(edge.id)}`,
+                    type: "button",
+                    "aria-label": `Edit connection: ${relationship}`,
+                },
+            });
+            edit.addEventListener("click", () => openConnectionDialog(edge.id));
+            item.append(edit);
+        }
+        elements.connectionsUnplacedList.append(item);
+    }
 }
 
 function focusTreeNode(key) {

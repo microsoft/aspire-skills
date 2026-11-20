@@ -567,3 +567,42 @@ test("confirmed trees omit connection editing affordances", async () => {
     renderer.press("F2", reference, { prevented: false });
     assert.equal(renderer.node("connection-dialog").open, false);
 });
+
+test("connections the tree cannot place stay listed and editable until confirmation", async () => {
+    const edges = [
+        { id: "api-cache", from: "api", to: "cache", kind: "waitFor" },
+        { id: "api-stale", from: "api", to: "cache", fromId: "api", toId: "gone", kind: "reference" },
+    ];
+    const initial = graphReview(["api", "cache-a", "cache-b"], edges);
+    initial.proposal.resources.slice(1).forEach((resource) => { resource.name = "cache"; });
+    const renderer = await createRenderer(initial, { renderPlan: true });
+    renderer.switchView("tree");
+    assert.ok(renderer.treeItems().every((item) => !item.getAttribute("aria-keyshortcuts")));
+    assert.equal(renderer.node("connections-unplaced").hidden, false);
+    assert.match(renderer.node("connections-unplaced-summary").textContent, /Not placed in the tree \(2\)/);
+    const rows = renderer.node("connections-unplaced-list").querySelectorAll("li");
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].matches(".connection-wait"), true);
+    assert.match(rows[0].textContent, /api → waits for cache.*Ambiguous endpoint/);
+    assert.match(rows[1].textContent, /api → references cache.*Endpoint resource not found/);
+    const edit = rows[0].querySelector("button");
+    assert.equal(edit.getAttribute("tabindex"), null);
+    assert.equal(edit.getAttribute("aria-label"), "Edit connection: api → waits for cache");
+    edit.listeners.get("click")();
+    assert.equal(renderer.node("connection-dialog").open, true);
+    assert.equal(renderer.node("connection-id").value, "api-cache");
+    assert.equal(renderer.requests.length, 0);
+
+    const confirmed = graphReview(["api", "cache-a", "cache-b"], edges, { confirmed: true });
+    confirmed.proposal.resources.slice(1).forEach((resource) => { resource.name = "cache"; });
+    const readOnly = await createRenderer(confirmed, { renderPlan: true });
+    readOnly.switchView("tree");
+    const confirmedRows = readOnly.node("connections-unplaced-list").querySelectorAll("li");
+    assert.equal(confirmedRows.length, 2);
+    assert.equal(readOnly.node("connections-unplaced-list").querySelector("button"), null);
+
+    const placed = await createRenderer(graphReview(), { renderPlan: true });
+    placed.switchView("tree");
+    assert.equal(placed.node("connections-unplaced").hidden, true);
+    assert.equal(placed.node("connections-unplaced-list").querySelectorAll("li").length, 0);
+});
