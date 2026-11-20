@@ -98,3 +98,36 @@ test("large cyclic chains use bounded iterative projection instead of recursive 
     assert.equal(tree.nodes.size, resources.length + 1);
     assert.equal(visibleConnectionTreeNodes(tree, new Set(tree.nodes.keys())).length, resources.length + 1);
 });
+
+test("endpoint IDs disambiguate duplicate resource names and never fall back from missing IDs", () => {
+    const resources = [
+        resource("api"),
+        { ...resource("cache"), id: "cache-a" },
+        { ...resource("cache"), id: "cache-b" },
+    ];
+    const connection = { ...edge("api", "cache"), fromId: "id:api", toId: "cache-a" };
+    const tree = projectConnectionsTree(resources, [connection]);
+    const target = [...tree.nodes.values()].find((node) => node.edge);
+    assert.equal(target.resource.id, "cache-a");
+    assert.equal(canonical(tree).find((node) => node.resource.id === "cache-a").disconnected, false);
+    assert.equal(canonical(tree).find((node) => node.resource.id === "cache-b").disconnected, true);
+    const missing = projectConnectionsTree(resources, [{ ...connection, toId: "missing" }]);
+    assert.ok([...missing.nodes.values()].every((node) => !node.edge));
+});
+
+test("name-only ambiguous endpoints are marked instead of attached to an arbitrary resource", () => {
+    const resources = [
+        resource("api"),
+        { ...resource("cache"), id: "cache-a" },
+        { ...resource("cache"), id: "cache-b" },
+    ];
+    for (const connection of [edge("api", "cache"), edge("cache", "api")]) {
+        const tree = projectConnectionsTree(resources, [connection]);
+        assert.ok([...tree.nodes.values()].every((node) => !node.edge));
+        const caches = canonical(tree).filter((node) => node.resource.name === "cache");
+        assert.ok(caches.every((node) => node.ambiguous && !node.disconnected));
+        const api = canonical(tree).find((node) => node.resource.name === "api");
+        assert.equal(api.ambiguous, true);
+        assert.equal(api.disconnected, false);
+    }
+});

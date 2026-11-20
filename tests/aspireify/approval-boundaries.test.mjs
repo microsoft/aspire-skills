@@ -101,6 +101,26 @@ test("all actions reject conflicting targets but accept equivalent canonical spe
     assert.deepEqual(await action("get_confirmation", {}, "target-match"), confirmed);
 });
 
+test("browser snapshots retain endpoint IDs before duplicate names can be confirmed", async (t) => {
+    const h = await setup(t, "endpoint-ids");
+    const before = await h.review();
+    await action("set_proposal", {
+        appHostPath: h.appHostPath,
+        proposalGeneration: before.proposalGeneration,
+        resources: [
+            { id: "api", name: "api", type: "Node.js", serviceId: "api" },
+            { id: "cache-a", name: "cache", type: "Container" },
+            { id: "cache-b", name: "cache", type: "Container" },
+        ],
+        edges: [{ id: "api-cache", from: "api", to: "cache-a", kind: "reference" }],
+    }, "endpoint-ids");
+    const snapshot = await h.review();
+    assert.equal(snapshot.proposal.edges[0].fromId, "api");
+    assert.equal(snapshot.proposal.edges[0].toId, "cache-a");
+    assert.equal(snapshot.proposal.edges[0].to, "cache");
+    assert.ok(snapshot.validation.issues.length > 0);
+});
+
 test("renderer tokens and claimed approval fields cannot replace the host's user decision", async (t) => {
     const unconfirmed = await setup(t, "host-required-confirm");
     const confirmed = await setup(t, "host-required-restart");

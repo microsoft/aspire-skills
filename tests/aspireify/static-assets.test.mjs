@@ -3,6 +3,28 @@ import { lstat, readFile, readlink } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { createCanvasTestDom } from "../fixtures/canvas-test-dom.mjs";
+
+test("proposal view markup preserves tree semantics, help associations and panel nesting", async () => {
+    const html = await readFile(new URL("../../extensions/aspireify/ui/index.html", import.meta.url), "utf8");
+    const { document } = createCanvasTestDom(html);
+    const node = (id) => document.getElementById(id);
+    assert.equal(node("connections-tree").getAttribute("role"), "tree");
+    assert.equal(node("connections-tree").getAttribute("aria-describedby"), "connections-tree-help");
+    assert.equal(node("connections-tree-help").parentElement, node("connections-tree-panel"));
+    assert.equal(node("connections-tree").parentElement, node("connections-tree-panel"));
+    assert.equal(node("connections-tree-panel").parentElement, node("resource-plan-panel"));
+    assert.equal(node("resource-details-view").parentElement, node("resource-plan-panel"));
+    for (const id of ["compact-resources", "relationship-guide", "relationship-workspace", "relationship-list-disclosure"]) {
+        assert.equal(node(id).parentElement, node("resource-details-view"));
+    }
+    assert.equal(node("resources-view").getAttribute("aria-controls"), "resource-details-view");
+    assert.equal(node("connections-tree-view").getAttribute("aria-controls"), "connections-tree-panel");
+    assert.equal(node("resources-view").parentElement.getAttribute("role"), "group");
+    assert.equal(node("resources-view").getAttribute("aria-pressed"), "true");
+    assert.equal(node("connections-tree-view").getAttribute("aria-pressed"), "false");
+    assert.equal(node("connections-tree-panel").hidden, true);
+});
 
 test("the provider serves and publishes every local module imported by the canvas entry point", async () => {
     const [appSource, extensionSource] = await Promise.all([

@@ -1,12 +1,27 @@
 // A spanning forest of the supplied graph: each resource expands once, each edge
 // appears once, and repeated targets are terminal references, not resource copies.
 export function projectConnectionsTree(resources, edges) {
-    const byName = new Map(resources.map((resource) => [resource.name, resource]));
+    const byId = new Map(resources.map((resource) => [resource.id, resource]));
+    const byName = new Map();
+    for (const resource of resources) {
+        byName.set(resource.name, byName.has(resource.name) ? null : resource);
+    }
+    const ambiguous = new Set();
+    const ambiguousPeers = new Set();
+    const endpoint = (edge, side) => {
+        if (edge[`${side}Id`] !== undefined) return byId.get(edge[`${side}Id`]);
+        if (byName.get(edge[side]) === null) ambiguous.add(edge[side]);
+        return byName.get(edge[side]);
+    };
     const outgoing = new Map(resources.map((resource) => [resource.id, []]));
     const incoming = new Set();
     edges.forEach((edge, index) => {
-        const from = byName.get(edge.from);
-        const to = byName.get(edge.to);
+        const from = endpoint(edge, "from");
+        const to = endpoint(edge, "to");
+        if (from === null || to === null) {
+            if (from) ambiguousPeers.add(from.id);
+            if (to) ambiguousPeers.add(to.id);
+        }
         if (from && to) {
             outgoing.get(from.id).push({ edge, target: to, index });
             incoming.add(to.id);
@@ -35,7 +50,9 @@ export function projectConnectionsTree(resources, edges) {
             parentKey: parent?.key ?? null,
             targetKey: resourceKey(resource),
             reference,
-            disconnected: !incoming.has(resource.id) && !outgoing.get(resource.id).length,
+            ambiguous: ambiguous.has(resource.name) || ambiguousPeers.has(resource.id),
+            disconnected: !ambiguous.has(resource.name) && !ambiguousPeers.has(resource.id) &&
+                !incoming.has(resource.id) && !outgoing.get(resource.id).length,
             children: [],
         };
         nodes.set(node.key, node);

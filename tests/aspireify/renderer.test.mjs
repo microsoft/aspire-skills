@@ -77,7 +77,7 @@ async function createRenderer(initialSnapshot, { renderPlan = false } = {}) {
     runInContext(rendererSource, context, { filename: "aspireify/ui/app.js" });
     if (!renderPlan) {
         // Restart-only tests do not need the resource graph DOM.
-        runInContext("renderResourcePlan = () => {}; renderNotProposedServices = () => {};", context);
+        runInContext("renderResourcePlan = () => {}; renderNotProposedItems = () => {};", context);
     }
     documentListeners.get("DOMContentLoaded")();
     await new Promise((resolve) => setImmediate(resolve));
@@ -94,12 +94,12 @@ async function createRenderer(initialSnapshot, { renderPlan = false } = {}) {
             node(view === "tree" ? "connections-tree-view" : "resources-view").listeners.get("click")();
         },
         treeItems() { return node("connections-tree").querySelectorAll("[role='treeitem']"); },
-        press(key, target = dom.document.activeElement) {
+        press(key, target = dom.document.activeElement, { prevented: expected = true, ...modifiers } = {}) {
             let prevented = false;
             node("connections-tree").listeners.get("keydown")({
-                key, target, preventDefault() { prevented = true; },
+                key, target, ...modifiers, preventDefault() { prevented = true; },
             });
-            assert.equal(prevented, true);
+            assert.equal(prevented, expected);
         },
         openRestart() {
             assert.equal(node("restart-review").disabled, false);
@@ -226,6 +226,10 @@ test("tree keyboard navigation expands, collapses, follows shared references, an
     renderer.press("ArrowRight");
     assert.equal(renderer.treeItems()[0].getAttribute("aria-expanded"), "true");
     assert.equal(renderer.treeItems().length, 4);
+    const child = renderer.treeItems()[1];
+    assert.equal(child.parentElement.getAttribute("role"), "group");
+    assert.equal(child.parentElement.closest("[role='treeitem']"), renderer.treeItems()[0]);
+    assert.equal(renderer.treeItems()[0].parentElement, renderer.node("connections-tree"));
     renderer.press("ArrowRight");
     assert.equal(renderer.document.activeElement.dataset.resourceId, "db");
     assert.match(renderer.document.activeElement.getAttribute("aria-label"), /api → references db/);
@@ -308,7 +312,7 @@ test("view, expansion, and stable resource focus survive snapshot rerenders and 
     assert.equal(renderer.requests.length, 0);
 });
 
-test("switching views keeps unsaved edits and confirmation eligibility unchanged", async () => {
+test("switching views alone keeps field drafts and confirmation eligibility unchanged", async () => {
     const renderer = await createRenderer(graphReview(["api"], []), { renderPlan: true });
     const nameInput = renderer.document.querySelectorAll("input")
         .find((input) => input.getAttribute("aria-label") === "Resource name for api");
@@ -324,6 +328,74 @@ test("switching views keeps unsaved edits and confirmation eligibility unchanged
         .find((input) => input.getAttribute("aria-label") === "Resource name for api").value, "invalid name");
     assert.equal(renderer.evaluate("snapshot.proposal.resources[0].name"), "api");
     assert.equal(renderer.requests.length, 0);
+});
+
+test("tree focus and Resources selection stay synchronized in both directions", async () => {
+    const renderer = await createRenderer(graphReview(), { renderPlan: true });
+    renderer.switchView("tree");
+    renderer.treeItems()[0].focus();
+    renderer.press("ArrowRight");
+    renderer.press("ArrowRight");
+    renderer.switchView("resources");
+    assert.equal(renderer.evaluate("selectedResourceId"), "db");
+    assert.match(renderer.node("plan-inspector").textContent, /db/);
+    renderer.evaluate('selectResource("worker", "navigate")');
+    renderer.switchView("tree");
+    assert.equal(renderer.treeItems().find((item) => item.tabIndex === 0).dataset.resourceId, "worker");
+    renderer.switchView("resources");
+    renderer.evaluate('selectResource("db", "navigate")');
+    renderer.evaluate("expandedTreeKeys.clear()");
+    renderer.switchView("tree");
+    assert.equal(renderer.treeItems()[0].getAttribute("aria-expanded"), "true");
+    assert.equal(renderer.treeItems().find((item) => item.tabIndex === 0).dataset.resourceId, "db");
+    assert.equal(renderer.requests.length, 0);
+});
+
+test("removing the focused resource restores focus to the first tree item with one tab stop", async () => {
+    const initial = graphReview();
+    const renderer = await createRenderer(initial, { renderPlan: true });
+    renderer.switchView("tree");
+    renderer.treeItems()[0].focus();
+    renderer.press("ArrowRight");
+    renderer.press("ArrowRight");
+    const next = structuredClone(initial);
+    next.revision++;
+    next.proposal.resources = next.proposal.resources.filter((resource) => resource.id !== "db");
+    next.proposal.edges = [];
+    renderer.pushSnapshot(next);
+    assert.equal(renderer.document.activeElement, renderer.treeItems()[0]);
+    assert.equal(renderer.treeItems().filter((item) => item.tabIndex === 0).length, 1);
+    assert.equal(renderer.evaluate("selectedResourceId"), "api");
+});
+
+test("Tab and modified keys pass through the tree without preventing browser shortcuts", async () => {
+    const renderer = await createRenderer(graphReview(), { renderPlan: true });
+    renderer.switchView("tree");
+    renderer.treeItems()[0].focus();
+    const first = renderer.document.activeElement;
+    renderer.press("Tab", first, { prevented: false });
+    renderer.press("Tab", first, { prevented: false, shiftKey: true });
+    for (const modifier of ["ctrlKey", "altKey", "metaKey"]) {
+        renderer.press("ArrowDown", first, { prevented: false, [modifier]: true });
+        renderer.press("w", first, { prevented: false, [modifier]: true });
+    }
+    assert.equal(renderer.document.activeElement, first);
+    assert.equal(renderer.treeItems()[0].getAttribute("aria-expanded"), "false");
+});
+
+test("resource connections and tree targets use endpoint IDs when names collide", async () => {
+    const initial = graphReview(["api", "cache-a", "cache-b"], [
+        { id: "api-cache", from: "api", to: "cache", fromId: "api", toId: "cache-a", kind: "reference" },
+    ]);
+    initial.proposal.resources.slice(1).forEach((resource) => { resource.name = "cache"; });
+    const renderer = await createRenderer(initial, { renderPlan: true });
+    renderer.evaluate('selectResource("cache-b", "navigate")');
+    assert.equal(renderer.node("plan-inspector").querySelectorAll(".connection-chip").length, 0);
+    renderer.evaluate('selectResource("cache-a", "navigate")');
+    assert.equal(renderer.node("plan-inspector").querySelectorAll(".connection-chip").length, 1);
+    renderer.switchView("tree");
+    assert.equal(renderer.treeItems()[1].dataset.resourceId, "cache-a");
+    assert.match(renderer.treeItems()[2].textContent, /No connections/);
 });
 
 test("switching during a pending resource save does not unblock confirmation or submit another mutation", async () => {

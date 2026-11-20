@@ -86,7 +86,12 @@ export function createCanvasTestDom(html) {
             ]);
         }
         querySelector(selector) { return this.querySelectorAll(selector)[0] ?? null; }
-        addEventListener(type, listener) { this.listeners.set(type, listener); }
+        addEventListener(type, listener) {
+            const previous = this.listeners.get(type);
+            this.listeners.set(type, previous
+                ? (event) => { previous(event); listener(event); }
+                : listener);
+        }
         focus() { document.activeElement = this; this.listeners.get("focus")?.({ target: this }); }
         scrollIntoView() {}
         setCustomValidity(message) { this.validationMessage = message; }
@@ -107,11 +112,27 @@ export function createCanvasTestDom(html) {
         querySelectorAll: (selector) => document.body.querySelectorAll(selector),
         addEventListener: (type, listener) => listeners.set(type, listener),
     };
-    for (const [, tag, attrs, id] of html.matchAll(/<(\w+)\b([^>]*\bid="([^"]+)"[^>]*)>/g)) {
+    const body = html.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i)?.[1];
+    if (body === undefined) throw new Error("Canvas markup must contain a body");
+    const stack = [document.body];
+    const voidTags = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]);
+    for (const [, closing, tag, attrs] of body.replace(/<!--[\s\S]*?-->/g, "").matchAll(/<(\/?)([\w-]+)\b([^>]*)>/g)) {
+        if (closing) {
+            if (stack.length === 1 || stack.pop().tagName !== tag) {
+                throw new Error(`Unbalanced canvas closing tag: ${tag}`);
+            }
+            continue;
+        }
         const element = createElement(tag);
-        element.setAttribute("id", id);
-        element.hidden = /\bhidden\b/.test(attrs);
-        document.body.append(element);
+        for (const [, name, doubleQuoted, singleQuoted, unquoted] of attrs.matchAll(/([\w:-]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s/>]+)))?/g)) {
+            const value = doubleQuoted ?? singleQuoted ?? unquoted ?? "";
+            element.setAttribute(name, value);
+            if (name === "class") element.className = value;
+            if (["hidden", "disabled", "open"].includes(name)) element[name] = true;
+        }
+        stack[stack.length - 1].append(element);
+        if (!voidTags.has(tag) && !attrs.trimEnd().endsWith("/")) stack.push(element);
     }
+    if (stack.length !== 1) throw new Error("Unclosed canvas markup");
     return { document, listeners, HTMLElement: Element, HTMLInputElement: Input, HTMLTextAreaElement: Textarea };
 }

@@ -9,17 +9,20 @@ only interactive decision surface shown in the canvas.
 The canvas only:
 
 1. opens through `open_aspireify`;
-2. receives the detected AppHost style and discovered runnable services through
+2. receives the detected AppHost style, discovered runnable services, and optional
+   external dependency inventory through
    `load_discovery`, using the skill's existing stable ID, name, type, framework,
    HTTP exposure, path, inclusion, resource name, and Service Defaults fields;
 3. receives resources and connections through `set_proposal`, using the current
    `proposalGeneration` and the skill's existing resource and edge fields;
-4. explicitly maps source services to proposed Aspire resources and lists any
+4. explicitly maps discovered services and external dependencies to proposed Aspire resources and lists any
    discovered service without a proposal mapping in a compact "Not in the
    proposed graph" section, without adding it to the graph. Services the skill
    passes in `set_proposal`'s optional `serviceTreatments` show as **Not
    modeled** or **Deferred** with an agent-supplied reason (and, when deferred, what
-   remains unresolved); every other unmapped service shows as **Not assessed**;
+   remains unresolved); every other unmapped service shows as **Not assessed**.
+   External dependencies have equivalent accounting without becoming fake
+   runnable services or artificial graph nodes;
 5. uses a compact mapping-first review for one or two resources and a role-grouped
    overview with one focused inspector for larger plans;
 6. lets the user add or remove plan resources, add their initial connections
@@ -34,6 +37,7 @@ The canvas only:
 9. keeps unresolved implementation tradeoffs in chat rather than inventing new
    canvas data; and
 10. returns the confirmed choices, unmapped services (`notProposed`), plan,
+    external inventory, resource mappings, and decisions (`externalDependencies`),
     canonical `appHostPath` and `appHostIdentity`, `approvedRevision`, generation,
     and hash through `get_confirmation`.
 
@@ -70,20 +74,27 @@ expanded canonical list presents every connection once.
 
 Use **Resources / Connections tree** to switch between the existing compact
 cards or overview/inspector and an expandable, read-only projection of the same
-proposal. The tree starts with resources that have no incoming connections, then
-adds roots for remaining components, including cycles and disconnected resources.
+proposal. The tree starts with resources that have no incoming connections,
+including disconnected resources, in proposal order. It then adds roots for
+remaining unreachable components, including cycles.
 It follows outgoing connections and shows their source, target, and relationship
 type. Each resource expands once; **Shared reference** and **Cycle reference**
 entries point to that same resource rather than duplicating it or expanding
-indefinitely. No resources or connections are inferred.
+indefinitely. Endpoint IDs keep connections attached to the correct resource
+even while names collide. Legacy name-only connections with ambiguous endpoints
+are not attached; affected resources are marked as ambiguous. No resources or
+connections are inferred.
 
 In the tree, use Up/Down, Home/End, and first-letter navigation to move focus;
 Right expands or enters a branch, Left collapses or moves to its parent, and
 Enter/Space toggles a branch or follows a reference to the original resource.
 The view and expanded branches survive normal snapshot updates; changing the
-AppHost resets them. Switch to **Resources** for the existing editing controls.
-Switching views never changes the proposal, saved confirmation, pending edits,
-or confirmation eligibility. The same confirmation and chat-handoff controls
+AppHost resets them. Tree focus carries into the selected resource when switching
+to **Resources** for editing; the selected resource is revealed when returning
+to the tree. Switching itself does not edit the proposal or saved confirmation,
+but leaving an edited field saves it through the usual change event, creating
+a revision and undo step. Pending saves still block confirmation as usual.
+The same confirmation and chat-handoff controls
 apply in both views, including when exploring an already-confirmed snapshot.
 
 The AppHost style is read-only in this surface. Loading only indicates that the
@@ -102,6 +113,28 @@ and TypeScript toolchain repair stay in chat.
 
 It intentionally has no repository detector, scanner, proposal generator,
 AppHost editor, deployment controls, initialization flow, or validation workflow.
+
+## External dependencies
+
+The canvas tracks supplied external dependencies separately from runnable
+services, shows their resource mappings or **Not modeled**, **Deferred**, and
+**Not assessed** decisions, and preserves this accounting in immutable
+confirmation and chat handoff. It does not create resources or change
+configuration, authentication, health checks, or startup ordering. See
+[External inventory handoff](../../skills/aspireify/references/scan-and-propose.md#external-inventory-handoff)
+for the skill's handoff guidance.
+
+Excluded and removed resource mappings remain in "Not in the proposed graph"
+even when another resource for the same dependency is included.
+
+Regenerating a proposal honors removals even when a generated resource mapped to
+a user-added resource with a different ID. Replacing the resource list withdraws
+generated mappings no longer supplied, while preserving user-added resources and
+connections. Omitting the list preserves mappings. Replacing discovery detaches
+mappings for missing dependency IDs and clears their treatments. Removal records
+survive inventory gaps and reloads, so rediscovered dependencies do not restore
+deleted resources. Starting a new run with `startNewRun: true` clears that removal
+history.
 
 ## Shared canvas UI
 
