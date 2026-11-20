@@ -66,6 +66,7 @@ class TestElement {
     }
 
     get offsetHeight() { return 180; }
+    get childNodes() { return this.children; }
 
     getBoundingClientRect() {
         return { left: 0, top: 0, right: 320, bottom: 60, width: 320, height: 60 };
@@ -76,6 +77,13 @@ class TestElement {
         this._text = undefined;
         child.parentElement = this;
         this.children.push(child);
+        return child;
+    }
+
+    insertBefore(child, reference) {
+        child.remove();
+        child.parentElement = this;
+        this.children.splice(this.children.indexOf(reference), 0, child);
         return child;
     }
 
@@ -118,6 +126,17 @@ class TestElement {
         }
         return this.attributes.get(name) ?? null;
     }
+
+    getAttributeNames() {
+        return [...new Set([
+            ...this.attributes.keys(),
+            ...["id", "name", "type", "title"].filter((name) => this[name]),
+            ...(this.className ? ["class"] : []),
+            ...Object.keys(this.dataset).map((name) => `data-${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`),
+        ])];
+    }
+
+    hasAttribute(name) { return this.getAttributeNames().includes(name); }
 
     removeAttribute(name) {
         this.attributes.delete(name);
@@ -266,10 +285,32 @@ function createRenderer({ transitions = false } = {}) {
     const streams = [];
     const queuedTransitions = [];
     const copied = [];
+    const nodePrototype = {
+        appendChild: TestElement.prototype.appendChild,
+        insertBefore: TestElement.prototype.insertBefore,
+        removeChild(child) {
+            if (child.parentElement !== this) throw new Error("The node is not a child.");
+            child.remove();
+            return child;
+        },
+    };
+    Object.defineProperties(nodePrototype, {
+        parentElement: { get() { return this.parentElement; } },
+        childNodes: { get() { return this.children; } },
+    });
+    const elementPrototype = {
+        getAttribute: TestElement.prototype.getAttribute,
+        getAttributeNames: TestElement.prototype.getAttributeNames,
+        hasAttribute: TestElement.prototype.hasAttribute,
+        removeAttribute: TestElement.prototype.removeAttribute,
+        setAttribute: TestElement.prototype.setAttribute,
+    };
+    Object.defineProperty(elementPrototype, "tagName", { get() { return this.tagName; } });
     let nextTimer = 0;
     let now = 0;
     const context = vm.createContext({
-        document, URLSearchParams,
+        document, URLSearchParams, Node: { prototype: nodePrototype }, Element: { prototype: elementPrototype },
+        HTMLFormElement: { prototype: { requestSubmit: TestElement.prototype.requestSubmit } },
         window: {
             location: { search: "?token=test-renderer" }, innerWidth: 480, innerHeight: 720,
             matchMedia: () => ({ matches: false }),
@@ -417,6 +458,16 @@ function clickCommand(renderer) {
 async function openCommand(renderer) {
     clickCommand(renderer);
     await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: inputs() });
+}
+
+async function openSecretDependentCommand(renderer) {
+    const fields = inputs();
+    fields[0] = { ...fields[0], inputType: "SecretText" };
+    await renderer.push({ type: "state", state: commandSnapshot(2, fields) });
+    clickCommand(renderer);
+    await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
+    button(renderer.document.body, "Continue").click();
+    return fields;
 }
 
 test("commands without inputs run directly from the chip without opening the command panel", async () => {
@@ -816,15 +867,241 @@ test("whitespace edits to secret dependencies still invalidate metadata", async 
     await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
     button(renderer.document.body, "Continue").click();
     enterField(renderer, "environment", "  token  ");
+    enterField(renderer, "environment", "  token  ", "change");
     await renderer.advance(250);
     await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
     enterField(renderer, "environment", "token");
-    assert.equal(button(renderer.document.body, "Loading inputs...").disabled, true);
+    assert.equal(button(renderer.document.body, "Run command").disabled, false);
+    enterField(renderer, "environment", "token", "change");
     await renderer.advance(250);
+    assert.equal(button(renderer.document.body, "Loading inputs...").disabled, true);
     const load = renderer.request("/api/command-inputs");
     assert.equal(load.body.arguments.environment, "token");
     await renderer.respond(load, { ok: true, inputs: fields });
     assert.equal(button(renderer.document.body, "Run command").disabled, false);
+});
+
+test("changing a secret select reloads dependent inputs", async () => {
+    const renderer = await boot();
+    const fields = inputs();
+    fields[0] = {
+        ...fields[0],
+        inputType: "SecretChoice",
+        options: [{ value: "dev", label: "Development" }, { value: "prod", label: "Production" }],
+    };
+    await renderer.push({ type: "state", state: commandSnapshot(2, fields) });
+    clickCommand(renderer);
+    await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
+    button(renderer.document.body, "Continue").click();
+
+    const environment = renderer.document.querySelector('[name="environment"]');
+    environment.value = "prod";
+    environment.dispatch("change");
+    await renderer.advance(250);
+    const updatedFields = structuredClone(fields);
+    updatedFields[1].value = "west";
+    updatedFields[1].options = [{ value: "west", label: "West" }];
+    const load = renderer.request("/api/command-inputs");
+    assert.equal(load.body.arguments.environment, "prod");
+    await renderer.respond(load, { ok: true, inputs: updatedFields });
+    assert.equal(renderer.document.querySelector('[name="target"]').value, "west");
+    assert.equal(button(renderer.document.body, "Run command").disabled, false);
+});
+
+for (const activation of ["click", "Enter"]) {
+    test(`a pending secret dependency can be submitted with ${activation}`, async () => {
+        const renderer = await boot();
+        const fields = await openSecretDependentCommand(renderer);
+        enterField(renderer, "environment", "secret");
+        await renderer.advance(1000);
+        assert.equal(renderer.requests.filter((request) => request.path === "/api/command-inputs").length, 1);
+        const submit = renderer.document.querySelector('.command-form button[type="submit"]');
+        assert.equal(submit.textContent, "Run command");
+        assert.equal(submit.disabled, false);
+
+        if (activation === "click") {
+            renderer.document.querySelector('[name="environment"]').dispatch("change");
+            submit.click();
+        } else {
+            renderer.document.querySelector(".command-form").requestSubmit();
+        }
+        assert.equal(button(renderer.document.body, "Loading inputs...").disabled, true);
+        assert.equal(renderer.requests.filter((request) => request.path === "/api/command").length, 0);
+        const load = renderer.request("/api/command-inputs");
+        assert.equal(load.body.arguments.environment, "secret");
+        await renderer.respond(load, { ok: true, inputs: fields });
+        const command = renderer.request("/api/command");
+        assert.deepEqual(command.body.arguments, { environment: "secret", target: "east" });
+        await renderer.advance(250);
+        assert.equal(renderer.requests.filter((request) => request.path === "/api/command-inputs").length, 2);
+        assert.equal(renderer.requests.filter((request) => request.path === "/api/command").length, 1);
+    });
+}
+
+test("a failed secret dependency load does not run the command", async () => {
+    const renderer = await boot();
+    const fields = await openSecretDependentCommand(renderer);
+    enterField(renderer, "environment", "secret");
+    renderer.document.querySelector(".command-form").requestSubmit();
+    await renderer.fail(renderer.request("/api/command-inputs"), "Inputs unavailable");
+    assert.match(renderer.document.querySelector(".command-form").textContent, /Inputs unavailable/);
+    assert.equal(renderer.requests.filter((request) => request.path === "/api/command").length, 0);
+    button(renderer.document.body, "Retry inputs").click();
+    await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
+    assert.equal(renderer.requests.filter((request) => request.path === "/api/command").length, 0);
+    button(renderer.document.body, "Run command").click();
+    assert.equal(renderer.request("/api/command").body.arguments.environment, "secret");
+});
+
+test("a secret load can populate required inputs before command validation", async () => {
+    const renderer = await boot();
+    const fields = [
+        { name: "token", label: "Token", inputType: "SecretText" },
+        { name: "target", label: "Target", inputType: "Text", required: true,
+            dynamicLoading: { dependsOnInputs: ["token"] } },
+    ];
+    await renderer.push({ type: "state", state: commandSnapshot(2, fields) });
+    clickCommand(renderer);
+    await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
+    button(renderer.document.body, "Continue").click();
+    enterField(renderer, "token", "secret");
+    renderer.document.querySelector('[name="token"]').dispatch("change");
+    button(renderer.document.body, "Run command").click();
+    await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
+    assert.equal(renderer.requests.filter((request) => request.path === "/api/command").length, 0);
+    enterField(renderer, "target", "example");
+    button(renderer.document.body, "Run command").click();
+    assert.deepEqual(renderer.request("/api/command").body.arguments, { token: "secret", target: "example" });
+});
+
+test("changed inputs require review before a pending secret command runs", async () => {
+    const renderer = await boot();
+    const fields = await openSecretDependentCommand(renderer);
+    enterField(renderer, "environment", "secret");
+    renderer.document.querySelector(".command-form").requestSubmit();
+    const updated = structuredClone(fields);
+    updated[1].value = "west";
+    updated[1].options = [{ value: "west", label: "West" }];
+    await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: updated });
+    assert.equal(renderer.requests.filter((request) => request.path === "/api/command").length, 0);
+    assert.equal(renderer.document.querySelector('[name="target"]').value, "west");
+    assert.match(renderer.document.querySelector(".command-form").textContent, /review/i);
+    button(renderer.document.body, "Run command").click();
+    assert.deepEqual(renderer.request("/api/command").body.arguments, { environment: "secret", target: "west" });
+});
+
+test("editing a secret during submission cancels the stale pending command", async () => {
+    const renderer = await boot();
+    const fields = await openSecretDependentCommand(renderer);
+    enterField(renderer, "environment", "first");
+    renderer.document.querySelector(".command-form").requestSubmit();
+    const stale = renderer.request("/api/command-inputs");
+    enterField(renderer, "environment", "second");
+    await renderer.respond(stale, { ok: true, inputs: fields });
+    assert.equal(renderer.requests.filter((request) => request.path === "/api/command").length, 0);
+    renderer.document.querySelector(".command-form").requestSubmit();
+    const latest = renderer.request("/api/command-inputs");
+    assert.equal(latest.body.arguments.environment, "second");
+    await renderer.respond(latest, { ok: true, inputs: fields });
+    assert.equal(renderer.request("/api/command").body.arguments.environment, "second");
+});
+
+test("editing another input during a secret load requires review", async () => {
+    const renderer = await boot();
+    const fields = await openSecretDependentCommand(renderer);
+    enterField(renderer, "environment", "secret");
+    renderer.document.querySelector(".command-form").requestSubmit();
+    const load = renderer.request("/api/command-inputs");
+    enterField(renderer, "target", "west", "change");
+    await renderer.respond(load, { ok: true, inputs: fields });
+    assert.equal(renderer.requests.filter((request) => request.path === "/api/command").length, 0);
+    assert.match(renderer.document.querySelector(".command-form").textContent, /review/i);
+    button(renderer.document.body, "Run command").click();
+    assert.deepEqual(renderer.request("/api/command").body.arguments, { environment: "secret", target: "west" });
+});
+
+test("a live schema change during a secret submission reloads inputs without running", async () => {
+    const renderer = await boot();
+    const fields = await openSecretDependentCommand(renderer);
+    enterField(renderer, "environment", "secret");
+    renderer.document.querySelector(".command-form").requestSubmit();
+    const stale = renderer.request("/api/command-inputs");
+    const updatedFields = structuredClone(fields);
+    updatedFields[1].label = "Updated target";
+    await renderer.push({ type: "state", state: commandSnapshot(3, updatedFields) });
+    await renderer.respond(stale, { ok: true, inputs: fields });
+    const reload = renderer.request("/api/command-inputs");
+    assert.equal(reload.body.arguments.environment, "secret");
+    await renderer.respond(reload, { ok: true, inputs: updatedFields });
+    assert.equal(renderer.requests.filter((request) => request.path === "/api/command").length, 0);
+    button(renderer.document.body, "Run command").click();
+    assert.equal(renderer.request("/api/command").body.arguments.environment, "secret");
+});
+
+test("closing the form during a secret load cancels the pending command", async () => {
+    const renderer = await boot();
+    const fields = await openSecretDependentCommand(renderer);
+    enterField(renderer, "environment", "secret");
+    renderer.document.querySelector(".command-form").requestSubmit();
+    const load = renderer.request("/api/command-inputs");
+    button(renderer.document.body, "Cancel").click();
+    await renderer.respond(load, { ok: true, inputs: fields });
+    assert.equal(renderer.document.querySelector(".command-form"), null);
+    assert.equal(renderer.requests.filter((request) => request.path === "/api/command").length, 0);
+});
+
+test("secret dependencies stay local until committed and retain the same control while typing", async () => {
+    const renderer = await boot();
+    const fields = inputs();
+    fields[0] = { ...fields[0], inputType: "SecretText" };
+    await renderer.push({ type: "state", state: commandSnapshot(2, fields) });
+    clickCommand(renderer);
+    await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
+    button(renderer.document.body, "Continue").click();
+    const control = renderer.document.querySelector('[name="environment"]');
+    const target = renderer.document.querySelector('[name="target"]');
+    for (const value of ["s", "se", "secret"]) {
+        enterField(renderer, "environment", value);
+        await renderer.advance(1000);
+        assert.equal(renderer.requests.filter((request) => request.path === "/api/command-inputs").length, 1);
+        assert.equal(renderer.document.querySelector('[name="environment"]'), control);
+        assert.equal(renderer.document.querySelector('[name="target"]'), target);
+        assert.equal(renderer.document.activeElement, control);
+    }
+    assert.equal(button(renderer.document.body, "Run command").disabled, false);
+    assert.equal(renderer.requests.filter((request) => request.path === "/api/command").length, 0);
+    control.dispatch("change");
+    assert.equal(renderer.document.querySelector('[name="target"]'), target, "committing must not replace the next focus target");
+    await renderer.advance(250);
+    const load = renderer.request("/api/command-inputs");
+    assert.equal(load.body.arguments.environment, "secret");
+    await renderer.respond(load, { ok: true, inputs: fields });
+    assert.equal(renderer.document.querySelector('[name="environment"]'), control);
+    assert.equal(button(renderer.document.body, "Run command").disabled, false);
+});
+
+test("live resource updates preserve the focused command input and update the surrounding board", async () => {
+    const renderer = await boot();
+    await openCommand(renderer);
+    enterField(renderer, "environment", "production");
+    const control = renderer.document.querySelector('[name="environment"]');
+    control.setSelectionRange(3, 5);
+    const state = snapshot(2);
+    state.roots[0].children[0].children[0].statusLabel = "Stopped";
+    await renderer.push({ type: "state", state });
+    assert.equal(renderer.document.querySelector('[name="environment"]'), control);
+    assert.equal(control.isConnected, true);
+    assert.equal(renderer.document.activeElement, control);
+    assert.equal(control.value, "production");
+    assert.equal(control.selectionStart, 3);
+    assert.equal(control.selectionEnd, 5);
+    assert.match(renderer.document.querySelector(".resource-roster").textContent, /Stopped/);
+    await renderer.advance(250);
+    const updatedInputs = inputs("west");
+    updatedInputs[1].options = [{ value: "west", label: "West" }];
+    await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: updatedInputs });
+    assert.equal(renderer.document.querySelector('[name="environment"]'), control);
+    assert.equal(renderer.document.querySelector('[name="target"]').value, "west");
 });
 
 test("secret-gated forms load effective non-secret defaults before Continue", async () => {
@@ -877,7 +1154,7 @@ test("number defaults remain visible and submit without browser-only normalizati
     assert.deepEqual(result.values, { count: 12 });
 });
 
-test("native browser displays exactly the number value submitted by an untouched form", {
+test("native browser preserves number defaults and focused command inputs during refreshes", {
     skip: !process.env.CHROME_BIN && "Set CHROME_BIN to a Chromium executable for native-browser regressions.",
 }, async (t) => {
     const directory = await mkdtemp(join(tmpdir(), "apphosts-number-browser-"));
@@ -911,6 +1188,47 @@ test("native browser displays exactly the number value submitted by an untouched
                 }
                 panel.remove();
             }
+            commandRunning = false;
+            const state = ${JSON.stringify(commandSnapshot(1, [
+                { name: "token", label: "Token", inputType: "SecretText" },
+                { ...inputs()[1], dynamicLoading: { dependsOnInputs: ["token"] } },
+            ]))};
+            acceptState(state);
+            selectedResourceId = "host-a:resource:api";
+            activeCommandId = ${JSON.stringify(commandId)};
+            secretWarningAccepted = true;
+            renderTree();
+            const control = document.querySelector('[name="token"]');
+            control.focus();
+            let blurCount = 0;
+            control.addEventListener("blur", () => blurCount++);
+            for (const value of ["s", "se", "secret"]) {
+                control.value = value;
+                control.dispatchEvent(new Event("input", { bubbles: true }));
+                if (document.activeElement !== control || !control.isConnected) {
+                    throw new Error("Typing replaced the focused secret input");
+                }
+            }
+            control.setSelectionRange(2, 4);
+            const nextState = structuredClone(state);
+            nextState.revision++;
+            nextState.roots[0].children[0].children[0].statusLabel = "Stopped";
+            acceptState(nextState);
+            if (document.activeElement !== control || !control.isConnected || blurCount
+                || control.selectionStart !== 2 || control.selectionEnd !== 4
+                || control.value !== "secret") {
+                throw new Error("Live refresh disrupted secret editing");
+            }
+            if (!document.querySelector(".resource-roster").textContent.includes("Stopped")) {
+                throw new Error("Preserving the input blocked live resource updates");
+            }
+            const nextTarget = document.querySelector('[name="target"]');
+            control.dispatchEvent(new Event("change", { bubbles: true }));
+            nextTarget.focus();
+            if (document.activeElement !== nextTarget || !nextTarget.isConnected) {
+                throw new Error("Committing the secret removed the next focus target");
+            }
+            cancelDynamicInputsLoad(activeCommandId);
             document.body.dataset.numberRegression = "passed";
         } catch (error) {
             document.body.dataset.numberRegression = error.message;
@@ -930,6 +1248,134 @@ test("native browser displays exactly the number value submitted by an untouched
     ], { timeout: 30_000, maxBuffer: 2_000_000 });
     assert.equal(stdout.match(/data-number-regression="([^"]*)"/)?.[1], "passed",
         "Native-browser number regression failed.");
+});
+
+test("native browser submits secret-dependent commands when an input is named requestSubmit", {
+    skip: !process.env.CHROME_BIN && "Set CHROME_BIN to a Chromium executable for native-browser regressions.",
+}, async (t) => {
+    const directory = await mkdtemp(join(tmpdir(), "apphosts-secret-submit-browser-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const fields = [
+        { name: "token", label: "Token", inputType: "SecretText" },
+        { name: "requestSubmit", label: "Target", inputType: "Choice", value: "east",
+            options: [{ value: "east", label: "East" }, { value: "west", label: "West" }],
+            dynamicLoading: { dependsOnInputs: ["token"] } },
+    ];
+    const setup = `
+        window.inputRequests = [];
+        window.commandRequests = [];
+        window.fetch = (path, options) => {
+            if (path === "/api/command-inputs") {
+                inputRequests.push(JSON.parse(options.body));
+                return Promise.resolve({
+                    ok: true, status: 200, json: async () => ({ ok: true, inputs: window.dynamicInputs }),
+                });
+            }
+            if (path === "/api/command") commandRequests.push(JSON.parse(options.body));
+            return new Promise(() => {});
+        };
+        window.EventSource = class { addEventListener() {} };
+    `;
+    const regression = `
+        (async () => {
+            try {
+                const fields = ${JSON.stringify(fields)};
+                window.dynamicInputs = fields;
+                acceptState(${JSON.stringify(commandSnapshot(1, fields))});
+                selectedResourceId = "host-a:resource:api";
+                activeCommandId = ${JSON.stringify(commandId)};
+                secretWarningAccepted = true;
+                commandInputs.set(activeCommandId, { baseSignature: JSON.stringify(fields), inputs: fields });
+                renderTree();
+                const control = document.querySelector('[name="token"]');
+                control.focus();
+                control.value = "secret";
+                control.dispatchEvent(new Event("input", { bubbles: true }));
+                const submit = document.querySelector('.command-form button[type="submit"]');
+                if (submit.disabled || submit.textContent !== "Run command") throw new Error("Run is blocked while editing");
+                if (inputRequests.length) throw new Error("Inputs loaded while typing");
+                submit.click();
+                if (inputRequests.length !== 1 || commandRequests.length) throw new Error("Run did not start one input load");
+                if (inputRequests[0].arguments.token !== "secret") throw new Error("Incorrect dependency value");
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                if (commandRequests.length !== 1 || commandRequests[0].arguments.token !== "secret"
+                    || commandRequests[0].arguments.requestSubmit !== "east") {
+                    throw new Error("Run did not submit after inputs loaded");
+                }
+                document.body.dataset.secretSubmitRegression = "passed";
+            } catch (error) {
+                document.body.dataset.secretSubmitRegression = error.message;
+            }
+        })();
+    `;
+    const script = (source) => `<script>${source.replaceAll("</script", "<\\/script")}</script>`;
+    const html = markup.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+        .replace(/<link\b[^>]*>/gi, "")
+        .replace("</body>", `${script(setup)}${script(rendererSource)}${script(regression)}</body>`);
+    const file = join(directory, "secret-submit.html");
+    await writeFile(file, html);
+    const { stdout } = await promisify(execFile)(process.env.CHROME_BIN, [
+        "--headless", "--disable-gpu",
+        ...(process.getuid?.() === 0 ? ["--no-sandbox"] : []),
+        `--user-data-dir=${join(directory, "profile")}`,
+        "--virtual-time-budget=1000", "--dump-dom", pathToFileURL(file).href,
+    ], { timeout: 30_000, maxBuffer: 2_000_000 });
+    assert.equal(stdout.match(/data-secret-submit-regression="([^"]*)"/)?.[1], "passed",
+        "Native-browser secret submission regression failed.");
+});
+
+test("native browser preserves focused input when names shadow DOM members", {
+    skip: !process.env.CHROME_BIN && "Set CHROME_BIN to a Chromium executable for native-browser regressions.",
+}, async (t) => {
+    const directory = await mkdtemp(join(tmpdir(), "apphosts-dom-member-browser-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const fields = [
+        "getAttributeNames", "setAttribute", "getAttribute", "hasAttribute", "removeAttribute",
+        "childNodes", "parentElement", "insertBefore", "appendChild", "remove", "tagName",
+    ].map((name) => ({ name, label: name, inputType: "Text" }));
+    const setup = `
+        window.fetch = () => new Promise(() => {});
+        window.EventSource = class { addEventListener() {} };
+    `;
+    const regression = `
+        try {
+            const fields = ${JSON.stringify(fields)};
+            const state = ${JSON.stringify(commandSnapshot(1, fields))};
+            acceptState(state);
+            selectedResourceId = "host-a:resource:api";
+            activeCommandId = ${JSON.stringify(commandId)};
+            renderTree();
+            const control = document.querySelector('[name="getAttributeNames"]');
+            control.focus();
+            let blurCount = 0;
+            control.addEventListener("blur", () => blurCount++);
+            const nextState = structuredClone(state);
+            nextState.revision++;
+            nextState.roots[0].children[0].children[0].statusLabel = "Stopped";
+            acceptState(nextState);
+            if (document.activeElement !== control || !control.isConnected || blurCount
+                || !document.querySelector(".resource-roster").textContent.includes("Stopped")) {
+                throw new Error("DOM member names disrupted focused input reconciliation");
+            }
+            document.body.dataset.domMemberRegression = "passed";
+        } catch (error) {
+            document.body.dataset.domMemberRegression = error.message;
+        }
+    `;
+    const script = (source) => `<script>${source.replaceAll("</script", "<\\/script")}</script>`;
+    const html = markup.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+        .replace(/<link\b[^>]*>/gi, "")
+        .replace("</body>", `${script(setup)}${script(rendererSource)}${script(regression)}</body>`);
+    const file = join(directory, "dom-members.html");
+    await writeFile(file, html);
+    const { stdout } = await promisify(execFile)(process.env.CHROME_BIN, [
+        "--headless", "--disable-gpu",
+        ...(process.getuid?.() === 0 ? ["--no-sandbox"] : []),
+        `--user-data-dir=${join(directory, "profile")}`,
+        "--virtual-time-budget=1000", "--dump-dom", pathToFileURL(file).href,
+    ], { timeout: 30_000, maxBuffer: 2_000_000 });
+    assert.equal(stdout.match(/data-dom-member-regression="([^"]*)"/)?.[1], "passed",
+        "Native-browser DOM member shadowing regression failed.");
 });
 
 test("committing a text edit normalizes it without trimming spaces while typing", async () => {
@@ -1008,6 +1454,74 @@ test("live base schema changes reload an open form and supersede pending old-sch
     assert.equal(button(renderer.document.body, "Run command").disabled, false);
 });
 
+test("live schema changes defer metadata reloads while a secret dependency is uncommitted", async () => {
+    const renderer = await boot();
+    const fields = await openSecretDependentCommand(renderer);
+    enterField(renderer, "environment", "partial-secret");
+    const updatedFields = structuredClone(fields);
+    updatedFields[1].label = "Updated target";
+    await renderer.push({ type: "state", state: commandSnapshot(3, updatedFields) });
+    await renderer.advance(1000);
+    assert.equal(renderer.requests.filter((request) => request.path === "/api/command-inputs").length, 1);
+    assert.equal(renderer.document.querySelector('[name="environment"]').value, "partial-secret");
+    assert.equal(renderer.document.querySelector(".command-form").textContent.includes("Updated target"), true);
+
+    renderer.document.querySelector('[name="environment"]').dispatch("change");
+    await renderer.advance(250);
+    const load = renderer.request("/api/command-inputs");
+    assert.equal(load.body.arguments.environment, "partial-secret");
+    await renderer.respond(load, { ok: true, inputs: updatedFields });
+    assert.equal(button(renderer.document.body, "Run command").disabled, false);
+});
+
+test("live schema changes clear tracking for removed secret dependencies", async () => {
+    const renderer = await boot();
+    const fields = await openSecretDependentCommand(renderer);
+    enterField(renderer, "environment", "partial-secret");
+    const updatedFields = [
+        { name: "region", label: "Region", inputType: "Text", value: "east" },
+        { ...fields[1], dynamicLoading: { dependsOnInputs: ["region"] } },
+    ];
+    await renderer.push({ type: "state", state: commandSnapshot(3, updatedFields) });
+    const schemaLoad = renderer.request("/api/command-inputs");
+    assert.deepEqual(schemaLoad.body.arguments, { region: "east", target: "east" });
+    await renderer.respond(schemaLoad, { ok: true, inputs: updatedFields });
+
+    enterField(renderer, "region", "west");
+    assert.equal(button(renderer.document.body, "Loading inputs...").disabled, true);
+    await renderer.advance(250);
+    const dependencyLoad = renderer.request("/api/command-inputs");
+    assert.equal(dependencyLoad.body.arguments.region, "west");
+});
+
+test("successful secret commands clear uncommitted dependency tracking", async () => {
+    const renderer = await boot();
+    const fields = inputs();
+    fields[0] = { ...fields[0], inputType: "SecretText" };
+    fields[1].dynamicLoading.dependsOnInputs = ["environment", "region"];
+    fields.push({ name: "region", label: "Region", inputType: "Text", value: "east" });
+    await renderer.push({ type: "state", state: commandSnapshot(2, fields) });
+    clickCommand(renderer);
+    await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
+    button(renderer.document.body, "Continue").click();
+
+    enterField(renderer, "environment", "first-secret");
+    renderer.document.querySelector('[name="environment"]').dispatch("change");
+    await renderer.advance(250);
+    await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
+    button(renderer.document.body, "Run command").click();
+    const command = renderer.request("/api/command");
+    enterField(renderer, "environment", "later-secret");
+    await renderer.respond(command, { ok: true });
+    await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
+
+    enterField(renderer, "region", "west");
+    assert.equal(button(renderer.document.body, "Loading inputs...").disabled, true);
+    await renderer.advance(250);
+    const dependencyLoad = renderer.request("/api/command-inputs");
+    assert.equal(dependencyLoad.body.arguments.region, "west");
+});
+
 test("live schemas that remove dynamic inputs cancel pending metadata without blocking ordinary commands", async () => {
     const renderer = await boot();
     clickCommand(renderer);
@@ -1083,6 +1597,7 @@ test("discarding secrets after success reloads metadata for the cleared dependen
     await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
     button(renderer.document.body, "Continue").click();
     enterField(renderer, "token", "temporary-secret");
+    enterField(renderer, "token", "temporary-secret", "change");
     await renderer.advance(250);
     await renderer.respond(renderer.request("/api/command-inputs"), { ok: true, inputs: fields });
     button(renderer.document.body, "Run command").click();

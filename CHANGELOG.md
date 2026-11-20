@@ -12,6 +12,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   honor removals and withdraw obsolete mappings; discovery refreshes clear
   stale references without losing removal history if dependencies disappear and
   return.
+- The AppHosts canvas preserves focused command inputs during live refreshes and
+  loads inputs that depend on a typed secret when you leave the field or run the
+  command.
 
 ## [0.0.6](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.6)
 
