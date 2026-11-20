@@ -116,11 +116,13 @@ bounded request bodies.
   snapshot once through the supported `onUserPromptSubmitted.additionalContext`
   hook, framed as untrusted data; snapshots it does not reference stay pending.
   The hook input carries no message identity, provenance, or submission time,
-  so the reference is the only binding: canvas-generated `session.send()`
-  messages, messages queued before the Add, and prompts submitted while an Add
-  is in flight cannot contain it. The reference is not authenticated authorship;
-  any root message that quotes it, including relayed text, receives the
-  snapshot. Consumption means handoff to that runtime hook, not proof of model
+  so only explicit reference matching is enforced. It is not authenticated
+  authorship, an in-flight fence, or submission-order protection: any root
+  prompt that contains a known reference, including canvas-generated
+  `session.send()` messages or relayed text, receives the snapshot. An Add that
+  is still in flight when a prompt is submitted can finish later; its snapshot
+  then stays pending for a later message that contains its reference.
+  Consumption means handoff to that runtime hook, not proof of model
   delivery: if another hook blocks the turn, re-add the context.
   Repeated clicks update the snapshot for that item and rotate its reference, so
   a message quoting the old reference receives nothing. Limits are 16 snapshots,
