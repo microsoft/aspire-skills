@@ -1,0 +1,326 @@
+name: Assess upstream Aspire skill impact
+
+on:
+  schedule:
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: One merged microsoft/aspire PR (instead of a time window)
+        type: string
+      since:
+        description: Window start UTC (YYYY-MM-DDTHH:mm:ssZ), at most seven days
+        type: string
+      until:
+        description: Window end UTC (YYYY-MM-DDTHH:mm:ssZ); supply with since
+        type: string
+      reassess:
+        description: Explicitly reassess previously recorded sources
+        type: boolean
+        default: false
+      smoke_only:
+        description: Verify hosted model setup and assess, without applying patches or publishing
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upstream-aspire-skill-assessment
+  cancel-in-progress: false
+
+jobs:
+  assess:
+    if: >-
+      github.repository == 'microsoft/aspire-skills' &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
+      (github.event_name == 'workflow_dispatch' || vars.UPSTREAM_SKILL_ASSESSMENT_ENABLED == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    outputs:
+      has-preview: ${{ steps.validate.outputs.has-preview }}
+      bundle-digest: ${{ steps.validate.outputs.bundle-digest }}
+      preview-url: ${{ steps.preview.outputs.artifact-url }}
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+      copilot-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+
+      - name: Resolve frozen target, clock and previous state
+        id: source
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const repo = context.repo;
+            const { data: branch } = await github.rest.repos.getBranch({ ...repo, branch: "dev" });
+            core.setOutput("target", branch.commit.sha);
+            const { data: run } = await github.rest.actions.getWorkflowRun({ ...repo, run_id: context.runId });
+            core.setOutput("clock", run.created_at);
+            const { join } = await import("node:path");
+            const { pathToFileURL } = await import("node:url");
+            const { selectStateRuns } = await import(pathToFileURL(join(process.env.GITHUB_WORKSPACE, "scripts", "upstream-skill-assessment.mjs")).href);
+            const states = await selectStateRuns(github, context);
+            core.setOutput("previous", states.previous);
+            core.setOutput("latest", states.latest);
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: steps.source.outputs.previous != ''
+        with:
+          name: upstream-assessment-state
+          path: .test-artifacts/upstream-assessment-previous
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.source.outputs.previous }}
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: steps.source.outputs.latest != ''
+        with:
+          name: upstream-assessment-state
+          path: .test-artifacts/upstream-assessment-latest
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.source.outputs.latest }}
+
+      - name: Checkout pinned skill guidance (never execute upstream source)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.source.outputs.target }}
+          path: .test-artifacts/upstream-skills-base
+          persist-credentials: false
+
+      - name: Collect bounded, immutable upstream evidence
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          ASSESSMENT_CLOCK: ${{ steps.source.outputs.clock }}
+          ASSESSMENT_TARGET: ${{ steps.source.outputs.target }}
+          PREVIOUS_RUN: ${{ steps.source.outputs.previous }}
+          LATEST_STATE_RUN: ${{ steps.source.outputs.latest }}
+        with:
+          script: |
+            const { mkdirSync, writeFileSync } = await import("node:fs");
+            const { join } = await import("node:path");
+            const root = process.env.GITHUB_WORKSPACE;
+            const { prepareAssessment, mergeStates, readJson, skillDocuments } = await import(`${root}/scripts/upstream-skill-assessment.mjs`);
+            const { findExistingPull } = await import(`${root}/scripts/publish-upstream-skill-assessment.mjs`);
+            const output = join(root, ".test-artifacts", "upstream-assessment");
+            mkdirSync(output, { recursive: true });
+            const states = [];
+            if (process.env.LATEST_STATE_RUN) states.push(readJson(join(root, ".test-artifacts", "upstream-assessment-latest", "state.json"), 1024 * 1024));
+            if (process.env.PREVIOUS_RUN) states.push(readJson(join(root, ".test-artifacts", "upstream-assessment-previous", "state.json"), 1024 * 1024));
+            const stateNow = new Date();
+            const ledger = mergeStates(states, stateNow);
+            const prepared = await prepareAssessment({
+              github, inputs: context.payload.inputs ?? {}, now: process.env.ASSESSMENT_CLOCK,
+              stateNow,
+              targetSha: process.env.ASSESSMENT_TARGET, ledger,
+              findPublished: source => findExistingPull(github, source),
+              documents: skillDocuments(join(root, ".test-artifacts", "upstream-skills-base"))
+            });
+            writeFileSync(join(output, "evidence.json"), JSON.stringify(prepared));
+
+      - name: Require model configuration for hosted smoke
+        if: inputs.smoke_only
+        env:
+          ENABLED: ${{ vars.UPSTREAM_SKILL_AGENT_ENABLED }}
+          MODEL: ${{ vars.UPSTREAM_SKILL_MODEL }}
+        run: test "$ENABLED" = true && test -n "$MODEL"
+
+      - name: Install existing Copilot evaluation runtime (opt-in only)
+        if: vars.UPSTREAM_SKILL_AGENT_ENABLED == 'true' && vars.UPSTREAM_SKILL_MODEL != ''
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund --prefix .test-artifacts/upstream-agent-tools @microsoft/vally-cli@0.16.0 @github/copilot-sdk@1.0.11 @github/copilot-linux-x64@1.0.80
+          test -f .test-artifacts/upstream-agent-tools/node_modules/@github/copilot-linux-x64/index.js
+          echo "$GITHUB_WORKSPACE/.test-artifacts/upstream-agent-tools/node_modules/.bin" >> "$GITHUB_PATH"
+          echo "COPILOT_CLI_PATH=$GITHUB_WORKSPACE/.test-artifacts/upstream-agent-tools/node_modules/@github/copilot-linux-x64/index.js" >> "$GITHUB_ENV"
+          .test-artifacts/upstream-agent-tools/node_modules/.bin/vally --version
+          node .test-artifacts/upstream-agent-tools/node_modules/@github/copilot-linux-x64/index.js --version
+
+      - name: Check pinned SDK tool-free contract (no model call)
+        if: vars.UPSTREAM_SKILL_AGENT_ENABLED == 'true' && vars.UPSTREAM_SKILL_MODEL != ''
+        env:
+          UPSTREAM_SKILL_SDK_ROOT: .test-artifacts/upstream-agent-tools
+        run: node --test tests/upstream-sdk-contract.test.mjs
+
+      - name: Assess without tools or repository writes
+        id: assessment
+        env:
+          UPSTREAM_SKILL_AGENT_ENABLED: ${{ vars.UPSTREAM_SKILL_AGENT_ENABLED }}
+          UPSTREAM_SKILL_MODEL: ${{ vars.UPSTREAM_SKILL_MODEL }}
+          UPSTREAM_SKILL_SMOKE_ONLY: ${{ inputs.smoke_only }}
+          COPILOT_GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/run-upstream-skill-assessment.mjs
+
+      - name: Apply exact replacements and run isolated tests, lint, catalogs and model evals
+        id: validate
+        if: ${{ !inputs.smoke_only }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ github.token }}
+        with:
+          script: |
+            const { join } = await import("node:path");
+            const { readJson } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/upstream-skill-assessment.mjs`);
+            const { bindingFromEnvironment, validateCandidates } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/validate-upstream-skill-assessment.mjs`);
+            const directory = join(process.env.GITHUB_WORKSPACE, ".test-artifacts", "upstream-assessment");
+            const { publication, digest } = await validateCandidates({
+              root: join(process.env.GITHUB_WORKSPACE, ".test-artifacts", "upstream-skills-base"),
+              output: join(process.env.GITHUB_WORKSPACE, ".test-artifacts", "upstream-publication"),
+              prepared: readJson(join(directory, "evidence.json")),
+              review: readJson(join(directory, "review.json")),
+              binding: bindingFromEnvironment(process.env), github
+            });
+            core.setOutput("has-preview", publication.items.length > 0 && publication.items.every(item => item.status === "validated"));
+            core.setOutput("blocked", publication.items.some(item => item.status !== "validated"));
+            core.setOutput("bundle-digest", digest);
+
+      - name: Summarize assessment and approval boundary
+        if: success()
+        run: |
+          node --input-type=module -e '
+            import { readFileSync, appendFileSync } from "node:fs";
+            const r = JSON.parse(readFileSync(".test-artifacts/upstream-assessment/review.json", "utf8"));
+            const counts = {};
+            for (const item of r.reports) counts[item.status] = (counts[item.status] ?? 0) + 1;
+            appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+              "## Upstream Aspire skills assessment\n\n" +
+              "Inspect evidence/review artifacts and the publication preview.txt (exact title/body/diff).\n\n" +
+              "Only validated changes can enter the separately protected draft publisher. No release or merge is performed.\n\n" +
+              "Hosted model smoke: `" + r.smoke + "`. Outcomes: `" + JSON.stringify(counts) + "`\n");
+          '
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() && steps.assessment.outcome == 'success' }}
+        with:
+          name: upstream-assessment-review
+          path: .test-artifacts/upstream-assessment/
+          retention-days: 90
+          if-no-files-found: error
+          overwrite: true
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        id: preview
+        if: ${{ !cancelled() && !inputs.smoke_only && steps.validate.outcome == 'success' }}
+        with:
+          name: upstream-publication-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .test-artifacts/upstream-publication/
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Record exact approval preview digest
+        if: steps.preview.outcome == 'success'
+        env:
+          PREVIEW_URL: ${{ steps.preview.outputs.artifact-url }}
+          PREVIEW_DIGEST: ${{ steps.validate.outputs.bundle-digest }}
+        run: |
+          printf '\n## Exact outbound preview\n\nDownload preview.txt before approving the publication environment.\n\nArtifact: %s\n\npublication.json SHA-256: `%s`\n' "$PREVIEW_URL" "$PREVIEW_DIGEST" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() && steps.assessment.outcome == 'success' }}
+        with:
+          name: upstream-assessment-state
+          path: .test-artifacts/upstream-assessment/state.json
+          retention-days: 90
+          if-no-files-found: error
+          overwrite: true
+
+      - name: Fail closed on unsuccessful validation
+        if: steps.validate.outputs.blocked == 'true'
+        run: |
+          echo "::error::Candidate validation failed. See persistent preview/logs. Sources remain retryable; no draft can publish."
+          exit 1
+
+  publication-gate:
+    needs: assess
+    if: needs.assess.outputs.has-preview == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - name: Require configured non-bypassable preview approval
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PUBLISH_ENABLED: ${{ vars.UPSTREAM_SKILL_PUBLISH_ENABLED }}
+        with:
+          script: |
+            core.summary.addRaw("Review the exact title/body/diff artifact and digest in the assess job before approving upstream-skill-publication. Failed/disabled gates leave source drafts retryable.");
+            await core.summary.write();
+            if (process.env.PUBLISH_ENABLED !== "true") throw new Error("Draft publication is disabled: configure the protected environment and explicitly enable UPSTREAM_SKILL_PUBLISH_ENABLED after hosted smoke.");
+            const { assertProtectedEnvironment } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/publish-upstream-skill-assessment.mjs`);
+            await assertProtectedEnvironment(github, context.payload.repository.default_branch);
+
+  publish:
+    needs: [assess, publication-gate]
+    if: needs.assess.outputs.has-preview == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: upstream-skill-publication
+      url: ${{ needs.assess.outputs.preview-url }}
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: upstream-publication-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .test-artifacts/approved-upstream-publication
+      - name: Verify same-run artifact, origin and immutable preview before obtaining writer token
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PREVIEW_DIGEST: ${{ needs.assess.outputs.bundle-digest }}
+        with:
+          script: |
+            const { bindingFromEnvironment } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/validate-upstream-skill-assessment.mjs`);
+            const { assertRunBinding, readPublication, verifyPreviewFiles } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/publish-upstream-skill-assessment.mjs`);
+            const binding = bindingFromEnvironment(process.env);
+            await assertRunBinding(github, binding);
+            const publication = readPublication(`${process.env.GITHUB_WORKSPACE}/.test-artifacts/approved-upstream-publication/publication.json`, process.env.PREVIEW_DIGEST, binding);
+            await verifyPreviewFiles(github, publication);
+      - name: Obtain repository-scoped draft writer (no model credential)
+        id: writer
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
+          private-key: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
+          owner: microsoft
+          repositories: aspire-skills
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Publish only approved draft content, never execute artifact code
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          WRITER_TOKEN: ${{ steps.writer.outputs.token }}
+          PREVIEW_DIGEST: ${{ needs.assess.outputs.bundle-digest }}
+        with:
+          script: |
+            const { bindingFromEnvironment } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/validate-upstream-skill-assessment.mjs`);
+            const { publish, readPublication } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/publish-upstream-skill-assessment.mjs`);
+            const publication = readPublication(`${process.env.GITHUB_WORKSPACE}/.test-artifacts/approved-upstream-publication/publication.json`, process.env.PREVIEW_DIGEST, bindingFromEnvironment(process.env));
+            const results = await publish({ reader: github, writer: getOctokit(process.env.WRITER_TOKEN), publication });
+            core.summary.addHeading("Approved upstream draft publication").addCodeBlock(JSON.stringify(results, null, 2));
+            await core.summary.write();
