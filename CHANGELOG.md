@@ -7,6 +7,13 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ### Changed
 - Simplified Aspireify's TypeScript AppHost examples to chain resource promises
   without redundant `await`, while retaining required lifecycle and callback awaits.
+- Kept skill-supplied external APIs, streams, and SDK-owned dependencies visible
+  in the Aspireify canvas without treating them as runnable services. Resource
+  mappings, not-modeled or deferred reasons, and unassessed items now survive
+  reload, immutable confirmation, and the chat handoff. Regenerated proposals
+  honor removals and withdraw obsolete mappings; discovery refreshes clear
+  stale references without losing removal history if dependencies disappear and
+  return.
 
 ## [0.0.6](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.6)
 
