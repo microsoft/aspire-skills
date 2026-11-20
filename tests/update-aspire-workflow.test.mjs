@@ -1,781 +1,1197 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import {
-  existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync
-} from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { test } from "node:test";
 import { parse } from "yaml";
 import {
-  applyFrozenProposal, cloneTrustedBase, dockerArguments, freezeBundle, pinPublicationBase, publicationPolicy,
-  parseTestResults, prepareVerifiedReview, resolveSource, testResultSummary, validateOutcome, validatePublication, validateReceipt,
-  validateReviewReceipt
-} from "../scripts/telemetry-workflow.mjs";
+  generateTelemetryCatalog, resolveTelemetrySource, runTelemetrySync, syncTelemetryCatalog, telemetrySummary,
+  validateTelemetryCatalog
+} from "../scripts/update-aspire-workflow.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const workflowPath = join(root, ".github", "workflows", "update-aspire.md");
-const markdown = readFileSync(workflowPath, "utf8");
-const authored = parse(/^---\r?\n([\s\S]*?)\r?\n---/.exec(markdown)[1]);
-const compiledText = readFileSync(workflowPath.replace(/\.md$/, ".lock.yml"), "utf8");
-const compiled = parse(compiledText);
-const allowedPath = "src/Aspire.Cli/Agents/Hooks/AgentTelemetryCatalog.cs";
+const workflow = parse(readFileSync(join(root, ".github", "workflows", "update-aspire.yml"), "utf8"));
+const catalogPath = "src/Aspire.Cli/Agents/Hooks/telemetry-catalog.json";
+const base = "1".repeat(40);
+const head = "2".repeat(40);
+const commit = "3".repeat(40);
+const newer = "4".repeat(40);
+const source = {
+  number: 123, commit, snapshot: "main",
+  url: "https://github.com/microsoft/aspire-skills/pull/123", dryRun: false
+};
 
-function git(directory, ...args) {
-  return execFileSync("git", ["-c", "core.hooksPath=/dev/null", ...args], {
-    cwd: directory, encoding: "utf8",
-    env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: process.platform === "win32" ? "NUL" : "/dev/null" }
-  }).trim();
-}
-
-function write(directory, path, value) {
-  mkdirSync(dirname(join(directory, path)), { recursive: true });
-  writeFileSync(join(directory, path), value);
-}
-
-function commit(directory, message = "fixture") {
-  git(directory, "add", ".");
-  git(directory, "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", message);
-  return git(directory, "rev-parse", "HEAD");
+function write(directory, path, value = "fixture\n") {
+  const file = join(directory, path);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, value);
 }
 
 function fixture(t) {
-  const directory = mkdtempSync(join(tmpdir(), "telemetry-policy-"));
+  const directory = mkdtempSync(join(tmpdir(), "telemetry-catalog-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  const repo = join(directory, "repo");
-  mkdirSync(repo);
-  git(repo, "init", "--quiet", "--initial-branch=main");
-  git(repo, "config", "user.name", "Fixture");
-  git(repo, "config", "user.email", "fixture@example.invalid");
-  git(repo, "config", "core.autocrlf", "false");
-  write(repo, allowedPath, "baseline\n");
-  write(repo, "restore.sh", "#!/bin/sh\nexit 0\n");
-  const base = commit(repo);
-  const output = join(directory, "telemetry-verified");
-  mkdirSync(output);
-  const source = {
-    number: 123, commit: base, base, aspireBase: base, merged: false,
-    branch: "update-aspire-telemetry-pr-123",
-    url: "https://github.com/microsoft/aspire-skills/pull/123"
-  };
-  const policy = { allowed_files: [allowedPath], max_patch_files: 100, max_patch_size: 4096 };
-  const checkFiles = (files, configuration) => {
-    const disallowed = files.filter(path => !configuration.allowed_files.includes(path));
-    return disallowed.length ? { action: "deny", files: disallowed } : { action: "allow" };
-  };
-  return { directory, repo, base, output, source, policy, checkFiles };
-}
-
-function proposal(f, files = { [allowedPath]: "candidate\n" }) {
-  git(f.repo, "switch", "--quiet", "--create", f.source.branch);
-  for (const [path, content] of Object.entries(files)) write(f.repo, path, content);
-  const head = commit(f.repo);
-  const bundle = join(f.directory, "input.bundle");
-  git(f.repo, "bundle", "create", bundle, `${f.base}..${f.source.branch}`);
-  return { ...f, head, bundle };
-}
-
-function freeze(f) {
-  return freezeBundle({
-    directory: f.repo, bundle: f.bundle, source: f.source,
-    outputDirectory: f.output, policy: f.policy, checkFiles: f.checkFiles
-  });
-}
-
-function withRun(t, directory) {
-  for (const [name, value] of Object.entries({
-    RUNNER_TEMP: directory, GITHUB_RUN_ID: "123456", GITHUB_RUN_ATTEMPT: "2"
-  })) {
-    const old = process.env[name];
-    process.env[name] = value;
-    t.after(() => old === undefined ? delete process.env[name] : process.env[name] = old);
+  write(directory, "skills/zeta/SKILL.md");
+  write(directory, "skills/alpha/SKILL.md");
+  write(directory, "skills/alpha/references/nested/config.yml");
+  write(directory, "skills/alpha/references/a.md");
+  write(directory, "skills/alpha/references/Z.md");
+  write(directory, "skills/alpha/assets/not-a-reference.md");
+  write(directory, "skills/README.md");
+  for (const prefix of [".github/plugins/mirror", ".github", "opencode"]) {
+    write(directory, `${prefix}/skills/not-canonical/SKILL.md`);
+    write(directory, `${prefix}/skills/not-canonical/references/ignored.md`);
   }
+  write(directory, "extensions/not-a-skill/extension.mjs");
+  return directory;
 }
 
-function artifactFixture(t) {
-  const directory = mkdtempSync(join(tmpdir(), "telemetry-artifacts-"));
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
-  const output = join(directory, "telemetry-verified");
-  mkdirSync(output);
-  const base = "1".repeat(40);
-  return {
-    directory, output, head: "3".repeat(40),
-    source: {
-      number: 123, commit: base, base, aspireBase: base, merged: false,
-      branch: "update-aspire-telemetry-pr-123",
-      url: "https://github.com/microsoft/aspire-skills/pull/123"
-    }
-  };
-}
+const expected = {
+  skills: ["alpha", "zeta"],
+  references: [
+    "alpha/references/Z.md",
+    "alpha/references/a.md",
+    "alpha/references/nested/config.yml"
+  ]
+};
 
-function receipt(f, type = "create_pull_request") {
-  for (const name of readdirSync(f.output)) rmSync(join(f.output, name));
-  const tests = type === "report_incomplete" ? undefined : { total: 1, passed: 1, failed: 0, skipped: 0 };
-  const summary = tests ? `${testResultSummary(tests)}\n\n` : "";
-  const item = type === "noop"
-    ? { type, message: `${summary}Baseline covers the selected source.` }
-    : type === "report_incomplete"
-      ? { type, reason: "A required update could not be prepared." }
-      : { type, branch: f.source.branch, title: "Telemetry", body: `${summary}Changes.` };
-  if (tests) writeFileSync(join(f.output, "telemetry-tests.log"), "Isolated fixture test output.");
-  if (type === "create_pull_request") {
-    const prefix = `aw-microsoft-aspire-${f.source.branch}`;
-    writeFileSync(join(f.output, `${prefix}.bundle`), "verified bundle");
-    writeFileSync(join(f.output, `${prefix}.patch`), "verified patch");
-  }
-  writeFileSync(join(f.output, "agent_output.json"), JSON.stringify({ items: [item], errors: [] }));
-  return {
-    source: f.source, type, tree: "2".repeat(40), ...(tests ? { tests } : {}),
-    run: "123456", attempt: "2",
-    files: Object.fromEntries(readdirSync(f.output).map(name => [
-      name, createHash("sha256").update(readFileSync(join(f.output, name))).digest("hex")
-    ]))
-  };
-}
-
-test("manual runs remain live by default while automatic activation requires a merged source", () => {
-  const accepts = new Function("github", `return (${authored.if});`);
-  for (const [name, merged, expected] of [
-    ["pull_request", true, true], ["pull_request", false, false], ["workflow_dispatch", false, true]
-  ]) {
-    assert.equal(accepts({
-      repository: "microsoft/aspire-skills", event_name: name, event: { pull_request: { merged } }
-    }), expected);
-  }
-  assert.equal(accepts({
-    repository: "example/fork", event_name: "workflow_dispatch", event: { pull_request: { merged: false } }
-  }), false);
-  assert.equal(authored.on.workflow_dispatch.inputs.dry_run.default, false);
-});
-
-test("workflow concurrency retains pending source assessments", () => {
-  for (const configuration of [authored.concurrency, compiled.concurrency]) {
-    assert.equal(configuration.group, "aspire-skills-to-aspire");
-    assert.equal(configuration["cancel-in-progress"], false);
-    assert.equal(configuration.queue, "max");
-  }
-});
-
-test("the configured source checkout resolves merged and diverged manual ancestry", async t => {
-  const checkout = compiled.jobs["resolve-source"].steps.find(step => step.uses?.startsWith("actions/checkout@"));
-  const depth = checkout.with["fetch-depth"] ?? 1;
-  for (const merged of [true, false]) {
-    await t.test(merged ? "merged source" : "diverged manual source", async t => {
-      const f = fixture(t);
-      withRun(t, f.directory);
-      git(f.repo, "switch", "--quiet", "--create", "feature");
-      write(f.repo, "extensions/example/extension.mjs", "selected\n");
-      const head = commit(f.repo);
-      git(f.repo, "switch", "--quiet", "main");
-      if (merged) {
-        git(f.repo, "-c", "commit.gpgsign=false", "merge", "--quiet", "--no-ff", "feature", "-m", "Merge fixture");
-      } else {
-        write(f.repo, "unrelated.txt", "main advanced\n");
-        commit(f.repo);
-      }
-      const workflowCommit = git(f.repo, "rev-parse", "HEAD");
-      const commitSha = merged ? workflowCommit : head;
-      const directory = join(f.directory, "source-checkout");
-      git(f.directory, "clone", "--quiet", "--no-local", "--depth=1", f.repo, directory);
-      git(directory, "checkout", "--quiet", "--detach", workflowCommit);
-      assert.equal(git(directory, "rev-parse", "--is-shallow-repository"), "true");
-      if (depth === 0) git(directory, "fetch", "--quiet", "--unshallow", "origin");
-      git(directory, "config", `url.${f.repo.replaceAll("\\", "/")}.insteadOf`, "https://github.com/microsoft/aspire.git");
-      const pr = {
-        merged, merge_commit_sha: merged ? commitSha : null, head: { sha: commitSha },
-        base: {
-          ref: "main", sha: merged ? f.base : workflowCommit,
-          repo: { full_name: "microsoft/aspire-skills" }
-        }
-      };
-      const github = { rest: { pulls: { get: async () => ({ data: pr }) } } };
-      const context = merged
-        ? { eventName: "pull_request", payload: { pull_request: { number: 123, merge_commit_sha: commitSha } } }
-        : { eventName: "workflow_dispatch", payload: { inputs: { pr_number: "123" } } };
-      const source = await resolveSource({ github, context, directory });
-      assert.equal(source.commit, commitSha);
-      assert.equal(source.base, f.base);
-      assert.deepEqual(JSON.parse(readFileSync(join(f.directory, "telemetry-source", "source-pr-files.json"))), [
-        { filename: "extensions/example/extension.mjs", additions: 1, deletions: 0 }
-      ]);
-    });
-  }
-  assert.equal(depth, 0);
-  assert.equal(authored.jobs["resolve-source"].steps[0].with["fetch-depth"], 0);
-});
-
-test("source evidence comes from immutable commits even when a manual PR advances", async t => {
-  const f = fixture(t);
-  withRun(t, f.directory);
-  git(f.repo, "remote", "add", "origin", f.repo);
-  git(f.repo, "config", `url.${f.repo.replaceAll("\\", "/")}.insteadOf`, "https://github.com/microsoft/aspire.git");
-  write(f.repo, "extensions/example/extension.mjs", "selected\n");
-  const head = commit(f.repo);
-  write(f.repo, "extensions/example/extension.mjs", "later revision\n");
-  commit(f.repo);
-  const pr = {
-    title: "Selected PR", body: "Untrusted evidence", merged: false,
-    head: { sha: head }, base: { ref: "main", sha: f.base, repo: { full_name: "microsoft/aspire-skills" } }
-  };
-  const github = { rest: { pulls: { get: async () => ({ data: pr }) } } };
-  const context = { eventName: "workflow_dispatch", payload: { inputs: { pr_number: "123", dry_run: "true" } } };
-  const source = await resolveSource({ github, context, directory: f.repo });
-  assert.equal(source.commit, head);
-  assert.equal(source.base, f.base);
-  const evidence = join(f.directory, "telemetry-source");
-  const metadata = JSON.parse(readFileSync(join(evidence, "source-pr.json")));
-  assert.deepEqual(metadata, { ...source, dryRun: true });
-  const diff = readFileSync(join(evidence, "source-pr.diff"), "utf8");
-  assert.match(diff, /\+selected/);
-  assert.doesNotMatch(diff, /later revision/);
-  assert.deepEqual(JSON.parse(readFileSync(join(evidence, "source-pr-files.json"))), [
-    { filename: "extensions/example/extension.mjs", additions: 1, deletions: 0 }
-  ]);
-});
-
-test("a force-push after the PR metadata snapshot cannot change the pinned inventory or diff", async t => {
-  const f = fixture(t);
-  withRun(t, f.directory);
-  git(f.repo, "remote", "add", "origin", f.repo);
-  git(f.repo, "config", `url.${f.repo.replaceAll("\\", "/")}.insteadOf`, "https://github.com/microsoft/aspire.git");
-  write(f.repo, "extensions/selected/extension.mjs", "selected revision\n");
-  const selected = commit(f.repo);
-  let replacement;
-  const github = { rest: { pulls: {
-    get: async () => {
-      const pr = {
-        merged: false, head: { sha: selected },
-        base: { ref: "main", sha: f.base, repo: { full_name: "microsoft/aspire-skills" } }
-      };
-      git(f.repo, "switch", "--quiet", "--detach", f.base);
-      write(f.repo, "extensions/replacement/extension.mjs", "force-pushed revision\n");
-      replacement = commit(f.repo);
-      git(f.repo, "update-ref", "refs/heads/main", replacement, selected);
-      return { data: pr };
+function sourceClient(main = commit) {
+  const comments = [];
+  const calls = [];
+  const issues = {};
+  for (const [name, result] of Object.entries({
+    listComments: () => comments,
+    createComment: args => {
+      const comment = { id: comments.length + 1, body: args.body, user: { login: "github-actions[bot]" } };
+      comments.push(comment);
+      return comment;
     },
-    listFiles: async () => { throw new Error("Mutable PR-files endpoints must not be used."); }
-  } } };
-  const source = await resolveSource({
-    github, context: { eventName: "workflow_dispatch", payload: { inputs: { pr_number: "123" } } },
-    directory: f.repo
-  });
-  assert.equal(git(f.repo, "rev-parse", "main"), replacement);
-  assert.equal(git(f.repo, "merge-base", selected, replacement), f.base);
-  assert.equal(source.commit, selected);
-  const evidence = join(f.directory, "telemetry-source");
-  assert.deepEqual(JSON.parse(readFileSync(join(evidence, "source-pr-files.json"))), [
-    { filename: "extensions/selected/extension.mjs", additions: 1, deletions: 0 }
+    updateComment: args => {
+      const comment = comments.find(comment => comment.id === args.comment_id);
+      assert.ok(comment);
+      comment.body = args.body;
+      return comment;
+    }
+  })) {
+    issues[name] = async args => {
+      assert.equal(args.owner, "microsoft");
+      assert.equal(args.repo, "aspire-skills");
+      calls.push({ name, args });
+      return { data: result(args) };
+    };
+  }
+  return {
+    comments, calls,
+    paginate: async (method, args) => (await method(args)).data,
+    rest: {
+      issues,
+      git: { getRef: async args => {
+        assert.deepEqual(args, { owner: "microsoft", repo: "aspire-skills", ref: "heads/main" });
+        return { data: { object: { sha: main } } };
+      } }
+    }
+  };
+}
+
+function publisher({
+  current = '{"skills":[],"references":[]}\n', existing = false, identicalHead = false, main = commit
+} = {}) {
+  const calls = [];
+  const methods = {};
+  const results = {
+    "git.getRef": args => {
+      if (args.ref === "heads/main") return { object: { sha: base } };
+      if (!existing) throw Object.assign(new Error("Not found"), { status: 404 });
+      return { object: { sha: head } };
+    },
+    "repos.getContent": () => ({
+      type: "file", encoding: "base64", content: Buffer.from(current).toString("base64")
+    }),
+    "pulls.list": () => existing ? [{ number: 42, node_id: "PR_42", draft: true, html_url: "https://github.com/microsoft/aspire/pull/42" }] : [],
+    "git.getCommit": args => args.commit_sha === base
+      ? { tree: { sha: "base-tree" }, parents: [] }
+      : { tree: { sha: identicalHead ? "generated-tree" : "old-tree" }, parents: [{ sha: base }] },
+    "git.createTree": () => ({ sha: "generated-tree" }),
+    "git.createCommit": () => ({ sha: commit }),
+    "git.createRef": () => ({}),
+    "git.updateRef": () => ({}),
+    "pulls.create": () => ({ number: 42, state: "open", draft: true, html_url: "https://github.com/microsoft/aspire/pull/42" }),
+    "pulls.update": args => ({
+      number: args.pull_number, state: args.state ?? "open", draft: true, html_url: `https://github.com/microsoft/aspire/pull/${args.pull_number}`
+    }),
+    "issues.addLabels": () => ({}),
+    "issues.createComment": () => ({}),
+    "git.deleteRef": () => ({})
+  };
+  for (const [name, result] of Object.entries(results)) {
+    const [group, method] = name.split(".");
+    methods[group] ??= {};
+    methods[group][method] = async args => {
+      assert.equal(args.owner, "microsoft");
+      assert.equal(args.repo, "aspire");
+      calls.push({ name, args });
+      return { data: result(args) };
+    };
+  }
+  return {
+    github: {
+      rest: methods,
+      graphql: async (query, variables) => {
+        calls.push({ name: "graphql", query, variables });
+        return { convertPullRequestToDraft: { pullRequest: { isDraft: true } } };
+      }
+    },
+    sourceGithub: sourceClient(main), calls
+  };
+}
+
+test("catalog inventories only canonical skills and all reference files in ordinal order", t => {
+  const directory = fixture(t);
+  assert.deepEqual(generateTelemetryCatalog(directory), expected);
+});
+
+test("incomplete skills and empty inventories fail instead of publishing destructive defaults", t => {
+  const directory = fixture(t);
+  mkdirSync(join(directory, "skills", "incomplete"));
+  assert.throws(() => generateTelemetryCatalog(directory), /missing a regular SKILL\.md/);
+  rmSync(join(directory, "skills"), { recursive: true });
+  mkdirSync(join(directory, "skills"));
+  assert.throws(() => generateTelemetryCatalog(directory), /at least one skill/);
+});
+
+test("linked skill and reference directories are rejected rather than traversed", t => {
+  const directory = fixture(t);
+  const target = join(directory, "outside");
+  mkdirSync(target);
+  symlinkSync(target, join(directory, "skills", "linked"), "junction");
+  assert.throws(() => generateTelemetryCatalog(directory), /Skill must be a regular directory/);
+  rmSync(join(directory, "skills", "linked"));
+  symlinkSync(target, join(directory, "skills", "alpha", "references", "linked"), "junction");
+  assert.throws(() => generateTelemetryCatalog(directory), /References must be regular files or directories/);
+});
+
+test("dry-run previews exact two-field JSON with stable formatting and performs no mutations", async t => {
+  const directory = fixture(t);
+  const f = publisher();
+  const result = await syncTelemetryCatalog({ ...f, directory, source: { ...source, dryRun: true } });
+  assert.equal(result.status, "preview");
+  assert.equal(result.content, `${JSON.stringify(expected, null, 2)}\n`);
+  assert.deepEqual(f.calls.map(call => call.name), ["git.getRef", "repos.getContent"]);
+  assert.equal(f.calls[1].args.ref, base);
+  assert.equal(f.calls[1].args.path, catalogPath);
+});
+
+test("an unchanged catalog without a proposal or branch performs no mutations", async t => {
+  const directory = fixture(t);
+  const f = publisher({ current: `${JSON.stringify(expected, null, 2)}\n` });
+  const result = await syncTelemetryCatalog({ ...f, directory, source });
+  assert.equal(result.status, "unchanged");
+  assert.deepEqual(f.calls.map(call => call.name), [
+    "git.getRef", "repos.getContent", "pulls.list", "git.getRef", "git.getRef"
   ]);
-  const diff = readFileSync(join(evidence, "source-pr.diff"), "utf8");
-  assert.match(diff, /\+selected revision/);
-  assert.doesNotMatch(diff, /replacement|force-pushed revision/);
 });
 
-test("source resolution rejects malformed inputs and mismatched automatic triggers", async t => {
-  const directory = mkdtempSync(join(tmpdir(), "telemetry-invalid-source-"));
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
-  const base = "1".repeat(40);
-  const pr = {
-    merged: true, merge_commit_sha: base,
-    base: { ref: "main", repo: { full_name: "microsoft/aspire-skills" } }
-  };
-  const github = { rest: { pulls: { get: async () => ({ data: pr }) } } };
-  for (const value of ["", "0", "01", "-1", "1.5", "1e3", "123\n", "123;echo injected"]) {
-    await assert.rejects(resolveSource({
-      github, context: { eventName: "workflow_dispatch", payload: { inputs: { pr_number: value } } }, directory
-    }), /positive integer/);
-  }
-  await assert.rejects(resolveSource({
-    github, context: { eventName: "pull_request", payload: { pull_request: { number: 123, merge_commit_sha: "a".repeat(40) } } },
-    directory
-  }), /triggering merge commit/);
-  pr.merged = false;
-  await assert.rejects(resolveSource({
-    github, context: { eventName: "pull_request", payload: { pull_request: { number: 123 } } },     directory
-  }), /requires a merged PR/);
-  pr.base.ref = "dev";
-  await assert.rejects(resolveSource({
-    github, context: { eventName: "workflow_dispatch", payload: { inputs: { pr_number: "123" } } }, directory
-  }), /must target/);
-});
-
-test("contradictory outcomes and forged destinations cannot reach publication", () => {
-  const source = { branch: "update-aspire-telemetry-pr-123" };
-  const good = { type: "create_pull_request", branch: source.branch, title: "Telemetry", body: "Evidence." };
-  for (const item of [
-    { ...good, branch: "update-aspire-telemetry-pr-999" },
-    { ...good, repo: "example/other" }, { ...good, base: "release/99" },
-    { ...good, title: "" }, { type: "noop", message: "" }, { type: "missing_tool" }
+test("an unchanged catalog deletes an orphan bot branch without an open proposal", async t => {
+  const directory = fixture(t);
+  for (const [status, branchMissing, outcome] of [
+    [undefined, false, "cleaned"], [404, true, "cleaned"], [422, true, "cleaned"], [422, false, /deletion failed/], [403, false, /deletion failed/]
   ]) {
-    assert.throws(() => validateOutcome({ items: [item] }, source));
+    const f = publisher({ current: `${JSON.stringify(expected, null, 2)}\n`, existing: true });
+    f.github.rest.pulls.list = async () => ({ data: [] });
+    let deleted = false;
+    const getRef = f.github.rest.git.getRef;
+    f.github.rest.git.getRef = args => {
+      if (args.ref !== "heads/main" && deleted && branchMissing) {
+        throw Object.assign(new Error("Missing branch"), { status: 404 });
+      }
+      return getRef(args);
+    };
+    if (status) {
+      f.github.rest.git.deleteRef = () => {
+        deleted = true;
+        throw Object.assign(new Error("Branch deletion failed"), { status });
+      };
+    }
+    if (typeof outcome === "string") {
+      assert.equal((await syncTelemetryCatalog({ ...f, directory, source })).status, outcome);
+    } else {
+      await assert.rejects(syncTelemetryCatalog({ ...f, directory, source }), outcome);
+    }
+    if (!status) {
+      assert.deepEqual(f.calls.map(call => call.name).slice(2), ["git.getRef", "git.getRef", "git.deleteRef", "git.getRef"]);
+      assert.equal(f.calls.find(call => call.name === "git.deleteRef").args.ref, "heads/update-aspire-telemetry-catalog");
+    }
+    assert.equal(f.calls.some(call => /create|update|Comment/.test(call.name)), false);
   }
-  assert.throws(() => validateOutcome({ items: [good, { type: "noop", message: "Contradiction." }] }, source));
-  assert.throws(() => validateOutcome({ items: [good], errors: ["failed"] }, source));
-  const accepted = validateOutcome({
-    items: [{ ...good, draft: false, assignees: ["attacker"], base_commit: "a".repeat(40) }]
-  }, source);
-  assert.deepEqual(accepted, { ...good, repo: "microsoft/aspire", base: "main" });
 });
 
-test("frozen bundle contains one trusted commit and exactly the proposed tree", t => {
-  const f = proposal(fixture(t));
-  const result = freeze(f);
-  const head = git(f.repo, "bundle", "list-heads", join(f.output, result.bundle));
-  const commit = head.split(" ")[0];
-  assert.equal(result.tree, git(f.repo, "rev-parse", `${f.head}^{tree}`));
-  assert.equal(git(f.repo, "rev-parse", `${commit}^`), f.base);
-  assert.equal(git(f.repo, "rev-list", "--count", `${f.base}..${commit}`), "1");
-  assert.equal(head, `${commit} refs/heads/${f.source.branch}`);
+test("dry runs never delete an orphan bot branch", async t => {
+  const directory = fixture(t);
+  const f = publisher({ current: `${JSON.stringify(expected, null, 2)}\n`, existing: true });
+  const result = await syncTelemetryCatalog({ ...f, directory, source: { ...source, dryRun: true } });
+  assert.equal(result.status, "unchanged");
+  assert.deepEqual(f.calls.map(call => call.name), ["git.getRef", "repos.getContent"]);
 });
 
-test("out-of-policy build scripts are rejected without executing candidate code", t => {
-  const f = fixture(t);
-  const canary = join(f.directory, "host-code-executed");
-  const candidate = proposal(f, { [allowedPath]: "candidate\n", "restore.sh": `touch '${canary}'\n` });
-  assert.throws(() => freeze(candidate), /file policy rejected.*restore\.sh/);
-  assert.equal(existsSync(canary), false);
-  assert.deepEqual(readdirSync(f.output), []);
+test("an unchanged catalog closes an obsolete bot proposal and deletes its branch", async t => {
+  const directory = fixture(t);
+  const f = publisher({ current: `${JSON.stringify(expected, null, 2)}\n`, existing: true });
+  const result = await syncTelemetryCatalog({ ...f, directory, source });
+  assert.equal(result.status, "closed");
+  assert.deepEqual(f.calls.map(call => call.name).slice(3), [
+    "git.getRef", "issues.createComment", "pulls.update", "git.deleteRef", "git.getRef"
+  ]);
+  assert.equal(f.calls.find(call => call.name === "pulls.update").args.state, "closed");
+  assert.equal(f.calls.find(call => call.name === "git.deleteRef").args.ref, "heads/update-aspire-telemetry-catalog");
 });
 
-test("symlink changes, different bundle heads, and excessive patches fail before verification", t => {
-  const f = proposal(fixture(t));
-  assert.throws(() => freeze({ ...f, source: { ...f.source, branch: "update-aspire-telemetry-pr-999" } }), /expected proposal head/);
-  assert.throws(() => freeze({ ...f, policy: { ...f.policy, max_patch_size: 0 } }), /patch limit/);
-  git(f.repo, "update-index", "--cacheinfo", `120000,${git(f.repo, "rev-parse", `HEAD:${allowedPath}`)},${allowedPath}`);
-  git(f.repo, "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "symlink");
-  const bundle = join(f.directory, "symlink.bundle");
-  git(f.repo, "bundle", "create", bundle, `${f.base}..${f.source.branch}`);
-  assert.throws(() => freeze({ ...f, bundle }), /file mode/);
-});
-
-test("sandbox source reuses the trusted base without its credentials, candidate refs, or shared metadata", t => {
-  const f = proposal(fixture(t));
-  const workspace = join(f.directory, "sandbox");
-  mkdirSync(workspace);
-  assert.throws(() => cloneTrustedBase(f.repo, workspace, f.base), /trusted base/);
-  assert.deepEqual(readdirSync(workspace), []);
-  git(f.repo, "config", "http.https://github.com/.extraheader", "fixture-only-header");
-  git(f.repo, "checkout", "--quiet", f.base);
-  cloneTrustedBase(f.repo, workspace, f.base);
-  assert.equal(git(workspace, "rev-parse", "HEAD"), f.base);
-  assert.equal(git(workspace, "rev-list", "--all"), f.base);
-  assert.equal(readFileSync(join(workspace, allowedPath), "utf8"), "baseline\n");
-  assert.doesNotMatch(git(workspace, "config", "--local", "--list"), /fixture-only-header/);
-  assert.equal(git(workspace, "config", "--get", "remote.origin.url"), "https://github.com/microsoft/aspire.git");
-  git(workspace, "config", "test.sandbox", "independent");
-  assert.doesNotMatch(git(f.repo, "config", "--local", "--list"), /test\.sandbox/);
-});
-
-test("frozen patch reproduces the verified tree without escaping its disposable checkout", t => {
-  const f = proposal(fixture(t));
-  const result = freeze(f);
-  const workspace = join(f.directory, "sandbox");
-  git(f.directory, "clone", "--quiet", "--no-checkout", f.repo, workspace);
-  git(workspace, "checkout", "--quiet", f.base);
-  applyFrozenProposal(workspace, join(f.output, result.patch), result.tree);
-  assert.equal(readFileSync(join(workspace, allowedPath), "utf8"), "candidate\n");
-  assert.equal(git(workspace, "write-tree"), result.tree);
-  const patch = join(f.directory, "escape.patch");
-  for (const path of ["../outside", "/absolute", "nested/../../outside"]) {
-    writeFileSync(patch, `diff --git a/${path} b/${path}\nnew file mode 100644\n--- /dev/null\n+++ b/${path}\n@@ -0,0 +1 @@\n+escaped\n`);
-    assert.throws(() => applyFrozenProposal(workspace, patch, result.tree), /invalid path/i);
+test("branch cleanup ignores missing refs but surfaces other deletion failures", async t => {
+  const directory = fixture(t);
+  for (const [status, branchMissing] of [[404, true], [422, true], [422, false], [403, false]]) {
+    const f = publisher({ current: `${JSON.stringify(expected, null, 2)}\n`, existing: true });
+    const getRef = f.github.rest.git.getRef;
+    f.github.rest.git.getRef = args => {
+      if (args.ref !== "heads/main" && branchMissing) {
+        throw Object.assign(new Error("Missing branch"), { status: 404 });
+      }
+      return getRef(args);
+    };
+    f.github.rest.git.deleteRef = () => {
+      throw Object.assign(new Error("Branch deletion failed"), { status });
+    };
+    if (branchMissing) {
+      assert.equal((await syncTelemetryCatalog({ ...f, directory, source })).status, "closed");
+    } else {
+      await assert.rejects(syncTelemetryCatalog({ ...f, directory, source }), /Branch deletion failed/);
+    }
   }
-  assert.equal(existsSync(join(f.directory, "outside")), false);
 });
 
-test("verification restores trusted code separately from offline candidate tests", () => {
-  const options = {
-    workspace: "/private/source", cache: "/private/cache", name: "test",
-    uid: 1001, gid: 1001, base: "a".repeat(40)
-  };
-  const args = dockerArguments({ ...options, offline: true });
-  assert.ok(args.includes("--network=none"));
-  assert.match(args.at(-1), /--no-restore/);
-  assert.doesNotMatch(args.at(-1), /restore\.sh/);
-  assert.throws(() => dockerArguments({ uid: 0, gid: 0 }), /unprivileged/);
-  const restore = dockerArguments({ ...options, offline: false });
-  assert.ok(restore.includes("--network=bridge"));
-  assert.match(restore.at(-1), /restore\.sh/);
-  assert.doesNotMatch(restore.at(-1), /dotnet test|git (?:fetch|clone|init)/);
+test("a snapshot superseded by newer main performs no mutations", async t => {
+  const directory = fixture(t);
+  for (const current of ['{"skills":[],"references":[]}\n', `${JSON.stringify(expected, null, 2)}\n`]) {
+    const f = publisher({ current, existing: true, main: newer });
+    assert.equal((await syncTelemetryCatalog({ ...f, directory, source })).status, "superseded");
+    assert.deepEqual(f.calls.map(call => call.name), ["git.getRef", "repos.getContent"]);
+  }
 });
 
-test("completed assertion failures produce an explicit result instead of an execution failure", () => {
-  const output = [
-    "failed Aspire.Cli.Tests.Agents.AgentTelemetryHookTests.AllowlistsMatchCanonicalPowerShellHook",
-    "Test run summary: Failed!",
-    "  total: 189",
-    "  failed: 12",
-    "  succeeded: 177",
-    "  skipped: 0",
-    "  duration: 58s 025ms"
-  ].join("\n");
-  const tests = parseTestResults(2, output);
-  assert.deepEqual(tests, { total: 189, failed: 12, passed: 177, skipped: 0 });
-  assert.equal(testResultSummary(tests),
-    "**Isolated telemetry tests: FAILED**\n\n177 passed, 12 failed, 0 skipped (189 total).");
-  const passed = output.replace("Failed!", "Passed!").replace("failed: 12", "failed: 0")
-    .replace("succeeded: 177", "succeeded: 189");
-  assert.deepEqual(parseTestResults(0, passed), { total: 189, failed: 0, passed: 189, skipped: 0 });
-  for (const [status, log] of [
-    [1, "AgentTelemetryHookTests.cs(22,117): error CS9007: Invalid raw string.\nBuild failed."],
-    [2, "Build failed."], [0, ""], [7, output], [124, output],
-    [0, output], [2, passed], [2, output + "\n" + output],
-    [2, output.replace("total: 189", "total: 190")],
-    [2, output.replace("  total:", "  error: 1\n  total:")],
-    [2, output.replace("  duration: 58s 025ms", "")],
-    [0, passed.replace("total: 189", "total: 0").replace("succeeded: 189", "succeeded: 0")],
-    [0, passed.replace("succeeded: 189", "succeeded: 0").replace("skipped: 0", "skipped: 189")]
+test("superseded first attempts defer reporting, and final attempts fail with manual dispatch guidance", async t => {
+  const directory = fixture(t);
+  for (const final of [false, true]) {
+    const f = publisher({ existing: true, main: newer });
+    const outputs = {};
+    const summaries = [];
+    const core = {
+      setOutput: (name, value) => { outputs[name] = value; },
+      info: () => {},
+      warning: message => assert.fail(message),
+      summary: { addRaw: value => ({ write: async () => summaries.push(value) }) }
+    };
+    const run = runTelemetrySync({ ...f, core, directory, source, final });
+    if (final) {
+      await assert.rejects(run, /dispatch this workflow from main with the pr_number of a PR merged into main/);
+    } else {
+      assert.equal((await run).status, "superseded");
+    }
+    assert.deepEqual(outputs, { status: "superseded" });
+    assert.deepEqual(f.calls.map(call => call.name), ["git.getRef", "repos.getContent"]);
+    assert.equal(summaries.length, final ? 1 : 0);
+    assert.equal(f.sourceGithub.calls.length, 0);
+    if (final) assert.match(summaries[0], /Telemetry catalog: superseded/);
+  }
+});
+
+test("completed syncs comment on the source PR with the proposal link or a no-change result", async t => {
+  const directory = fixture(t);
+  const content = `${JSON.stringify(expected, null, 2)}\n`;
+  for (const [status, options, message, orphan] of [
+    ["created", {}, /Opened a draft/],
+    ["updated", { existing: true }, /Updated the draft/],
+    ["unchanged", { current: content }, /No Aspire telemetry update needed/],
+    ["closed", { current: content, existing: true }, /No Aspire telemetry update needed/],
+    ["cleaned", { current: content }, /No Aspire telemetry update needed/, true]
   ]) {
-    assert.deepEqual(parseTestResults(status, log), { status: "incomplete", exitCode: status });
-  }
-  assert.equal(testResultSummary(parseTestResults(1, "Build failed.")),
-    "**Isolated telemetry build/tests: NOT COMPLETED**\n\n" +
-    "Build/test command exited with code 1. No completed test result was confirmed.");
-  for (const status of [null, -1, 125, 126, 127, 256]) {
-    assert.throws(() => parseTestResults(status, output), /Isolated verifier execution failed/);
-  }
-  assert.throws(() => testResultSummary({ status: "incomplete", exitCode: null }), /valid exit code/);
-});
-
-test("publication rejects altered artifacts, different source snapshots, and stale run attempts", t => {
-  const f = artifactFixture(t);
-  withRun(t, f.directory);
-  const verified = receipt(f);
-  assert.equal(validateReceipt(verified, f.source, f.output).type, "create_pull_request");
-  assert.throws(() => validateReceipt({ ...verified, attempt: "1" }, f.source, f.output), /run, and attempt/);
-  assert.throws(() => validateReceipt(verified, { ...f.source, commit: "a".repeat(40) }, f.output), /source, run/);
-  assert.throws(() => validateReceipt({ ...verified, files: { "../receipt.json": "forged" } }, f.source, f.output), /artifact set/);
-  assert.throws(() => validateReceipt({
-    ...verified, tests: { total: 1, failed: 1, passed: 0, skipped: 0 }
-  }, f.source, f.output), /does not report the recorded test results/);
-  const log = join(f.output, "telemetry-tests.log");
-  const original = readFileSync(log);
-  writeFileSync(log, "Test results changed after review.");
-  assert.throws(() => validateReceipt(verified, f.source, f.output), /artifact changed: telemetry-tests.log/);
-  writeFileSync(log, original);
-  writeFileSync(join(f.output, Object.keys(verified.files).find(name => name.endsWith(".bundle"))), "changed after tests");
-  assert.throws(() => validateReceipt(verified, f.source, f.output), /artifact changed/);
-});
-
-test("native review replaces raw transports with the frozen proposal and records its exact receipt", t => {
-  const f = artifactFixture(t);
-  withRun(t, f.directory);
-  const verified = receipt(f);
-  const directory = join(f.directory, "review-inputs");
-  mkdirSync(directory);
-  for (const name of ["agent_output.json", "telemetry-tests.log", "aw-unverified.patch", "aw-unverified.bundle"]) {
-    writeFileSync(join(directory, name), "unverified");
-  }
-  write(directory, "aw-prompts/prompt.txt", "Original prompt context.");
-  prepareVerifiedReview({ source: f.source, receipt: verified, directory });
-  assert.equal(existsSync(join(directory, "aw-unverified.patch")), false);
-  assert.equal(existsSync(join(directory, "aw-unverified.bundle")), false);
-  for (const name of Object.keys(verified.files)) {
-    assert.deepEqual(readFileSync(join(directory, name)), readFileSync(join(f.output, name)));
-  }
-  assert.deepEqual(JSON.parse(readFileSync(join(directory, "verification-receipt.json"))), verified);
-  assert.deepEqual(JSON.parse(readFileSync(join(f.directory, "telemetry-reviewed", "receipt.json"))), verified);
-  assert.equal(readFileSync(join(directory, "aw-prompts", "prompt.txt"), "utf8"), "Original prompt context.");
-});
-
-test("native review binding rejects missing, stale, mismatched, skipped, and non-successful review", () => {
-  const verified = {
-    source: { commit: "1".repeat(40) }, tree: "2".repeat(40), type: "create_pull_request",
-    run: "123456", attempt: "2", files: { "agent_output.json": "3".repeat(64) }
-  };
-  const detection = { result: "success", success: "true", conclusion: "success" };
-  validateReviewReceipt(verified, structuredClone(verified), detection);
-  for (const reviewed of [
-    undefined, { ...verified, attempt: "1" },
-    { ...verified, files: { "agent_output.json": "4".repeat(64) } }
-  ]) {
-    assert.throws(() => validateReviewReceipt(verified, reviewed, detection), /Threat review does not match/);
-  }
-  for (const result of [
-    undefined, {}, { ...detection, result: "failure" }, { ...detection, success: "false" },
-    { ...detection, conclusion: "skipped" }, { ...detection, conclusion: "warning" }
-  ]) {
-    assert.throws(() => validateReviewReceipt(verified, verified, result), /successful native threat review/);
-  }
-});
-
-test("native publisher fetches cannot silently rebase a verified proposal", t => {
-  const f = fixture(t);
-  const publisher = join(f.directory, "publisher");
-  git(f.directory, "clone", "--quiet", "--no-local", f.repo, publisher);
-  pinPublicationBase(publisher, f.base);
-  write(f.repo, "unrelated.txt", "main advanced\n");
-  const advanced = commit(f.repo);
-  git(publisher, "fetch", "origin", "main");
-  assert.equal(git(publisher, "rev-parse", "origin/main"), f.base);
-  assert.equal(git(publisher, "rev-parse", "origin/publication-main"), advanced);
-});
-
-test("publication audit requires the actual draft PR to contain the verified tree on its pinned parent", async t => {
-  const f = artifactFixture(t);
-  withRun(t, f.directory);
-  const verified = receipt(f);
-  const goodPr = {
-    number: 42, html_url: "https://github.com/microsoft/aspire/pull/42", state: "open", draft: true, merged: false,
-    body: `${testResultSummary(verified.tests)}\n\nChanges.`,
-    base: { ref: "main", repo: { full_name: "microsoft/aspire" } },
-    head: { ref: f.source.branch, sha: f.head, repo: { full_name: "microsoft/aspire" } }
-  };
-  const goodCommit = { sha: f.head, tree: { sha: verified.tree }, parents: [{ sha: f.source.aspireBase }] };
-  let pr = goodPr;
-  let commit = goodCommit;
-  const reads = [];
-  const github = { rest: {
-    pulls: { get: async parameters => {
-      assert.deepEqual(parameters, { owner: "microsoft", repo: "aspire", pull_number: 42 });
-      reads.push("PR");
-      return { data: pr };
-    } },
-    git: { getCommit: async parameters => {
-      assert.deepEqual(parameters, { owner: "microsoft", repo: "aspire", commit_sha: f.head });
-      reads.push("commit");
-      return { data: commit };
-    } }
-  } };
-  const audit = values => validatePublication({
-    github, source: f.source, receipt: verified, publisherResult: "success",
-    staged: false, number: "42", url: goodPr.html_url, ...values
-  });
-  assert.equal(await audit(), "published");
-  for (const [name, change] of [
-    ["wrong PR number", () => pr.number = 43],
-    ["wrong actual URL", () => pr.html_url += "?unexpected"],
-    ["closed PR", () => pr.state = "closed"],
-    ["non-draft PR", () => pr.draft = false],
-    ["merged PR", () => pr.merged = true],
-    ["wrong base repository", () => pr.base.repo.full_name = "example/other"],
-    ["wrong base branch", () => pr.base.ref = "release/99"],
-    ["fork head", () => pr.head.repo.full_name = "example/fork"],
-    ["wrong head branch", () => pr.head.ref += "-other"],
-    ["wrong commit", () => commit.sha = "a".repeat(40)],
-    ["untested tree", () => commit.tree.sha = "a".repeat(40)],
-    ["different parent", () => commit.parents[0].sha = "a".repeat(40)],
-    ["merge commit", () => commit.parents.push({ sha: "a".repeat(40) })]
-  ]) {
-    await t.test(name, async () => {
-      pr = structuredClone(goodPr);
-      commit = structuredClone(goodCommit);
-      change();
-      await assert.rejects(audit(), /actual PR does not match|published commit does not match/);
+    await t.test(status, async () => {
+      const f = publisher(options);
+      if (orphan) {
+        const getRef = f.github.rest.git.getRef;
+        f.github.rest.git.getRef = async args => args.ref === "heads/main"
+          ? getRef(args)
+          : { data: { object: { sha: head } } };
+      }
+      const core = {
+        setOutput: () => {}, info: () => {}, warning: message => assert.fail(message),
+        summary: { addRaw: () => ({ write: async () => {} }) }
+      };
+      const result = await runTelemetrySync({ ...f, core, directory, source, final: false });
+      assert.equal(result.status, status);
+      assert.deepEqual(f.sourceGithub.calls.map(call => call.name), ["listComments", "createComment"]);
+      const comment = f.sourceGithub.calls[1].args;
+      assert.equal(comment.issue_number, source.number);
+      assert.match(comment.body, message);
+      assert.ok(!comment.body.includes(source.commit));
+      if (["created", "updated"].includes(status)) {
+        assert.ok(comment.body.includes(`[PR in microsoft/aspire](${result.url})`));
+      } else {
+        assert.doesNotMatch(comment.body, /draft|\/pull\//);
+      }
     });
   }
-  pr = goodPr;
-  commit = goodCommit;
-  await assert.rejects(audit({
-    github: { rest: { pulls: { get: async () => ({ data: { ...goodPr, body: "Results removed." } }) } } }
-  }), /actual PR does not report the recorded test results/);
-  for (const values of [
-    { number: "", url: "" }, { number: "" }, { url: "" }, { number: "042" }, { number: "42\n" },
-    { number: "42", url: "https://github.com/example/other/pull/42" },
-    { number: "42", url: `${goodPr.html_url}/` }
-  ]) {
-    reads.length = 0;
-    await assert.rejects(audit(values), /canonical Aspire PR number and URL/);
-    assert.deepEqual(reads, []);
+});
+
+test("reruns update the bot's source comment without editing another user's comment or creating duplicates", async t => {
+  const directory = fixture(t);
+  const f = publisher();
+  trackProposalState(f);
+  const unrelated = {
+    id: 100, body: "<!-- aspire-skills-telemetry-sync -->\n\nA user's comment.", user: { login: "someone" }
+  };
+  f.sourceGithub.comments.push(unrelated);
+  const core = {
+    setOutput: () => {}, info: () => {}, warning: message => assert.fail(message),
+    summary: { addRaw: () => ({ write: async () => {} }) }
+  };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await runTelemetrySync({ ...f, core, directory, source, final: false });
   }
-  for (const publisherResult of ["failure", "cancelled", "skipped", ""]) {
-    await assert.rejects(audit({ publisherResult }), /publisher did not complete successfully/);
+  assert.equal(f.sourceGithub.calls.filter(call => call.name === "createComment").length, 1);
+  const updates = f.sourceGithub.calls.filter(call => call.name === "updateComment");
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0].args.comment_id, f.sourceGithub.comments[1].id);
+  assert.match(f.sourceGithub.comments[1].body, /Updated the draft/);
+  assert.equal(unrelated.body, "<!-- aspire-skills-telemetry-sync -->\n\nA user's comment.");
+});
+
+test("dry runs summarize the generated catalog and never comment on the source PR", async t => {
+  const directory = fixture(t);
+  const content = `${JSON.stringify(expected, null, 2)}\n`;
+  for (const [current, status] of [["{}", "preview"], [content, "unchanged"]]) {
+    const f = publisher({ current });
+    const summaries = [];
+    const core = {
+      setOutput: () => {}, info: () => {}, warning: message => assert.fail(message),
+      summary: { addRaw: value => ({ write: async () => summaries.push(value) }) }
+    };
+    await runTelemetrySync({ ...f, core, directory, source: { ...source, dryRun: true }, final: false });
+    assert.equal(summaries.length, 1);
+    assert.match(summaries[0], new RegExp(`<h2>Telemetry catalog: ${status}</h2>`));
+    assert.ok(summaries[0].includes(content.replaceAll('"', "&quot;")));
+    assert.equal(f.sourceGithub.calls.length, 0);
   }
 });
 
-test("publication audit distinguishes staged previews, verified no-ops, incomplete work, and missing publication", async t => {
-  const f = artifactFixture(t);
-  withRun(t, f.directory);
-  const github = { get rest() { throw new Error("This outcome must not call the GitHub API."); } };
-  const audit = (verified, values = {}) => validatePublication({
-    github, source: f.source, receipt: verified, publisherResult: "success",
-    staged: false, ...values
+test("source comment failures propagate while preserving the publication summary", async t => {
+  const directory = fixture(t);
+  const f = publisher();
+  const failure = Object.assign(new Error("Comment permission denied"), { status: 403 });
+  f.sourceGithub.rest.issues.createComment = async () => { throw failure; };
+  const summaries = [];
+  const core = {
+    setOutput: () => {}, info: () => {}, warning: message => assert.fail(message),
+    summary: { addRaw: value => ({ write: async () => summaries.push(value) }) }
+  };
+  await assert.rejects(
+    runTelemetrySync({ ...f, core, directory, source, final: false }),
+    error => error === failure
+  );
+  assert.equal(f.calls.filter(call => call.name === "pulls.create").length, 1);
+  assert.equal(summaries.length, 1);
+  assert.match(summaries[0], /https:\/\/github\.com\/microsoft\/aspire\/pull\/42/);
+});
+
+test("a superseded run publishes the newly resolved main inventory on retry", async t => {
+  const firstDirectory = fixture(t);
+  const retryDirectory = fixture(t);
+  write(retryDirectory, "skills/beta/SKILL.md");
+  write(retryDirectory, "skills/beta/references/new.md");
+
+  let currentMain = commit;
+  const comparisons = [];
+  const sourceGithub = sourceGithubFor({ merged: true, calls: comparisons });
+  sourceGithub.rest.git.getRef = async args => {
+    assert.deepEqual(args, { owner: "microsoft", repo: "aspire-skills", ref: "heads/main" });
+    return { data: { object: { sha: currentMain } } };
+  };
+  const f = publisher();
+  const outputs = [];
+  const summaries = [];
+  const core = {
+    setOutput: (name, value) => outputs.push([name, value]),
+    info: () => {},
+    warning: message => assert.fail(message),
+    summary: { addRaw: value => ({ write: async () => summaries.push(value) }) }
+  };
+  const context = sourceContext();
+  const first = await resolveTelemetrySource({ github: sourceGithub, context });
+  currentMain = newer;
+  const superseded = await runTelemetrySync({
+    ...f, sourceGithub, core, directory: firstDirectory, source: first, final: false
   });
-  let verified = receipt(f, "noop");
-  assert.equal(await audit(verified), "noop");
-  assert.equal(await audit(verified, { staged: true }), "staged");
-  for (const values of [
-    { number: "42" }, { url: "https://github.com/microsoft/aspire/pull/42" },
-    { staged: true, number: "42", url: "https://github.com/microsoft/aspire/pull/42" }
-  ]) {
-    await assert.rejects(audit(verified, values), /unexpectedly published a PR/);
-  }
-  verified = receipt(f, "report_incomplete");
-  await assert.rejects(audit(verified), /maintenance is incomplete/);
-  await assert.rejects(audit(verified, { staged: true }), /maintenance is incomplete/);
-  verified = receipt(f);
-  assert.equal(await audit(verified, { staged: true }), "staged");
-  await assert.rejects(audit(verified), /did not return a canonical Aspire PR/);
+  assert.equal(superseded.status, "superseded");
+  assert.deepEqual(f.calls.map(call => call.name), ["git.getRef", "repos.getContent"]);
+  assert.equal(summaries.length, 0);
+  assert.equal(sourceGithub.calls.length, 0);
+
+  const retry = await resolveTelemetrySource({ github: sourceGithub, context });
+  const result = await runTelemetrySync({
+    ...f, sourceGithub, core, directory: retryDirectory, source: retry, final: true
+  });
+  assert.equal(retry.commit, newer);
+  assert.deepEqual(comparisons.map(comparison => comparison.head), [commit, newer]);
+  assert.equal(result.status, "created");
+  const published = f.calls.find(call => call.name === "git.createTree").args.tree[0].content;
+  assert.deepEqual(JSON.parse(published), {
+    skills: ["alpha", "beta", "zeta"],
+    references: [...expected.references, "beta/references/new.md"]
+  });
+  assert.deepEqual(outputs, [["status", "superseded"], ["status", "created"]]);
+  assert.equal(summaries.length, 1);
+  assert.equal(sourceGithub.calls.filter(call => call.name === "createComment").length, 1);
+  assert.ok(sourceGithub.comments[0].body.includes(`[PR in microsoft/aspire](${result.url})`));
+  assert.ok(!sourceGithub.comments[0].body.includes(newer));
 });
 
-test("custom security-review actions remain SHA-pinned after compilation", () => {
-  for (const steps of [
-    authored["safe-outputs"]["threat-detection"].steps,
-    compiled.jobs.detection.steps
+test("unmerged PR head snapshots can only be previewed", async t => {
+  const directory = fixture(t);
+  const f = publisher();
+  await assert.rejects(
+    syncTelemetryCatalog({ ...f, directory, source: { ...source, snapshot: "head" } }),
+    /Only current main snapshots/
+  );
+  assert.equal(f.calls.length, 0);
+  const preview = await syncTelemetryCatalog({ ...f, directory, source: { ...source, snapshot: "head", dryRun: true } });
+  assert.equal(preview.status, "preview");
+});
+
+test("catalog validation enforces Aspire's parser contract", () => {
+  assert.equal(validateTelemetryCatalog(expected), expected);
+  for (const [catalog, error] of [
+    [{ skills: ["alpha"], references: [] }, /non-empty references/],
+    [{ skills: [], references: ["alpha/references/a.md"] }, /non-empty skills/],
+    [{ ...expected, mcpTools: ["x"] }, /only skills and references/],
+    [{ skills: ["alpha.beta"], references: ["alpha.beta/references/a.md"] }, /Invalid skill identifier/],
+    [{ skills: ["a".repeat(129)], references: ["a".repeat(129) + "/references/a.md"] }, /Invalid skill identifier/],
+    [{ skills: ["Alpha", "alpha"], references: ["alpha/references/a.md"] }, /Duplicate skills/],
+    [{ skills: ["zeta", "alpha"], references: ["alpha/references/a.md"] }, /sorted ordinally/],
+    [{ skills: ["alpha"], references: ["alpha/references/A.md", "alpha/references/a.md"] }, /Duplicate references/],
+    [{ skills: ["alpha"], references: ["alpha/references/a\\b.md"] }, /Invalid reference path/],
+    [{ skills: ["alpha"], references: ["alpha/references/../a.md"] }, /Invalid reference path/],
+    [{ skills: ["alpha"], references: ["beta/references/a.md"] }, /Invalid reference path/],
+    [{ skills: ["alpha"], references: ["alpha/assets/a.md"] }, /Invalid reference path/],
+    [{ skills: ["alpha"], references: ["alpha/references"] }, /Invalid reference path/]
   ]) {
-    for (const step of steps.filter(step => step.uses)) {
-      assert.match(step.uses, /@[a-f0-9]{40}$/, `${step.name ?? step.uses} must use a commit SHA`);
+    assert.throws(() => validateTelemetryCatalog(catalog), error);
+  }
+});
+
+test("reference paths reject names the Aspire telemetry hook would discard", () => {
+  for (const path of [
+    "alpha/references/r\u00e9sum\u00e9.md",
+    "alpha/references/space name.md",
+    "alpha/references/part..md",
+    `alpha/references/${"a".repeat(256)}`
+  ]) {
+    assert.throws(() => validateTelemetryCatalog({
+      skills: ["alpha"], references: [path]
+    }), /Invalid reference path/);
+  }
+});
+
+test("generated inventories that Aspire would reject fail before any API call", async t => {
+  const directory = fixture(t);
+  for (const path of ["skills/alpha/references", "skills/zeta/references"]) rmSync(join(directory, path), { recursive: true, force: true });
+  const f = publisher();
+  await assert.rejects(syncTelemetryCatalog({ ...f, directory, source }), /non-empty references/);
+  assert.equal(f.calls.length, 0);
+  write(directory, "skills/alpha/references/a.md");
+  write(directory, "skills/bad.name/SKILL.md");
+  assert.throws(() => generateTelemetryCatalog(directory), /Invalid skill identifier: bad\.name/);
+  rmSync(join(directory, "skills", "bad.name"), { recursive: true, force: true });
+  write(directory, "skills/alpha/references/r\u00e9sum\u00e9.md");
+  assert.throws(() => generateTelemetryCatalog(directory), /Invalid reference path/);
+});
+
+test("changed inventory creates a draft Aspire PR whose commit changes only the catalog", async t => {
+  const directory = fixture(t);
+  const f = publisher();
+  const result = await syncTelemetryCatalog({ ...f, directory, source });
+  assert.equal(result.status, "created");
+  assert.equal(result.url, "https://github.com/microsoft/aspire/pull/42");
+  const tree = f.calls.find(call => call.name === "git.createTree").args;
+  assert.equal(tree.base_tree, "base-tree");
+  assert.deepEqual(tree.tree, [{
+    path: catalogPath, mode: "100644", type: "blob", content: `${JSON.stringify(expected, null, 2)}\n`
+  }]);
+  assert.deepEqual(f.calls.find(call => call.name === "git.createCommit").args.parents, [base]);
+  assert.equal(f.calls.find(call => call.name === "git.createRef").args.sha, commit);
+  const pr = f.calls.find(call => call.name === "pulls.create").args;
+  assert.equal(pr.draft, true);
+  assert.equal(pr.base, "main");
+  assert.equal(pr.head, "update-aspire-telemetry-catalog");
+  assert.equal(pr.body, [
+    `Sync the telemetry catalog with [microsoft/aspire-skills#123](${source.url}).`,
+    "",
+    "Generated from canonical `skills/` directories and their `references/` files.",
+    "",
+    "<!-- aspire-skills-telemetry-catalog -->"
+  ].join("\n"));
+});
+
+test("subsequent inventory updates replace only the automation branch and reuse its open PR", async t => {
+  const directory = fixture(t);
+  const f = publisher({ existing: true });
+  const result = await syncTelemetryCatalog({ ...f, directory, source });
+  assert.equal(result.status, "updated");
+  assert.ok(!f.calls.some(call => ["git.createRef", "pulls.create"].includes(call.name)));
+  assert.deepEqual(f.calls.find(call => call.name === "git.updateRef").args, {
+    owner: "microsoft", repo: "aspire", ref: "heads/update-aspire-telemetry-catalog", sha: commit, force: true
+  });
+  assert.equal(f.calls.find(call => call.name === "pulls.update").args.pull_number, 42);
+  assert.deepEqual(f.calls.find(call => call.name === "issues.addLabels").args.labels, [
+    "area-cli", "area-engineering-systems"
+  ]);
+});
+
+test("a label failure is retried when an existing proposal is synchronized again", async t => {
+  const directory = fixture(t);
+  const f = publisher({ existing: true });
+  let attempts = 0;
+  f.github.rest.issues.addLabels = async args => {
+    f.calls.push({ name: "issues.addLabels", args });
+    if (attempts++ === 0) throw new Error("Temporary label failure");
+    return { data: [] };
+  };
+
+  await assert.rejects(syncTelemetryCatalog({ ...f, directory, source }), /Temporary label failure/);
+  assert.equal((await syncTelemetryCatalog({ ...f, directory, source })).status, "updated");
+  assert.equal(attempts, 2);
+});
+
+test("a missing label on an open proposal surfaces instead of replacing the proposal", async t => {
+  const directory = fixture(t);
+  const f = publisher({ existing: true });
+  const failure = Object.assign(new Error("Label not found"), { status: 404 });
+  f.github.rest.issues.addLabels = async () => { throw failure; };
+  await assert.rejects(syncTelemetryCatalog({ ...f, directory, source }), error => error === failure);
+  assert.ok(!f.calls.some(call => call.name === "pulls.create"));
+});
+
+test("a ready proposal is returned to draft before its branch is updated", async t => {
+  const directory = fixture(t);
+  const f = publisher({ existing: true });
+  f.github.rest.pulls.list = async args => {
+    f.calls.push({ name: "pulls.list", args });
+    return { data: [{
+      number: 42, node_id: "PR_42", draft: false,
+      html_url: "https://github.com/microsoft/aspire/pull/42"
+    }] };
+  };
+
+  const result = await syncTelemetryCatalog({ ...f, directory, source });
+  assert.equal(result.status, "updated");
+  assert.ok(f.calls.findIndex(call => call.name === "graphql") < f.calls.findIndex(call => call.name === "git.updateRef"));
+  assert.deepEqual(f.calls.find(call => call.name === "graphql").variables, { pullRequestId: "PR_42" });
+});
+
+test("a failed draft conversion prevents the proposal branch from being updated", async t => {
+  const directory = fixture(t);
+  const f = publisher({ existing: true });
+  f.github.rest.pulls.list = async () => ({ data: [{
+    number: 42, node_id: "PR_42", draft: false,
+    html_url: "https://github.com/microsoft/aspire/pull/42"
+  }] });
+  f.github.graphql = async () => ({ convertPullRequestToDraft: { pullRequest: { isDraft: false } } });
+
+  await assert.rejects(syncTelemetryCatalog({ ...f, directory, source }), /Unable to return the telemetry proposal to draft/);
+  assert.ok(!f.calls.some(call => call.name === "git.updateRef"));
+});
+
+test("repeated publication reuses the already generated commit", async t => {
+  const directory = fixture(t);
+  const f = publisher({ existing: true, identicalHead: true });
+  assert.equal((await syncTelemetryCatalog({ ...f, directory, source })).status, "updated");
+  assert.ok(!f.calls.some(call => ["git.createCommit", "git.updateRef", "git.createRef"].includes(call.name)));
+});
+
+test("an identical tree on a stale or merge commit is rebuilt on current Aspire main", async t => {
+  const directory = fixture(t);
+  for (const parents of [[{ sha: moved }], [{ sha: base }, { sha: moved }]]) {
+    const f = publisher({ existing: true, identicalHead: true });
+    const getCommit = f.github.rest.git.getCommit;
+    f.github.rest.git.getCommit = async args => args.commit_sha === head
+      ? { data: { tree: { sha: "generated-tree" }, parents } }
+      : getCommit(args);
+    assert.equal((await syncTelemetryCatalog({ ...f, directory, source })).status, "updated");
+    assert.deepEqual(f.calls.find(call => call.name === "git.createCommit").args.parents, [base]);
+    assert.equal(f.calls.find(call => call.name === "git.updateRef").args.force, true);
+  }
+});
+
+test("publication fails explicitly on permission failures instead of treating them as a missing branch", async t => {
+  const directory = fixture(t);
+  const f = publisher();
+  const original = f.github.rest.git.getRef;
+  f.github.rest.git.getRef = args => {
+    if (args.ref !== "heads/main") throw Object.assign(new Error("Forbidden"), { status: 403 });
+    return original(args);
+  };
+  await assert.rejects(syncTelemetryCatalog({ ...f, directory, source }), /Forbidden/);
+  assert.ok(!f.calls.some(call => call.name.startsWith("git.create")));
+});
+
+test("a branch deleted during update is recreated, while an existing branch error propagates", async t => {
+  const directory = fixture(t);
+  const f = publisher({ existing: true });
+  let branchExists = true;
+  const getRef = f.github.rest.git.getRef;
+  f.github.rest.git.getRef = async args => {
+    if (args.ref === "heads/update-aspire-telemetry-catalog" && !branchExists) {
+      f.calls.push({ name: "git.getRef", args });
+      throw Object.assign(new Error("Not found"), { status: 404 });
     }
-  }
+    return getRef(args);
+  };
+  f.github.rest.git.updateRef = async args => {
+    f.calls.push({ name: "git.updateRef", args });
+    branchExists = false;
+    throw Object.assign(new Error("Reference does not exist"), { status: 422 });
+  };
+
+  const result = await syncTelemetryCatalog({ ...f, directory, source });
+  assert.equal(result.status, "updated");
+  assert.equal(f.calls.filter(call => call.name === "git.createRef").length, 1);
+  const branchLookups = f.calls
+    .map((call, index) => ({ call, index }))
+    .filter(({ call }) => call.name === "git.getRef" && call.args.ref === "heads/update-aspire-telemetry-catalog");
+  assert.equal(branchLookups.length, 2);
+  assert.ok(branchLookups[0].index < f.calls.findIndex(call => call.name === "git.updateRef"));
+  assert.ok(f.calls.findIndex(call => call.name === "git.updateRef") < branchLookups[1].index);
+  assert.ok(branchLookups[1].index < f.calls.findIndex(call => call.name === "git.createRef"));
+
+  const g = publisher({ existing: true });
+  const updateFailure = Object.assign(new Error("Reference update rejected"), { status: 422 });
+  g.github.rest.git.updateRef = async () => { throw updateFailure; };
+  await assert.rejects(syncTelemetryCatalog({ ...g, directory, source }), error => error === updateFailure);
 });
 
-test("compiled workflow enforces verifier success, strict detection, and bounded credentials", async () => {
-  assert.ok(compiled.jobs.agent.needs.includes("resolve-source"));
-  assert.ok(compiled.jobs.safe_outputs.needs.includes("detection"));
-  assert.ok(compiled.jobs.safe_outputs.needs.includes("verify-telemetry"));
-  assert.match(compiled.jobs.safe_outputs.if, /needs\.detection\.result == 'success'/);
-  assert.match(compiled.jobs.safe_outputs.if, /needs\.verify-telemetry\.result == 'success'/);
-  const detection = authored["safe-outputs"]["threat-detection"];
-  assert.equal(detection["continue-on-error"], false);
-  assert.equal(detection["report-as-issue"], false);
-  assert.ok(compiled.jobs.detection.needs.includes("verify-telemetry"));
-  assert.ok(compiled.jobs.detection.needs.includes("resolve-source"));
-  assert.match(compiled.jobs.detection.if, /needs\.verify-telemetry\.result == 'success'/);
-  const reviewSteps = compiled.jobs.detection.steps;
-  const stage = reviewSteps.findIndex(step => step.with?.script?.includes("prepareVerifiedReview("));
-  const record = reviewSteps.findIndex(step => step.with?.name === "telemetry-reviewed-proposal");
-  const execution = reviewSteps.findIndex(step => step.id === "detection_agentic_execution");
-  assert.ok(stage > reviewSteps.findIndex(step => step.name === "Prepare threat detection files"));
-  assert.ok(record > stage && record < execution);
-  assert.equal(reviewSteps[execution].env.CUSTOM_PROMPT, detection.prompt);
-  const publication = compiled.jobs.safe_outputs.steps.find(step =>
-    step.with?.script?.includes("await promoteVerifiedProposal("));
-  assert.equal(publication.env.TELEMETRY_DETECTION_SUCCESS, "${{ needs.detection.outputs.detection_success }}");
-  assert.equal(publication.env.TELEMETRY_DETECTION_CONCLUSION, "${{ needs.detection.outputs.detection_conclusion }}");
-  const validator = compiled.jobs.safe_outputs.steps.find(step => step.with?.path === "_telemetry-tools");
-  assert.equal(validator.with.ref, "${{ github.workflow_sha }}");
-  assert.equal(validator.with["persist-credentials"], false);
-  for (const step of [
-    compiled.jobs.detection.steps.find(step => step.id === "detection_agentic_execution"),
-    compiled.jobs.detection.steps.find(step => step.env?.DETECTION_AGENTIC_EXECUTION_OUTCOME)
-  ]) {
-    assert.ok(step);
-    assert.equal(step.env.GH_AW_DETECTION_CONTINUE_ON_ERROR, "false");
-  }
-  for (const name of ["resolve-source", "verify-telemetry", "validate-publication"]) {
-    assert.ok(Object.values(compiled.jobs[name].permissions).every(value => ["none", "read"].includes(value)));
-  }
-  const maximum = { contents: "write", issues: "read", "pull-requests": "write" };
-  const rank = { none: 0, read: 1, write: 2 };
-  for (const name of ["safe_outputs", "conclusion"]) {
-    const permissions = compiled.jobs[name].permissions ?? compiled.permissions;
-    assert.ok(permissions && typeof permissions === "object");
-    for (const [scope, value] of Object.entries(permissions)) {
-      assert.ok(Object.hasOwn(rank, value));
-      assert.ok(rank[value] <= rank[maximum[scope] ?? "none"], `${name} token exceeds ${scope} permission ceiling`);
-    }
-  }
-  for (const name of ["agent", "safe_outputs"]) {
-    assert.ok(!compiled.jobs[name].steps.some(step => step.run?.includes("./restore.sh")));
-  }
-  const policy = await publicationPolicy(root);
-  assert.equal(policy.max, 1);
-  assert.equal(policy.fallback_as_issue, false);
-  assert.deepEqual(policy.allowed_base_branches, ["main"]);
+const moved = "5".repeat(40);
+
+// Returns each Aspire main SHA in turn, repeating the last one, and serves catalog content per ref.
+function moveTargetMain(f, shas, catalogs = {}) {
+  const getRef = f.github.rest.git.getRef;
+  let index = 0;
+  f.github.rest.git.getRef = async args => {
+    if (args.ref !== "heads/main") return getRef(args);
+    f.calls.push({ name: "git.getRef", args });
+    return { data: { object: { sha: shas[Math.min(index++, shas.length - 1)] } } };
+  };
+  const getContent = f.github.rest.repos.getContent;
+  f.github.rest.repos.getContent = async args => {
+    if (!(args.ref in catalogs)) return getContent(args);
+    f.calls.push({ name: "repos.getContent", args });
+    return { data: { type: "file", encoding: "base64", content: Buffer.from(catalogs[args.ref]).toString("base64") } };
+  };
+  const getCommit = f.github.rest.git.getCommit;
+  f.github.rest.git.getCommit = async args => args.commit_sha === moved
+    ? { data: { tree: { sha: "moved-tree" }, parents: [] } }
+    : getCommit(args);
+}
+
+function sourceSequence(f, shas) {
+  let index = 0;
+  f.sourceGithub = { rest: { git: { getRef: async () => ({
+    data: { object: { sha: shas[Math.min(index++, shas.length - 1)] } }
+  }) } } };
+}
+
+test("source main moving during publication supersedes the published proposal for retry", async t => {
+  const directory = fixture(t);
+  const f = publisher();
+  sourceSequence(f, [commit, newer]);
+  const result = await syncTelemetryCatalog({ ...f, directory, source });
+  assert.equal(result.status, "superseded");
+  assert.equal(result.url, "https://github.com/microsoft/aspire/pull/42");
+  assert.ok(f.calls.some(call => call.name === "pulls.create"));
+
+  const summaries = [];
+  const core = {
+    setOutput: () => {}, info: () => {}, warning: message => assert.fail(message),
+    summary: { addRaw: value => ({ write: async () => summaries.push(value) }) }
+  };
+  const g = publisher({ existing: true });
+  sourceSequence(g, [commit, newer]);
+  assert.equal((await runTelemetrySync({ ...g, core, directory, source, final: false })).status, "superseded");
+  assert.equal(summaries.length, 0);
+  sourceSequence(g, [commit, newer]);
+  await assert.rejects(runTelemetrySync({ ...g, core, directory, source, final: true }), /may not reflect current main/);
+  assert.match(summaries[0], /may not reflect current main/);
+  assert.match(summaries[0], /https:\/\/github\.com\/microsoft\/aspire\/pull\/42/);
 });
 
-test("compiled publication audit uses trusted code and read-only destination credentials after native publishing", () => {
-  const audit = compiled.jobs["validate-publication"];
-  for (const dependency of ["resolve-source", "verify-telemetry", "safe_outputs"]) {
-    assert.ok(audit.needs.includes(dependency));
-  }
-  assert.match(audit.if, /!cancelled\(\).*needs\.verify-telemetry\.result == 'success'/);
-  assert.ok(compiled.jobs.conclusion.needs.includes("validate-publication"));
-  const checkout = audit.steps.find(step => step.uses?.startsWith("actions/checkout@"));
-  assert.equal(checkout.with.ref, "${{ github.workflow_sha }}");
-  assert.equal(checkout.with["persist-credentials"], false);
-  const token = audit.steps.find(step => step.id === "publication-read-token");
-  assert.equal(token.with.repositories, "aspire");
-  assert.equal(token.with["permission-contents"], "read");
-  assert.equal(token.with["permission-pull-requests"], "read");
-  const validation = audit.steps.find(step => step.with?.script?.includes("validatePublication("));
-  assert.equal(validation.env.TELEMETRY_PUBLISHER_RESULT, "${{ needs.safe_outputs.result }}");
-  assert.equal(validation.env.TELEMETRY_PR_NUMBER, "${{ needs.safe_outputs.outputs.created_pr_number }}");
-  assert.equal(validation.env.TELEMETRY_PR_URL, "${{ needs.safe_outputs.outputs.created_pr_url }}");
-  assert.equal(validation.env.TELEMETRY_STAGED, authored["safe-outputs"].staged);
+test("Aspire main moving before closure re-evaluates the catalog instead of closing the proposal", async t => {
+  const directory = fixture(t);
+  const f = publisher({ current: `${JSON.stringify(expected, null, 2)}\n`, existing: true });
+  moveTargetMain(f, [base, moved], { [moved]: '{"skills":[],"references":[]}\n' });
+  const result = await syncTelemetryCatalog({ ...f, directory, source });
+  assert.equal(result.status, "updated");
+  assert.ok(!f.calls.some(call => call.name === "issues.createComment" || call.name === "git.deleteRef"));
+  assert.ok(!f.calls.some(call => call.name === "pulls.update" && call.args.state === "closed"));
+  assert.deepEqual(f.calls.find(call => call.name === "git.createCommit").args.parents, [moved]);
+  assert.equal(f.calls.find(call => call.name === "git.createTree").args.base_tree, "moved-tree");
 });
 
-test("Dependabot leaves compiler-managed gh-aw actions pinned", () => {
-  const config = parse(readFileSync(join(root, ".github", "dependabot.yml"), "utf8"));
-  const actions = config.updates.find(update => update["package-ecosystem"] === "github-actions");
+// Makes open proposals and the bot branch follow the publisher's own close, delete, and create calls.
+function trackProposalState(f, { open = [], branch = false } = {}) {
+  const wrap = (group, method, effect) => {
+    const original = f.github.rest[group][method];
+    f.github.rest[group][method] = async args => {
+      const response = await original(args);
+      effect(args, response.data);
+      return response;
+    };
+  };
+  wrap("pulls", "create", (_, proposal) => { open = [proposal]; });
+  wrap("pulls", "update", args => { if (args.state === "closed") open = []; });
+  wrap("git", "createRef", () => { branch = true; });
+  wrap("git", "deleteRef", () => { branch = false; });
+  f.github.rest.pulls.list = async args => {
+    f.calls.push({ name: "pulls.list", args });
+    return { data: open };
+  };
+  const getRef = f.github.rest.git.getRef;
+  f.github.rest.git.getRef = async args => {
+    if (args.ref === "heads/main") return getRef(args);
+    f.calls.push({ name: "git.getRef", args });
+    if (!branch) throw Object.assign(new Error("Not found"), { status: 404 });
+    return { data: { object: { sha: head } } };
+  };
+}
+
+test("a source superseded during publication retries with the new inventory", async t => {
+  const firstDirectory = fixture(t);
+  const retryDirectory = fixture(t);
+  write(retryDirectory, "skills/beta/SKILL.md");
+  write(retryDirectory, "skills/beta/references/new.md");
+  const f = publisher();
+  trackProposalState(f);
+  let currentMain = commit;
+  const comparisons = [];
+  f.sourceGithub = sourceGithubFor({ merged: true, calls: comparisons });
+  f.sourceGithub.rest.git.getRef = async () => ({ data: { object: { sha: currentMain } } });
+  const create = f.github.rest.pulls.create;
+  f.github.rest.pulls.create = async args => {
+    const result = await create(args);
+    currentMain = newer;
+    return result;
+  };
+  const outputs = [];
+  const core = {
+    setOutput: (_, value) => outputs.push(value), info: () => {}, warning: message => assert.fail(message),
+    summary: { addRaw: () => ({ write: async () => {} }) }
+  };
+  const context = sourceContext();
+  const first = await resolveTelemetrySource({ github: f.sourceGithub, context });
+  assert.equal((await runTelemetrySync({
+    ...f, core, directory: firstDirectory, source: first, final: false
+  })).status, "superseded");
+  const retry = await resolveTelemetrySource({ github: f.sourceGithub, context });
+  assert.equal(retry.commit, newer);
+  assert.deepEqual(comparisons.map(comparison => comparison.head), [commit, newer]);
+  assert.equal((await runTelemetrySync({
+    ...f, core, directory: retryDirectory, source: retry, final: true
+  })).status, "updated");
+  const trees = f.calls.filter(call => call.name === "git.createTree");
+  assert.deepEqual(JSON.parse(trees.at(-1).args.tree[0].content), {
+    skills: ["alpha", "beta", "zeta"],
+    references: [...expected.references, "beta/references/new.md"]
+  });
+  assert.ok(!f.calls.find(call => call.name === "pulls.update").args.body.includes(newer));
+  assert.deepEqual(outputs, ["superseded", "updated"]);
+});
+
+test("Aspire main moving after closure reconciles against the new main", async t => {
+  const directory = fixture(t);
+  const f = publisher({ current: `${JSON.stringify(expected, null, 2)}\n`, existing: true });
+  // Closure succeeds against base, then main moves to a catalog that needs a proposal again.
+  moveTargetMain(f, [base, base, moved], { [moved]: '{"skills":[],"references":[]}\n' });
+  trackProposalState(f, { open: [{ number: 42, html_url: "https://github.com/microsoft/aspire/pull/42" }], branch: true });
+  const result = await syncTelemetryCatalog({ ...f, directory, source });
+  assert.equal(result.status, "created");
+  assert.ok(f.calls.some(call => call.name === "pulls.update" && call.args.state === "closed"));
+  assert.deepEqual(f.calls.find(call => call.name === "git.createCommit").args.parents, [moved]);
+  assert.equal(f.calls.filter(call => call.name === "pulls.create").length, 1);
+});
+
+test("Aspire main moving during publication rebuilds the proposal on the current main", async t => {
+  const directory = fixture(t);
+  const f = publisher();
+  // Attempt one publishes on base, then the post-publication check sees moved main.
+  moveTargetMain(f, [base, base, moved]);
+  trackProposalState(f);
+  const result = await syncTelemetryCatalog({ ...f, directory, source });
+  assert.equal(result.status, "created");
   assert.deepEqual(
-    actions.ignore.find(rule => rule["dependency-name"] === "github/gh-aw-actions/*"),
-    { "dependency-name": "github/gh-aw-actions/*" },
+    f.calls.filter(call => call.name === "git.createCommit").map(call => call.args.parents),
+    [[base], [moved]]
+  );
+  assert.equal(f.calls.filter(call => call.name === "git.createRef").length, 1);
+  assert.equal(f.calls.filter(call => call.name === "git.updateRef").length, 1);
+  assert.equal(f.calls.filter(call => call.name === "pulls.create").length, 1);
+});
+
+test("Aspire main moving before branch publication rebuilds from the new main", async t => {
+  const directory = fixture(t);
+  const f = publisher();
+  moveTargetMain(f, [base, moved]);
+  const result = await syncTelemetryCatalog({ ...f, directory, source });
+  assert.equal(result.status, "created");
+  assert.deepEqual(f.calls.filter(call => call.name === "git.createCommit").map(call => call.args.parents), [[moved]]);
+  assert.equal(f.calls.filter(call => call.name === "git.createRef").length, 1);
+});
+
+test("a target move that rejects PR creation is reconciled against the new catalog", async t => {
+  const directory = fixture(t);
+  const f = publisher();
+  let currentMain = base;
+  const getRef = f.github.rest.git.getRef;
+  f.github.rest.git.getRef = async args => args.ref === "heads/main"
+    ? { data: { object: { sha: currentMain } } }
+    : getRef(args);
+  const getContent = f.github.rest.repos.getContent;
+  f.github.rest.repos.getContent = async args => args.ref === moved
+    ? { data: { type: "file", encoding: "base64", content: Buffer.from(`${JSON.stringify(expected, null, 2)}\n`).toString("base64") } }
+    : getContent(args);
+  trackProposalState(f);
+  f.github.rest.pulls.create = async () => {
+    currentMain = moved;
+    throw Object.assign(new Error("No commits between branches"), { status: 422 });
+  };
+  const result = await syncTelemetryCatalog({ ...f, directory, source });
+  assert.equal(result.status, "cleaned");
+  assert.ok(f.calls.some(call => call.name === "git.deleteRef"));
+});
+
+test("a label failure is not masked by a concurrent target move", async t => {
+  const directory = fixture(t);
+  const f = publisher();
+  trackProposalState(f);
+  let currentMain = base;
+  const getRef = f.github.rest.git.getRef;
+  f.github.rest.git.getRef = async args => args.ref === "heads/main"
+    ? { data: { object: { sha: currentMain } } }
+    : getRef(args);
+  const failure = Object.assign(new Error("Label validation failed"), { status: 422 });
+  f.github.rest.issues.addLabels = async () => {
+    currentMain = moved;
+    throw failure;
+  };
+
+  await assert.rejects(syncTelemetryCatalog({ ...f, directory, source }), error => error === failure);
+  assert.equal(f.calls.filter(call => call.name === "pulls.create").length, 1);
+  assert.ok(!f.calls.some(call => call.name === "pulls.update"));
+});
+
+test("Aspire main moving before every publication fails without mutations", async t => {
+  const directory = fixture(t);
+  const f = publisher();
+  const shas = Array.from({ length: 10 }, (_, index) => String(index + 5).repeat(40).slice(0, 40));
+  moveTargetMain(f, shas, Object.fromEntries(shas.map(sha => [sha, '{"skills":[],"references":[]}\n'])));
+  await assert.rejects(syncTelemetryCatalog({ ...f, directory, source }), /Aspire main moved during 3 synchronization attempts/);
+  assert.ok(!f.calls.some(call => /git\.(createCommit|createRef|updateRef)|pulls\.(create|update)|issues\./.test(call.name)));
+});
+
+test("a source superseded during repeated target races still triggers source retry", async t => {
+  const directory = fixture(t);
+  const f = publisher();
+  const shas = Array.from({ length: 10 }, (_, index) => String(index + 5).repeat(40).slice(0, 40));
+  moveTargetMain(f, shas, Object.fromEntries(shas.map(sha => [sha, '{"skills":[],"references":[]}\n'])));
+  sourceSequence(f, [commit, commit, commit, newer]);
+  assert.equal((await syncTelemetryCatalog({ ...f, directory, source })).status, "superseded");
+});
+
+test("a proposal closed or removed before update is replaced by one new draft PR", async t => {
+  const directory = fixture(t);
+  for (const failure of [{ state: "closed" }, { status: 404 }]) {
+    const f = publisher({ existing: true });
+    f.github.rest.pulls.update = async args => {
+      f.calls.push({ name: "pulls.update", args });
+      if (failure.status) throw Object.assign(new Error("Not found"), { status: failure.status });
+      return { data: { number: args.pull_number, state: failure.state, html_url: "https://github.com/microsoft/aspire/pull/42" } };
+    };
+    const result = await syncTelemetryCatalog({ ...f, directory, source });
+    assert.equal(result.status, "created");
+    assert.equal(f.calls.filter(call => call.name === "pulls.create").length, 1);
+    assert.equal(f.calls.find(call => call.name === "pulls.create").args.draft, true);
+    assert.ok(f.calls.some(call => call.name === "issues.addLabels"));
+  }
+  const f = publisher({ existing: true });
+  f.github.rest.pulls.update = async () => { throw Object.assign(new Error("Forbidden"), { status: 403 }); };
+  await assert.rejects(syncTelemetryCatalog({ ...f, directory, source }), /Forbidden/);
+  assert.ok(!f.calls.some(call => call.name === "pulls.create"));
+});
+
+test("a leftover branch from a closed proposal is reset and gets one new draft PR", async t => {
+  const directory = fixture(t);
+  const f = publisher({ existing: true });
+  f.github.rest.pulls.list = async args => {
+    f.calls.push({ name: "pulls.list", args });
+    return { data: [] };
+  };
+  const result = await syncTelemetryCatalog({ ...f, directory, source });
+  assert.equal(result.status, "created");
+  assert.equal(f.calls.find(call => call.name === "git.updateRef").args.force, true);
+  assert.ok(!f.calls.some(call => call.name === "git.createRef" || call.name === "pulls.update"));
+  assert.equal(f.calls.filter(call => call.name === "pulls.create").length, 1);
+});
+
+test("a proposal opened concurrently is reused instead of duplicated", async t => {
+  const directory = fixture(t);
+  const f = publisher();
+  let listed = 0;
+  f.github.rest.pulls.list = async args => {
+    f.calls.push({ name: "pulls.list", args });
+    return { data: listed++ ? [{ number: 77, html_url: "https://github.com/microsoft/aspire/pull/77" }] : [] };
+  };
+  f.github.rest.pulls.create = async args => {
+    f.calls.push({ name: "pulls.create", args });
+    throw Object.assign(new Error("A pull request already exists"), { status: 422 });
+  };
+  const result = await syncTelemetryCatalog({ ...f, directory, source });
+  assert.equal(result.status, "updated");
+  assert.equal(result.url, "https://github.com/microsoft/aspire/pull/77");
+  assert.equal(f.calls.find(call => call.name === "pulls.update").args.pull_number, 77);
+  assert.ok(f.calls.some(call => call.name === "issues.addLabels"));
+
+  const g = publisher();
+  g.github.rest.pulls.create = async () => { throw Object.assign(new Error("Head missing"), { status: 422 }); };
+  await assert.rejects(syncTelemetryCatalog({ ...g, directory, source }), /Head missing/);
+});
+
+test("a concurrently opened proposal that closes again is replaced, not reported as updated", async t => {
+  const directory = fixture(t);
+  const f = publisher();
+  let created = 0;
+  f.github.rest.pulls.create = async () => {
+    if (created++ === 0) throw Object.assign(new Error("A pull request already exists"), { status: 422 });
+    return { data: { number: 78, state: "open", html_url: "https://github.com/microsoft/aspire/pull/78" } };
+  };
+  let listed = 0;
+  f.github.rest.pulls.list = async () => ({
+    data: listed++ ? [{ number: 77, html_url: "https://github.com/microsoft/aspire/pull/77" }] : []
+  });
+  f.github.rest.pulls.update = async () => ({ data: { number: 77, state: "closed" } });
+  const result = await syncTelemetryCatalog({ ...f, directory, source });
+  assert.equal(result.status, "created");
+  assert.equal(result.url, "https://github.com/microsoft/aspire/pull/78");
+  assert.equal(created, 2);
+});
+
+test("repeatedly closed competing proposals fail instead of reporting success", async t => {
+  const directory = fixture(t);
+  const f = publisher();
+  let listed = 0;
+  f.github.rest.pulls.list = async () => ({ data: listed++ ? [{ number: 77 }] : [] });
+  f.github.rest.pulls.create = async () => {
+    throw Object.assign(new Error("A pull request already exists"), { status: 422 });
+  };
+  f.github.rest.pulls.update = async () => ({ data: { number: 77, state: "closed" } });
+  await assert.rejects(syncTelemetryCatalog({ ...f, directory, source }), /Unable to keep a telemetry proposal open/);
+});
+
+function sourceGithubFor({
+  merged, mergeSha = commit, main = newer, status = "ahead", calls = [],
+  baseRef = "main", baseRepo = "microsoft/aspire-skills"
+}) {
+  const github = sourceClient(main);
+  github.rest.pulls = { get: async args => {
+    assert.deepEqual(args, { owner: "microsoft", repo: "aspire-skills", pull_number: 123 });
+    return { data: {
+      base: { ref: baseRef, repo: { full_name: baseRepo } },
+      merged, merge_commit_sha: mergeSha, head: { sha: head }
+    } };
+  } };
+  github.rest.repos = { compareCommits: async args => {
+    calls.push(args);
+    return { data: { status } };
+  } };
+  return github;
+}
+
+function sourceContext({ manual = false, dryRun = false, ref = "refs/heads/main" } = {}) {
+  return {
+    eventName: manual ? "workflow_dispatch" : "pull_request",
+    ref,
+    payload: {
+      inputs: { pr_number: "123", dry_run: String(dryRun) },
+      pull_request: { number: 123, merge_commit_sha: commit }
+    }
+  };
+}
+
+test("merged sources publish current main so stale or out-of-order events cannot roll back inventory", async () => {
+  for (const [manual, dryRun] of [[false, false], [true, false], [true, true]]) {
+    const calls = [];
+    const github = sourceGithubFor({ merged: true, calls });
+    assert.deepEqual(await resolveTelemetrySource({ github, context: sourceContext({ manual, dryRun }) }), {
+      ...source, commit: newer, dryRun
+    });
+    assert.deepEqual(calls, [{ owner: "microsoft", repo: "aspire-skills", base: commit, head: newer }]);
+  }
+});
+
+test("merged sources must be contained in main", async () => {
+  for (const status of ["behind", "diverged"]) {
+    const github = sourceGithubFor({ merged: true, status });
+    await assert.rejects(resolveTelemetrySource({ github, context: sourceContext() }), /not contained in main/);
+  }
+});
+
+test("unmerged manual sources preview their head but cannot publish", async () => {
+  const github = sourceGithubFor({ merged: false });
+  assert.deepEqual(await resolveTelemetrySource({ github, context: sourceContext({ manual: true, dryRun: true }) }), {
+    ...source, commit: head, snapshot: "head", dryRun: true
+  });
+  await assert.rejects(
+    resolveTelemetrySource({ github, context: sourceContext({ manual: true }) }),
+    /only be previewed with dry_run/
   );
 });
 
-test("Linux CI exercises publication against the same pinned runtime as the workflow", () => {
-  const ci = parse(readFileSync(join(root, ".github", "workflows", "test.yml"), "utf8"));
-  const runtime = steps => steps.find(step => step.uses?.startsWith("github/gh-aw-actions/setup@"));
-  assert.equal(runtime(ci.jobs.test.steps).uses, runtime(compiled.jobs.safe_outputs.steps).uses);
-  assert.equal(runtime(ci.jobs.test.steps).if, "runner.os == 'Linux'");
-  const regression = ci.jobs.test.steps.find(step =>
-    step.run?.includes("node --test tests/telemetry-publication/*.test.mjs"));
-  assert.ok(regression);
-  assert.equal(regression.if, "runner.os == 'Linux'");
-  assert.equal(regression.env.GH_AW_ACTIONS_DIR, "${{ runner.temp }}/gh-aw/actions");
-  const compiler = ci.jobs.test.steps.find(step => step.uses?.startsWith("github/gh-aw-actions/setup-cli@"));
-  assert.equal(compiler.uses, runtime(compiled.jobs.safe_outputs.steps).uses.replace("/setup@", "/setup-cli@"));
-  const metadata = JSON.parse(compiledText.split("\n")[0].replace(/^# gh-aw-metadata: /, ""));
-  assert.equal(compiler.with.version, metadata.compiler_version);
-  assert.equal(compiler.if, "runner.os == 'Linux'");
-  const compilation = ci.jobs.test.steps.find(step => step.name === "Compile agentic workflows");
-  assert.match(compilation.run, /--purge --validate/);
-  assert.doesNotMatch(compilation.run, /--force-refresh-action-pins/);
-  const actionTag = runtime(compiled.jobs.safe_outputs.steps).uses.split("@")[1];
-  assert.match(actionTag, /^[a-f0-9]{40}$/);
-  assert.ok(compilation.run.includes(`--action-tag ${actionTag}`));
-  assert.equal(compilation.if, "runner.os == 'Linux'");
-  const drift = ci.jobs.test.steps.find(step => step.name === "Reject generated workflow drift");
-  assert.equal(drift.if, "runner.os == 'Linux'");
-  assert.ok(drift.run.includes("'.github/dependabot.yml'"));
-  const canary = ci.jobs.test.steps.find(step => step.run === "node tests/telemetry-publication/isolation-canary.mjs");
-  assert.ok(canary);
-  assert.equal(canary.if, "runner.os == 'Linux'");
-  assert.equal(canary["continue-on-error"], undefined);
-  const commandCheck = ci.jobs.test.steps.find(step => step.name === "Reject interpreted container commands");
-  assert.equal(commandCheck.env.FORGED_CONTAINER_OUTPUT, `\${{ steps.${canary.id}.outputs.forged }}`);
-  assert.equal(commandCheck.run, 'test -z "$FORGED_CONTAINER_OUTPUT"');
+test("automatic source resolution rejects unmerged or mismatched events", async () => {
+  for (const [merged, mergeSha] of [[false, commit], [true, head]]) {
+    const github = sourceGithubFor({ merged, mergeSha });
+    await assert.rejects(resolveTelemetrySource({ github, context: sourceContext() }), /requires the triggering merged PR/);
+  }
 });
 
-test("Copilot protocol selection uses the fixed, pinned runtime and firewall", () => {
-  const runtime = compiled.jobs.safe_outputs.steps.find(step =>
-    step.uses?.startsWith("github/gh-aw-actions/setup@")).uses;
-  for (const job of ["agent", "detection"]) {
-    assert.equal(
-      compiled.jobs[job].steps.find(step => step.uses?.startsWith("github/gh-aw-actions/setup@")).uses,
-      runtime,
+test("manual runs, including previews, require the main workflow ref", async () => {
+  const github = sourceGithubFor({ merged: true });
+  for (const dryRun of [false, true]) {
+    await assert.rejects(
+      resolveTelemetrySource({ github, context: sourceContext({ manual: true, dryRun, ref: "refs/heads/feature" }) }),
+      /must use the workflow from main/
     );
-    const scripts = compiled.jobs[job].steps.map(step => step.run ?? "").join("\n");
-    for (const role of ["agent", "api-proxy", "squid"]) {
-      const image = authored.sandbox.agent.images[role];
-      assert.match(image, /@sha256:[a-f0-9]{64}$/);
-      assert.ok(image.includes(`:${authored.sandbox.agent.version.replace(/^v/, "")}@sha256:`));
-      assert.ok(scripts.includes(image));
-    }
-    assert.ok(compiled.jobs[job].steps.every(step => !step.env?.COPILOT_PROVIDER_WIRE_API));
   }
 });
 
-test("dry-runs have no diagnostic-issue mutation paths and publishing App is target-only", () => {
-  const outputs = authored["safe-outputs"];
-  assert.equal(outputs["report-failure-as-issue"], false);
-  assert.equal(outputs["report-failed-jobs"], false);
-  assert.equal(outputs["missing-tool"]["create-issue"], false);
-  assert.equal(outputs["report-incomplete"]["create-issue"], false);
-  assert.equal(outputs["threat-detection"]["report-as-issue"], false);
-  assert.equal(outputs["github-app"], undefined);
-  assert.deepEqual(outputs["create-pull-request"]["github-app"].repositories, ["aspire"]);
-  assert.ok(!compiled.jobs.conclusion.steps.some(step => step.uses?.startsWith("actions/create-github-app-token@")));
-  const research = authored["pre-agent-steps"].find(step => step.id === "github-read-token");
-  for (const permission of ["contents", "pull-requests"]) {
-    assert.equal(research.with[`permission-${permission}`], "read");
+test("source resolution rejects malformed PR numbers, non-main targets, and mutable source refs", async () => {
+  for (const value of ["12abc", "0", "-1", "1e2", "012", " 123", "", "9007199254740993", undefined]) {
+    const github = sourceGithubFor({ merged: true });
+    const get = github.rest.pulls.get;
+    let fetched = false;
+    github.rest.pulls.get = async args => { fetched = true; return get(args); };
+    const context = sourceContext({ manual: true });
+    context.payload.inputs.pr_number = value;
+    await assert.rejects(resolveTelemetrySource({ github, context }), /pr_number must be a positive integer/, String(value));
+    assert.equal(fetched, false);
   }
-  assert.equal(research.with["permission-issues"], undefined);
-  assert.equal(authored.permissions.issues, undefined);
-  assert.equal(compiled.jobs.agent.permissions.issues, undefined);
-  assert.deepEqual(authored.tools.github.toolsets, ["repos", "pull_requests"]);
-  assert.match(markdown, /Do not retrieve source PR [^.]*\bdescriptions\b/);
+  for (const [options, message] of [
+    [{ baseRef: "release/1.0" }, /must target microsoft\/aspire-skills main/],
+    [{ baseRepo: "example/aspire-skills" }, /must target microsoft\/aspire-skills main/],
+    [{ main: "main" }, /immutable commit SHA/],
+    [{ main: "A".repeat(40) }, /immutable commit SHA/],
+    [{ main: undefined }, /immutable commit SHA/]
+  ]) {
+    for (const manual of [false, true]) {
+      const calls = [];
+      const github = sourceGithubFor({ merged: true, calls, ...options });
+      if ("main" in options && options.main === undefined) {
+        github.rest.git.getRef = async () => ({ data: { object: {} } });
+      }
+      await assert.rejects(resolveTelemetrySource({ github, context: sourceContext({ manual }) }), message);
+      assert.deepEqual(calls, []);
+    }
+  }
+});
+
+test("job summary escapes source-controlled catalog content", () => {
+  const summary = telemetrySummary({
+    status: "preview", url: 'https://example.test/"><x>',
+    content: '{"references":["a/references/<img src=x onerror=alert(1)>&\'.md"]}\n'
+  });
+  assert.doesNotMatch(summary, /<img|<x>|onerror=alert\(1\)>/);
+  assert.match(summary, /&lt;img src=x onerror=alert\(1\)&gt;&amp;&#39;\.md/);
+  assert.match(summary, /href="https:\/\/example\.test\/&quot;&gt;&lt;x&gt;"/);
+});
+
+test("workflow retains activation and separates trusted scripts from read-only source evidence", () => {
+  assert.deepEqual(workflow.permissions, { contents: "read", "pull-requests": "write" });
+  assert.deepEqual(workflow.on.pull_request, { branches: ["main"], types: ["closed"] });
+  assert.equal(workflow.on.workflow_dispatch.inputs.dry_run.default, false);
+  assert.equal(workflow.concurrency, undefined);
+  const group = new Function("inputs", "github", "format", `return ${workflow.jobs.sync.concurrency.group.slice(3, -2)};`);
+  const format = (pattern, ...args) => pattern.replace(/\{(\d+)\}/g, (_, index) => args[index]);
+  assert.equal(group({ dry_run: false }, { run_id: 7 }, format), "aspire-skills-to-aspire");
+  assert.equal(group({}, { run_id: 7 }, format), "aspire-skills-to-aspire");
+  assert.equal(group({ dry_run: true }, { run_id: 7 }, format), "aspire-skills-to-aspire-preview-7");
+  assert.equal(workflow.jobs.sync.concurrency["cancel-in-progress"], false);
+  // The default single-slot queue would let a newer publishing job replace an already-pending one.
+  assert.equal(workflow.jobs.sync.concurrency.queue, "max");
+  const accepts = new Function("github", `return (${workflow.jobs.sync.if});`);
+  for (const [event, merged, repository, headRepo, expected, ref = "refs/heads/main"] of [
+    ["pull_request", true, "microsoft/aspire-skills", 1, true, "refs/pull/1/merge"],
+    ["pull_request", true, "microsoft/aspire-skills", 2, false],
+    ["pull_request", false, "microsoft/aspire-skills", 1, false],
+    ["workflow_dispatch", false, "microsoft/aspire-skills", undefined, true],
+    ["workflow_dispatch", false, "microsoft/aspire-skills", undefined, false, "refs/heads/feature"],
+    ["workflow_dispatch", false, "example/fork", undefined, false]
+  ]) {
+    assert.equal(accepts({
+      event_name: event, repository, repository_id: 1, ref,
+      event: { pull_request: { merged, head: { repo: { id: headRepo } } } }
+    }), expected);
+  }
+  const checkouts = workflow.jobs.sync.steps.filter(step => step.uses?.startsWith("actions/checkout@"));
+  assert.deepEqual(checkouts.map(step => step.with), [
+    { ref: "${{ github.workflow_sha }}", "persist-credentials": false },
+    { ref: "${{ steps.source.outputs.commit }}", path: "_source", "persist-credentials": false },
+    { ref: "${{ steps.retry-source.outputs.commit }}", path: "_source-retry", "persist-credentials": false }
+  ]);
+  const token = workflow.jobs.sync.steps.find(step => step.uses?.startsWith("actions/create-github-app-token@"));
+  assert.equal(token.if, "steps.source.outputs.dry-run != 'true'");
+  assert.equal(token.with.repositories, "aspire");
+  assert.equal(workflow.jobs.sync.steps.some(step => step.run), false);
+  const scripts = workflow.jobs.sync.steps.filter(step => step.uses?.startsWith("actions/github-script@"));
+  const [resolve, sync, retryResolve, retrySync] = scripts;
+  assert.equal(scripts.length, 4);
+  for (const step of scripts) {
+    assert.match(step.with.script, /\/scripts\/update-aspire-workflow\.mjs/);
+  }
+  for (const step of [sync, retrySync]) {
+    assert.equal(step.env.SOURCE_TOKEN, "${{ github.token }}");
+    assert.match(step.with.script, /sourceGithub: getOctokit\(process\.env\.SOURCE_TOKEN\)/);
+  }
+  // The single retry re-runs the same guarded resolution against newer main, never the mutable branch head.
+  assert.equal(resolve.with["github-token"], undefined);
+  assert.equal(retryResolve.with["github-token"], undefined);
+  assert.match(retryResolve.with.script, /resolveTelemetrySource\(\{ github, context \}\)/);
+  assert.match(sync.with.script, /_source`,[\s\S]*final: false/);
+  assert.match(retrySync.with.script, /_source-retry`,[\s\S]*final: true/);
+  assert.equal(retrySync.env.TELEMETRY_SOURCE, "${{ steps.retry-source.outputs.source }}");
+  const retrySteps = workflow.jobs.sync.steps.slice(workflow.jobs.sync.steps.indexOf(sync) + 1);
+  assert.equal(retrySteps.length, 3);
+  for (const step of retrySteps) assert.equal(step.if, "steps.sync.outputs.status == 'superseded'");
+});
+
+test("resolve steps set every source output that later workflow steps read", async () => {
+  const steps = workflow.jobs.sync.steps;
+  const text = JSON.stringify(steps);
+  const AsyncFunction = (async () => {}).constructor;
+  // A file URL keeps the workflow's `${GITHUB_WORKSPACE}/scripts/...` import valid on Windows too.
+  const process = { env: { GITHUB_WORKSPACE: pathToFileURL(root).href } };
+  for (const id of ["source", "retry-source"]) {
+    const reads = new Set([...text.matchAll(new RegExp(`steps\\.${id}\\.outputs\\.([\\w-]+)`, "g"))].map(match => match[1]));
+    assert.ok(reads.size > 0, id);
+    const script = new AsyncFunction("github", "context", "core", "process", steps.find(step => step.id === id).with.script);
+    for (const [options, dryRun] of [[{}, false], [{ manual: true, dryRun: true }, true]]) {
+      const outputs = {};
+      const core = { setOutput: (name, value) => { outputs[name] = value; } };
+      await script(sourceGithubFor({ merged: true }), sourceContext(options), core, process);
+      for (const name of reads) assert.ok(name in outputs, `${id} must set ${name}`);
+      assert.equal(outputs.commit, newer);
+      assert.deepEqual(JSON.parse(outputs.source), { ...source, commit: newer, dryRun });
+      if ("dry-run" in outputs) assert.equal(outputs["dry-run"], String(dryRun));
+    }
+  }
 });
