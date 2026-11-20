@@ -4,16 +4,6 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 
 ## [0.0.7](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.7)
 
-### Added
-- Added opt-in, bounded upstream Aspire main/release-branch skill-impact
-  assessment with immutable implementation/test evidence and human triage.
-  Grounded documentation replacements are validated in isolated pinned dev
-  checkouts with regenerated catalogs, Node tests, skill lint and affected-skill
-  model evals. A separate repository-scoped draft publisher requires approval
-  of the exact title/body/diff, deduplicates open and closed source PRs, and never
-  publishes a release or merges changes. Unconfigured gates and unsuccessful
-  validation remain explicit and retryable; hosted activation requires maintainer setup.
-
 ### Changed
 - Kept skill-supplied external APIs, streams, and SDK-owned dependencies visible
   in the Aspireify canvas without treating them as runnable services. Resource
