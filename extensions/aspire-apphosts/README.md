@@ -27,6 +27,9 @@ changes appear without reopening the panel. Opening the canvas never starts an
 AppHost; Run, Stop, Deploy, Publish, and pipeline-step operations are explicit
 and serialized per AppHost.
 
+Closing the canvas stops polling and closes its listener after in-flight
+requests finish. It does not cancel an operation that has already started.
+
 Snapshots carry a monotonic content revision across HTTP and server-sent events.
 An older response cannot replace a newer model, and freshness updates apply only
 to the model revision they describe. Selected context includes the owning
@@ -103,8 +106,11 @@ bounded request bodies.
   terminal canvas.
 - **Add to chat** captures a sanitized snapshot in memory. A visible **Pending
   selected context** area lists the snapshots; **Clear pending context** cancels
-  them. Merely selecting an item never queues context. Nothing is sent
-  automatically, and no native composer attachment pill is created.
+  them across all open AppHosts canvases. Every canvas shows the shared list,
+  and Clear targets its displayed revision: if the list changed, the request
+  fails without deleting newer snapshots. Merely selecting an item never queues
+  context. Nothing is sent automatically, and no native composer attachment pill
+  is created.
   The next nonempty user message in the same foreground session consumes these
   snapshots once through the supported `onUserPromptSubmitted.additionalContext`
   hook, framed as untrusted data. Consumption means handoff to that runtime hook,

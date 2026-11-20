@@ -521,12 +521,11 @@ function publishState(entry, nextState) {
 }
 
 function publicState(entry) {
-    return { ...entry.state, pendingContext: pendingContextMetadata(entry) };
+    return { ...entry.state, pendingContext: pendingContextMetadata() };
 }
 
-function pendingContextMetadata(entry) {
+function pendingContextMetadata() {
     const items = [...pendingSelectedContext.values()]
-        .filter((item) => item.owner === entry)
         .map((item) => ({ id: item.id, label: item.context.label }));
     return { revision: pendingContextRevision, state: items.length ? "pending" : "empty", count: items.length, items };
 }
@@ -534,7 +533,7 @@ function pendingContextMetadata(entry) {
 function publishPendingContext() {
     pendingContextRevision += 1;
     for (const entry of instances.values()) {
-        broadcast(entry, { type: "pending-context", pendingContext: pendingContextMetadata(entry) });
+        broadcast(entry, { type: "pending-context", pendingContext: pendingContextMetadata() });
     }
 }
 
@@ -1602,7 +1601,7 @@ function queueCopilotContext(entry, nodeId) {
         ...snapshot, bytes, owner: entry, id: previous?.id ?? randomUUID(),
     });
     publishPendingContext();
-    return { ok: true, pendingContext: pendingContextMetadata(entry) };
+    return { ok: true, pendingContext: pendingContextMetadata() };
 }
 
 async function runResourceCommand(entry, request) {
@@ -2257,8 +2256,14 @@ async function handleRequest(entry, req, res) {
         if (requestContextEpoch !== contextSessionEpoch || requestWorkingDirectory !== entry.workingDirectory) {
             return sendJson(res, 409, { ok: false, error: "The foreground context changed. Review pending context in the current canvas before clearing." });
         }
-        clearPendingContext(entry);
-        return sendJson(res, 200, { ok: true, pendingContext: pendingContextMetadata(entry) });
+        if (!Number.isInteger(body?.revision) || body.revision < 0) {
+            return sendJson(res, 400, { ok: false, error: "A displayed pending-context revision is required to clear context." });
+        }
+        if (body.revision !== pendingContextRevision) {
+            return sendJson(res, 409, { ok: false, error: "Pending context changed. Review the current list before clearing." });
+        }
+        clearPendingContext();
+        return sendJson(res, 200, { ok: true, pendingContext: pendingContextMetadata() });
     }
     if (url.pathname === "/api/open-source") {
         try {

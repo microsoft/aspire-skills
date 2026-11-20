@@ -530,7 +530,9 @@ test("Add to chat shows visible clearable pending context without claiming nativ
     const clear = renderer.document.getElementById("pending-context-clear");
     clear.focus();
     clear.click();
-    await renderer.respond(renderer.request("/api/copilot-context/clear"), { ok: true, pendingContext: pendingContext(3, 0) });
+    const clearRequest = renderer.request("/api/copilot-context/clear");
+    assert.deepEqual(JSON.parse(clearRequest.options.body), { revision: 2 });
+    await renderer.respond(clearRequest, { ok: true, pendingContext: pendingContext(3, 0) });
     assert.equal(region.hidden, true);
     assert.equal(renderer.document.activeElement.id, "search-input", "clearing keeps keyboard focus on a visible control");
     assert.equal(renderer.state().revision, 1, "queue updates never alter content revision");

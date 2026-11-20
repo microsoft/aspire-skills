@@ -717,11 +717,11 @@ test("pending snapshots deduplicate by identity, update on repeat clicks, and ca
     h.controls.state = "Stopped";
     await h.request(open, "/api/state");
     assert.match(h.submit().additionalContext, /"state":"Running"/, "captures at click time, not submit time");
-    await h.request(open, "/api/copilot-context", { nodeId: node.id });
-    const cleared = await h.request(open, "/api/copilot-context/clear", {});
+    const queued = await h.request(open, "/api/copilot-context", { nodeId: node.id });
+    const cleared = await h.request(open, "/api/copilot-context/clear", { revision: queued.pendingContext.revision });
     assert.equal(cleared.pendingContext.count, 0);
     assert.equal(h.submit(), undefined, "cancelled context cannot reach a later prompt");
-    assert.equal((await h.request(open, "/api/copilot-context/clear", {})).ok, true);
+    assert.equal((await h.request(open, "/api/copilot-context/clear", { revision: cleared.pendingContext.revision })).ok, true);
     const missing = await h.request(open, "/api/copilot-context", { nodeId: "no-longer-present" });
     assert.equal(missing.status, 400);
     assert.equal(missing.error, "The selected canvas item is no longer available.");
@@ -892,11 +892,64 @@ test("deduplication moves a snapshot between canvas owners without duplicate del
     const node = allNodes(state.roots).find((candidate) => candidate.kind === "resource");
     await h.request(one, "/api/copilot-context", { nodeId: node.id });
     await h.request(two, "/api/copilot-context", { nodeId: node.id });
-    assert.equal((await h.request(one, "/api/state")).state.pendingContext.count, 0);
+    assert.equal((await h.request(one, "/api/state")).state.pendingContext.count, 1);
     assert.equal((await h.request(two, "/api/state")).state.pendingContext.count, 1);
     await h.close("one");
     const delivered = h.submit().additionalContext;
     assert.equal(JSON.parse(delivered.slice(delivered.indexOf("\n") + 1)).length, 1);
+});
+
+test("all canvases show the shared context list and either can clear the displayed revision", async (t) => {
+    const h = await harness(t);
+    const one = await h.open("one");
+    const two = await h.open("two");
+    const nodes = allNodes((await h.request(one, "/api/state")).state.roots)
+        .filter((node) => node.kind === "resource");
+    await h.request(one, "/api/copilot-context", { nodeId: nodes[0].id });
+    const queued = await h.request(two, "/api/copilot-context", { nodeId: nodes[1].id });
+    assert.equal(queued.pendingContext.count, 2);
+    assert.deepEqual((await h.request(one, "/api/state")).state.pendingContext, queued.pendingContext);
+    assert.deepEqual((await h.request(two, "/api/state")).state.pendingContext, queued.pendingContext);
+    const cleared = await h.request(one, "/api/copilot-context/clear", { revision: queued.pendingContext.revision });
+    assert.equal(cleared.ok, true);
+    assert.equal(cleared.pendingContext.count, 0);
+    assert.deepEqual((await h.request(two, "/api/state")).state.pendingContext, cleared.pendingContext);
+    assert.equal(h.submit(), undefined);
+});
+
+test("a delayed Clear rejects its old revision without deleting an updated snapshot", async (t) => {
+    const h = await harness(t);
+    const open = await h.open();
+    const node = allNodes((await h.request(open, "/api/state")).state.roots)
+        .find((candidate) => candidate.kind === "resource");
+    const first = await h.request(open, "/api/copilot-context", { nodeId: node.id });
+    const entered = deferred();
+    h.servers[0].once("request", () => entered.resolve());
+    let request;
+    const pending = new Promise((done, reject) => {
+        request = http.request(new URL("/api/copilot-context/clear", open.url), {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-aspire-apphosts-token": new URL(open.url).searchParams.get("token") },
+        }, (response) => {
+            const chunks = [];
+            response.on("data", (chunk) => chunks.push(chunk));
+            response.once("end", () => done({ status: response.statusCode, ...JSON.parse(Buffer.concat(chunks).toString("utf8")) }));
+        });
+        request.once("error", reject);
+        request.write('{"revision":');
+    });
+    await entered.promise;
+    const updated = await h.request(open, "/api/copilot-context", { nodeId: node.id });
+    request.end(`${first.pendingContext.revision}}`);
+    const result = await pending;
+    assert.equal(result.status, 409);
+    assert.match(result.error, /Pending context changed/);
+    assert.deepEqual((await h.request(open, "/api/state")).state.pendingContext, updated.pendingContext);
+    for (const revision of [undefined, -1, "1", 1.5]) {
+        const invalid = await h.request(open, "/api/copilot-context/clear", { revision });
+        assert.equal(invalid.status, 400);
+    }
+    assert.ok(h.submit().additionalContext);
 });
 
 test("context is owner-specific, fresh/stale-aware, and carries resource dependencies through HTTP and hook", async (t) => {
@@ -1866,12 +1919,13 @@ test("closing a panel does not cancel its already-started explicit operation", {
     const h = await harness(t);
     h.controls.inputs = [];
     const open = await h.open();
+    h.servers[0].keepAliveTimeout = 60_000;
     const request = await requestFor(h, open);
     const started = deferred();
     const release = deferred();
     h.controls.executor = async () => { started.resolve(); await release.promise; return ok({ completed: true }); };
     const operation = h.request(open, "/api/command", { ...request, arguments: {} });
-    await started.promise;
+    assert.equal(await Promise.race([started.promise.then(() => "started"), operation]), "started");
     const closing = h.close();
     release.resolve();
     assert.equal((await operation).ok, true);

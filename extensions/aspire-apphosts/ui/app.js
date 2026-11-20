@@ -365,7 +365,9 @@ function acceptPendingContext(pending) {
 
 document.getElementById("pending-context-clear").addEventListener("click", async () => {
     try {
-        const result = await api("/api/copilot-context/clear", { method: "POST", body: {} });
+        const result = await api("/api/copilot-context/clear", {
+            method: "POST", body: { revision: pendingContextState.revision },
+        });
         if (result.ok) acceptPendingContext(result.pendingContext);
         else showToast(result.error, true);
     } catch (error) {
