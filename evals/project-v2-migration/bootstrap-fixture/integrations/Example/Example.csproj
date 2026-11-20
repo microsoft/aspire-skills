@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="../Build.props" />
+  <ItemGroup><ProjectReference Include="../Shared/Shared.csproj" /></ItemGroup>
+</Project>

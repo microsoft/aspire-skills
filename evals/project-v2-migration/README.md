@@ -1,7 +1,7 @@
 # Project v2 migration evaluations
 
 These fixtures are **legacy inputs**, not hand-written successful agent outputs.
-The migration spec loads all eight sibling skills and contains 15 read-only cases
+The migration spec loads all eight sibling skills and contains 21 read-only cases
 and seven actual-edit cases.
 
 ## Source and approval gates
@@ -63,6 +63,45 @@ The separate `clientpublish` Dockerfile annotation remains unchanged.
 | File app | Preserve `PublishAot=true`, runtime environment, and publishing options |
 | EF/Blazor | Retain EF metadata/operation ownership and client configuration; handle the new EF overload's `ASPIREPROJECTS001`; require explicit approval of resolved gateway framework/base/user changes; remove only the obsolete gateway Dockerfile-image mutation while preserving SDK container options |
 | Assessment/routing | No implicit edits, upgrades, or missing-capability workarounds; ordinary wiring routes to `aspireify` |
+| Fresh polyglot bootstrap | Normal generated-state absence; bounded unchanged-AppHost restore approval; separately approved pinned disposable add/restore probe; return to exact migration-edit approval; honest upstream restore-failure reporting |
+
+The six bootstrap cases are offline decision/command-planning stimuli with
+empty-diff and no-command trace guards. Reported restore/probe results are inputs,
+not executed installation evidence. These cases do not qualify a real Aspire
+restore or reproduce the upstream SourceLink SHA-256 failure.
+Restore-command grading accepts `.\apphost.mts` and `./apphost.mts` as
+shell-equivalent paths to the same selected AppHost from its directory. This does
+not relax the once-only restore, unchanged inputs, conditional capability handoff,
+separate approvals, empty-diff, no-execution or all-graders-pass requirements.
+Paired restore plans explicitly permit read-only capability inspection after
+success or expressly forbid it and require inspection to remain pending; neither
+case executes the plan.
+
+The separate opt-in [`execution` spec](execution/eval.yaml)
+uses a fixture-local Node mock CLI and the default all-graders-pass policy.
+It lives outside automatic CI/nightly model discovery so those jobs cannot run
+controlled commands without first satisfying its execution preconditions.
+Run model-backed execution only in an environment that enforces workspace-only
+filesystem writes and denies agent network access, with inherited personal
+instructions/hooks disabled. The trace graders detect forbidden commands after
+execution; they are not a sandbox or a permission boundary. If those execution
+constraints cannot be guaranteed on the host, run only the offline contract
+tests and report model execution as blocked.
+It permits controlled execution to test missing side-effect approval, an exact
+legacy restore that leaves configuration after failure, and a copy-owned probe
+with a transitive local integration closure. Run its lint/eval with the commands
+above, substituting `evals/project-v2-migration/execution/eval.yaml`.
+The hidden program grader inspects the actual workspace, command/cwd/target
+audit, config ownership, protected original files, copied build inputs and
+install/script markers. Grading-only hashes/configuration live in
+`bootstrap-baseline.json`, separate from the agent-visible mock and fixture;
+update that manifest when changing fixture/mock inputs (the integrity test
+detects drift, allowing only checkout line-ending normalization).
+Negative controls deliberately execute wrong-target,
+retry, inherited-config and external-build paths and require grading failure.
+The mock performs no real installs, scripts, MSBuild, network or Aspire execution;
+its generated declarations and diagnostics are synthetic, not package/runtime
+qualification or reproduction of the upstream failure.
 
 The generated TypeScript third argument is optional, not nullable.
 `{ launchProfileName: null }` is valid and selects the default profile; literal

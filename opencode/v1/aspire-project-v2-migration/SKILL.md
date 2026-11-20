@@ -97,6 +97,66 @@ Inspect the selected AppHost and every legacy candidate:
 
 An already migrated app or an app with no matching resources is a no-op.
 
+### 1a. Fresh polyglot worktree / capability bootstrap
+
+Missing `.aspire/modules/` and resolved integration metadata in a fresh TypeScript
+or other polyglot worktree is normal, git-ignored generated state, not missing
+application source or an Aspire defect. Do not treat online docs or a version
+label as proof of the installed API.
+
+1. Request bounded preparation approval for restoring the **unchanged exact AppHost once**.
+   Name its working directory, command, existing SDK/integration pins and channel,
+   and expected restore downloads/cache/generated-file writes. Guest restore can
+   also run package-manager installs, update lockfiles and execute lifecycle scripts
+   with their own side effects. Inspect package-manager configuration and scripts
+   read-only; disclose those effects and obtain explicit approval before restoring.
+   Resolve the effective config root, including ancestor settings. If it has legacy
+   `.aspire/settings.json` but no `aspire.config.json`, restore can create
+   `aspire.config.json` there before SDK generation, even if restore later fails.
+   Name that exact configuration path and obtain approval for its creation; generic
+   cache/generated-file approval is insufficient. Also disclose local integration
+   builds and their MSBuild targets when present. Keep assessment read-only while
+   waiting; no integration additions or migration edits are included. If any
+   required effect is outside approval, stop and request the missing permission.
+2. Only after that approval, run the exact scoped restore. For a selected
+   `apphost.mts`, from its directory:
+
+   ```powershell
+   aspire restore --apphost .\apphost.mts --non-interactive
+   ```
+
+   Use the actual selected entry point, not another AppHost. After either outcome,
+   inspect and report actual config/lockfile/script/build effects within the approved
+   scope, including changes left by failure; do not silently undo them or claim the
+   workspace is unchanged. If restore fails, stop
+   and report the exact failed command, working directory, exit code and actual
+   diagnostic **in the answer**, not merely a promise to report them. For the
+   `IntegrationRestore.csproj` SourceLink `SourceRoot.RevisionId` invalid-commit-hash
+   failure with a valid 64-character SHA-256 revision, identify
+   [microsoft/aspire#21735](https://github.com/microsoft/aspire/issues/21735), not
+   missing application source. State that capability verification remains blocked:
+   no retries, generated-target edits, SourceLink suppression or toolchain changes.
+3. On success, inspect the resolved integration graph and generated API read-only
+   within the user's permitted scope. A successful restore is not capability proof.
+   Restoring existing integrations may not expose `addDotnetProject` when
+   `Aspire.Hosting.Dotnet` is not referenced. That is not yet a handle-only API
+   failure. Request a separately approved capability probe using the supported
+   add/restore flow in a disposable copy, preserving the app's pins and channel.
+   Follow the [bounded probe and failure rules](references/compatibility-and-validation.md#bounded-polyglot-capability-probe).
+4. Require the resolved `addDotnetProject(name, path, options?)` with flat `DotnetProjectOptions`
+   and every other needed capability. Missing/older APIs remain a capability stop.
+   Once verified, return to **Classify and propose** (workflow step 2) for the exact
+   per-resource/per-file plan and request migration-edit approval; never copy probe
+   edits into the application as preparation.
+
+Preparation approval is not migration-edit, runtime, or publish approval. Run only
+the approved preparation; never hand-edit generated modules or upgrade implicitly.
+For an offline restore plan, describe both conditional outcomes without executing
+either: failure reporting and the read-only success handoff, including separately
+approved disposable probing if Dotnet is absent. If the user limits the task to
+the restore alone, leave capability inspection pending rather than extending the
+task. Never turn a plan or a failure report into permission for additional actions.
+
 ### 2. Classify and propose
 
 Present a table before editing:

@@ -5,6 +5,13 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [0.0.7](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.7)
 
 ### Changed
+- Project v2 migration now explains fresh polyglot generated-state absence and
+  guides separately approved restore/capability preparation before exact migration
+  edits, preserving pinned toolchains, reporting exact upstream restore failures,
+  and explaining the conditional read-only capability handoff within user scope.
+  Preparation approval includes guest package installs, lockfile/lifecycle-script
+  effects and legacy configuration migration; disposable probes must isolate
+  effective configuration and local integration builds.
 - Kept skill-supplied external APIs, streams, and SDK-owned dependencies visible
   in the Aspireify canvas without treating them as runnable services. Resource
   mappings, not-modeled or deferred reasons, and unassessed items now survive
