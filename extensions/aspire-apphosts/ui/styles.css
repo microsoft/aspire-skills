@@ -41,6 +41,38 @@ p {
 
 /* Compact canvas chrome */
 
+.pending-context {
+    display: flex;
+    flex-shrink: 0;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px var(--gutter);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+}
+
+.pending-context-copy {
+    min-width: 0;
+    flex: 1;
+    overflow-wrap: anywhere;
+}
+
+.pending-context ul {
+    max-height: 80px;
+    overflow-y: auto;
+    margin: 4px 0;
+    padding-left: 18px;
+}
+
+.pending-context-reference {
+    user-select: all;
+}
+
+.pending-context-note {
+    color: var(--muted);
+    font-size: 11px;
+}
+
 .toolbar {
     z-index: 10;
     display: flex;

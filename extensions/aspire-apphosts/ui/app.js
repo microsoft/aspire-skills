@@ -350,7 +350,39 @@ function laterTimestamp(current, incoming) {
         : incoming;
 }
 
+let pendingContextState = { revision: -1, count: 0, items: [] };
+
+function acceptPendingContext(pending) {
+    if (!Number.isInteger(pending?.revision) || pending.revision <= pendingContextState.revision) return;
+    pendingContextState = pending;
+    const region = document.getElementById("pending-context");
+    const hadFocus = region.contains(document.activeElement);
+    region.hidden = pending.count === 0;
+    document.getElementById("pending-context-summary").textContent =
+        `${pending.count} selected snapshot${pending.count === 1 ? "" : "s"} pending. Include a reference in your message to attach it.`;
+    document.getElementById("pending-context-items").replaceChildren(
+        ...pending.items.map((item) => element("li", { dataset: { pendingId: item.id } }, [
+            element("span", { text: `${item.label} ` }),
+            element("code", { class: "pending-context-reference", text: item.reference ?? "" }),
+        ])),
+    );
+    if (region.hidden && hadFocus) els.searchInput.focus();
+}
+
+document.getElementById("pending-context-clear").addEventListener("click", async () => {
+    try {
+        const result = await api("/api/copilot-context/clear", {
+            method: "POST", body: { revision: pendingContextState.revision },
+        });
+        if (result.ok) acceptPendingContext(result.pendingContext);
+        else showToast(result.error, true);
+    } catch (error) {
+        showToast(error.message, true);
+    }
+});
+
 function acceptState(state) {
+    acceptPendingContext(state?.pendingContext);
     if (!Number.isInteger(state?.revision) || state.revision < 0
         || state.revision < (modelState?.revision ?? -1)) {
         return false;
@@ -2186,8 +2218,11 @@ async function executeNodeAction(action, node) {
     if (action === "ask") {
         try {
             const result = await api("/api/copilot-context", { method: "POST", body: { nodeId: node.id } });
+            if (result.ok) acceptPendingContext(result.pendingContext);
             showToast(
-                result.ok ? `Added ${node.label} to chat. Finish your question in the composer.` : result.error,
+                result.ok
+                    ? `${node.label} snapshot pending. Include ${result.reference} in your message to attach it.`
+                    : result.error,
                 !result.ok,
             );
         } catch (error) {
@@ -3310,6 +3345,10 @@ function connectEvents() {
         }
         if (message.type === "freshness" && modelState) {
             acceptFreshness(message);
+            return;
+        }
+        if (message.type === "pending-context") {
+            acceptPendingContext(message.pendingContext);
             return;
         }
         if (message.type === "browser-error") {
