@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = path => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const reference = read("skills/aspireify/references/typescript-authoring.md");
-const parenthesizedAwaitChain = /\(\s*await\s+builder\b[^;]*?\)\s*\)\s*\.\s*[A-Za-z_$][\w$]*\s*\(/;
+const parenthesizedAwaitChain = /\(\s*await\s+[\w$.]+[^;{}]*?\)\s*\.\s*[A-Za-z_$][\w$]*\s*\(/;
 const section = heading => {
   const content = reference.split(`## ${heading}\n`)[1]?.split("\n## ")[0];
   assert.ok(content, `Missing ${heading} section`);
@@ -23,7 +23,6 @@ test("Aspireify TypeScript examples do not parenthesize awaits to continue fluen
     }
   }
   assert.ok(count > 0, "Missing TypeScript examples");
-  assert.match(read("skills/aspireify/SKILL.md"), /\| Add project \|.*\| `builder\.addProject\(/);
 });
 
 test("fluent-chain guard permits awaiting a concrete resource value", () => {
@@ -32,6 +31,9 @@ test("fluent-chain guard permits awaiting a concrete resource value", () => {
     "const resource = await builder.addProject('api', './Api.csproj').withReference(db);",
     "builder.addViteApp('web', './web').withReference(api);",
     "await builder.build().run();",
+    "const api = await builder\n  .addProject('api', './Api.csproj')\n  .withReference(db);",
+    "if (await interaction.isAvailable()) {\n  const result = await interaction.promptInputAsync('a', 'b').then(x => x);\n}",
+    "await yarp.addRoute('/api/{**catch-all}', api.getEndpoint('http'));",
   ]) {
     assert.doesNotMatch(code, parenthesizedAwaitChain);
   }
@@ -41,30 +43,23 @@ test("fluent-chain guard permits awaiting a concrete resource value", () => {
     "(await builder.addViteApp('web', './web')).publishAsStaticWebsite({ apiTarget: api });",
     "(await builder.addProject('api', './Api.csproj')).publishAsAzureContainerApp(async () => {});",
     "(await builder.addPostgres('pg')).addDatabase('appdb');",
+    "const db = (await pg.addDatabase('db')).withDataVolume();",
+    "(await api).withEnvironment('KEY', value);",
   ]) {
     assert.match(code, parenthesizedAwaitChain);
   }
 });
 
-test("canonical skeleton awaits lifecycle boundaries and passes fluent resources directly", () => {
+test("canonical skeleton awaits lifecycle boundaries without parenthesized awaits", () => {
   const skeleton = section("Skeleton");
-  assert.deepEqual([...skeleton.matchAll(/\bawait\s+([^;\n]+)/g)].map(match => match[1]), [
-    "createBuilder()",
-    "builder.build().run()",
-  ]);
-  assert.match(skeleton, /const pg = builder\.addPostgres\('pg'\)\.addDatabase\('appdb'\);/);
-  assert.match(skeleton, /const api = builder\.addProject\([\s\S]*?\.withReference\(pg\)/);
-  assert.match(skeleton, /builder\.addNextJsApp\([\s\S]*?\.withReference\(api\)/);
-
-  const environment = section("Unified `withEnvironment` API");
-  assert.match(environment, /const api = builder\.addProject\([^\n]+\)\n\s*\.withEnvironment/);
-  assert.match(environment, /\.withEnvironment\('SERVICE_URL', cache\.primaryEndpoint\(\)\)/);
-  assert.match(section("Endpoint Property Expressions"), /const httpEndpoint = api\.getEndpoint\('http'\);/);
+  assert.doesNotMatch(skeleton, parenthesizedAwaitChain);
+  assert.match(skeleton, /const builder = await createBuilder\(\);/);
+  assert.match(skeleton, /await builder\.build\(\)\.run\(\);/);
 });
 
 test("fluent guidance explains promise types without removing required callback awaits", () => {
   const guidance = section("Promise-fluent return types");
-  for (const term of ["ResourcePromise", "PromiseLike", "EndpointReferencePromise", "withEnvironment"]) {
+  for (const term of ["ResourcePromise", "PromiseLike", "13.3", "trackPromise", "flushPendingPromises", "AppHostUsageError"]) {
     assert.ok(guidance.includes(term), `Missing ${term} explanation`);
   }
   assert.match(guidance, /callback/i);
@@ -80,9 +75,9 @@ test("fluent guidance explains promise types without removing required callback 
   assert.match(reference, /await interaction\.isAvailable\(\)/);
 });
 
-test("TypeScript eval fixture models the same fluent declaration style", () => {
+test("TypeScript eval fixture awaits lifecycle boundaries without parenthesized awaits", () => {
   const fixture = read("evals/ts-apphost/apphost.mts");
-  assert.doesNotMatch(fixture, /\bawait\s+builder(?!\s*\.\s*build\s*\()/);
+  assert.doesNotMatch(fixture, parenthesizedAwaitChain);
   assert.match(fixture, /const builder = await createBuilder\(\)/);
   assert.match(fixture, /await builder\.build\(\)\.run\(\)/);
 });
