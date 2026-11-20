@@ -81,19 +81,21 @@ or command shapes; C#, TypeScript, and Go AppHost APIs differ.
 
 ### Keep configuration visible in the AppHost
 
-Scan `.env`, `.env.local`, `.env.development`, `secrets.json.example`,
-`<UserSecretsId>`, and setup scripts. Propose migrating values into AppHost parameters:
-connection strings become Aspire resources, API keys/tokens become secret parameters,
-and non-secret config becomes plain parameters or `WithEnvironment()` values. Never
-delete `.env` files or remove existing `UserSecretsId` entries without explicit user
-approval because non-Aspire workflows may still depend on them.
+Scan configuration sources and setup scripts; report key names and source locations,
+never secret values or authenticated URLs. Propose resources, parameters, or retained
+configuration based on the consumer's contract, not automatic migration. A URL parameter
+is configuration, not a service resource. Preserve SDK-owned authentication, endpoint
+discovery, protected transports, retries and recovery. Never delete `.env` files or
+remove `UserSecretsId` entries without approval; non-Aspire workflows may need them.
 
 ### Local development first
 
 This skill optimizes local development, not production deployment. Prefer persistent
 container lifetimes and data volumes for databases/caches, use HTTPS endpoints by
-default, pass endpoint references instead of hardcoded URLs, and model external SaaS
-URLs/API keys as parameters so they are visible in the dashboard.
+default and pass endpoint references instead of hardcoded local URLs. Inventory
+significant external dependencies even when Aspire does not launch them. Choose
+`AddExternalService` only for useful visibility, wiring, or diagnostics; descriptive-only
+visibility can be valid while configuration/SDK ownership stays unchanged.
 
 ### Persistent-data recovery
 
@@ -205,7 +207,7 @@ command matrix and resolver details.
 1. SCAN     → discover projects, services, dependencies, integration candidates
 2. PROPOSE  → resource graph + integration list, confirm with user
 3. EDIT     → wire AppHost, add ServiceDefaults + OTel + health checks
-4. VALIDATE → aspire start --non-interactive → aspire wait <each resource>
+4. VALIDATE → aspire start --non-interactive → aspire wait <each local resource>
 5. DEACTIVATE → confirm clean start, hand off to aspire-orchestration
 ```
 
@@ -228,11 +230,14 @@ Walk the repo and inventory:
 | Python services | `find . -name 'pyproject.toml' -o -name 'requirements.txt'` |
 | Go services | `find . -name 'go.mod' -not -path '*/.aspire/*'` (skip the AppHost's own `go.mod`) |
 | Container deps in compose | `docker-compose.yml`, `compose.yaml` (Postgres? Redis? Rabbit?) |
-| Connection strings | grep `appsettings*.json`, `.env*`, `config/*` for `Postgres`, `Redis`, `Mongo`, `RabbitMQ`, `Cosmos`, `ServiceBus` |
+| Connection strings | locate key names and source files in `appsettings*.json`, `.env*`, `config/*`; do not print values |
 | Integration packages | `dotnet list package` per project; package.json `dependencies` |
 | Existing endpoints | hardcoded ports in `launchSettings.json`, `next.config.js`, `vite.config.ts` |
+| Significant external dependencies | HTTPS APIs, WebSocket streams, SDK-selected endpoints; trace config keys/sources and consumers, not just localhost URLs |
 
-Full heuristics in [references/scan-and-propose.md](references/scan-and-propose.md).
+Record purpose, configuration key/source (no secret values), lifecycle ownership,
+and explicit versus dynamic endpoint selection. Full heuristics and disposition
+rules are in [references/scan-and-propose.md](references/scan-and-propose.md).
 
 ### 2. Propose
 
@@ -242,6 +247,17 @@ Present a resource graph **before editing**. Ask clarifying questions:
 - "Your React app hardcodes `http://localhost:5000` — replace with Aspire service discovery (`endpoint.url`)?"
 - "Your API has an `/admin` endpoint — exclude it from `WithReference()` so consumers don't see it?"
 
+Before confirmation, account for every significant discovered dependency with a
+canvas treatment backed by an evidence-based disposition: an `externalDependencyId`
+mapping for a **proposed resource**; `not-modeled` for **retained configuration/SDK
+ownership** or a dependency **outside the agreed scope**; or `deferred` (with
+`unresolved`) for an **agreed deferred investigation**. Nothing may remain
+`not-assessed`. Resolve material scope and behavior questions in chat first,
+including exclusions from a local-process-only graph. Keep external dependencies
+distinct from runnable services: send them through `load_discovery.externalDependencies`
+and `set_proposal.externalDependencyTreatments`, keeping only the rationale in chat. See the
+[external modeling policy](references/apphost-wiring.md#external-dependency-modeling).
+
 ### 3. Edit
 
 Apply the proposed graph. Use the right authoring style for the AppHost language.
@@ -250,9 +266,13 @@ Apply the proposed graph. Use the right authoring style for the AppHost language
 
 ```bash
 aspire start --non-interactive --format Json
-aspire wait <resource>          # repeat for each declared resource
+aspire wait <resource>          # repeat for each local project, container, and other runnable resource
 aspire describe --format Json   # sanity check graph
 ```
+
+Exclude external-service resources from default validation waits; their readiness
+checks and startup gates require explicit agreement under the
+[external modeling policy](references/apphost-wiring.md#external-dependency-modeling).
 
 Full validation flow + recovery in [references/validation.md](references/validation.md).
 
@@ -375,6 +395,7 @@ Full flow in [references/validation.md](references/validation.md).
 - **Respect existing project structure** — do not reorganize the repo.
 - **If stuck, use `aspire doctor`** to diagnose environment issues.
 - **Never hardcode URLs in `WithEnvironment` / `withEnvironment`** — pass endpoint references such as `api.GetEndpoint("http")` or `api.getEndpoint('http')` instead of string literals.
+- **External dependencies are not startup gates by default.** Do not add HTTP health checks to WebSocket URLs or invent health endpoints. `WithReference` supplies connection/discovery information, not arbitrary SDK options; preserve existing client behavior unless an explicit change is agreed.
 - **Never use `WithUrlForEndpoint` / `withUrlForEndpoint` to set `dev.localhost` URLs** — that API is only for dashboard display labels; `dev.localhost` belongs in AppHost launch/profile configuration.
 
 ## References

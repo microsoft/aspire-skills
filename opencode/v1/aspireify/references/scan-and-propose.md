@@ -11,11 +11,79 @@ Heuristics for the **scan** and **propose** phases of `aspireify`.
 | Python services | `find . -maxdepth 4 -name 'pyproject.toml' -o -name 'requirements.txt'` |
 | Go services | `find . -maxdepth 4 -name 'go.mod' -not -path '*/.aspire/*'` |
 | Container deps | `cat docker-compose*.y*ml compose*.y*ml 2>/dev/null` |
-| Connection strings | `grep -rIE '(Postgres\|Redis\|Mongo\|RabbitMQ\|Cosmos\|ServiceBus\|AMQP)' --include='*.json' --include='.env*' --include='*.config'` |
-| Hardcoded URLs | `grep -rIE 'http://localhost:[0-9]+' --include='*.ts' --include='*.tsx' --include='*.js' --include='*.cs' --include='*.go'` |
+| Connection strings | Locate configuration keys and their consumers in `appsettings*.json`, `.env*`, `*.config`; record source locations, not connection-string values |
+| Hardcoded URLs | Locate files with `grep -rlIE 'http://localhost:[0-9]+' --include='*.ts' --include='*.tsx' --include='*.js' --include='*.cs' --include='*.go'`; report keys/locations, not potentially authenticated URL values |
+| Significant external dependencies | Trace HTTPS API clients, WebSocket subscriptions and SDK constructors/options to configuration keys/sources; inspect setup docs and package references as leads, not proof |
 | Existing integration packages | `dotnet list package` per `.csproj`; `jq .dependencies package.json` per Node project; the `require` block of each Go `go.mod` |
 | Existing endpoints | `launchSettings.json`, `next.config.js`, `vite.config.ts`, `apphost.mts`, `apphost.go` |
 | Existing AppHost references | `apphost.cs` / `Program.cs` / `apphost.go` / current `apphost.mts` / legacy `apphost.ts` — what's already wired? |
+
+### Significant dependency inventory
+
+Inventory application-level dependencies that materially affect features, data,
+authentication, messaging, or streaming, whether local or remote. Do not enumerate
+every request, SDK-internal endpoint, or transitive package. Package presence alone
+does not prove an active dependency; find its consumer.
+
+For each significant dependency, record:
+
+- **Purpose and consumers** — the feature it supports and the code that uses it.
+- **Configuration key/source** — key names and file/line or setup-document evidence,
+  including environment, user secrets, or credential-provider sources. Never copy
+  secret values, connection strings, tokens, or authenticated URLs into the inventory,
+  proposal, chat, or canvas.
+- **Lifecycle ownership** — AppHost-launched, separately operated, or provider-managed;
+  separately note client/SDK ownership of authentication, transport and recovery.
+- **Endpoint selection** — explicit configured address versus dynamic SDK selection
+  (for example region, account, environment or discovery). Record the selection
+  inputs; do not invent a stable URL for an SDK-selected endpoint.
+- **Evidence and uncertainty** — source locations for the above, and unknowns that
+  affect scope, wiring, or behavior. Do not infer a health endpoint from an API URL.
+
+A local-process-only AppHost can be correct. It is not permission to silently omit
+remote dependencies: explain the inventory and exclusions, and clarify material
+scope in chat before confirmation. If evidence is insufficient, ask or agree to
+defer the investigation rather than fabricate an endpoint or resource.
+
+### Choose a disposition and canvas treatment
+
+Apply the [external modeling policy](apphost-wiring.md#external-dependency-modeling).
+Importance alone neither requires nor rules out `AddExternalService`. Record each
+disposition with the canvas treatment it maps to; the disposition is the evidence-backed
+rationale, not a separate status.
+
+| Disposition (rationale) | Canvas treatment | Evidence-backed rationale to present |
+|-------------------------|------------------|--------------------------------------|
+| **Proposed resource** | `externalDependencyId` mapping | Name the concrete benefit: descriptive-only dashboard visibility, a consumer that understands discovery, deliberate endpoint wiring, or meaningful opt-in diagnostics. State what ownership and behavior remain unchanged. |
+| **Retained configuration/SDK ownership** | `not-modeled`; `reason` names what keeps ownership | Explain why existing configuration or SDK-selected endpoints/authentication/transport/recovery are more accurate; an optional URL parameter is still configuration, not a service. |
+| **Outside the agreed scope** | `not-modeled`; `reason` names the agreed scope boundary | Cite the scope decision from chat that excludes it (for example, a separately owned feature or environment). |
+| **Agreed deferred investigation** | `deferred`; `reason` plus `unresolved` (the missing evidence or open question) | State the missing evidence, the question to resolve, and the user's agreement to defer. |
+| (none supplied) | `not-assessed` | Shown by the canvas when no mapping or treatment exists; it must not remain at confirmation. |
+
+Before confirmation, every significant discovered dependency needs a mapping or a
+treatment with a rationale tied to evidence; out-of-scope dependencies are
+`not-modeled`, never left `not-assessed`. Resolve material scope and behavior
+questions in chat first (including whether a resource is descriptive-only, whether
+configuration moves, and whether diagnostics or startup behavior changes).
+
+### Send the canvas payload
+
+Keep this accounting separate from the runnable resource graph:
+
+- Send discovered external APIs, WebSocket streams, and SDK-selected endpoints through
+  `load_discovery.externalDependencies`. Do not put external dependencies in runnable
+  `services` or fabricate resource types/edges to make the accounting fit. Use the
+  action schemas for fields; supply configuration key names and evidence, never
+  secret values or authenticated URLs.
+- Map proposal resources with `externalDependencyId`, not `serviceId`.
+- For unmapped dependencies, pass `set_proposal.externalDependencyTreatments`:
+  `not-modeled` with a `reason`, or `deferred` with a `reason` and `unresolved`.
+  Keep only the rationale discussion in chat.
+- Do not invent resources merely for visibility or change configuration,
+  SDK/authentication, health-check, or startup ownership.
+- Carry `get_confirmation.externalDependencies`, including its `resourceMappings`
+  and decisions, into implementation. Omitting inventory or treatments preserves
+  them within the current run; explicit empty arrays clear them.
 
 ## Heuristics
 
@@ -111,7 +179,8 @@ When presenting the proposed graph to the user, structure it as:
 SCAN RESULTS
   Projects: Api (csproj), Worker (csproj)
   Frontends: web (Next.js)
-  External deps: Postgres (compose), Redis (compose)
+  Local infrastructure: Postgres (compose), Redis (compose)
+  External dependencies: catalog HTTPS API, event WebSocket, regional storage SDK
   Connection strings hardcoded in: Api/appsettings.Development.json
 
 PROPOSED RESOURCE GRAPH
@@ -122,29 +191,26 @@ PROPOSED RESOURCE GRAPH
   - worker (Project) → references pg
   - web (Next.js) → references api; waits for api; WithBrowserLogs
 
+DEPENDENCY DISPOSITIONS (evidence locations, never secret values)
+  - catalog: product lookup for api; Catalog:BaseUrl in Api/appsettings.json,
+    consumed in Api/CatalogClient.cs; explicit HTTPS, provider-operated.
+    Proposed catalog ExternalService for descriptive-only visibility; existing
+    configuration and authenticated client remain unchanged; no checks or waits.
+  - events: updates for worker; EVENTS_URL in setup docs, consumed in Worker/stream.py;
+    explicit WSS, provider-operated. Retain configuration and SDK auth/reconnect;
+    no HTTP health check and no startup gate.
+  - storage: archival for worker; STORAGE_REGION in setup docs, used by SDK factory
+    in Worker/storage.py; provider-managed, SDK-selected endpoint. Defer modeling
+    pending account/region evidence only if user agrees; retain SDK behavior meanwhile.
+
 QUESTIONS BEFORE I EDIT
   1. Replace appsettings Postgres connection string with Aspire service discovery? [Y/n]
   2. Mark Api's /admin endpoint as ExcludeReferenceEndpoint? [Y/n]
   3. Bind everything to a default compute environment, or wait for deploy? [skip/aca/aks]
+  4. Is catalog visibility useful without moving its config? May storage investigation
+     be deferred with SDK ownership unchanged, or should we resolve it before approval?
 ```
 
-Wait for confirmation before editing.
-
-## External inventory handoff
-
-Send discovered external APIs, WebSocket streams, and SDK-selected endpoints
-through `load_discovery.externalDependencies`, not runnable `services`. Use the
-action schemas for fields; supply configuration key names and evidence, never
-secret values or authenticated URLs.
-
-Map proposal resources with `externalDependencyId`, not `serviceId`. For unmapped
-dependencies, pass `set_proposal.externalDependencyTreatments`: `not-modeled`
-with a `reason`, or `deferred` with a `reason` and `unresolved`. If no mapping or
-treatment is supplied, the canvas shows the item as **Not assessed**. Before
-confirmation, every significant in-scope dependency should have a mapping or a
-treatment. Resolve tradeoffs in chat; do not invent resources merely for visibility
-or change configuration, SDK/authentication, health-check, or startup ownership.
-
-Carry `get_confirmation.externalDependencies`, including its `resourceMappings`
-and decisions, into implementation. Omitting inventory or treatments preserves
-them within the current run; explicit empty arrays clear them.
+Resolve these questions and complete the dependency dispositions and canvas
+treatments, then wait for confirmation before editing. The external dependencies
+above are not runnable services.

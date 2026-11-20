@@ -3,7 +3,7 @@ description: "Evaluates the aspireify skill for correct agentic AppHost wiring g
   language-aware authoring (C#, file-based C#, TypeScript, Go), TypeScript AppHost package-manager
   resolution, current Aspire features (unified withEnvironment, AddNextJsApp, WithBrowserLogs,
   ExcludeReferenceEndpoint), ServiceDefaults wiring, validation flow, and proper hand-off to
-  other Aspire skills."
+  other Aspire skills, including evidence-backed external dependency modeling."
 version: "1.0"
 type: capability
 tags:
@@ -71,6 +71,132 @@ stimuli:
           required: [aspireify]
       - type: diff-empty
         name: preserves-version-wiring-workspace
+  - name: aspireify-external-discovery-001
+    prompt: >
+      Use the aspireify skill before answering. Read app/ and give a read-only scan
+      and proposal for wiring its Python worker into the empty AppHost. Include
+      the significant dependencies and what you need me to decide before confirmation.
+      The catalog, event stream, and storage are operated outside this repository.
+      Archival storage is outside the agreed scope of this change.
+      Do not edit files, install, run commands, start anything, or contact services.
+    tags:
+      priority: p0
+      area:
+        - external-dependencies
+        - discovery
+    environment:
+      files:
+        - src: ../../../evals/version-preservation/csharp-apphost
+          dest: app/AppHost
+        - src: ../../../evals/external-dependencies-python
+          dest: app/worker
+    rubric:
+      - The assistant's response inventories catalog HTTPS lookup, the WebSocket update stream, and SDK-selected regional storage, with purpose, consumer/configuration source evidence, lifecycle ownership, and explicit versus dynamic endpoint selection.
+      - The assistant's response records key names and source locations without exposing credential values and preserves authentication, protected CA transports, retries and stream recovery.
+      - The assistant's response gives every significant dependency a canvas treatment before confirmation (an externalDependencyId mapping, not-modeled with a reason, or deferred with a reason and unresolved question), uses the dispositions as rationale, marks out-of-scope archival storage not-modeled, and leaves nothing not-assessed.
+      - The assistant's response resolves material scope and behavior questions in chat without representing remote dependencies as runnable services or assuming every dependency needs a resource.
+      - The assistant's response avoids invented health endpoints, HTTP probes on WebSocket URLs, and default external-service startup gates.
+    graders:
+      - type: prompt
+        name: inventories-significant-external-dependencies
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response identify all three dependencies using
+            worker.py and settings.json as evidence: fetch_catalog/catalogBaseUrl,
+            watch_updates/streamUrl, and archive_snapshot/storageRegion? Require
+            their purposes, configuration keys/sources, external lifecycle ownership,
+            and the distinction between explicit HTTPS/WSS addresses and SDK-selected
+            storage endpoints. Package names alone are not sufficient evidence.
+      - type: prompt
+        name: accounts-for-external-dispositions-before-confirmation
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response account for each significant dependency
+            before confirmation with an externalDependencyId resource mapping, a
+            not-modeled treatment whose reason names retained configuration/SDK
+            ownership or the agreed scope boundary, or a deferred treatment with a
+            reason and unresolved question requiring user agreement? Archival storage
+            must be not-modeled as outside the agreed scope, not left not-assessed or
+            silently dropped. A local-only launch graph is valid if treatments are
+            explicit; no fabricated runnable external service should be proposed.
+      - type: prompt
+        name: preserves-external-client-behavior
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response preserve existing token/SDK authentication,
+            provider CA transports, adaptive retries and WebSocket recovery, without
+            inventing a storage URL, a health endpoint, an HTTP probe for WSS, or
+            default external startup gates? Judge proposed behavior, not warnings
+            that mention forbidden patterns.
+      - type: diff-empty
+        name: external-discovery-remains-read-only
+      - type: skill-invocation
+        name: invokes-aspireify-external-discovery
+        config:
+          required: [aspireify]
+  - name: aspireify-external-visibility-001
+    prompt: >
+      Use the aspireify skill before answering. Read app/ and give a read-only
+      modeling recommendation. I want a useful catalog dashboard entry but its
+      current settings, token auth and protected client must stay as they are.
+      Would a URL parameter alone represent the service? Could WithReference set
+      all the SDK options? Keep regional storage SDK-owned. The stream runbook is
+      missing and I have not agreed to defer investigating its readiness behavior.
+      Explain what can be proposed and what still needs agreement before confirmation.
+      Do not edit files, run commands, start anything, or contact services.
+    tags:
+      priority: p1
+      area:
+        - external-dependencies
+        - modeling
+    environment:
+      files:
+        - src: ../../../evals/version-preservation/csharp-apphost
+          dest: app/AppHost
+        - src: ../../../evals/external-dependencies-python
+          dest: app/worker
+    rubric:
+      - The assistant's response recommends a descriptive-only AddExternalService for the useful catalog dashboard entry while retaining its configuration, auth and protected client ownership; visibility is not proof of health.
+      - The assistant's response distinguishes an endpoint parameter from a service resource and explains that WithReference does not automatically configure arbitrary SDK options.
+      - The assistant's response treats SDK-selected storage as not-modeled with an ownership reason and asks to resolve or agree to a deferred treatment for the stream investigation before confirmation, preserving client behavior without invented checks or startup gates.
+    graders:
+      - type: prompt
+        name: permits-descriptive-only-external-visibility
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response allow AddExternalService to provide the
+            requested catalog dashboard visibility without moving consumer settings,
+            adding WithReference, replacing the authenticated client, or requiring
+            checks/waits? Reject claims that an external resource is useful only
+            when it changes configuration or verifies reachability.
+      - type: prompt
+        name: distinguishes-parameters-resources-and-sdk-options
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response explain that a URL parameter is configuration,
+            not a service resource, and WithReference injects discovery/connection
+            information rather than automatically reconfiguring arbitrary SDK options?
+      - type: prompt
+        name: resolves-external-uncertainty-before-confirmation
+        config:
+          scoring: binary
+          prompt: >
+            Does the assistant's response retain regional storage under SDK ownership
+            (not-modeled, with the worker's region, CA and retry evidence as the
+            reason), and ask to investigate or obtain agreement to a deferred
+            treatment for the stream uncertainty before confirmation? It must not silently exclude the stream or add
+            an HTTP check, fabricated endpoint or external startup gate.
+      - type: diff-empty
+        name: external-visibility-remains-read-only
+      - type: skill-invocation
+        name: invokes-aspireify-external-visibility
+        config:
+          required: [aspireify]
   - name: aspireify-nextjs-001
     prompt: Add my Next.js frontend in ./web to my Aspire AppHost and wire it to talk to my API.
     tags:
