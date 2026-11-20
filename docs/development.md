@@ -29,20 +29,28 @@ release branches, on pushes to main or dev, and on merge-queue candidates.
 Release-branch pushes rely on PR checks instead of triggering a duplicate matrix.
 
 The **OpenCode catalog check** runs on every PR, including stacked PRs, on
-main/dev/release pushes, and on merge-queue candidates. On PRs into main, it
-also requires the branch name, coordinated versions, and newest changelog
-heading to agree on a version newer than main's, finalized notes for that
-version, and unchanged entries for published releases.
+main/dev/release pushes, and on merge-queue candidates. It rejects missing,
+extra, or stale catalog files.
+
+The **Changelog check** runs on PRs into `dev`, `dev` pushes, and merge-queue
+candidates. It rejects edits to published or shipped changelog entries, and new
+entries under a version that has a release branch once `dev` has moved past it.
 
 The **Release branch check** fails any PR into main unless its head is a
-`release/<version>` branch in this repository.
+`release/<version>` branch in this repository. It also requires the branch
+name, coordinated versions, and newest changelog heading to agree on a version
+newer than main's, finalized notes for that version, and unchanged entries for
+published releases.
 
 ## Release flow
 
 1. **Prepare.** Run **Prepare release** from `main` with a full `dev` commit
    SHA and the next dev version. It opens a `release/<version>` PR to `main`
-   at that commit, using that commit's version, and a version bump PR to `dev`.
-   Follow the bump PR's instructions, then merge it.
+   at that commit, using that commit's version, and a `bump-dev/<next>` PR that
+   advances `dev`. Until the bump PR merges, keep adding entries under the
+   release version. After each merge into `dev`, **Sync changelog** rebuilds the
+   bump PR on the latest `dev` and moves entries added after the cut to the next
+   version.
 2. **Backport fixes.** Comment `/backport to release/<version>` on merged `dev`
    PRs. Resolve any conflicts manually.
 3. **Publish.** Finalize the notes on the release branch and merge the release
@@ -50,18 +58,23 @@ The **Release branch check** fails any PR into main unless its head is a
 4. **Merge back.** Open a PR from `main` to `dev`, keep dev's version and newer
    work, and merge it with a merge commit.
 
+If a PR that was opened before the bump merges still lands an entry under the
+release version, **Sync changelog** opens a `changelog-move/<version>` PR that
+moves it to the newest version.
+
 ## Automation setup
 
 Install the Aspire repository GitHub App with write access to contents, pull
 requests, and workflows. Add its `ASPIRE_BOT_APP_ID` and
 `ASPIRE_BOT_PRIVATE_KEY` as Actions secrets.
 
-**Prepare release** and the backport workflow run from `main`, so prepare the
-first release manually: cut `release/<version>` from `dev`, open a PR to `main`,
-and advance `dev` with `npm run version:dev -- <next-version>`.
+**Prepare release**, **Sync changelog**, and the backport workflow use the app
+token. Prepare release and backport run from `main`, so prepare the first
+release manually: cut `release/<version>` from `dev`, open a PR to `main`, and
+advance `dev` with `npm run version:dev -- <next-version>`.
 
 Require **OpenCode catalog check** and the three **Test** jobs on `main` and
-`dev`, and **Release branch check** on `main`.
+`dev`, **Changelog check** on `dev`, and **Release branch check** on `main`.
 
 ## Aspire telemetry maintenance
 

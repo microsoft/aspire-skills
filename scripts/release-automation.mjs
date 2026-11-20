@@ -80,6 +80,59 @@ export function validateRelease(repo, candidate, base, branch, { requireNotes = 
   return version;
 }
 
+function releaseCuts(repo, head) {
+  const cuts = new Map();
+  const refs = repo.run(["ls-remote", "--heads", "origin", "refs/heads/release/*"]).trim();
+  for (const line of refs ? refs.split("\n") : []) {
+    const [sha, ref] = line.split(/\s+/);
+    let version;
+    try {
+      version = releaseVersion(ref.slice("refs/heads/".length));
+    } catch {
+      continue;
+    }
+    repo.run(["fetch", "--no-tags", "origin", fullSha(sha)]);
+    cuts.set(version, fullSha(repo.run(["merge-base", sha, head]).trim()));
+  }
+  return cuts;
+}
+
+// Changelog sections that other branches own: sections published on main, and the dev commits release branches were cut from.
+function changelogOwners(repo, head) {
+  const main = fetchedRemoteHead(repo, "main");
+  return { published: main ? Changelog.read(repo, main) : null, cuts: releaseCuts(repo, head) };
+}
+
+// Keeps changelog entries out of released versions. `base` is the commit `head` is compared against.
+// While a cut version is still dev's newest, entries may be added; `syncChangelog` moves them.
+export function validateChangelogPlacement(repo, head, base) {
+  const changelog = Changelog.read(repo, head);
+  const before = Changelog.read(repo, base);
+  const { published, cuts } = changelogOwners(repo, head);
+  const devVersion = versionSnapshot(repo, head).version;
+  const newest = changelog.newest;
+  if (newest !== devVersion) {
+    throw new Error(`The newest changelog heading must be the development version ${devVersion}.`);
+  }
+  for (const version of changelog.versions) {
+    const section = changelog.section(version);
+    if (section === before.section(version)) continue;
+    const publishedSection = published?.section(version);
+    if (publishedSection !== undefined) {
+      if (section !== publishedSection) throw new Error(`${version} is already released. Add changelog entries under ${newest}.`);
+    } else if (cuts.has(version)) {
+      if (changelog.entryChanges(version, Changelog.read(repo, cuts.get(version))).removed.length) {
+        throw new Error(`${version} changelog entries shipped in release/${version}. Edit them on that branch, not on dev.`);
+      }
+      if (version !== newest && changelog.entryChanges(version, before).added.length) {
+        throw new Error(`release/${version} was cut from dev. Add changelog entries under ${newest}.`);
+      }
+    } else if (version !== newest) {
+      throw new Error(`Add changelog entries under ${newest}, not ${version}.`);
+    }
+  }
+}
+
 export function githubRequest(path, { method = "GET", body } = {}) {
   const result = spawnSync("gh", ["api", "--method", method, path, ...(body ? ["--input", "-"] : [])], {
     encoding: "utf8", input: body ? JSON.stringify(body) : undefined, maxBuffer: 16 * 1024 * 1024
@@ -156,8 +209,18 @@ function planRelease(repo, operation, main, findPull) {
   return planEntry({
     kind: "release", branch, base: "main", baseCommit: main, commit: source, existing,
     title: `Release ${version}`,
-    description: "Finalize the release notes and merge after required checks pass."
+    description: `This PR releases \`dev\` commit ${source} as ${version}. `
+      + "Finalize the release notes, then merge after required checks pass."
   });
+}
+
+function buildDevBump(repo, operation, dev) {
+  const { version, nextVersion } = operation;
+  const { files } = developmentVersionFiles(repo, dev, nextVersion);
+  files.set("CHANGELOG.md", Changelog.parse(files.get("CHANGELOG.md").toString("utf8"))
+    .withLaterEntriesMoved(version, Changelog.read(repo, operation.source), nextVersion).toBuffer());
+  const bump = commitFiles(repo, dev, files, `Advance dev to ${nextVersion}\n\n${operation.trailer()}`);
+  return commitFiles(repo, bump, expectedCatalog(repo, bump), `Generate dev ${nextVersion} catalogs`, { replace: ["opencode"] });
 }
 
 function planDevBump(repo, operation, dev, findPull) {
@@ -176,17 +239,18 @@ function planDevBump(repo, operation, dev, findPull) {
       throw new Error(`Existing branch has an unexpected development version: ${branch}`);
     }
   } else {
-    const { files } = developmentVersionFiles(repo, dev, nextVersion);
-    expected = commitFiles(repo, dev, files, `Advance dev to ${nextVersion}\n\n${operation.trailer()}`);
-    expected = commitFiles(repo, expected, expectedCatalog(repo, expected),
-      `Generate dev ${nextVersion} catalogs`, { replace: ["opencode"] });
+    expected = buildDevBump(repo, operation, dev);
   }
   return planEntry({
     kind: "bump-dev", branch, base: "dev", baseCommit: dev, commit: expected, existing,
     title: `Advance dev to ${nextVersion}`,
-    description: `\`dev\` is preparing release ${version} from the source commit above.\n\n`
-      + `Before merging, incorporate newer \`dev\` changes and compare \`CHANGELOG.md\` with that commit. `
-      + `Move ${version} entries added since then to ${nextVersion}, and keep the original ${version} entries.`
+    description: [
+      `This PR advances \`dev\` to ${nextVersion}. Release ${version} ships \`dev\` commit ${operation.source}.`,
+      "",
+      `Until this PR merges, keep adding changelog entries under ${version}. After each merge into \`dev\`, `
+        + `automation rebuilds this PR on the latest \`dev\` and moves ${version} entries added after `
+        + `${operation.source} to ${nextVersion}. Don't push to this branch.`
+    ].join("\n")
   });
 }
 
@@ -218,6 +282,60 @@ export function prepareRelease(repo, request, {
     branches: Object.freeze([planRelease(repo, operation, main, findPull), planDevBump(repo, operation, dev, findPull)])
   });
 }
+
+const moveMarker = version => `<!-- Aspire-Changelog-Move: ${version} -->`;
+
+// Returns null when `branch` already holds `commit`'s tree on top of `dev` and has a PR.
+function syncUpdate(repo, dev, { branch, commit, pull, ...entry }) {
+  const current = fetchedRemoteHead(repo, branch);
+  const tree = sha => repo.run(["rev-parse", `${sha}^{tree}`]).trim();
+  const upToDate = current !== null && isAncestor(repo, dev, current) && tree(current) === tree(commit);
+  if (upToDate && pull !== null) return null;
+  return Object.freeze({ ...entry, branch, base: "dev", current, commit: upToDate ? current : commit, pull });
+}
+
+// Plans the bot updates that keep dev's changelog entries out of cut releases, without pushing.
+// While a bump PR is open, it is rebuilt on the latest dev. After it merges, cut entries that still
+// land on dev get a PR that moves them to the newest version.
+export function syncChangelog(repo, { api = githubRequest, repository = process.env.GITHUB_REPOSITORY } = {}) {
+  assertRepository(repository);
+  repo.run(["fetch", "--no-tags", "origin", "dev"]);
+  const dev = repo.sha("refs/remotes/origin/dev");
+  const changelog = Changelog.read(repo, dev);
+  const newest = changelog.newest;
+  const pulls = api(`repos/${repository}/pulls?state=open&base=dev&per_page=100`)
+    .filter(pull => pull.head.repo?.full_name === repository);
+  const updates = [];
+  for (const pull of pulls) {
+    if (!pull.head.ref.startsWith("bump-dev/")) continue;
+    const operation = ReleaseOperation.parse(pull.body);
+    if (operation?.version !== newest || pull.head.ref !== `bump-dev/${operation.nextVersion}`) continue;
+    updates.push(syncUpdate(repo, dev, {
+      kind: "bump-dev", branch: pull.head.ref, pull: pull.number, commit: buildDevBump(repo, operation, dev)
+    }));
+  }
+  const { published, cuts } = changelogOwners(repo, dev);
+  for (const [version, cut] of cuts) {
+    const cutChangelog = Changelog.read(repo, cut);
+    if (compareVersions(version, newest) >= 0 || published?.section(version) !== undefined
+      || cutChangelog.section(version) === undefined
+      || !changelog.entryChanges(version, cutChangelog).added.length) continue;
+    const branch = `changelog-move/${version}`;
+    const marker = moveMarker(version);
+    const pull = pulls.find(candidate => candidate.head.ref === branch);
+    if (pull && !pull.body?.includes(marker)) throw new Error(`Existing PR does not match this automation operation: ${branch}`);
+    const files = new Map([["CHANGELOG.md", changelog.withLaterEntriesMoved(version, cutChangelog, newest).toBuffer()]]);
+    updates.push(syncUpdate(repo, dev, {
+      kind: "changelog-move", branch, pull: pull?.number ?? null, marker,
+      commit: commitFiles(repo, dev, files, `Move changelog entries from ${version} to ${newest}`),
+      title: `Move ${version} changelog entries to ${newest}`,
+      description: `\`release/${version}\` was cut before these changelog entries merged into \`dev\`, `
+        + `so this PR moves them from ${version} to ${newest}. Automation updates this PR when \`dev\` changes.`
+    }));
+  }
+  return Object.freeze({ updates: Object.freeze(updates.filter(Boolean)) });
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const repo = new Repository(process.cwd());
@@ -226,8 +344,18 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (command === "prepare" && args.length === 2) {
       const [source, nextVersion] = args;
       result = prepareRelease(repo, { source, nextVersion });
-    } else throw new Error("Usage: release-automation.mjs prepare <sha> <next-version>");
-    console.log(JSON.stringify(result, null, 2));
+    } else if (command === "sync" && args.length === 0) {
+      result = syncChangelog(repo);
+    } else if (command === "validate-release" && (args.length === 1 || args.length === 2)) {
+      const [base, branch] = args;
+      validateRelease(repo, repo.sha("HEAD"), fullSha(base, "Base"), branch || undefined, { requireNotes: true });
+    } else if (command === "check-changelog" && args.length === 1) {
+      validateChangelogPlacement(repo, repo.sha("HEAD"), fullSha(args[0], "Base"));
+    } else {
+      throw new Error("Usage: release-automation.mjs prepare <sha> <next-version> | sync"
+        + " | validate-release <base-sha> [release-branch] | check-changelog <base-sha>");
+    }
+    if (result !== undefined) console.log(JSON.stringify(result, null, 2));
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;

@@ -1,0 +1,88 @@
+name: Sync changelog
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: sync-changelog
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'microsoft/aspire-skills' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout automation
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: dev
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "22"
+      - run: npm ci --ignore-scripts
+      - name: Plan changelog updates
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          plan=$(node scripts/release-automation.mjs sync)
+          echo "plan=$(jq -c . <<< "$plan")" >> "$GITHUB_OUTPUT"
+          echo "count=$(jq '.updates | length' <<< "$plan")" >> "$GITHUB_OUTPUT"
+      - name: Generate Aspire App token
+        id: app-token
+        if: steps.plan.outputs.count != '0'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.ASPIRE_BOT_APP_ID }}
+          private-key: ${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: write
+      - name: Push changelog branches
+        if: steps.plan.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SYNC_PLAN: ${{ steps.plan.outputs.plan }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r update; do
+            branch=$(jq -r .branch <<< "$update")
+            current=$(jq -r '.current // ""' <<< "$update")
+            commit=$(jq -r .commit <<< "$update")
+            if [[ "$commit" == "$current" ]]; then
+              continue
+            fi
+            git -c credential.helper= -c 'credential.helper=!gh auth git-credential' \
+              push "--force-with-lease=refs/heads/$branch:$current" origin "$commit:refs/heads/$branch"
+          done < <(jq -c '.updates[]' <<< "$SYNC_PLAN")
+      - name: Open changelog PRs
+        if: steps.plan.outputs.count != '0'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          SYNC_PLAN: ${{ steps.plan.outputs.plan }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const {updates} = JSON.parse(process.env.SYNC_PLAN);
+            for (const {branch, base, pull, title, description, marker} of updates) {
+              if (pull !== null) {
+                core.info(`${branch}: updated #${pull}`);
+                continue;
+              }
+              const {data: created} = await github.rest.pulls.create({
+                ...context.repo, head: branch, base, title, body: `${marker}\n\n${description}`
+              });
+              core.info(`${branch}: ${created.html_url}`);
+            }

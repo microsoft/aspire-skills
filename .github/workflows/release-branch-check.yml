@@ -9,9 +9,13 @@ on:
       - synchronize
       - reopened
       - edited
+  push:
+    branches:
+      - main
   merge_group:
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   release-branch-check:
@@ -28,3 +32,26 @@ jobs:
             echo "::error::PRs into main must come from a release/<version> branch in this repository."
             exit 1
           fi
+
+      - name: Checkout checked commit
+        if: github.event_name != 'merge_group' || github.event.merge_group.base_ref == 'refs/heads/main'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node
+        if: github.event_name != 'merge_group' || github.event.merge_group.base_ref == 'refs/heads/main'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: "22"
+
+      - name: Validate coordinated release and published history
+        if: github.event_name != 'merge_group' || github.event.merge_group.base_ref == 'refs/heads/main'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          RELEASE_BRANCH: ${{ github.head_ref }}
+        run: |
+          npm ci --ignore-scripts
+          node scripts/release-automation.mjs validate-release "$BASE_SHA" "$RELEASE_BRANCH"

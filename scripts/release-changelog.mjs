@@ -15,6 +15,51 @@ function sectionBody(section) {
   return newline < 0 ? "" : section.slice(newline);
 }
 
+const isListItem = text => /^[-*] /.test(text);
+
+// Splits a section body into entries: list items or paragraphs, keyed by their `###` group.
+function sectionEntries(section) {
+  const entries = [];
+  let group = "";
+  let current = null;
+  for (const line of sectionBody(section).split("\n")) {
+    if (line.startsWith("### ")) {
+      group = line;
+      current = null;
+    } else if (!line.trim()) {
+      current = null;
+    } else if (current && !isListItem(line)) {
+      current.text += `\n${line}`;
+    } else {
+      current = { group, text: line };
+      entries.push(current);
+    }
+  }
+  return entries;
+}
+
+// Multiset difference of two sections' entries.
+function compareEntries(section, baseline) {
+  const remaining = baseline === undefined ? [] : sectionEntries(baseline);
+  const added = (section === undefined ? [] : sectionEntries(section)).filter(entry => {
+    const index = remaining.findIndex(other => other.group === entry.group && other.text === entry.text);
+    if (index < 0) return true;
+    remaining.splice(index, 1);
+    return false;
+  });
+  return { added, removed: remaining };
+}
+
+function renderEntries(entries) {
+  const groups = new Map();
+  for (const { group, text } of entries) groups.set(group, [...groups.get(group) ?? [], text]);
+  return [...groups].map(([group, texts]) => {
+    const body = texts.map((text, index) => index === 0 ? text
+      : (isListItem(text) && isListItem(texts[index - 1]) ? "\n" : "\n\n") + text).join("");
+    return group ? `${group}\n${body}` : body;
+  }).join("\n\n");
+}
+
 // Immutable view of CHANGELOG.md: a free-form prefix followed by uniquely versioned
 // sections in strictly descending version order.
 export class Changelog {
@@ -66,6 +111,10 @@ export class Changelog {
     return this.#sections.keys().next().value;
   }
 
+  get versions() {
+    return [...this.#sections.keys()];
+  }
+
   section(version) {
     return this.#sections.get(version);
   }
@@ -85,6 +134,29 @@ export class Changelog {
   withNewSection(version) {
     if (this.#sections.has(version)) throw new Error(`Changelog already has ${version}.`);
     return this.#with(new Map([[version, changelogHeading(version)], ...this.#sections]));
+  }
+
+  // Entries in this `version` section that `baseline` lacks, and baseline entries this section lacks.
+  entryChanges(version, baseline) {
+    return compareEntries(this.#sections.get(version), baseline.section(version));
+  }
+
+  // Restores `version` to its released section and appends entries added since then to `target`.
+  withLaterEntriesMoved(version, released, target) {
+    const releasedSection = released.section(version);
+    const targetSection = this.#sections.get(target);
+    if (releasedSection === undefined || !this.#sections.has(version)) throw new Error(`Changelog is missing ${version}.`);
+    if (targetSection === undefined) throw new Error(`Changelog is missing ${target}.`);
+    const { added, removed } = this.entryChanges(version, released);
+    if (removed.length) {
+      throw new Error(`${version} changelog entries changed after the release commit. Restore them on dev.`);
+    }
+    const sections = new Map(this.#sections);
+    sections.set(version, releasedSection);
+    if (added.length) {
+      sections.set(target, `${changelogHeading(target)}\n\n${renderEntries([...sectionEntries(targetSection), ...added])}`);
+    }
+    return this.#with(sections);
   }
 
   toBuffer() {

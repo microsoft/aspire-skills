@@ -93,7 +93,9 @@ versions change. Ordinary feature and release-fix PRs preserve dev's current ver
 
 Dedicated `bump-dev/<version>` PRs advance dev's coordinated version, add its
 changelog heading, and regenerate catalogs. Entries added after the release
-commit move to the new heading.
+commit move to the new heading. **Sync changelog** rebuilds open bump PRs after
+each `dev` merge; bot-authored `bump-dev/*` and `changelog-move/*` branches
+should not carry manual edits.
 
 | File | Field |
 |------|-------|
@@ -147,6 +149,8 @@ Preserve historical release note bodies when updating headings or references.
 Dev PRs keep the current version's `CHANGELOG.md` entry up to date as changes
 land, preserving earlier entries. Version-bump PRs add the next version's
 heading; `release/<version>` PRs finalize the notes for the selected snapshot.
+The **Changelog check** rejects `dev` edits to released or shipped entries, and
+new entries under a cut version once `dev` has advanced past it.
 
 **Severity:** `important`.
 

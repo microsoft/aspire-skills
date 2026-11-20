@@ -200,7 +200,7 @@ Only flag concrete, high-confidence problems. Categories:
    duplicate keys, off-by-one in tags / IDs, `id`/`name` confusion (`--task` filters by
    `id`).
 7. **Release history** — stale or missing `opencode/` catalogs, edits to earlier
-   changelog entries, a `main`-to-`dev` merge that loses dev's notes or version,
+   changelog entries, new entries under a cut version after `dev` advances past it, a `main`-to-`dev` merge that loses dev's notes or version,
    release changes beyond the selected commit and reviewed backports, unfinished
    release notes, or inconsistent canonical versions. See the Release Checklist.
 8. **13.5 staleness** — treating legacy `apphost.ts` as current, inspecting resources

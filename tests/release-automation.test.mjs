@@ -9,7 +9,7 @@ import { Repository } from "../scripts/release-git.mjs";
 import { expectedCatalog, validateCatalog } from "../scripts/release-catalog.mjs";
 import { developmentVersionFiles } from "../scripts/version-development.mjs";
 import { versionSnapshot } from "../scripts/release-versions.mjs";
-import { commitFiles, ensurePullRequest, guardedPush, prepareRelease, remoteHead, validateRelease } from "../scripts/release-automation.mjs";
+import { commitFiles, ensurePullRequest, guardedPush, prepareRelease, remoteHead, syncChangelog, validateChangelogPlacement, validateRelease } from "../scripts/release-automation.mjs";
 import { Changelog } from "../scripts/release-changelog.mjs";
 import { ReleaseOperation } from "../scripts/release-operation.mjs";
 
@@ -60,14 +60,16 @@ function githubFixture() {
     if (options.method === "POST") {
       const pull = {
         number: pulls.length + 1, state: "open", body: options.body.body,
-        head: { ref: options.body.head }, base: { ref: options.body.base },
+        head: { ref: options.body.head, repo: { full_name: "example/test" } }, base: { ref: options.body.base },
         html_url: `https://github.com/example/test/pull/${pulls.length + 1}`
       };
       pulls.push(pull);
       return pull;
     }
-    const branch = new URL(`https://api.github.com/${path}`).searchParams.get("head").split(":")[1];
-    return pulls.filter(pull => pull.head.ref === branch);
+    const params = new URL(`https://api.github.com/${path}`).searchParams;
+    const head = params.get("head");
+    if (head) return pulls.filter(pull => pull.head.ref === head.split(":")[1]);
+    return pulls.filter(pull => pull.state === params.get("state") && pull.base.ref === params.get("base"));
   };
   return { api, pulls };
 }
@@ -93,13 +95,18 @@ test("preparation cuts the release at the selected dev commit; reruns preserve e
   assert.deepEqual(plan.branches.map(({commit, ...branch}) => branch), [
     {
       kind: "release", branch: "release/0.0.4", base: "main", baseCommit: f.main, existing: false, title: "Release 0.0.4",
-      description: "Finalize the release notes and merge after required checks pass."
+      description: `This PR releases \`dev\` commit ${f.dev} as 0.0.4. `
+        + "Finalize the release notes, then merge after required checks pass."
     },
     {
       kind: "bump-dev", branch: "bump-dev/0.0.5", base: "dev", baseCommit: f.dev, existing: false, title: "Advance dev to 0.0.5",
-      description: "`dev` is preparing release 0.0.4 from the source commit above.\n\n"
-        + "Before merging, incorporate newer `dev` changes and compare `CHANGELOG.md` with that commit. "
-        + "Move 0.0.4 entries added since then to 0.0.5, and keep the original 0.0.4 entries."
+      description: [
+        `This PR advances \`dev\` to 0.0.5. Release 0.0.4 ships \`dev\` commit ${f.dev}.`,
+        "",
+        "Until this PR merges, keep adding changelog entries under 0.0.4. After each merge into `dev`, "
+          + `automation rebuilds this PR on the latest \`dev\` and moves 0.0.4 entries added after ${f.dev} `
+          + "to 0.0.5. Don't push to this branch."
+      ].join("\n")
     }
   ]);
   assert.deepEqual(plan.operation.toJSON(), { source: f.dev, version: "0.0.4", nextVersion: "0.0.5" });
@@ -193,22 +200,33 @@ test("preparation leaves stale catalogs for the PR check", t => {
   assert.equal(remoteHead(f.repo, "release/0.0.4"), null);
 });
 
-test("the bump PR identifies the release snapshot and explains later changelog entries", async t => {
+function editChangelog(repo, parent, version, notes, message = "Edit changelog") {
+  const changelog = repo.read(parent, "CHANGELOG.md").toString();
+  const section = Changelog.read(repo, parent).section(version);
+  const heading = section.split("\n")[0];
+  return commitFiles(repo, parent, new Map([["CHANGELOG.md", Buffer.from(
+    changelog.replace(section, notes ? `${heading}\n\n${notes}` : heading)
+  )]]), message);
+}
+
+test("the bump moves changelog entries added after the release commit", async t => {
   const f = fixture(t);
   const github = githubFixture();
-  const heading = Changelog.read(f.repo, f.dev).section("0.0.4");
-  const atSource = f.repo.read(f.dev, "CHANGELOG.md").toString().replace(heading, `${heading}\n\nRelease note.`);
-  const source = commitFiles(f.repo, f.dev, new Map([["CHANGELOG.md", Buffer.from(atSource)]]), "Release snapshot");
-  const later = commitFiles(f.repo, source, new Map([["CHANGELOG.md", Buffer.from(
-    atSource.replace("Release note.", "Release note.\n\nLater dev note.")
-  )]]), "Later dev note");
+  const released = "### Added\n- Release note\n  continued.\n\n### Changed\n- Released change.";
+  const source = editChangelog(f.repo, f.dev, "0.0.4", released, "Release snapshot");
+  const later = editChangelog(f.repo, source, "0.0.4",
+    "### Added\n- Release note\n  continued.\n- Later addition.\n\n### Changed\n- Released change.\n- Later change.");
   guardedPush(f.repo, "dev", later, f.dev);
 
   const plan = prepareWithGithub(f, github, source, "0.0.5");
   assert.equal(plan.branches[0].commit, source);
   const bumpChangelog = Changelog.read(f.repo, plan.branches[1].commit);
-  assert.equal(bumpChangelog.notes("0.0.4"), "Release note.\n\nLater dev note.");
-  assert.equal(bumpChangelog.notes("0.0.5"), "");
+  assert.equal(bumpChangelog.notes("0.0.4"), released);
+  assert.equal(bumpChangelog.notes("0.0.5"), "### Added\n- Later addition.\n\n### Changed\n- Later change.");
+
+  const edited = editChangelog(f.repo, source, "0.0.4", released.replace("Released change.", "Reworded change."));
+  guardedPush(f.repo, "dev", edited, later);
+  assert.throws(() => prepareWithGithub(f, github, source, "0.0.5"), /0\.0\.4 changelog entries changed after the release commit/);
 
   const workflow = parse(readFileSync(new URL("../.github/workflows/prepare-release.yml", import.meta.url), "utf8"));
   const script = workflow.jobs.prepare.steps.find(step => step.name === "Open release and development PRs").with.script;
@@ -222,17 +240,105 @@ test("the bump PR identifies the release snapshot and explains later changelog e
     } } },
     async paginate() { return []; }
   }, { repo: { owner: "example", repo: "test" } }, { summary, info() {} }, {
-    env: {
-      RELEASE_PLAN: JSON.stringify(plan), GITHUB_SERVER_URL: "https://github.com",
-      GITHUB_REPOSITORY: "example/test", GITHUB_RUN_ID: "1"
-    }
+    env: { RELEASE_PLAN: JSON.stringify(plan) }
   });
   const body = created.find(pull => pull.head === "bump-dev/0.0.5").body;
-  assert.ok(body.includes(`Source commit: ${source}`));
-  assert.match(body, /`dev` is preparing release 0\.0\.4 from the source commit above/);
-  assert.match(body, /incorporate newer `dev` changes and compare `CHANGELOG\.md` with that commit/);
-  assert.match(body, /Move 0\.0\.4 entries added since then to 0\.0\.5/);
-  assert.match(body, /keep the original 0\.0\.4 entries/);
+  assert.ok(body.includes(`This PR advances \`dev\` to 0.0.5. Release 0.0.4 ships \`dev\` commit ${source}`));
+  assert.doesNotMatch(body, /Source commit:|Workflow:/);
+});
+
+test("changelog placement allows cut-version entries only until the bump merges", t => {
+  const f = fixture(t);
+  const github = githubFixture();
+  const check = (head, base) => validateChangelogPlacement(f.repo, head, base);
+  const feature = editChangelog(f.repo, f.dev, "0.0.4", "- Feature.");
+  check(feature, f.dev);
+  assert.throws(() => check(editChangelog(f.repo, feature, "0.0.3", "Rewritten."), feature), /0\.0\.3 is already released/);
+  guardedPush(f.repo, "dev", feature, f.dev);
+
+  guardedPush(f.repo, "release/0.0.4", feature, null);
+  const late = editChangelog(f.repo, feature, "0.0.4", "- Feature.\n- Late.");
+  check(late, feature);
+  assert.throws(() => check(editChangelog(f.repo, feature, "0.0.4", "- Reworded."), feature),
+    /0\.0\.4 changelog entries shipped in release\/0\.0\.4/);
+  guardedPush(f.repo, "dev", late, feature);
+
+  const bump = prepareWithGithub(f, github, feature, "0.0.5").branches[1].commit;
+  check(bump, late);
+  check(editChangelog(f.repo, bump, "0.0.5", "- Late.\n- Next feature."), bump);
+  assert.throws(() => check(editChangelog(f.repo, bump, "0.0.4", "- Feature.\n- After bump."), bump),
+    /release\/0\.0\.4 was cut from dev\. Add changelog entries under 0\.0\.5/);
+});
+
+test("changelog sync rebuilds the open bump PR, then moves stale cut entries in a PR", async t => {
+  const f = fixture(t);
+  const github = githubFixture();
+  const sync = () => syncChangelog(f.repo, { api: github.api, repository: "example/test" }).updates;
+  const feature = editChangelog(f.repo, f.dev, "0.0.4", "- Feature.");
+  guardedPush(f.repo, "dev", feature, f.dev);
+  const plan = prepareWithGithub(f, github, feature, "0.0.5");
+  for (const { branch, commit } of plan.branches) guardedPush(f.repo, branch, commit, null);
+  openPreparedPulls(github, plan);
+  assert.deepEqual(sync(), []);
+
+  const late = commitFiles(f.repo, editChangelog(f.repo, feature, "0.0.4", "- Feature.\n- Late."),
+    new Map([["late.txt", Buffer.from("Late work.\n")]]), "Late work");
+  guardedPush(f.repo, "dev", late, feature);
+  const [rebuild, ...extra] = sync();
+  assert.deepEqual(extra, []);
+  assert.deepEqual({ ...rebuild, commit: undefined }, {
+    kind: "bump-dev", branch: "bump-dev/0.0.5", base: "dev", current: plan.branches[1].commit, commit: undefined, pull: 2
+  });
+  const bumped = Changelog.read(f.repo, rebuild.commit);
+  assert.equal(bumped.notes("0.0.4"), "- Feature.");
+  assert.equal(bumped.notes("0.0.5"), "- Late.");
+  assert.equal(f.repo.read(rebuild.commit, "late.txt").toString(), "Late work.\n");
+  assert.equal(versionSnapshot(f.repo, rebuild.commit).version, "0.0.5");
+  validateCatalog(f.repo, rebuild.commit, expectedCatalog(f.repo, rebuild.commit));
+  validateChangelogPlacement(f.repo, rebuild.commit, late);
+  guardedPush(f.repo, rebuild.branch, rebuild.commit, rebuild.current);
+  assert.deepEqual(sync(), []);
+
+  guardedPush(f.repo, "dev", rebuild.commit, late);
+  github.pulls[1].state = "closed";
+  assert.deepEqual(sync(), []);
+  const stale = editChangelog(f.repo, rebuild.commit, "0.0.4", "- Feature.\n- Stale.");
+  guardedPush(f.repo, "dev", stale, rebuild.commit);
+  const [move] = sync();
+  assert.deepEqual({ ...move, commit: undefined }, {
+    kind: "changelog-move", branch: "changelog-move/0.0.4", base: "dev", current: null, commit: undefined, pull: null,
+    marker: "<!-- Aspire-Changelog-Move: 0.0.4 -->", title: "Move 0.0.4 changelog entries to 0.0.5",
+    description: "`release/0.0.4` was cut before these changelog entries merged into `dev`, so this PR moves them "
+      + "from 0.0.4 to 0.0.5. Automation updates this PR when `dev` changes."
+  });
+  const moved = Changelog.read(f.repo, move.commit);
+  assert.equal(moved.notes("0.0.4"), "- Feature.");
+  assert.equal(moved.notes("0.0.5"), "- Late.\n- Stale.");
+  validateChangelogPlacement(f.repo, move.commit, stale);
+  guardedPush(f.repo, move.branch, move.commit, null);
+
+  const workflow = parse(readFileSync(new URL("../.github/workflows/sync-changelog.yml", import.meta.url), "utf8"));
+  const script = workflow.jobs.sync.steps.find(step => step.name === "Open changelog PRs").with.script;
+  const run = new (Object.getPrototypeOf(async function () {}).constructor)("github", "context", "core", "process", script);
+  const created = [];
+  const updates = [move, { ...rebuild, pull: 2 }];
+  await run({ rest: { pulls: { async create(pull) {
+    created.push(pull);
+    github.api("repos/example/test/pulls", { method: "POST", body: pull });
+    return { data: { html_url: "https://github.com/example/test/pull/3" } };
+  } } } }, { repo: { owner: "example", repo: "test" } }, { info() {} }, {
+    env: { SYNC_PLAN: JSON.stringify({ updates }) }
+  });
+  assert.deepEqual(created.map(({ head, base }) => ({ head, base })), [{ head: "changelog-move/0.0.4", base: "dev" }]);
+  assert.ok(created[0].body.startsWith(`${move.marker}\n\n`));
+  assert.deepEqual(sync(), []);
+
+  const newer = commitFiles(f.repo, stale, new Map([["newer.txt", Buffer.from("Newer.\n")]]), "Newer work");
+  guardedPush(f.repo, "dev", newer, stale);
+  const [refresh] = sync();
+  assert.equal(refresh.current, move.commit);
+  assert.equal(refresh.pull, 3);
+  assert.equal(f.repo.read(refresh.commit, "newer.txt").toString(), "Newer.\n");
 });
 
 test("release validation rejects changes to published notes", t => {
@@ -342,6 +448,20 @@ test("release workflow wiring keeps preparation unprivileged and bot checks on c
   assert.ok(Object.hasOwn(workflow("test").on, "merge_group"));
   const catalogCheck = workflow("catalog-check").jobs["catalog-check"].steps.find(step => step.name === "Reject catalog drift");
   assert.equal(catalogCheck.run, "npm run catalog:check");
+  const changelogCheck = workflow("changelog-check").jobs["changelog-check"];
+  assert.equal(changelogCheck.name, "Changelog check");
+  assert.match(changelogCheck.steps.at(-1).run, /check-changelog "\$BASE_SHA"/);
+  assert.match(workflow("release-branch-check").jobs["release-branch-check"].steps.at(-1).run,
+    /validate-release "\$BASE_SHA" "\$RELEASE_BRANCH"/);
+  const sync = workflow("sync-changelog");
+  assert.deepEqual(sync.permissions, { contents: "read", "pull-requests": "read" });
+  assert.match(sync.jobs.sync.if, /microsoft\/aspire-skills/);
+  const syncSteps = sync.jobs.sync.steps;
+  assert.equal(syncSteps.find(step => step.id === "plan").env.GH_TOKEN, "${{ github.token }}");
+  const syncPush = syncSteps.find(step => step.name === "Push changelog branches");
+  assert.equal(syncPush.env.GH_TOKEN, "${{ steps.app-token.outputs.token }}");
+  assert.match(syncPush.run, /push "--force-with-lease=refs\/heads\/\$branch:\$current"/);
+  assert.equal(syncSteps.find(step => step.name === "Open changelog PRs").with["github-token"], "${{ steps.app-token.outputs.token }}");
   const publisher = workflow("publish").jobs.publish.steps.find(step => step.name === "Check release contents");
   assert.match(publisher.run, /npm run catalog:check/);
 });
@@ -477,10 +597,7 @@ test("release preparation only admits main dispatches and reuses CRLF-marked PRs
       }];
     }
   }, { repo: { owner: "microsoft", repo: "aspire-skills" } }, { summary, info() {} }, {
-    env: {
-      RELEASE_PLAN: JSON.stringify({ operation, marker, branches }),
-      GITHUB_SERVER_URL: "https://github.com", GITHUB_REPOSITORY: "microsoft/aspire-skills", GITHUB_RUN_ID: "1"
-    }
+    env: { RELEASE_PLAN: JSON.stringify({ operation, marker, branches }) }
   });
   assert.deepEqual(created, []);
 });

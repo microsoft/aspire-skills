@@ -84,8 +84,7 @@ jobs:
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
-            const {operation, marker, branches} = JSON.parse(process.env.RELEASE_PLAN);
-            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            const {marker, branches} = JSON.parse(process.env.RELEASE_PLAN);
             core.summary.addHeading("Prepared release");
             for (const {branch, base, title, description} of branches) {
               const pulls = await github.paginate(github.rest.pulls.list, {
@@ -103,7 +102,7 @@ jobs:
               } else {
                 ({data: pull} = await github.rest.pulls.create({
                   ...context.repo, head: branch, base, title,
-                  body: `${marker}\n\nSource commit: ${operation.source}\n\n${description}\n\nWorkflow: ${runUrl}`
+                  body: `${marker}\n\n${description}`
                 }));
               }
               core.info(`${branch}: ${pull.html_url}`);
