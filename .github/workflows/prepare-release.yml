@@ -7,10 +7,6 @@ on:
         description: Full dev source commit SHA
         required: true
         type: string
-      version:
-        description: Release version without v
-        required: true
-        type: string
       next_version:
         description: Next development version without v
         required: true
@@ -43,12 +39,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ inputs.source }}
-          RELEASE_VERSION: ${{ inputs.version }}
           NEXT_VERSION: ${{ inputs.next_version }}
         shell: bash
         run: |
           set -euo pipefail
-          plan=$(node scripts/release-automation.mjs prepare "$SOURCE_SHA" "$RELEASE_VERSION" "$NEXT_VERSION")
+          plan=$(node scripts/release-automation.mjs prepare "$SOURCE_SHA" "$NEXT_VERSION")
           echo "plan=$(jq -c . <<< "$plan")" >> "$GITHUB_OUTPUT"
       - name: Generate Aspire App token
         id: app-token

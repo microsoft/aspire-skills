@@ -9,10 +9,9 @@ import { Repository } from "../scripts/release-git.mjs";
 import { expectedCatalog, validateCatalog } from "../scripts/release-catalog.mjs";
 import { developmentVersionFiles } from "../scripts/version-development.mjs";
 import { versionSnapshot } from "../scripts/release-versions.mjs";
-import { commitFiles, ensurePullRequest, guardedPush, prepareRelease, releaseFiles, remoteHead, validateRelease } from "../scripts/release-automation.mjs";
+import { commitFiles, ensurePullRequest, guardedPush, prepareRelease, remoteHead, validateRelease } from "../scripts/release-automation.mjs";
 import { Changelog } from "../scripts/release-changelog.mjs";
 import { ReleaseOperation } from "../scripts/release-operation.mjs";
-import { runBackport, validateBackport } from "../scripts/backport.mjs";
 
 function fixture(t) {
   const directory = mkdtempSync(join(tmpdir(), "aspire-release-test-"));
@@ -48,7 +47,8 @@ function fixture(t) {
   repo.run(["update-ref", "refs/heads/main", main]);
   repo.run(["checkout", "--detach", main]);
   const { files } = developmentVersionFiles(repo, main, "0.0.4");
-  const dev = commitFiles(repo, main, files, "Development source");
+  const devVersion = commitFiles(repo, main, files, "Development version");
+  const dev = commitFiles(repo, devVersion, expectedCatalog(repo, devVersion), "Development catalogs", { replace: ["opencode"] });
   repo.run(["update-ref", "refs/heads/dev", dev]);
   repo.run(["push", "--quiet", "origin", "main", "dev"]);
   return { repo, root, main, dev };
@@ -56,15 +56,7 @@ function fixture(t) {
 
 function githubFixture() {
   const pulls = [];
-  const comments = [];
-  const sources = new Map();
   const api = (path, options = {}) => {
-    if (path.endsWith("/comments")) {
-      comments.push(options.body.body);
-      return { html_url: "https://github.com/example/test/comment/1" };
-    }
-    const number = /\/pulls\/(\d+)$/.exec(path)?.[1];
-    if (number) return sources.get(Number(number));
     if (options.method === "POST") {
       const pull = {
         number: pulls.length + 1, state: "open", body: options.body.body,
@@ -77,11 +69,11 @@ function githubFixture() {
     const branch = new URL(`https://api.github.com/${path}`).searchParams.get("head").split(":")[1];
     return pulls.filter(pull => pull.head.ref === branch);
   };
-  return { api, pulls, comments, sources };
+  return { api, pulls };
 }
 
-function prepareWithGithub(f, github, source, version, nextVersion) {
-  return prepareRelease(f.repo, { source, version, nextVersion }, {
+function prepareWithGithub(f, github, source, nextVersion) {
+  return prepareRelease(f.repo, { source, nextVersion }, {
     api: github.api, repository: "example/test"
   });
 }
@@ -94,55 +86,58 @@ function openPreparedPulls(github, plan) {
   }
 }
 
-test("preparation returns 0.0.5 release commits without publishing; reruns preserve edits", t => {
+test("preparation cuts the release at the selected dev commit; reruns preserve edits", t => {
   const f = fixture(t);
   const github = githubFixture();
-  const plan = prepareWithGithub(f, github, f.dev, "0.0.5", "0.0.6");
+  const plan = prepareWithGithub(f, github, f.dev, "0.0.5");
   assert.deepEqual(plan.branches.map(({commit, ...branch}) => branch), [
     {
-      kind: "release", branch: "release/0.0.5", base: "main", baseCommit: f.main, existing: false, title: "Release 0.0.5",
+      kind: "release", branch: "release/0.0.4", base: "main", baseCommit: f.main, existing: false, title: "Release 0.0.4",
       description: "Finalize the release notes and merge after required checks pass."
     },
     {
-      kind: "bump-dev", branch: "bump-dev/0.0.6", base: "dev", baseCommit: f.dev, existing: false, title: "Advance dev to 0.0.6",
-      description: "Advances coordinated versions, adds the next changelog heading, and regenerates catalogs."
+      kind: "bump-dev", branch: "bump-dev/0.0.5", base: "dev", baseCommit: f.dev, existing: false, title: "Advance dev to 0.0.5",
+      description: "`dev` is preparing release 0.0.4 from the source commit above.\n\n"
+        + "Before merging, incorporate newer `dev` changes and compare `CHANGELOG.md` with that commit. "
+        + "Move 0.0.4 entries added since then to 0.0.5, and keep the original 0.0.4 entries."
     }
   ]);
-  assert.deepEqual(plan.operation.toJSON(), { source: f.dev, version: "0.0.5", nextVersion: "0.0.6" });
+  assert.deepEqual(plan.operation.toJSON(), { source: f.dev, version: "0.0.4", nextVersion: "0.0.5" });
   assert.equal(plan.marker, plan.operation.comment());
   for (const {branch} of plan.branches) assert.equal(remoteHead(f.repo, branch), null);
   const [{commit: release}, {commit: bump}] = plan.branches;
-  validateRelease(f.repo, release, f.main, "release/0.0.5");
-  assert.equal(versionSnapshot(f.repo, bump).version, "0.0.6");
+  assert.equal(release, f.dev);
+  validateRelease(f.repo, release, f.main, "release/0.0.4");
+  assert.equal(versionSnapshot(f.repo, bump).version, "0.0.5");
   validateCatalog(f.repo, bump, expectedCatalog(f.repo, bump));
   assert.match(f.repo.read(bump, "package.json").toString(), /Preserve non-version metadata/);
   for (const {branch, commit} of plan.branches) guardedPush(f.repo, branch, commit, null);
   openPreparedPulls(github, plan);
   for (const pull of github.pulls) pull.body = pull.body.replaceAll("\n", "\r\n");
   const edited = commitFiles(f.repo, release, new Map([["maintainer.txt", Buffer.from("Keep this edit.\n")]]), "Maintainer review");
-  guardedPush(f.repo, "release/0.0.5", edited, release);
-  const retry = prepareWithGithub(f, github, f.dev, "0.0.5", "0.0.6");
+  guardedPush(f.repo, "release/0.0.4", edited, release);
+  const retry = prepareWithGithub(f, github, f.dev, "0.0.5");
   assert.deepEqual(retry.branches.map(({commit, existing}) => ({commit, existing})), [
     { commit: edited, existing: true }, { commit: bump, existing: true }
   ]);
-  assert.equal(remoteHead(f.repo, "release/0.0.5"), edited);
+  assert.equal(remoteHead(f.repo, "release/0.0.4"), edited);
   const advanced = commitFiles(f.repo, f.dev, new Map([["newer.txt", Buffer.from("New dev work.\n")]]), "New dev work");
   guardedPush(f.repo, "dev", advanced, f.dev);
-  const afterDevAdvance = prepareWithGithub(f, github, f.dev, "0.0.5", "0.0.6");
+  const afterDevAdvance = prepareWithGithub(f, github, f.dev, "0.0.5");
   assert.deepEqual(afterDevAdvance.branches.map(({commit, existing}) => ({commit, existing})), [
     { commit: edited, existing: true }, { commit: bump, existing: true }
   ]);
-  assert.throws(() => prepareWithGithub(f, github, f.dev, "0.0.5", "0.0.7"), /does not match this automation operation/);
+  assert.throws(() => prepareWithGithub(f, github, f.dev, "0.0.6"), /does not match this automation operation/);
 });
 
 test("preparation resumes when the workflow has pushed only one branch", t => {
   const f = fixture(t);
   const github = githubFixture();
-  const plan = prepareWithGithub(f, github, f.dev, "0.0.4", "0.0.5");
+  const plan = prepareWithGithub(f, github, f.dev, "0.0.5");
   const release = plan.branches[0];
-  assert.doesNotMatch(f.repo.run(["log", "--format=%s", release.commit, "--not", f.dev]), /Prepare release/);
+  assert.equal(release.commit, f.dev);
   guardedPush(f.repo, release.branch, release.commit, null);
-  const retry = prepareWithGithub(f, github, f.dev, "0.0.4", "0.0.5");
+  const retry = prepareWithGithub(f, github, f.dev, "0.0.5");
   assert.deepEqual(retry.branches[0], { ...release, existing: true });
   assert.equal(retry.branches[1].existing, false);
   assert.equal(remoteHead(f.repo, retry.branches[1].branch), null);
@@ -151,11 +146,10 @@ test("preparation resumes when the workflow has pushed only one branch", t => {
 test("preparation rejects invalid versions, unrelated sources, and existing tags or branches", t => {
   const f = fixture(t);
   const github = githubFixture();
-  const prepare = (source = f.dev, version = "0.0.4", next = "0.0.5") =>
-    prepareWithGithub(f, github, source, version, next);
-  assert.throws(() => prepare(f.dev, "v0.0.4"), /SemVer/);
-  assert.throws(() => prepare(f.dev, "0.0.4", "0.0.4"), /newer than the release/);
-  assert.throws(() => prepare(f.dev, "0.0.3"), /newer than main/);
+  const prepare = (source = f.dev, next = "0.0.5") => prepareWithGithub(f, github, source, next);
+  assert.throws(() => prepare(f.dev, "v0.0.5"), /SemVer/);
+  assert.throws(() => prepare(f.dev, "0.0.4"), /newer than the release/);
+  assert.throws(() => prepare(f.main), /newer than main/);
   const unrelated = commitFiles(f.repo, null, new Map([["unrelated", Buffer.from("Unrelated")]]), "Unrelated root");
   assert.throws(() => prepare(unrelated), /git merge-base failed/);
   const unexpected = commitFiles(f.repo, f.dev, new Map([["unexpected.txt", Buffer.from("Not generated.\n")]]), "Unrelated branch work");
@@ -166,29 +160,93 @@ test("preparation rejects invalid versions, unrelated sources, and existing tags
   assert.throws(() => prepare(), /published tag/);
 });
 
-test("release version alignment keeps historical notes and rejects historical edits", t => {
+test("preparation uses the selected commit's version when dev has advanced", t => {
   const f = fixture(t);
   const github = githubFixture();
-  const release = prepareWithGithub(f, github, f.dev, "0.0.6", "0.0.7").branches[0].commit;
-  assert.equal(versionSnapshot(f.repo, release).version, "0.0.6");
-  assert.match(f.repo.read(release, "CHANGELOG.md").toString(), /## \[0\.0\.6\]/);
-  const bad = commitFiles(f.repo, release, new Map([["CHANGELOG.md", Buffer.from(
-    f.repo.read(release, "CHANGELOG.md").toString().replace("Approved notes.", "Rewritten history.")
+  const { files } = developmentVersionFiles(f.repo, f.dev, "0.0.5");
+  const advancedVersion = commitFiles(f.repo, f.dev, files, "Advance development");
+  const advanced = commitFiles(f.repo, advancedVersion, expectedCatalog(f.repo, advancedVersion),
+    "Update development catalogs", { replace: ["opencode"] });
+  guardedPush(f.repo, "dev", advanced, f.dev);
+
+  const plan = prepareWithGithub(f, github, f.dev, "0.0.6");
+  assert.equal(plan.operation.version, "0.0.4");
+  assert.equal(plan.branches[0].branch, "release/0.0.4");
+  assert.equal(plan.branches[0].commit, f.dev);
+  assert.equal(plan.branches[1].baseCommit, advanced);
+  assert.equal(versionSnapshot(f.repo, plan.branches[1].commit).version, "0.0.6");
+  assert.throws(() => prepareWithGithub(f, github, f.dev, "0.0.5"), /newer than dev/);
+});
+
+test("preparation leaves stale catalogs for the PR check", t => {
+  const f = fixture(t);
+  const github = githubFixture();
+  const path = "skills/aspire/SKILL.md";
+  const stale = commitFiles(f.repo, f.dev, new Map([[path, Buffer.concat([
+    f.repo.read(f.dev, path), Buffer.from("\nA new skill change.\n")
+  ])]]), "Change skill without updating catalogs");
+  guardedPush(f.repo, "dev", stale, f.dev);
+
+  const plan = prepareWithGithub(f, github, stale, "0.0.5");
+  assert.equal(plan.branches[0].commit, stale);
+  assert.throws(() => validateCatalog(f.repo, stale, expectedCatalog(f.repo, stale)), /Catalog bytes or SHA-512/);
+  assert.equal(remoteHead(f.repo, "release/0.0.4"), null);
+});
+
+test("the bump PR identifies the release snapshot and explains later changelog entries", async t => {
+  const f = fixture(t);
+  const github = githubFixture();
+  const heading = Changelog.read(f.repo, f.dev).section("0.0.4");
+  const atSource = f.repo.read(f.dev, "CHANGELOG.md").toString().replace(heading, `${heading}\n\nRelease note.`);
+  const source = commitFiles(f.repo, f.dev, new Map([["CHANGELOG.md", Buffer.from(atSource)]]), "Release snapshot");
+  const later = commitFiles(f.repo, source, new Map([["CHANGELOG.md", Buffer.from(
+    atSource.replace("Release note.", "Release note.\n\nLater dev note.")
+  )]]), "Later dev note");
+  guardedPush(f.repo, "dev", later, f.dev);
+
+  const plan = prepareWithGithub(f, github, source, "0.0.5");
+  assert.equal(plan.branches[0].commit, source);
+  const bumpChangelog = Changelog.read(f.repo, plan.branches[1].commit);
+  assert.equal(bumpChangelog.notes("0.0.4"), "Release note.\n\nLater dev note.");
+  assert.equal(bumpChangelog.notes("0.0.5"), "");
+
+  const workflow = parse(readFileSync(new URL("../.github/workflows/prepare-release.yml", import.meta.url), "utf8"));
+  const script = workflow.jobs.prepare.steps.find(step => step.name === "Open release and development PRs").with.script;
+  const run = new (Object.getPrototypeOf(async function () {}).constructor)("github", "context", "core", "process", script);
+  const created = [];
+  const summary = { addHeading() {}, addLink() { return this; }, addEOL() {}, async write() {} };
+  await run({
+    rest: { pulls: { list() {}, async create(pull) {
+      created.push(pull);
+      return { data: { ...pull, html_url: `https://github.com/example/test/pull/${created.length}` } };
+    } } },
+    async paginate() { return []; }
+  }, { repo: { owner: "example", repo: "test" } }, { summary, info() {} }, {
+    env: {
+      RELEASE_PLAN: JSON.stringify(plan), GITHUB_SERVER_URL: "https://github.com",
+      GITHUB_REPOSITORY: "example/test", GITHUB_RUN_ID: "1"
+    }
+  });
+  const body = created.find(pull => pull.head === "bump-dev/0.0.5").body;
+  assert.ok(body.includes(`Source commit: ${source}`));
+  assert.match(body, /`dev` is preparing release 0\.0\.4 from the source commit above/);
+  assert.match(body, /incorporate newer `dev` changes and compare `CHANGELOG\.md` with that commit/);
+  assert.match(body, /Move 0\.0\.4 entries added since then to 0\.0\.5/);
+  assert.match(body, /keep the original 0\.0\.4 entries/);
+});
+
+test("release validation rejects changes to published notes", t => {
+  const f = fixture(t);
+  const bad = commitFiles(f.repo, f.dev, new Map([["CHANGELOG.md", Buffer.from(
+    f.repo.read(f.dev, "CHANGELOG.md").toString().replace("Approved notes.", "Rewritten history.")
   )]]), "Corrupt history");
   assert.throws(() => validateRelease(f.repo, bad, f.main), /Approved changelog history/);
-  const bootstrap = commitFiles(f.repo, f.main, releaseFiles(f.repo, f.main, "0.0.4", f.main), "Bootstrap next release");
-  const bootstrapNotes = f.repo.read(bootstrap, "CHANGELOG.md").toString();
-  assert.match(bootstrapNotes, /## \[0\.0\.4\]/);
-  assert.ok(bootstrapNotes.endsWith(f.repo.read(f.main, "CHANGELOG.md").toString().split("\n\n").slice(1).join("\n\n")));
-  assert.equal(versionSnapshot(f.repo, bootstrap).version, "0.0.4");
 });
 
 test("release checks reject empty notes before a candidate can merge", t => {
   const f = fixture(t);
-  const release = commitFiles(f.repo, f.dev, releaseFiles(f.repo, f.dev, "0.0.5", f.main), "Release candidate");
-  const candidate = commitFiles(f.repo, release, expectedCatalog(f.repo, release), "Generate release catalogs", { replace: ["opencode"] });
-  assert.doesNotThrow(() => validateRelease(f.repo, candidate, f.main, "release/0.0.5"));
-  assert.throws(() => validateRelease(f.repo, candidate, f.main, "release/0.0.5", { requireNotes: true }),
+  assert.doesNotThrow(() => validateRelease(f.repo, f.dev, f.main, "release/0.0.4"));
+  assert.throws(() => validateRelease(f.repo, f.dev, f.main, "release/0.0.4", { requireNotes: true }),
     /notes must be finalized/);
 });
 
@@ -219,64 +277,11 @@ test("changelogs reject out-of-order sections and preserve line endings", () => 
   assert.equal(changelog.withNewSection("0.0.5").toBuffer().toString(), text.replace(heading("0.0.4"), `${heading("0.0.5")}\r\n\r\n${heading("0.0.4")}`));
   assert.throws(() => changelog.withNewSection("0.0.3"), /descending order/);
   assert.throws(() => changelog.withNewSection("0.0.4"), /already has 0\.0\.4/);
-  assert.throws(() => changelog.withNewSection("0.0.5").withNewestRenamed("0.0.4"), /already has 0\.0\.4/);
   assert.throws(() => changelog.withNewSection("not-a-version"), /SemVer/);
   assert.throws(() => Changelog.parse(`# Changelog\n\n## [0.0.4](https://example.com/v0.0.4)\n`), /Invalid changelog section/);
   assert.throws(() => Changelog.parse(`# Changelog\n\n${heading("0.0.4")}\n\n${heading("0.0.4")}\n`), /duplicate/);
   assert.throws(() => new Changelog(Symbol("Changelog"), "", new Map(), "\n"), /Changelog\.parse/);
   assert.ok(Object.isFrozen(changelog));
-});
-
-test("release backport refuses to overwrite changelog edits made after the selected source", t => {
-  const f = fixture(t);
-  const github = githubFixture();
-  const path = "CHANGELOG.md";
-  const released = f.dev;
-  const laterNotes = f.repo.read(released, path).toString().replace("Approved notes.", "Approved notes.\n\nLater dev notes.");
-  const newer = commitFiles(f.repo, released, new Map([[path, Buffer.from(laterNotes)]]), "Later dev notes");
-  guardedPush(f.repo, "dev", newer, released);
-  const plan = prepareWithGithub(f, github, released, "0.0.4", "0.0.5");
-  const release = commitFiles(f.repo, plan.branches[0].commit, new Map([[path,
-    Buffer.from(f.repo.read(plan.branches[0].commit, path).toString().replace("Approved notes.", "Final release notes."))
-  ]]), "Finalize release notes");
-  mergeReleasePull(f, github, 49, release, plan.branches[1].commit, plan.marker);
-  assert.throws(() => runBackport(f.repo, {
-    repository: "example/test", number: 49, mode: "automatic", api: github.api
-  }), /changed after the release source/);
-  assert.equal(remoteHead(f.repo, "backport/pr-49-to-dev"), null);
-});
-
-test("release backport requires the dev version bump to merge first", t => {
-  const f = fixture(t);
-  const github = githubFixture();
-  const plan = prepareWithGithub(f, github, f.dev, "0.0.4", "0.0.5");
-  const release = plan.branches[0].commit;
-  const tree = new Map([...f.repo.files(release).keys()].map(path => [path, f.repo.read(release, path)]));
-  const source = commitFiles(f.repo, f.main, tree, "Merge release PR");
-  guardedPush(f.repo, "main", source, f.main);
-  sourcePull(github, 50, source, "main", release);
-  Object.assign(github.sources.get(50), { body: plan.marker, head: { sha: release, ref: "release/0.0.4" } });
-  assert.throws(() => runBackport(f.repo, {
-    repository: "example/test", number: 50, mode: "automatic", api: github.api
-  }), /Merge the dev version bump to 0\.0\.5/);
-  assert.equal(remoteHead(f.repo, "backport/pr-50-to-dev"), null);
-});
-
-test("automatic release backport rejects a missing source marker", t => {
-  const f = fixture(t);
-  const github = githubFixture();
-  const plan = prepareWithGithub(f, github, f.dev, "0.0.4", "0.0.5");
-  const release = plan.branches[0].commit;
-  const tree = new Map([...f.repo.files(release).keys()].map(path => [path, f.repo.read(release, path)]));
-  const source = commitFiles(f.repo, f.main, tree, "Merge release PR");
-  guardedPush(f.repo, "main", source, f.main);
-  guardedPush(f.repo, "dev", plan.branches[1].commit, f.dev);
-  sourcePull(github, 51, source, "main", release);
-  Object.assign(github.sources.get(51), { head: { sha: release, ref: "release/0.0.4" } });
-  assert.throws(() => runBackport(f.repo, {
-    repository: "example/test", number: 51, mode: "automatic", api: github.api
-  }), /must record its release operation/);
-  assert.equal(remoteHead(f.repo, "backport/pr-51-to-dev"), null);
 });
 
 test("PR deduplication refuses closed PRs and unrelated branch identities", () => {
@@ -308,214 +313,135 @@ test("a remote update between the last read and push is rejected by the lease", 
   assert.equal(remoteHead(f.repo, branch), newer);
 });
 
-function sourcePull(github, number, source, base, head = source) {
-  github.sources.set(number, {
-    number, merged: true, merge_commit_sha: source, base: { ref: base, repo: { full_name: "example/test" } },
-    head: { sha: head, ref: "contributor-branch" }, title: "Fix an important instruction", user: { login: "contributor", id: 1 }, body: ""
-  });
-}
-
-function mergeReleasePull(f, github, number, release, devBump, marker) {
-  const releaseTree = new Map([...f.repo.files(release).keys()].map(path => [path, f.repo.read(release, path)]));
-  const source = commitFiles(f.repo, f.main, releaseTree, "Merge release PR");
-  guardedPush(f.repo, "main", source, f.main);
-  guardedPush(f.repo, "dev", devBump, remoteHead(f.repo, "dev"));
-  sourcePull(github, number, source, "main", release);
-  Object.assign(github.sources.get(number), {
-    body: marker.replaceAll("\n", "\r\n"),
-    head: { sha: release, ref: "release/0.0.4" }
-  });
-}
-
-test("Arcade patch backport preserves unrelated target work and reruns reuse the PR", t => {
-  const f = fixture(t);
-  const github = githubFixture();
-  const source = commitFiles(f.repo, f.dev, new Map([["skills/aspire/fix.md", Buffer.from("Selected fix.\n")]]), "Selected fix");
-  guardedPush(f.repo, "dev", source, f.dev);
-  const candidate = commitFiles(f.repo, f.dev, new Map([["skills/aspire/newer.md", Buffer.from("Keep candidate work.\n")]]), "Candidate work");
-  guardedPush(f.repo, "release/0.0.4", candidate, null);
-  sourcePull(github, 42, source, "dev");
-  const options = { repository: "example/test", number: 42, target: "release/0.0.4", mode: "manual", api: github.api };
-  assert.throws(() => runBackport(f.repo, { ...options, mode: undefined }), /Backport mode/);
-  assert.throws(() => runBackport(f.repo, { ...options, mode: "automatic" }), /always target dev/);
-  assert.throws(() => runBackport(f.repo, { ...options, target: "dev" }), /Invalid backport target/);
-  assert.throws(() => runBackport(f.repo, { ...options, repository: undefined }), /owner\/name/);
-  runBackport(f.repo, options);
-  const backport = remoteHead(f.repo, "backport/pr-42-to-release/0.0.4");
-  assert.equal(f.repo.read(backport, "skills/aspire/fix.md").toString(), "Selected fix.\n");
-  assert.equal(f.repo.read(backport, "skills/aspire/newer.md").toString(), "Keep candidate work.\n");
-  assert.equal(versionSnapshot(f.repo, backport).version, "0.0.4");
-  assert.match(f.repo.run(["log", "--format=%an <%ae>%n%B", backport, "--not", candidate]),
-    /^contributor <1\+contributor@users\.noreply\.github\.com>\nFix an important instruction\n\nBackport of #42\.$/m);
-  assert.equal(runBackport(f.repo, options).number, 1);
-  assert.equal(github.pulls.length, 1);
-  github.pulls[0].state = "closed";
-  assert.throws(() => runBackport(f.repo, options), /already closed/);
-});
-
-test("automatic main-to-dev backport regenerates catalogs for the dev target", t => {
-  const f = fixture(t);
-  const github = githubFixture();
-  const release = commitFiles(f.repo, f.dev, expectedCatalog(f.repo, f.dev), "Released catalogs", { replace: ["opencode"] });
-  const newer = commitFiles(f.repo, f.dev, new Map([["skills/aspire/newer.md", Buffer.from("Unreleased work.\n")]]), "New dev work");
-  guardedPush(f.repo, "main", release, f.main);
-  guardedPush(f.repo, "dev", newer, f.dev);
-  sourcePull(github, 43, release, "main");
-  runBackport(f.repo, { repository: "example/test", number: 43, mode: "automatic", api: github.api });
-  const backport = remoteHead(f.repo, "backport/pr-43-to-dev");
-  assert.equal(f.repo.read(backport, "skills/aspire/newer.md").toString(), "Unreleased work.\n");
-  validateCatalog(f.repo, backport, expectedCatalog(f.repo, backport));
-});
-
-test("automatic release backport preserves the bumped dev version", t => {
-  const f = fixture(t);
-  const github = githubFixture();
-  const plan = prepareWithGithub(f, github, f.dev, "0.0.4", "0.0.5");
-  const release = commitFiles(f.repo, plan.branches[0].commit, new Map([["CHANGELOG.md",
-    Buffer.from(f.repo.read(plan.branches[0].commit, "CHANGELOG.md").toString().replace("Approved notes.", "Final release notes."))
-  ]]), "Finalize release notes");
-  const devBump = plan.branches[1].commit;
-  mergeReleasePull(f, github, 46, release, devBump, plan.marker);
-
-  runBackport(f.repo, { repository: "example/test", number: 46, mode: "automatic", api: github.api });
-
-  const backport = remoteHead(f.repo, "backport/pr-46-to-dev");
-  assert.equal(versionSnapshot(f.repo, backport).version, "0.0.5");
-  const changelog = f.repo.read(backport, "CHANGELOG.md").toString();
-  assert.match(changelog, /^## \[0\.0\.5\].*^## \[0\.0\.4\].*Final release notes\./ms);
-  assert.equal(changelog.includes("Approved notes."), false);
-  const bumpedChangelog = f.repo.read(devBump, "CHANGELOG.md").toString();
-  assert.equal(
-    changelog.slice(changelog.indexOf("## [0.0.5]"), changelog.indexOf("## [0.0.4]")),
-    bumpedChangelog.slice(bumpedChangelog.indexOf("## [0.0.5]"), bumpedChangelog.indexOf("## [0.0.4]"))
-  );
-  validateCatalog(f.repo, backport, expectedCatalog(f.repo, backport));
-});
-
-test("automatic release backport carries manifest content edits at the dev version", t => {
-  const f = fixture(t);
-  const github = githubFixture();
-  const plan = prepareWithGithub(f, github, f.dev, "0.0.4", "0.0.5");
-  const body = f.repo.read(plan.branches[0].commit, "skills/aspire/SKILL.md").toString().replace("# Aspire", "# Aspire hotfix");
-  const release = commitFiles(f.repo, plan.branches[0].commit, new Map([["skills/aspire/SKILL.md", Buffer.from(body)]]), "Hotfix skill");
-  mergeReleasePull(f, github, 47, release, plan.branches[1].commit, plan.marker);
-
-  runBackport(f.repo, { repository: "example/test", number: 47, mode: "automatic", api: github.api });
-
-  const backport = remoteHead(f.repo, "backport/pr-47-to-dev");
-  assert.match(f.repo.read(backport, "skills/aspire/SKILL.md").toString(), /version: 0\.0\.5\n[\s\S]*# Aspire hotfix/);
-  assert.equal(versionSnapshot(f.repo, backport).version, "0.0.5");
-});
-
-test("automatic release backport does not replay dev history from before the release source", t => {
-  const f = fixture(t);
-  const github = githubFixture();
-  const released = commitFiles(f.repo, f.dev, new Map([["skills/aspire/links.md", Buffer.from("Released link.\n")]]), "Released dev work");
-  const newer = commitFiles(f.repo, released, new Map([["skills/aspire/links.md", Buffer.from("Newer dev link.\n")]]), "Newer dev work");
-  guardedPush(f.repo, "dev", newer, f.dev);
-  const plan = prepareWithGithub(f, github, released, "0.0.4", "0.0.5");
-  const release = commitFiles(f.repo, plan.branches[0].commit, new Map([["skills/aspire/fix.md", Buffer.from("Release fix.\n")]]), "Release fix");
-  mergeReleasePull(f, github, 48, release, plan.branches[1].commit, plan.marker);
-
-  runBackport(f.repo, { repository: "example/test", number: 48, mode: "automatic", api: github.api });
-
-  const backport = remoteHead(f.repo, "backport/pr-48-to-dev");
-  assert.equal(f.repo.read(backport, "skills/aspire/links.md").toString(), "Newer dev link.\n");
-  assert.equal(f.repo.read(backport, "skills/aspire/fix.md").toString(), "Release fix.\n");
-});
-
-test("backports skip catalog hunks that would conflict and regenerate them", t => {
-  const f = fixture(t);
-  const github = githubFixture();
-  const catalog = [...expectedCatalog(f.repo, f.dev).keys()][0];
-  const source = commitFiles(f.repo, f.dev, new Map([
-    ["skills/aspire/fix.md", Buffer.from("Selected fix.\n")], [catalog, Buffer.from("source catalog\n")]
-  ]), "Fix with catalogs");
-  const target = commitFiles(f.repo, f.dev, new Map([[catalog, Buffer.from("target catalog\n")]]), "Target catalogs");
-  guardedPush(f.repo, "dev", source, f.dev);
-  guardedPush(f.repo, "release/0.0.4", target, null);
-  sourcePull(github, 45, source, "dev");
-  // Non-release PRs may quote a marker; it must not change the patch base.
-  github.sources.get(45).body = "Docs example: <!-- Aspire-Release-Source: <sha>";
-  runBackport(f.repo, { repository: "example/test", number: 45, target: "release/0.0.4", mode: "manual", api: github.api });
-  const backport = remoteHead(f.repo, "backport/pr-45-to-release/0.0.4");
-  assert.equal(f.repo.read(backport, "skills/aspire/fix.md").toString(), "Selected fix.\n");
-  validateCatalog(f.repo, backport, expectedCatalog(f.repo, backport));
-});
-
-test("Arcade patch conflicts are reported and create no branch or success-shaped PR", t => {
-  const f = fixture(t);
-  const github = githubFixture();
-  const source = commitFiles(f.repo, f.dev, new Map([["skills/aspire/links.md", Buffer.from("Source fix.\n")]]), "Conflicting source");
-  const target = commitFiles(f.repo, f.dev, new Map([["skills/aspire/links.md", Buffer.from("Different target fix.\n")]]), "Target work");
-  guardedPush(f.repo, "dev", source, f.dev);
-  guardedPush(f.repo, "release/0.0.4", target, null);
-  sourcePull(github, 44, source, "dev");
-  const options = { repository: "example/test", number: 44, target: "release/0.0.4", mode: "manual", api: github.api };
-  assert.throws(() => runBackport(f.repo, options), /git am failed/);
-  assert.equal(remoteHead(f.repo, "backport/pr-44-to-release/0.0.4"), null);
-  assert.equal(github.pulls.length, 0);
-  assert.match(github.comments.at(-1), /failed.*Please backport manually/);
-
-  f.repo.run(["am", "--abort"]);
-  const quiet = console.error;
-  console.error = () => {};
-  t.after(() => { console.error = quiet; });
-  const api = (path, request) => {
-    if (path.endsWith("/comments") && request.body.body.includes("failed")) throw new Error("comment API unavailable");
-    return github.api(path, request);
-  };
-  assert.throws(() => runBackport(f.repo, { ...options, api }), /git am failed/);
-});
-
-test("backport preservation checks reject version changes and loss of dev notes", t => {
-  const f = fixture(t);
-  const bump = commitFiles(f.repo, f.dev, developmentVersionFiles(f.repo, f.dev, "0.0.5").files, "Version change");
-  assert.throws(() => validateBackport(f.repo, f.dev, bump, f.main, "dev"), /coordinated version/);
-  const changed = commitFiles(f.repo, f.dev, new Map([["CHANGELOG.md", Buffer.from(
-    f.repo.read(f.dev, "CHANGELOG.md").toString().replace("## [0.0.4]", "New notes.\n\n## [0.0.4]")
-  )]]), "Add prefix");
-  assert.doesNotThrow(() => validateBackport(f.repo, f.dev, changed, f.main, "dev"));
-  const lost = commitFiles(f.repo, f.dev, new Map([["CHANGELOG.md", f.repo.read(f.main, "CHANGELOG.md")]]), "Lose heading");
-  assert.throws(() => validateBackport(f.repo, f.dev, lost, f.main, "dev"), /current changelog heading/);
-});
-
-test("workflow wiring keeps fork validation unprivileged and bot checks on final candidates", () => {
+test("release workflow wiring keeps preparation unprivileged and bot checks on candidates", () => {
   const workflow = name => parse(readFileSync(new URL(`../.github/workflows/${name}.yml`, import.meta.url), "utf8"));
-  for (const name of ["prepare-release", "backport"]) {
-    const config = workflow(name);
-    assert.equal(config.permissions.contents, "read");
-    if (name === "prepare-release") assert.equal(config.permissions["pull-requests"], "read");
-    assert.equal(config.on.pull_request_target, undefined);
-    assert.equal(config.concurrency["cancel-in-progress"], false);
-    const job = Object.values(config.jobs)[0];
-    assert.match(job.if, /microsoft\/aspire-skills/);
-    const checkout = job.steps.find(step => step.uses?.startsWith("actions/checkout@"));
-    assert.equal(checkout.with.ref, "main");
-    assert.equal(checkout.with["persist-credentials"], false);
-    const token = job.steps.find(step => step.uses?.startsWith("actions/create-github-app-token@"));
-    assert.equal(token.with["client-id"], "${{ secrets.ASPIRE_BOT_APP_ID }}");
-    assert.equal(token.with["private-key"], "${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}");
-  }
-  const preparation = workflow("prepare-release").jobs.prepare.steps;
-  assert.equal(preparation.find(step => step.id === "prepare").env.GH_TOKEN, "${{ github.token }}");
+  const config = workflow("prepare-release");
+  assert.deepEqual(Object.keys(config.on.workflow_dispatch.inputs), ["source", "next_version"]);
+  assert.equal(config.permissions.contents, "read");
+  assert.equal(config.permissions["pull-requests"], "read");
+  assert.equal(config.on.pull_request_target, undefined);
+  assert.equal(config.concurrency["cancel-in-progress"], false);
+  const job = config.jobs.prepare;
+  assert.match(job.if, /microsoft\/aspire-skills/);
+  const checkout = job.steps.find(step => step.uses?.startsWith("actions/checkout@"));
+  assert.equal(checkout.with.ref, "main");
+  assert.equal(checkout.with["persist-credentials"], false);
+  const token = job.steps.find(step => step.uses?.startsWith("actions/create-github-app-token@"));
+  assert.equal(token.with["client-id"], "${{ secrets.ASPIRE_BOT_APP_ID }}");
+  assert.equal(token.with["private-key"], "${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}");
+  const preparation = job.steps;
+  const prepare = preparation.find(step => step.id === "prepare");
+  assert.equal(prepare.env.GH_TOKEN, "${{ github.token }}");
+  assert.match(prepare.run, /prepare "\$SOURCE_SHA" "\$NEXT_VERSION"/);
   const push = preparation.find(step => step.name === "Push release and development branches");
   assert.equal(push.env.GH_TOKEN, "${{ steps.app-token.outputs.token }}");
   assert.match(push.run, /push "--force-with-lease=refs\/heads\/\$branch:"/);
   const open = preparation.find(step => step.name === "Open release and development PRs");
   assert.equal(open.with["github-token"], "${{ steps.app-token.outputs.token }}");
   assert.match(open.with.script, /github\.rest\.pulls\.create/);
-  const backport = workflow("backport");
-  assert.equal(backport.on.issue_comment, undefined);
-  assert.deepEqual(backport.on.pull_request, { branches: ["main"], types: ["closed"] });
-  assert.ok(backport.on.workflow_dispatch.inputs.source_pr);
-  assert.ok(backport.on.workflow_dispatch.inputs.target_branch);
-  const backportRun = backport.jobs.backport.steps.find(step => step.name === "Run Arcade patch backport").run;
-  assert.match(backportRun, /backport\.mjs "\$SOURCE_PR" automatic\n/);
-  assert.match(backportRun, /backport\.mjs "\$SOURCE_PR" manual "\$TARGET_BRANCH"/);
   assert.ok(Object.hasOwn(workflow("test").on, "merge_group"));
+  const catalogCheck = workflow("catalog-check").jobs["catalog-check"].steps.find(step => step.name === "Reject catalog drift");
+  assert.equal(catalogCheck.run, "npm run catalog:check");
   const publisher = workflow("publish").jobs.publish.steps.find(step => step.name === "Check release contents");
   assert.match(publisher.run, /npm run catalog:check/);
+});
+
+test("Aspire backport workflow checks the repository and commenter before using the app", async () => {
+  const workflow = parse(readFileSync(new URL("../.github/workflows/backport.yml", import.meta.url), "utf8"));
+  assert.deepEqual(workflow.on.issue_comment, { types: ["created"] });
+  const job = workflow.jobs.backport;
+  const allowed = new Function("github", "contains", `return (${job.if});`);
+  const event = { issue: { pull_request: {} }, comment: { body: "/backport to release/0.0.4" } };
+  const github = { repository: "microsoft/aspire-skills", event_name: "issue_comment", event };
+  const contains = (value, text) => value.includes(text);
+  assert.equal(allowed(github, contains), true);
+  assert.equal(allowed({ ...github, repository: "fork/aspire-skills" }, contains), false);
+  assert.equal(allowed({ ...github, event_name: "schedule" }, contains), false);
+  assert.equal(allowed({ ...github, event: { ...event, issue: { pull_request: "" } } }, contains), false);
+  assert.equal(allowed({ ...github, event: { ...event, comment: { body: "hello" } } }, contains), false);
+  const cleanupAllowed = new Function("github", `return (${workflow.jobs.cleanup.if});`);
+  assert.equal(cleanupAllowed({ ...github, event_name: "schedule" }), true);
+  assert.equal(cleanupAllowed({ ...github, event_name: "schedule", repository: "fork/aspire-skills" }), false);
+
+  const steps = job.steps;
+  const permissionIndex = steps.findIndex(step => step.name === "Verify user has write access");
+  const tokenIndex = steps.findIndex(step => step.id === "app-token");
+  assert.ok(permissionIndex >= 0 && tokenIndex > permissionIndex);
+  const token = steps[tokenIndex];
+  assert.equal(token.with["client-id"], "${{ secrets.ASPIRE_BOT_APP_ID }}");
+  assert.equal(token.with["private-key"], "${{ secrets.ASPIRE_BOT_PRIVATE_KEY }}");
+  const checkout = steps.find(step => step.name === "Checkout repo");
+  assert.equal(checkout.with.token, "${{ steps.app-token.outputs.token }}");
+  const backport = steps.find(step => step.name === "Run backport");
+  assert.equal(backport.env.GH_TOKEN, "${{ steps.app-token.outputs.token }}");
+  assert.equal(backport.with["github-token"], "${{ steps.app-token.outputs.token }}");
+
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+  const verify = new AsyncFunction("github", "context", "core", steps[permissionIndex].with.script);
+  const context = { repo: { owner: "microsoft", repo: "aspire-skills" }, payload: { comment: { user: { login: "requester" } } } };
+  for (const permission of ["write", "read"]) {
+    const failures = [];
+    await verify({ rest: { repos: { async getCollaboratorPermissionLevel(request) {
+      assert.equal(request.username, "requester");
+      return { data: { permission } };
+    } } } }, context, { setFailed: message => failures.push(message) });
+    assert.equal(failures.length, permission === "write" ? 0 : 1);
+  }
+  const extract = new AsyncFunction("context", `let target_branch;\n${steps.find(step => step.id === "target-branch-extractor").with.script}`);
+  assert.equal(await extract({ eventName: "issue_comment", payload: { comment: event.comment } }), "release/0.0.4");
+});
+
+test("Aspire backport workflow applies a PR patch and opens a backport PR", async t => {
+  const f = fixture(t);
+  const source = commitFiles(f.repo, f.dev, new Map([["skills/aspire/fix.md", Buffer.from("Selected fix.\n")]]), "Selected fix");
+  const target = commitFiles(f.repo, f.dev, new Map([["skills/aspire/newer.md", Buffer.from("Target work.\n")]]), "Target work");
+  guardedPush(f.repo, "dev", source, f.dev);
+  guardedPush(f.repo, "release/0.0.4", target, null);
+  f.repo.run(["fetch", "origin"]);
+  const patch = f.repo.run(["format-patch", "--stdout", "--binary", "-1", source], { binary: true });
+
+  const workflow = parse(readFileSync(new URL("../.github/workflows/backport.yml", import.meta.url), "utf8"));
+  const step = workflow.jobs.backport.steps.find(item => item.name === "Run backport");
+  const script = step.with.script.replaceAll("${{ steps.target-branch-extractor.outputs.result }}", "release/0.0.4");
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+  const run = new AsyncFunction("github", "context", "core", "exec", "process", script);
+  const pulls = [];
+  const failures = [];
+  const github = { rest: {
+    pulls: { async create(request) {
+      pulls.push(request);
+      return { data: { number: 1, html_url: "https://github.com/example/test/pull/1" } };
+    } },
+    issues: { async createComment() { return { data: { html_url: "https://github.com/example/test/comment/1" } }; } }
+  } };
+  const context = {
+    repo: { owner: "example", repo: "test" }, serverUrl: "https://github.com", runId: 1,
+    payload: {
+      repository: { owner: { login: "example" }, name: "test" },
+      issue: { number: 42, title: "Selected fix", user: { login: "contributor" } },
+      comment: { user: { login: "maintainer" } }
+    }
+  };
+  const exec = { async exec(command, _args, options = {}) {
+    if (command === "git clean -xdff") return 0;
+    if (command === 'bash -c "gh pr diff --patch 42 > changes.patch"') {
+      writeFileSync(join(f.root, "changes.patch"), patch);
+      return 0;
+    }
+    const args = command.match(/"[^"]*"|\S+/g).map(arg => arg.replace(/^"|"$/g, ""));
+    assert.equal(args.shift(), "git");
+    const output = f.repo.run(args);
+    if (options.listeners?.stdout) options.listeners.stdout(Buffer.from(output));
+    return 0;
+  } };
+  await run(github, context, { setFailed: message => failures.push(message) }, exec, { env: step.env });
+  assert.deepEqual(failures, []);
+  assert.deepEqual(pulls.map(({ head, base }) => ({ head, base })), [
+    { head: "backport/pr-42-to-release/0.0.4", base: "release/0.0.4" }
+  ]);
+  const backport = remoteHead(f.repo, pulls[0].head);
+  assert.equal(f.repo.read(backport, "skills/aspire/fix.md").toString(), "Selected fix.\n");
+  assert.equal(f.repo.read(backport, "skills/aspire/newer.md").toString(), "Target work.\n");
 });
 
 test("release preparation only admits main dispatches and reuses CRLF-marked PRs", async () => {

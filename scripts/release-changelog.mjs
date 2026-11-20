@@ -82,26 +82,9 @@ export class Changelog {
     }
   }
 
-  withNewestRenamed(version) {
-    const newest = this.newest;
-    if (version !== newest && this.#sections.has(version)) throw new Error(`Changelog already has ${version}.`);
-    const sections = new Map(this.#sections);
-    const section = sections.get(newest);
-    sections.delete(newest);
-    return this.#with(new Map([
-      [version, changelogHeading(version) + sectionBody(section)], ...sections
-    ]));
-  }
-
   withNewSection(version) {
     if (this.#sections.has(version)) throw new Error(`Changelog already has ${version}.`);
     return this.#with(new Map([[version, changelogHeading(version)], ...this.#sections]));
-  }
-
-  // Sections from source replace same-versioned sections here.
-  mergedWith(source) {
-    const sections = new Map([...this.#sections, ...source.#sections]);
-    return this.#with(new Map([...sections].sort(([left], [right]) => compareVersions(right, left))));
   }
 
   toBuffer() {

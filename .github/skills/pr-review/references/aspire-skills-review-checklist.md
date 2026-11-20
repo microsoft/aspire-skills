@@ -92,8 +92,8 @@ skills share one version within a branch. Check them together whenever release
 versions change. Ordinary feature and release-fix PRs preserve dev's current version:
 
 Dedicated `bump-dev/<version>` PRs advance dev's coordinated version, add its
-changelog heading, and regenerate catalogs. They preserve source and existing
-changelog entries.
+changelog heading, and regenerate catalogs. Entries added after the release
+commit move to the new heading.
 
 | File | Field |
 |------|-------|
@@ -220,9 +220,9 @@ These are the questions Phase 2 of the review workflow exists to answer.
 Apply section 7 and the [development guide](../../../../docs/development.md).
 For a release PR, verify:
 
-- `release/<version>` starts at the selected dev commit, records that SHA and
-  deliberate backports, and targets main. Coordinated versions match the branch
-  and are newer than main's version. The Release branch check passes.
+- `release/<version>` targets main and contains only the selected dev commit
+  plus reviewed backports. Its version comes from that commit and is newer than
+  main's. The Release branch check passes.
 - Changelog notes are finalized in nonempty Changed, Removed, and Added sections,
   in that order, omitting empty sections and preserving published history.
 - Committed V1 and V2 catalogs match the shipped source. Dev retains these
@@ -234,18 +234,9 @@ For a release PR, verify:
   notes. Reruns preserve that tag and those notes; no manual tag step, generated
   archive upload, or token-triggered follow-up job is needed.
 
-The Arcade-derived workflow opens selected dev-to-release patch backports by
-manual dispatch and automatically attempts a main-to-dev patch backport when a
-same-repository PR merges into main. There is no comment trigger. Keep dev's next
-version, current changelog notes, and newer work, including non-version manifest
-changes; bring in main's approved changelog history and regenerate catalogs. Patch conflicts and preservation failures require manual
-resolution and a source-PR notification. This flow uses `git am`, not a real
-merge; retained merge ancestry and merge-commit-only merging are not requirements.
-
-Automation uses the Aspire App so final bot commits run ordinary required checks.
-Reruns must not duplicate PRs, reopen closed PRs, replace maintainer edits, or
-overwrite newer refs. Tag publication still uses `GITHUB_TOKEN` and cannot move
-existing tags.
+Backport PRs, opened with `/backport to release/<version>`, keep the release
+version and current catalogs. After publishing, a `main`-to-`dev` PR keeps
+dev's version and newer work and merges with a merge commit.
 
 **Severity:** `important` for inaccurate guidance or missing validation evidence;
 `blocking` for source/version mismatches or publication of unapproved code.

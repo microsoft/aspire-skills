@@ -11,7 +11,6 @@ npm test
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for skill formatting and agent-host checks.
 Set `CHROME_BIN` to a Chromium executable when running `npm test` to include the
 AppHosts native-browser number-input regression; without it, that check is skipped.
-
 Dev retains `CHANGELOG.md` and generated `opencode/` catalogs. Regenerate catalogs
 with `npm run catalog` after changing shipped skills, references, or assets,
 and commit them with the source changes. Run `npm run catalog:check` to check
@@ -30,99 +29,39 @@ release branches, on pushes to main or dev, and on merge-queue candidates.
 Release-branch pushes rely on PR checks instead of triggering a duplicate matrix.
 
 The **OpenCode catalog check** runs on every PR, including stacked PRs, on
-main/dev/release pushes, and on merge-queue candidates. Candidates targeting
-main must also have synchronized versions and unchanged published changelog
-history.
+main/dev/release pushes, and on merge-queue candidates. On PRs into main, it
+also requires the branch name, coordinated versions, and newest changelog
+heading to agree on a version newer than main's, finalized notes for that
+version, and unchanged entries for published releases.
 
 The **Release branch check** fails any PR into main unless its head is a
 `release/<version>` branch in this repository.
 
 ## Release flow
 
-1. **Prepare the PRs.** Run **Prepare release** from main with the full selected
-   dev commit SHA, release version, and next dev version (versions omit `v`).
-   It creates `release/<version>` and its PR to main, generates the release
-   catalogs, and creates `bump-dev/<next-version>` and its PR to dev. The dev
-   bump updates coordinated versions, adds a changelog heading without
-   changing earlier notes, and regenerates catalogs. The workflow has separate
-   steps for preparing commits, pushing branches, and opening PRs; the push
-   and PR steps use the Aspire App token. Links to both PRs appear in the run
-   summary. Both PRs require review.
-   Merge the dev version-bump PR before the release PR. The automatic release
-   backport requires dev to have advanced to the next version.
-2. **Prepare candidate fixes.** Run **Backport PR to branch** from main with a
-   merged dev PR number and its target `release/<version>`. The copied
-   Arcade-derived workflow from `microsoft/aspire` builds the patch locally
-   from the PR's base to its head, applies it with `git am`, and opens
-   `backport/pr-<number>-to-<target>` for review.
-   Backports skip generated catalog hunks and regenerate catalogs for the target.
-   There is no `/backport` comment trigger.
-3. **Finalize the candidate.** Maintainers finalize the release notes and merge
-   approved fixes into the release branch.
-4. **Release to main.** Maintainers approve and merge the release PR after all
-   required checks pass. The publisher validates and tags the exact merged
-   commit and creates a source-only GitHub release with no generated archives.
-5. **Review the automatic backport.** Every same-repository PR merged into main
-   triggers the Arcade patch-copy flow back to dev. It opens a reviewable
-   `backport/pr-<number>-to-dev` PR when patch application and preservation
-   checks succeed. This is a patch backport, not a real merge: it does not
-   retain merge ancestry, and it does not require merge-commit-only merging.
-
-Backport patches set coordinated versions on both sides to the target's
-version. Manifest content edits still apply, but a release cannot overwrite the
-target's version. The release PR body records its dev source commit; backports
-start there so they do not replay older dev history. The marker also identifies
-the operation on reruns, so release preparation does not need an empty commit.
-Main-to-dev backports merge approved release notes while preserving dev's
-current changelog entry. If a previously recorded changelog section changed
-after the release source was selected, the backport stops rather than replacing
-those notes. Patch conflicts and preservation-check failures post a source-PR
-comment with the workflow link; resolve them manually rather than accepting one
-side wholesale. If the release PR was merged before the version bump, merge the
-bump and rerun the failed backport.
-
-Reruns reuse matching open PRs and can recover from a branch push followed by a
-PR-creation failure. They do not reopen closed PRs, replace maintainer edits, or
-reuse unrelated branches. Stale operations fail rather than overwrite newer
-work. Retry against current refs; investigate a conflicting operation identity
-instead of force-pushing over it.
-
-The `release-automation.mjs prepare` command only prepares local commits and
-prints a JSON plan. It does not push branches or call the GitHub PR API; those
-operations belong to the workflow.
+1. **Prepare.** Run **Prepare release** from `main` with a full `dev` commit
+   SHA and the next dev version. It opens a `release/<version>` PR to `main`
+   at that commit, using that commit's version, and a version bump PR to `dev`.
+   Follow the bump PR's instructions, then merge it.
+2. **Backport fixes.** Comment `/backport to release/<version>` on merged `dev`
+   PRs. Resolve any conflicts manually.
+3. **Publish.** Finalize the notes on the release branch and merge the release
+   PR. The publisher tags the merged commit and creates the GitHub release.
+4. **Merge back.** Open a PR from `main` to `dev`, keep dev's version and newer
+   work, and merge it with a merge commit.
 
 ## Automation setup
 
-Install the Aspire repository GitHub App for this repository and make
-`ASPIRE_BOT_APP_ID` and `ASPIRE_BOT_PRIVATE_KEY` available as Actions secrets.
-Branch/PR automation uses short-lived, repository-scoped App tokens with only
-the necessary permissions. Release preparation and backports also need the App's
-workflow-write permission so selected workflow-file changes can be pushed.
-App pushes trigger normal PR checks, unlike workflow-token pushes.
+Install the Aspire repository GitHub App with write access to contents, pull
+requests, and workflows. Add its `ASPIRE_BOT_APP_ID` and
+`ASPIRE_BOT_PRIVATE_KEY` as Actions secrets.
 
-After the workflows and helpers land on dev, the first rollout still needs a
-maintainer-prepared `release/<version>` PR to main: align its versions, finalize
-its changelog, and generate and commit its stable catalogs with `npm run catalog`.
-Dispatch workflows cannot prepare this bootstrap PR before the helpers exist on
-main. Configure the App before merging that PR. Subsequent releases use the
-automated preparation flow.
+**Prepare release** and the backport workflow run from `main`, so prepare the
+first release manually: cut `release/<version>` from `dev`, open a PR to `main`,
+and advance `dev` with `npm run version:dev -- <next-version>`.
 
-Keep the existing required check names. A maintainer must require **OpenCode catalog check** and
-**Test (ubuntu-latest)**, **Test (macos-latest)**, and **Test (windows-latest)**
-on main as well as dev, retaining **Release branch check** on main. This code
-does not change rulesets, approval requirements, or repository settings.
-
-## Publication
-
-`.github/workflows/publish.yml` runs when a same-repository `release/*` PR
-merges into main. It uses the event's `merge_commit_sha`, reruns the source,
-catalog, and version checks, then tags that commit and creates a source-only
-GitHub release from the approved changelog notes.
-
-Tag/release publication still uses `GITHUB_TOKEN`; branch and PR preparation uses
-the Aspire App. Maintainers approve and merge PRs. Tags and releases are
-published in the same run because workflow-token tag pushes do not trigger
-another workflow. Reruns must preserve the tag's commit and approved notes.
+Require **OpenCode catalog check** and the three **Test** jobs on `main` and
+`dev`, and **Release branch check** on `main`.
 
 ## Aspire telemetry maintenance
 

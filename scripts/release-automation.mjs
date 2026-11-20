@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Repository, fullSha } from "./release-git.mjs";
-import { expectedCatalog, validateCatalog } from "./release-catalog.mjs";
-import { compareVersions, parseVersion, updateVersion, versionSnapshot } from "./release-versions.mjs";
+import { expectedCatalog } from "./release-catalog.mjs";
+import { compareVersions, parseVersion, versionSnapshot } from "./release-versions.mjs";
 import { developmentVersionFiles } from "./version-development.mjs";
 import { Changelog } from "./release-changelog.mjs";
 import { ReleaseOperation } from "./release-operation.mjs";
@@ -77,23 +77,7 @@ export function validateRelease(repo, candidate, base, branch, { requireNotes = 
   if (changelog.newest !== version) throw new Error("Release version and newest changelog heading disagree.");
   if (requireNotes && !changelog.notes(version)) throw new Error("Release changelog notes must be finalized before merging.");
   assertPublishedHistory(repo, candidate, base);
-  validateCatalog(repo, candidate, expectedCatalog(repo, candidate));
   return version;
-}
-
-export function releaseFiles(repo, source, version, main) {
-  parseVersion(version);
-  const snapshot = versionSnapshot(repo, source);
-  if (compareVersions(version, snapshot.version) < 0) throw new Error("Release version cannot precede the source version.");
-  if (main && version !== snapshot.version && versionSnapshot(repo, main).version === snapshot.version) {
-    assertPublishedHistory(repo, source, main);
-    return developmentVersionFiles(repo, source, version).files;
-  }
-  const files = new Map([...snapshot.manifests].map(([path, bytes]) => [path, updateVersion(bytes, path, version)]));
-  const changelog = Changelog.read(repo, source);
-  if (changelog.newest !== snapshot.version) throw new Error("Source version and newest changelog heading disagree.");
-  files.set("CHANGELOG.md", changelog.withNewestRenamed(version).toBuffer());
-  return files;
 }
 
 export function githubRequest(path, { method = "GET", body } = {}) {
@@ -158,30 +142,26 @@ function planRelease(repo, operation, main, findPull) {
   const { source, version } = operation;
   const branch = `release/${version}`;
   const pull = findPull(branch, "main");
-  let expected = commitFiles(repo, source, releaseFiles(repo, source, version, main), `Prepare release ${version}`);
-  assertPublishedHistory(repo, expected, main);
-  expected = commitFiles(repo, expected, expectedCatalog(repo, expected),
-    `Generate release ${version} catalogs`, { replace: ["opencode"] });
-  validateRelease(repo, expected, main, branch);
+  validateRelease(repo, source, main, branch);
   const existing = fetchedRemoteHead(repo, branch);
   if (existing) {
     if (!isAncestor(repo, source, existing)) {
       throw new Error(`Existing branch does not descend from this operation's source: ${branch}`);
     }
-    if (!pull && repo.run(["rev-parse", `${existing}^{tree}`]) !== repo.run(["rev-parse", `${expected}^{tree}`])) {
+    if (!pull && existing !== source) {
       throw new Error(`Existing branch has no matching PR and contains unexpected changes: ${branch}`);
     }
     validateRelease(repo, existing, main, branch);
   }
   return planEntry({
-    kind: "release", branch, base: "main", baseCommit: main, commit: expected, existing,
+    kind: "release", branch, base: "main", baseCommit: main, commit: source, existing,
     title: `Release ${version}`,
     description: "Finalize the release notes and merge after required checks pass."
   });
 }
 
 function planDevBump(repo, operation, dev, findPull) {
-  const { nextVersion } = operation;
+  const { version, nextVersion } = operation;
   const branch = `bump-dev/${nextVersion}`;
   findPull(branch, "dev");
   const existing = fetchedRemoteHead(repo, branch);
@@ -204,7 +184,9 @@ function planDevBump(repo, operation, dev, findPull) {
   return planEntry({
     kind: "bump-dev", branch, base: "dev", baseCommit: dev, commit: expected, existing,
     title: `Advance dev to ${nextVersion}`,
-    description: "Advances coordinated versions, adds the next changelog heading, and regenerates catalogs."
+    description: `\`dev\` is preparing release ${version} from the source commit above.\n\n`
+      + `Before merging, incorporate newer \`dev\` changes and compare \`CHANGELOG.md\` with that commit. `
+      + `Move ${version} entries added since then to ${nextVersion}, and keep the original ${version} entries.`
   });
 }
 
@@ -214,13 +196,16 @@ export function prepareRelease(repo, request, {
   api = githubRequest,
   repository = process.env.GITHUB_REPOSITORY
 } = {}) {
-  const operation = ReleaseOperation.create(request ?? {});
   assertRepository(repository);
-  const { source, version, nextVersion } = operation;
+  const source = fullSha(request?.source, "Release source");
+  const nextVersion = request?.nextVersion;
+  parseVersion(nextVersion);
   repo.run(["fetch", "--no-tags", "origin", "main", "dev"]);
   const main = repo.sha("refs/remotes/origin/main");
   const dev = repo.sha("refs/remotes/origin/dev");
   repo.run(["merge-base", "--is-ancestor", source, dev]);
+  const version = versionSnapshot(repo, source).version;
+  const operation = ReleaseOperation.create({ source, version, nextVersion });
   if (compareVersions(version, versionSnapshot(repo, main).version) <= 0) throw new Error("Release version must be newer than main.");
   if (compareVersions(nextVersion, versionSnapshot(repo, dev).version) <= 0) throw new Error("Next dev version must be newer than dev.");
   if (repo.run(["ls-remote", "--tags", "origin", `refs/tags/v${version}`]).trim()) {
@@ -238,10 +223,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const repo = new Repository(process.cwd());
     const [command, ...args] = process.argv.slice(2);
     let result;
-    if (command === "prepare" && args.length === 3) {
-      const [source, version, nextVersion] = args;
-      result = prepareRelease(repo, { source, version, nextVersion });
-    } else throw new Error("Usage: release-automation.mjs prepare <sha> <version> <next-version>");
+    if (command === "prepare" && args.length === 2) {
+      const [source, nextVersion] = args;
+      result = prepareRelease(repo, { source, nextVersion });
+    } else throw new Error("Usage: release-automation.mjs prepare <sha> <next-version>");
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
     console.error(error.message);
