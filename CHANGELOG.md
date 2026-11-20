@@ -5,6 +5,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [0.0.7](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.7)
 
 ### Changed
+- Clarified Aspireify's TypeScript AppHost guidance on fluent resource chains:
+  await the whole chain by default or, on Aspire 13.3+, chain without `await`, and
+  never parenthesize an `await` to keep chaining.
 - Kept skill-supplied external APIs, streams, and SDK-owned dependencies visible
   in the Aspireify canvas without treating them as runnable services. Resource
   mappings, not-modeled or deferred reasons, and unassessed items now survive
