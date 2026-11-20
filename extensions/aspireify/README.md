@@ -69,8 +69,39 @@ Explicit UNC/network paths are rejected before filesystem access. Mapped drives,
 mounted shares, and local aliases to remote storage are not detected.
 
 Connections are directed: `from` references, waits for, or is a child of `to`.
-Each selected resource shows both outgoing and incoming relationships, while an
-expanded canonical list presents every connection once.
+Each selected resource shows both outgoing and incoming relationships, and the
+connections tree is the single surface listing every connection once. One
+legend, shared by both views, explains direction and the color of each
+connection kind.
+
+Use **Resources / Connections tree** to switch between the existing compact
+cards or overview/inspector and an expandable projection of the same proposal.
+The tree starts with resources that have no incoming connections,
+including disconnected resources, in proposal order. It then adds roots for
+remaining unreachable components, including cycles.
+It follows outgoing connections and shows their source, target, and relationship
+type. Each resource expands once; **Shared reference** and **Cycle reference**
+entries point to that same resource rather than duplicating it or expanding
+indefinitely. Endpoint IDs keep connections attached to the correct resource
+even while names collide. Legacy name-only connections with ambiguous endpoints,
+and connections whose endpoint ID no longer matches a resource, are not attached; affected
+resources are marked as ambiguous, and those connections are listed below the
+tree (with **Edit** before confirmation). No resources or
+connections are inferred.
+
+In the tree, use Up/Down, Home/End, and first-letter navigation to move focus;
+Right expands or enters a branch, Left collapses or moves to its parent, and
+Enter/Space toggles a branch or follows a reference to the original resource.
+Before confirmation, select a connection's **Edit** button or press F2 on it to
+open the same connection editor used by the resource view.
+The view and expanded branches survive normal snapshot updates; changing the
+AppHost resets them. Tree focus carries into the selected resource when switching
+to **Resources** for editing; the selected resource is revealed when returning
+to the tree. Switching itself does not edit the proposal or saved confirmation,
+but leaving an edited field saves it through the usual change event, creating
+a revision and undo step. Pending saves still block confirmation as usual.
+The same confirmation and chat-handoff controls
+apply in both views, including when exploring an already-confirmed snapshot.
 
 The AppHost style is read-only in this surface. Loading only indicates that the
 generated proposal snapshot is being received. Scanning, clarification, proposal

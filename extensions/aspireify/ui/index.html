@@ -138,15 +138,38 @@
                                     Add resource
                                 </button>
                             </div>
-                            <div class="compact-resources" id="compact-resources" hidden></div>
-                            <div class="relationship-guide" id="relationship-guide" hidden>
-                                <strong>Reading connections</strong>
-                                <span>
-                                    → is outgoing; ← is incoming. References share connection
-                                    information, waits-for controls startup order, and child-of
-                                    models ownership.
-                                </span>
+                            <div class="proposal-view-switch" role="group" aria-label="Proposal view">
+                                <button class="btn btn-outline btn-sm" id="resources-view" type="button" aria-pressed="true" aria-controls="resource-details-view">Resources</button>
+                                <button class="btn btn-outline btn-sm" id="connections-tree-view" type="button" aria-pressed="false" aria-controls="connections-tree-panel">Connections tree</button>
                             </div>
+                            <div class="connection-legend" id="connection-legend">
+                                <strong>Connections</strong>
+                                <span>→ outgoing (source → target); ← incoming.</span>
+                                <ul class="connection-legend-kinds">
+                                    <li class="connection-reference"><span class="connection-swatch" aria-hidden="true"></span>References pass connection information</li>
+                                    <li class="connection-wait"><span class="connection-swatch" aria-hidden="true"></span>Waits for controls startup order</li>
+                                    <li class="connection-parent"><span class="connection-swatch" aria-hidden="true"></span>Child of models ownership</li>
+                                </ul>
+                            </div>
+                            <section id="connections-tree-panel" aria-label="Resource connections" hidden>
+                                <p id="connections-tree-help" class="relationship-help muted">
+                                    Each connection appears once; connections whose endpoints
+                                    cannot be placed are listed below the tree. Each resource expands once;
+                                    shared and cycle references point to that same resource, not
+                                    a copy. Keys: ↑/↓ move, →/← expand or collapse, Home/End go to
+                                    the first or last item, and typing a letter finds a resource.
+                                    Enter or Space toggles a branch or follows a reference. Select
+                                    Edit or press F2 on a connection to edit it.
+                                </p>
+                                <p id="connections-tree-state" class="muted" hidden></p>
+                                <ul id="connections-tree" class="connections-tree" role="tree" aria-label="Proposed resource connections" aria-describedby="connection-legend connections-tree-help"></ul>
+                                <div id="connections-unplaced" class="connections-unplaced" hidden>
+                                    <p id="connections-unplaced-summary" class="muted"></p>
+                                    <ul id="connections-unplaced-list" aria-labelledby="connections-unplaced-summary"></ul>
+                                </div>
+                            </section>
+                            <div id="resource-details-view">
+                            <div class="compact-resources" id="compact-resources" hidden></div>
                             <div class="relationship-workspace" id="relationship-workspace" hidden>
                                 <nav
                                     class="plan-overview"
@@ -160,20 +183,7 @@
                                     aria-live="polite"
                                 ></section>
                             </div>
-                            <details
-                                class="relationship-list-disclosure"
-                                id="relationship-list-disclosure"
-                                open
-                                hidden
-                            >
-                                <summary id="relationship-list-summary">All relationships</summary>
-                                <p class="relationship-help muted">
-                                    References pass connection information. Wait-for connections
-                                    control startup order. Parent relationships model resource
-                                    ownership.
-                                </p>
-                                <div class="relationship-list" id="relationship-list"></div>
-                            </details>
+                            </div>
                         </section>
                     </div>
                 </div>
