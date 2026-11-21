@@ -88,7 +88,9 @@ confirm the exact target and arguments before calling again with
 target, runtime, command schema, and normalized arguments. The token is not
 proof that a human approved: the host cannot authenticate that confirmation.
 Commands use the same operation lock and refresh path as the canvas, and their
-output appears in the Output panel.
+output appears in the Output panel. Agent action results report status and
+identities only; arbitrary command stdout, stderr, and error text stay out of
+the agent response.
 
 ## Experience
 

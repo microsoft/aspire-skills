@@ -594,6 +594,26 @@ test("start runs directly while failures remain visible and private paths are re
     assert.equal(h.commandCalls().length, 1);
 });
 
+test("agent results never expose arbitrary command output on success or failure", async (t) => {
+    const h = await harness(t);
+    h.controls.inputs = [];
+    const opened = await h.open();
+    const request = await requestFor(h, opened);
+    const privateOutput = "private-connection-value \\\\server\\share\\secret https://internal.example/path";
+    h.controls.executor = () => ({ ok: true, code: 0, stdout: privateOutput, stderr: privateOutput });
+    const successToken = (await h.action("run_resource_command", request)).confirmationToken;
+    const success = await h.action("run_resource_command", { ...request, confirmationToken: successToken });
+    assert.equal(success.ok, true);
+    assert.doesNotMatch(JSON.stringify(success), /private-connection-value|server|internal\.example/);
+    assert.equal(success.output, undefined);
+    h.controls.executor = () => ({ ok: false, code: 1, stdout: privateOutput, stderr: privateOutput, error: privateOutput });
+    const failureToken = (await h.action("run_resource_command", request)).confirmationToken;
+    const failure = await h.action("run_resource_command", { ...request, confirmationToken: failureToken });
+    assert.equal(failure.ok, false);
+    assert.doesNotMatch(JSON.stringify(failure), /private-connection-value|server|internal\.example/);
+    assert.equal(failure.output, undefined);
+});
+
 test("dot-prefixed workspace AppHosts remain visible and open source without admitting outside hosts", async (t) => {
     const root = await mkdtemp(join(tmpdir(), "aspire-workspace-path-"));
     t.after(() => rm(root, { recursive: true, force: true }));

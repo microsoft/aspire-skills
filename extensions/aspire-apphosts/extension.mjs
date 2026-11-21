@@ -1643,9 +1643,19 @@ async function runAgentResourceCommand(entry, request) {
             return { ok: false, status: 409, error: "Confirmation is invalid, expired, used, or does not match the command." };
         }
     }
-    return runResourceCommand(entry, { ...request, arguments: target.values }, {
+    const result = await runResourceCommand(entry, { ...request, arguments: target.values }, {
         agentSignature: target.signature,
     });
+    return {
+        ok: result.ok,
+        status: result.status,
+        appHostId: target.record.id,
+        resourceName: target.resource.name,
+        commandName: target.command.name,
+        ...(result.ok ? { message: "The resource command completed. See the canvas Output panel for details." }
+            : { error: "The resource command failed or could not run. If it started, see the canvas Output panel." }),
+        ...(result.errorCode ? { errorCode: result.errorCode } : {}),
+    };
 }
 
 function submittedSecretValues(command, values) {
