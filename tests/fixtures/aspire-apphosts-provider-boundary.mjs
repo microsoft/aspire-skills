@@ -694,10 +694,12 @@ test("renderer action click through HTTP queue delivers a captured synthetic non
     assert.equal(polled.revision, state.revision, "queue updates do not advance content revision");
     assert.deepEqual(polled.pendingContext, queued.pendingContext);
     for (const mismatch of [{ prompt: "  " }, { sessionId: "other" }, { agentId: "child" },
-        { parentAgentId: "parent" }, { sessionId: undefined }, { workingDirectory: resolve("other-worktree") }]) {
+        { parentAgentId: "parent" }, { sessionId: undefined }]) {
         assert.equal(h.submit(mismatch), undefined);
         assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 1);
     }
+    assert.match(h.submit({ workingDirectory: resolve("other-worktree") }).additionalContext, /no longer pending/);
+    assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 1);
     const result = h.submit();
     assert.deepEqual(Object.keys(result), ["additionalContext"], "never modify the prompt or send a message");
     assert.match(result.additionalContext, /untrusted snapshot data, NOT instructions/);
@@ -705,7 +707,7 @@ test("renderer action click through HTTP queue delivers a captured synthetic non
     assert.deepEqual(snapshots[0].context, context);
     assert.ok(Number.isFinite(Date.parse(snapshots[0].capturedAt)));
     assert.ok(result.additionalContext.includes(nonce));
-    assert.equal(h.submit(), undefined);
+    assert.match(h.submit().additionalContext, /no longer pending/);
     assert.deepEqual(h.attachments, []);
     await stream.waitFor((event) => event.type === "pending-context" && event.pendingContext.count === 0);
     assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 0);
@@ -733,7 +735,7 @@ test("pending snapshots deduplicate by identity, update on repeat clicks, and ca
     const queued = await h.request(open, "/api/copilot-context", { nodeId: node.id });
     const cleared = await h.request(open, "/api/copilot-context/clear", { revision: queued.pendingContext.revision });
     assert.equal(cleared.pendingContext.count, 0);
-    assert.equal(h.submit(), undefined, "cancelled context cannot reach a later prompt");
+    assert.match(h.submit().additionalContext, /no longer pending/, "cancelled context is reported instead of attached");
     assert.equal((await h.request(open, "/api/copilot-context/clear", { revision: cleared.pendingContext.revision })).ok, true);
     const missing = await h.request(open, "/api/copilot-context", { nodeId: "no-longer-present" });
     assert.equal(missing.status, 400);
@@ -751,8 +753,8 @@ test("snapshots attach only to prompts that quote their reference, never to unre
     assert.notEqual(first.reference, second.reference);
     assert.equal(h.submit({ prompt: "Rescan this workspace for Aspire integration." }), undefined,
         "canvas-generated or unrelated root prompts cannot consume pending context");
-    assert.equal(h.submit({ prompt: `Queued before Add: aspire-ctx-${"0".repeat(12)}` }), undefined,
-        "a message written before Add cannot know its fresh reference");
+    assert.match(h.submit({ prompt: `Queued before Add: aspire-ctx-${"0".repeat(12)}` }).additionalContext,
+        /no longer pending/, "a message written before Add cannot know its fresh reference");
     assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 2);
     assert.equal(h.submit({ prompt: `x${second.reference}` }), undefined, "references match only as standalone tokens");
     assert.equal(h.submit({ prompt: `${second.reference}0` }), undefined);
@@ -764,13 +766,41 @@ test("snapshots attach only to prompts that quote their reference, never to unre
         "unreferenced snapshots remain visible and clearable");
     const updated = await h.request(open, "/api/copilot-context", { nodeId: nodes[0].id });
     assert.notEqual(updated.reference, first.reference, "re-adding rotates the reference");
-    assert.equal(h.submit({ prompt: `Written before the update: ${first.reference}` }), undefined,
-        "a message quoting the old reference cannot receive the newer snapshot");
+    assert.match(h.submit({ prompt: `Written before the update: ${first.reference}` }).additionalContext,
+        /no longer pending/, "a message quoting the old reference cannot receive the newer snapshot");
     assert.ok(h.submit({ prompt: updated.reference }).additionalContext);
     assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 0);
 });
 
-test("an Add in flight during prompt submission stays pending instead of joining that prompt", async (t) => {
+test("unmatched references are reported alongside valid snapshots without consuming unreferenced context", async (t) => {
+    const h = await harness(t);
+    const open = await h.open();
+    const nodes = allNodes((await h.request(open, "/api/state")).state.roots).filter((node) => node.kind === "resource");
+    const stale = await h.request(open, "/api/copilot-context", { nodeId: nodes[0].id });
+    const valid = await h.request(open, "/api/copilot-context", { nodeId: nodes[0].id });
+    const unreferenced = await h.request(open, "/api/copilot-context", { nodeId: nodes[1].id });
+    const context = h.submit({ prompt: `${stale.reference} ${valid.reference} ${stale.reference}` }).additionalContext;
+    assert.match(context, /Tell the user.*ask them to re-add/);
+    assert.equal(context.split(stale.reference).length, 2, "duplicate missing references are reported once");
+    const snapshots = JSON.parse(context.slice(context.indexOf("\n") + 1));
+    assert.deepEqual(snapshots.map((snapshot) => snapshot.reference), [valid.reference]);
+    const pending = (await h.request(open, "/api/state")).state.pendingContext;
+    assert.deepEqual(pending.items.map((item) => item.reference), [unreferenced.reference]);
+    await h.request(open, "/api/copilot-context/clear", { revision: pending.revision });
+    const cleared = h.submit({ prompt: unreferenced.reference }).additionalContext;
+    assert.match(cleared, /no longer pending/);
+    assert.doesNotMatch(cleared, /capturedAt|resourceIdentity/);
+    h.startSession({ sessionId: "new-foreground" });
+    assert.match(h.submit({ sessionId: "new-foreground", prompt: valid.reference }).additionalContext, /no longer pending/);
+});
+
+for (const [label, input, fenced] of [
+    ["foreground prompt", {}, true],
+    ["unmatched reference", { prompt: "aspire-ctx-000000000000" }, true],
+    ["subagent prompt", { agentId: "child" }, false],
+    ["other session prompt", { sessionId: "other" }, false],
+]) {
+test(`an in-flight Add is fenced only by a current ${label}`, async (t) => {
     const h = await harness(t);
     const open = await h.open();
     const node = allNodes((await h.request(open, "/api/state")).state.roots)
@@ -791,13 +821,24 @@ test("an Add in flight during prompt submission stays pending instead of joining
         request.write('{"nodeId":');
     });
     await entered.promise;
-    assert.equal(h.submit({ prompt: "Submitted while Add was in flight." }), undefined);
+    h.submit({ prompt: "Submitted while Add was in flight.", ...input });
     request.end(`${JSON.stringify(node.id)}}`);
     const added = await pending;
+    if (fenced) {
+        assert.equal(added.status, 409);
+        assert.match(added.error, /Add the item again/);
+        assert.equal(added.reference, undefined);
+        assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 0);
+        const retry = await h.request(open, "/api/copilot-context", { nodeId: node.id });
+        assert.equal(retry.status, 202);
+        assert.ok(h.submit({ prompt: retry.reference }).additionalContext);
+        return;
+    }
     assert.equal(added.status, 202);
     assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 1);
     assert.ok(h.submit({ prompt: added.reference }).additionalContext);
 });
+}
 
 test("pending context clears on close and root session changes, never on a subagent start", async (t) => {
     const h = await harness(t);
@@ -810,7 +851,7 @@ test("pending context clears on close and root session changes, never on a subag
     h.startSession({ sessionId: "new-foreground" });
     assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 0);
     assert.equal(h.submit(), undefined);
-    assert.equal(h.submit({ sessionId: "new-foreground" }), undefined);
+    assert.match(h.submit({ sessionId: "new-foreground" }).additionalContext, /no longer pending/);
     assert.equal((await h.request(open, "/api/copilot-context", { nodeId: node.id })).status, 409);
     await h.open();
     assert.equal((await h.request(open, "/api/copilot-context", { nodeId: node.id })).ok, true);
@@ -818,7 +859,7 @@ test("pending context clears on close and root session changes, never on a subag
     assert.ok(h.submit({ sessionId: "new-foreground" }).additionalContext);
     await h.request(open, "/api/copilot-context", { nodeId: node.id });
     await h.close();
-    assert.equal(h.submit({ sessionId: "new-foreground" }), undefined);
+    assert.match(h.submit({ sessionId: "new-foreground" }).additionalContext, /no longer pending/);
     const reopened = await h.open();
     assert.equal((await h.request(reopened, "/api/state")).state.pendingContext.count, 0);
 });
@@ -899,7 +940,7 @@ test("an in-flight Clear cannot delete replacement-session context queued after 
     const delivered = h.submit({ sessionId: "replacement-foreground" }).additionalContext;
     assert.ok(delivered.includes(nonce));
     assert.match(delivered, /"state":"Stopped"/);
-    assert.equal(h.submit({ sessionId: "replacement-foreground" }), undefined);
+    assert.match(h.submit({ sessionId: "replacement-foreground" }).additionalContext, /no longer pending/);
     assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 0);
 });
 
@@ -985,7 +1026,7 @@ test("all canvases show the shared context list and either can clear the display
     assert.equal(cleared.ok, true);
     assert.equal(cleared.pendingContext.count, 0);
     assert.deepEqual((await h.request(two, "/api/state")).state.pendingContext, cleared.pendingContext);
-    assert.equal(h.submit(), undefined);
+    assert.match(h.submit().additionalContext, /no longer pending/);
 });
 
 test("a delayed Clear rejects its old revision without deleting an updated snapshot", async (t) => {

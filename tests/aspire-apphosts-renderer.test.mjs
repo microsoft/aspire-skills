@@ -522,10 +522,16 @@ test("Add to chat shows visible clearable pending context without claiming nativ
     assert.doesNotMatch(message, /composer|delivered|attached/i);
     const region = renderer.document.getElementById("pending-context");
     assert.equal(region.hidden, false);
-    assert.match(region.textContent, /1 selected snapshot pending\. Include a reference in your message/);
+    assert.match(region.textContent, /1 selected snapshot pending, not delivered\. Copy a reference below and paste it into your message/);
     assert.equal(renderer.document.querySelectorAll("#pending-context-items li").length, 1);
     assert.equal(renderer.document.querySelector("#pending-context-items .pending-context-reference").textContent,
         "aspire-ctx-0123456789ab");
+    const copy = renderer.document.querySelector('[data-context-reference="aspire-ctx-0123456789ab"]');
+    assert.equal(copy.textContent, "Copy reference");
+    assert.equal(renderer.document.activeElement, copy, "Add confirmation focuses the prominent copy control");
+    copy.click();
+    await settle();
+    assert.deepEqual(renderer.copied, ["aspire-ctx-0123456789ab"]);
     renderer.document.querySelector(".inspector-ask").click();
     await renderer.respond(renderer.request("/api/copilot-context"), { ok: true, reference: "aspire-ctx-0123456789ab", pendingContext: pendingContext(2) });
     assert.equal(renderer.document.querySelectorAll("#pending-context-items li").length, 1, "repeated clicks do not duplicate the indicator");
@@ -538,6 +544,33 @@ test("Add to chat shows visible clearable pending context without claiming nativ
     assert.equal(region.hidden, true);
     assert.equal(renderer.document.activeElement.id, "search-input", "clearing keeps keyboard focus on a visible control");
     assert.equal(renderer.state().revision, 1, "queue updates never alter content revision");
+});
+
+for (const failure of ["unavailable", "rejected"]) {
+    test(`pending reference copy reports ${failure} clipboard access without claiming delivery`, async () => {
+        const renderer = await boot();
+        renderer.evaluate(failure === "unavailable"
+            ? "navigator.clipboard = undefined"
+            : "navigator.clipboard.writeText = async () => { throw new Error('denied'); }");
+        await renderer.push({ type: "pending-context", pendingContext: pendingContext(1) });
+        renderer.document.querySelector('[data-context-reference="aspire-ctx-0123456789ab"]').click();
+        await settle();
+        assert.match(renderer.document.querySelector(".toast.is-error").textContent, /copy.*manually/);
+        assert.equal(renderer.document.getElementById("pending-context").hidden, false);
+        assert.deepEqual(renderer.copied, []);
+    });
+}
+
+test("Add focuses the copy control even when SSE confirms pending context before HTTP", async () => {
+    const renderer = await boot();
+    selectApi(renderer);
+    renderer.document.querySelector(".inspector-ask").click();
+    await renderer.push({ type: "pending-context", pendingContext: pendingContext(1) });
+    await renderer.respond(renderer.request("/api/copilot-context"), {
+        ok: true, reference: "aspire-ctx-0123456789ab", pendingContext: pendingContext(1),
+    });
+    assert.equal(renderer.document.activeElement,
+        renderer.document.querySelector('[data-context-reference="aspire-ctx-0123456789ab"]'));
 });
 
 test("hook consumption updates pending UI through SSE and old polls cannot resurrect it", async () => {

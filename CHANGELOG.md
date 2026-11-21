@@ -7,13 +7,15 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ### Changed
 - AppHosts **Add to chat** now queues bounded, visible, clearable snapshots in
   memory instead of relying on the native attachment push acknowledgement. Each
-  snapshot shows a fresh `aspire-ctx-…` reference; the submit hook attaches it
+  snapshot shows a fresh, copyable `aspire-ctx-…` reference; the submit hook attaches it
   only to a root message that contains that reference. This is explicit
   reference matching only, not authenticated authorship or submission-order
   protection: any root prompt that contains a known reference, including
-  canvas-generated or relayed text, receives the snapshot, and an Add still in
-  flight when a prompt is submitted can finish later and stay pending for a
-  later referencing message. Nothing sends automatically or creates a native
+  canvas-generated or relayed text, receives the snapshot. Add requests still in
+  flight when the foreground prompt hook executes fail visibly and must be
+  retried; this is a hook-time fence, not a submission-time guarantee. Unmatched
+  references produce a note asking Copilot to report missing context and request
+  a fresh Add. Nothing sends automatically or creates a native
   composer pill;
   snapshots are consumed once at the hook boundary and cleared on canvas close
   or foreground session start. All open

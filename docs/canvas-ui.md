@@ -37,3 +37,29 @@ are packaged or resolved.
   support.
 - Review changes in light and dark themes and at narrow and wide sizes without
   changing the canvas's workflow.
+
+## Chat delivery contract
+
+- **Add to chat** prepares context for attachment and never starts a turn.
+  **Ask Copilot** starts a turn now.
+- Report success only after the relevant delivery boundary is confirmed.
+  Preparing or queuing context is **pending**, not confirmed model delivery.
+  Explain any extra step at click time, and do not claim a composer attachment
+  without host confirmation.
+- Show request and clipboard failures in the canvas. Report unmatched references
+  through the prompt hook so Copilot can tell the user what was not attached and
+  ask them to re-add it.
+- Serialize canvas data sent to the model and explicitly mark it as untrusted
+  data, not instructions.
+
+AppHosts uses a reference-based bridge: Add to chat shows a persistent, copyable
+reference and focuses its copy control. Only a root prompt in the owning session
+and workspace that includes that reference receives the snapshot. An ordinary
+message without a reference attaches nothing. The bridge confirms handoff to
+`onUserPromptSubmitted.additionalContext`, not end-to-end model delivery; another
+hook can still block the turn. Requests still in flight when the foreground
+prompt hook executes fail visibly and must be retried. This is a hook-time fence,
+not a submission-time ordering guarantee or proof of user authorship.
+
+Doctor's existing early "Queued for Copilot" status and rejected-send logging
+do not yet meet this contract; fixing those is separate from the AppHosts bridge.

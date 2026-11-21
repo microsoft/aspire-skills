@@ -349,21 +349,49 @@ function laterTimestamp(current, incoming) {
 
 let pendingContextState = { revision: -1, count: 0, items: [] };
 
-function acceptPendingContext(pending) {
-    if (!Number.isInteger(pending?.revision) || pending.revision <= pendingContextState.revision) return;
+async function copyContextReference(reference) {
+    if (typeof navigator.clipboard?.writeText !== "function") {
+        showToast("Clipboard access is unavailable in this canvas. Select and copy the reference manually.", true);
+        return;
+    }
+    try {
+        await navigator.clipboard.writeText(reference);
+        showToast(`Copied ${reference}. Paste it into your message to attach the snapshot.`);
+    } catch {
+        showToast("Couldn't copy the reference. Select and copy it manually.", true);
+    }
+}
+
+function acceptPendingContext(pending, focusReference) {
+    if (!Number.isInteger(pending?.revision) || pending.revision < pendingContextState.revision) return;
+    if (pending.revision === pendingContextState.revision) {
+        if (focusReference) document.getElementById("pending-context-items")
+            .querySelector(`[data-context-reference="${focusReference}"]`)?.focus();
+        return;
+    }
     pendingContextState = pending;
     const region = document.getElementById("pending-context");
     const hadFocus = region.contains(document.activeElement);
     region.hidden = pending.count === 0;
     document.getElementById("pending-context-summary").textContent =
-        `${pending.count} selected snapshot${pending.count === 1 ? "" : "s"} pending. Include a reference in your message to attach it.`;
+        `${pending.count} selected snapshot${pending.count === 1 ? "" : "s"} pending, not delivered. Copy a reference below and paste it into your message to attach it.`;
     document.getElementById("pending-context-items").replaceChildren(
         ...pending.items.map((item) => element("li", { dataset: { pendingId: item.id } }, [
             element("span", { text: `${item.label} ` }),
             element("code", { class: "pending-context-reference", text: item.reference ?? "" }),
+            element("button", {
+                class: "button button-secondary button-small",
+                type: "button",
+                text: "Copy reference",
+                "aria-label": `Copy reference for ${item.label}`,
+                dataset: { contextReference: item.reference },
+                on: { click: () => void copyContextReference(item.reference) },
+            }),
         ])),
     );
     if (region.hidden && hadFocus) els.searchInput.focus();
+    if (focusReference) document.getElementById("pending-context-items")
+        .querySelector(`[data-context-reference="${focusReference}"]`)?.focus();
 }
 
 document.getElementById("pending-context-clear").addEventListener("click", async () => {
@@ -2139,7 +2167,7 @@ async function executeNodeAction(action, node) {
     if (action === "ask") {
         try {
             const result = await api("/api/copilot-context", { method: "POST", body: { nodeId: node.id } });
-            if (result.ok) acceptPendingContext(result.pendingContext);
+            if (result.ok) acceptPendingContext(result.pendingContext, result.reference);
             showToast(
                 result.ok
                     ? `${node.label} snapshot pending. Include ${result.reference} in your message to attach it.`

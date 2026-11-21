@@ -58,7 +58,7 @@ p {
 }
 
 .pending-context ul {
-    max-height: 80px;
+    max-height: 160px;
     overflow-y: auto;
     margin: 4px 0;
     padding-left: 18px;
@@ -66,6 +66,15 @@ p {
 
 .pending-context-reference {
     user-select: all;
+    font-weight: 600;
+}
+
+.pending-context li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 6px 0;
 }
 
 .pending-context-note {
