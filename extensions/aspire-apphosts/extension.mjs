@@ -75,6 +75,8 @@ const MAX_BODY_BYTES = 128 * 1024;
 const MAX_PENDING_CONTEXT_COUNT = 16;
 const MAX_PENDING_CONTEXT_BYTES = 64 * 1024;
 const MAX_CONTEXT_SNAPSHOT_BYTES = 16 * 1024;
+const MAX_COMMAND_CONFIRMATIONS = 16;
+const COMMAND_CONFIRMATION_TTL_MS = 5 * 60_000;
 
 const CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -1519,6 +1521,133 @@ function commandMetadataOptions(record, resource, command) {
     };
 }
 
+function agentIdentitiesSafe(entry, record, resource, command, inputs) {
+    const text = (value) => publicAgentCommandText(entry, record, value, 1000);
+    return [record.id, resource.name, command.name, ...inputs.map((input) => input.name),
+        ...inputs.flatMap((input) => input.options.map((option) => option.value))]
+        .every((value) => text(value) === value);
+}
+
+function agentCommandTarget(entry, request) {
+    if (entry.closed) return { error: "The canvas is closed.", status: 409 };
+    const appHostId = request?.appHostId;
+    const resourceName = request?.resourceName;
+    const commandName = request?.commandName;
+    if (![appHostId, resourceName, commandName].every((value) => typeof value === "string" && value.length > 0)) {
+        return { error: "AppHost, resource, and command identities are required.", status: 400 };
+    }
+    const { record, resource } = getResource(entry, appHostId, resourceName);
+    if (!record || record.status !== "running" || entry.discoveryStale || modelForRecord(entry, record)?.stale) {
+        return { error: "The AppHost is not running or its state is stale. Refresh the canvas.", status: 409 };
+    }
+    const nodes = [...entry.nodeIndex.values()];
+    const resourceNodes = nodes.filter((node) => node.kind === "resource"
+        && node.appHostId === appHostId && node.resourceName === resourceName);
+    const commandNodes = nodes.filter((node) => node.kind === "command"
+        && node.appHostId === appHostId && node.resourceName === resourceName && node.commandName === commandName);
+    const matchingCommands = resource?.commands.filter((candidate) => candidate.name === commandName) ?? [];
+    if (resourceNodes.length !== 1 || commandNodes.length !== 1 || matchingCommands.length !== 1) {
+        return { error: "The visible resource command is no longer available.", status: 404 };
+    }
+    const command = matchingCommands[0];
+    if (command.state.toLowerCase() !== "enabled") {
+        return { error: "The resource command is not currently enabled.", status: 409 };
+    }
+    const inputs = commandInputsFor(entry, record, resource, command);
+    if (!agentIdentitiesSafe(entry, record, resource, command, inputs)) {
+        return { error: "This command has private identity or argument metadata; run it in the canvas.", status: 409 };
+    }
+    if ([...command.argumentInputs, ...inputs].some((input) =>
+        input.inputType.toLowerCase().includes("secret") || input.dynamicLoading)) {
+        return { error: "Commands with secret or dynamically loaded inputs must be run in the canvas.", status: 409 };
+    }
+    const validation = validateCommandArguments({ ...command, argumentInputs: inputs }, request.arguments ?? {});
+    if (!validation.ok) {
+        return {
+            error: "Command arguments are invalid.", status: 400,
+            validationErrors: validation.errors.map((item) => ({
+                argumentName: publicAgentCommandText(entry, record, item.argumentName, 120),
+                errorMessage: publicAgentCommandText(entry, record, item.errorMessage, 500),
+            })),
+        };
+    }
+    const signature = JSON.stringify([
+        record.id, record.runtimeId, record.appHostPath, record.appHostPid, resource.name, command,
+        inputs, validation.values,
+    ]);
+    return { record, resource, command, inputs, values: validation.values, signature };
+}
+
+function commandRequiresConfirmation(commandName) {
+    return !["start", "resource-start"].includes(commandName.toLowerCase());
+}
+
+function listResourceCommands(entry, input) {
+    const commands = [];
+    for (const node of entry.nodeIndex.values()) {
+        if (node.kind !== "command"
+            || (input?.appHostId && node.appHostId !== input.appHostId)
+            || (input?.resourceName && node.resourceName !== input.resourceName)) continue;
+        const { record, resource } = getResource(entry, node.appHostId, node.resourceName);
+        const command = resource?.commands.find((candidate) => candidate.name === node.commandName);
+        if (!record || !resource || !command) continue;
+        const inputs = commandInputsFor(entry, record, resource, command);
+        const text = (value, max = 1000) => publicAgentCommandText(entry, record, value, max);
+        const unavailable = [...command.argumentInputs, ...inputs].some((item) =>
+            item.inputType.toLowerCase().includes("secret") || item.dynamicLoading);
+        const privateIdentity = !agentIdentitiesSafe(entry, record, resource, command, inputs);
+        commands.push({
+            appHostId: text(record.id), appHostName: text(record.displayName),
+            resourceName: text(resource.name), resourceDisplayName: text(resource.displayName),
+            commandName: text(command.name), displayName: text(command.displayName),
+            description: text(command.description), state: text(command.state),
+            requiresConfirmation: commandRequiresConfirmation(command.name),
+            agentRunnable: !unavailable && !privateIdentity && command.state.toLowerCase() === "enabled"
+                && record.status === "running" && !entry.discoveryStale && !modelForRecord(entry, record)?.stale,
+            ...(unavailable ? { unavailableReason: "Run commands with secret or dynamically loaded inputs in the canvas." } : {}),
+            ...(!unavailable && privateIdentity ? { unavailableReason: "Run commands with private identity or argument metadata in the canvas." } : {}),
+            arguments: inputs.filter((item) => !item.inputType.toLowerCase().includes("secret")).map((item) => ({
+                name: text(item.name, 120), label: text(item.label, 240), description: text(item.description),
+                inputType: text(item.inputType, 80), required: item.required, disabled: item.disabled,
+                ...(item.maxLength ? { maxLength: item.maxLength } : {}),
+                allowCustomChoice: item.allowCustomChoice,
+                options: item.options.map((option) => ({ value: text(option.value), label: text(option.label) })),
+            })),
+        });
+    }
+    return { commands };
+}
+
+async function runAgentResourceCommand(entry, request) {
+    const confirmation = request.confirmationToken ? entry.commandConfirmations.get(request.confirmationToken) : undefined;
+    if (request.confirmationToken) entry.commandConfirmations.delete(request.confirmationToken);
+    const target = agentCommandTarget(entry, request);
+    if (target.error) return { ok: false, ...target };
+    const now = Date.now();
+    for (const [token, confirmation] of entry.commandConfirmations) {
+        if (confirmation.expiresAt <= now) entry.commandConfirmations.delete(token);
+    }
+    if (commandRequiresConfirmation(target.command.name)) {
+        if (!request.confirmationToken) {
+            if (entry.commandConfirmations.size >= MAX_COMMAND_CONFIRMATIONS) {
+                return { ok: false, status: 409, error: "Too many pending command confirmations. Try again later." };
+            }
+            const confirmationToken = createToken();
+            entry.commandConfirmations.set(confirmationToken, {
+                signature: target.signature, expiresAt: now + COMMAND_CONFIRMATION_TTL_MS,
+            });
+            return { ok: false, status: 409, requiresConfirmation: true, confirmationToken,
+                message: "Ask the user to confirm this exact command and arguments before calling again with the token." };
+        }
+        if (!confirmation || confirmation.expiresAt <= now || confirmation.signature !== target.signature) {
+            return { ok: false, status: 409, error: "Confirmation is invalid, expired, used, or does not match the command." };
+        }
+    }
+    return runResourceCommand(entry, { ...request, arguments: target.values }, {
+        agentSignature: target.signature,
+    });
+}
+
 function submittedSecretValues(command, values) {
     return [...new Set(command.argumentInputs
         .filter((input) => input.inputType.toLowerCase().includes("secret"))
@@ -1529,6 +1658,12 @@ function submittedSecretValues(command, values) {
 function publicCommandText(entry, record, value, max, sensitiveValues) {
     const text = relativizeWorkspacePaths(redactText(value, Infinity, sensitiveValues), entry.workingDirectory);
     return redactText(redactAbsolutePaths(redactKnownPaths(text, [entry.workingDirectory, record?.appHostPath])), max);
+}
+
+function publicAgentCommandText(entry, record, value, max, sensitiveValues) {
+    const privatePaths = [entry.workingDirectory, entry.requestedAppHostPath,
+        ...[...entry.hostRecords.values()].map((host) => host.appHostPath), record?.appHostPath];
+    return publicCommandText(entry, record, redactKnownPaths(value, privatePaths), max, sensitiveValues);
 }
 
 function nodeContext(entry, node) {
@@ -1609,7 +1744,7 @@ function queueCopilotContext(entry, nodeId) {
     return { ok: true, reference, pendingContext: pendingContextMetadata() };
 }
 
-async function runResourceCommand(entry, request) {
+async function runResourceCommand(entry, request, { agentSignature } = {}) {
     const { record, resource } = getResource(entry, request?.appHostId, String(request?.resourceName ?? ""));
     if (!record || record.status !== "running") {
         return { ok: false, status: 409, error: "The AppHost is not running." };
@@ -1651,6 +1786,11 @@ async function runResourceCommand(entry, request) {
             appHostOperationKey(record.appHostPath),
             { name: "resource-command", label: `Running ${command.displayName}...` },
             async () => {
+                if (agentSignature && agentCommandTarget(entry, request).signature !== agentSignature) {
+                    const error = new Error("The resource command changed before execution. Refresh and retry.");
+                    error.code = "command_inputs_changed";
+                    throw error;
+                }
                 if (entry.commandInputMetadata.executionInputsFor(metadataOptions, validation.values) !== currentInputs) {
                     const error = new Error("Command inputs changed. Reload inputs before running.");
                     error.code = "command_inputs_changed";
@@ -1681,7 +1821,7 @@ async function runResourceCommand(entry, request) {
                             entry,
                             record,
                             source: "user",
-                            label: `${command.displayName} ${resource.displayName ?? resource.name}`,
+                            label: `${agentSignature ? "Agent: " : ""}${command.displayName} ${resource.displayName ?? resource.name}`,
                         },
                     },
                 );
@@ -1692,7 +1832,8 @@ async function runResourceCommand(entry, request) {
             ok: false,
             status: ["apphost_busy", "command_inputs_changed"].includes(error?.code) ? 409 : 500,
             ...(error?.code === "command_inputs_changed" ? { errorCode: error.code } : {}),
-            error: publicCommandText(entry, record, error?.message || error, 1000, sensitiveValues),
+            error: (agentSignature ? publicAgentCommandText : publicCommandText)(
+                entry, record, error?.message || error, 1000, sensitiveValues),
         };
     } finally {
         if (operationStarted) {
@@ -1705,8 +1846,10 @@ async function runResourceCommand(entry, request) {
         appHostId: record.id,
         resourceName: resource.name,
         commandName: command.name,
-        output: publicCommandText(entry, record, result.stdout, 128 * 1024, sensitiveValues),
-        message: publicCommandText(entry, record, result.stderr, 16 * 1024, sensitiveValues),
+        output: (agentSignature ? publicAgentCommandText : publicCommandText)(
+            entry, record, result.stdout, 128 * 1024, sensitiveValues),
+        message: (agentSignature ? publicAgentCommandText : publicCommandText)(
+            entry, record, result.stderr, 16 * 1024, sensitiveValues),
         error: result.ok
             ? undefined
             : privateError(
@@ -2413,6 +2556,7 @@ async function startServer(ctx) {
         hostModels: new Map(),
         commandInputMetadata: new CommandInputMetadataStore(),
         commandInputLoads: new KeyedTaskQueue(),
+        commandConfirmations: new Map(),
         nodeIndex: new Map(),
         selectionId: null,
         contextSessionId: foregroundSessionId,
@@ -2487,6 +2631,7 @@ async function startServer(ctx) {
 
 async function closeEntry(entry) {
     entry.closed = true;
+    entry.commandConfirmations.clear();
     clearPendingContext(entry);
     entry.generation.invalidate();
     if (entry.timer) {
@@ -2537,6 +2682,37 @@ const appHostsCanvas = createCanvas({
         },
     },
     actions: [
+        {
+            name: "list_resource_commands",
+            description: "List visible AppHost resource commands and their safe argument metadata.",
+            inputSchema: {
+                type: "object", additionalProperties: false,
+                properties: { appHostId: { type: "string" }, resourceName: { type: "string" } },
+            },
+            handler: (ctx) => {
+                const entry = instances.get(ctx.instanceId);
+                if (!entry || entry.closed) throw new CanvasError("canvas_not_open", "The Aspire AppHosts canvas is not open.");
+                return listResourceCommands(entry, ctx.input);
+            },
+        },
+        {
+            name: "run_resource_command",
+            description: "Run a visible resource command. When confirmation is required, ask the user before resubmitting its token.",
+            inputSchema: {
+                type: "object", additionalProperties: false,
+                required: ["appHostId", "resourceName", "commandName"],
+                properties: {
+                    appHostId: { type: "string" }, resourceName: { type: "string" },
+                    commandName: { type: "string" }, arguments: { type: "object" },
+                    confirmationToken: { type: "string" },
+                },
+            },
+            handler: (ctx) => {
+                const entry = instances.get(ctx.instanceId);
+                if (!entry || entry.closed) throw new CanvasError("canvas_not_open", "The Aspire AppHosts canvas is not open.");
+                return runAgentResourceCommand(entry, ctx.input ?? {});
+            },
+        },
         {
             name: "refresh_model",
             description: "Refresh AppHost discovery and the visible resource workspace.",
@@ -2722,6 +2898,7 @@ const openTool = {
 function onSessionStart(input) {
     if (!input?.sessionId || input.agentId || input.parentAgentId) return;
     clearPendingContext();
+    for (const entry of instances.values()) entry.commandConfirmations.clear();
     foregroundSessionId = input.sessionId;
     contextSessionEpoch += 1;
     if (input?.workingDirectory) {

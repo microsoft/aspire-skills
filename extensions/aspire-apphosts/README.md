@@ -71,6 +71,25 @@ Each canvas instance serves its renderer from a random loopback port protected b
 a per-instance token, host/origin checks, a strict Content Security Policy, and
 bounded request bodies.
 
+## Agent resource commands
+
+The `list_resource_commands` canvas action lists visible commands, optionally
+filtered by `appHostId` and `resourceName`. It returns sanitized identities and
+non-secret argument metadata without defaults. Use the exact returned identities
+with `run_resource_command`, providing `appHostId`, `resourceName`, `commandName`,
+and any `arguments`. Commands with secret or dynamically loaded inputs must be
+run in the canvas instead.
+
+The provider rejects stale targets, unavailable commands, and invalid arguments.
+Start commands run directly. For other commands, the first call returns
+`requiresConfirmation` and a single-use token; the agent must ask the user to
+confirm the exact target and arguments before calling again with
+`confirmationToken`. Tokens expire after five minutes and are bound to the
+target, runtime, command schema, and normalized arguments. The token is not
+proof that a human approved: the host cannot authenticate that confirmation.
+Commands use the same operation lock and refresh path as the canvas, and their
+output appears in the Output panel.
+
 ## Experience
 
 - Workspace mode with a compact AppHost switcher and running hosts first.

@@ -4,6 +4,11 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 
 ## [0.0.7](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.7)
 
+### Added
+- AppHosts canvas actions can list visible resource commands and run supported
+  commands through the workbench, with argument validation and confirmation
+  tokens for commands other than start.
+
 ### Changed
 - AppHosts **Add to chat** now queues bounded, visible, clearable snapshots in
   memory instead of relying on the native attachment push acknowledgement. Each
