@@ -64,10 +64,17 @@ addition or execution of a disposable probe.
   separate approval naming the external project/paths and build effects, or
   expand the approved copy; disposable-probe approval alone does not permit
   external builds. Do not drop integrations or rewrite their behavior to pass.
+- Resolve each declared npm integration host directory too: restore runs
+  `npm install` in each host, which can update lockfiles and run lifecycle
+  scripts. Copy those hosts and their required inputs/configuration into the
+  approved copy, rebase references and verify real paths before execution.
+  If any npm host remains outside the copy, stop for separate approval naming
+  its exact paths and install, lockfile and lifecycle-script effects, or expand
+  the approved copy. Probe approval does not authorize effects in original hosts.
 - Confirm targeting/version/source flags with the selected CLI's `aspire add --help`
   and `aspire restore --help`. Use its supported add/restore flow **only in the
   approved copy**: for example, where supported,
-  `aspire add Aspire.Hosting.Dotnet --version <compatible-pinned-version> --non-interactive`,
+  `aspire add Aspire.Hosting.Dotnet --version <compatible-pinned-version> --apphost <copied-apphost-path> --non-interactive`,
   then restore the copy's exact AppHost. Keep existing integration pins unchanged;
   if a matching package cannot be resolved without upgrades, stop for a decision.
 - Inspect the resulting package graph and generated declarations for the flat

@@ -44,7 +44,7 @@ stimuli:
           disallowed:
             - name: '.*'
               args:
-                command: '(^|[\s;&|])([^\s;&|]*[/\\])?(aspire|npm|pnpm|yarn|bun|dotnet|gh|curl|wget)([\s;&|]|$)|(^|[\s;&|])git\s+(fetch|pull|push|clone)\b'
+                command: '(^|[\s;&|])([^\s;&|]*[/\\])?(aspire|npm|pnpm|yarn|bun|dotnet|gh|curl|wget)(\.(exe|cmd|bat))?([\s;&|]|$)|(^|[\s;&|])([^\s;&|]*[/\\])?git(\.(exe|cmd|bat))?\s+(fetch|pull|push|clone)\b'
       - type: program
         name: bootstrap-denied-effects-contract
         config: { program: node, args: [.grader/grade-bootstrap.mjs, denied] }

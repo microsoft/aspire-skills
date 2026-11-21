@@ -169,7 +169,7 @@ test("capability probe preserves pinned inputs and restore failures stay diagnos
   assert.match(probe, /separate approval/);
   assert.match(probe, /pinned SDK, integrations, channel and feeds/);
   assert.match(probe, /aspire add --help/);
-  assert.match(probe, /aspire add Aspire\.Hosting\.Dotnet --version <compatible-pinned-version> --non-interactive/);
+  assert.match(probe, /aspire add Aspire\.Hosting\.Dotnet --version <compatible-pinned-version> --apphost <copied-apphost-path> --non-interactive/);
   assert.match(probe, /supported add\/restore flow/);
   assert.match(probe, /Do not copy probe changes back/);
   assert.match(probe, /report the command, exit code and actual diagnostic/);

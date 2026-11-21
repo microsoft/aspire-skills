@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -9,14 +10,52 @@ const inside = (root, path) => {
   return rel === "" || (!isAbsolute(rel) && rel !== ".." && !rel.startsWith(`..${sep}`));
 };
 
+function assertWritePath(root, path) {
+  assert.ok(inside(root, path), "Mock write escapes fixture workspace");
+  let current = path;
+  while (current !== root) {
+    try {
+      const stat = lstatSync(current);
+      assert.ok(!stat.isSymbolicLink(), "Mock write follows symlink or junction");
+      assert.ok(inside(root, realpathSync(current)), "Mock write escapes fixture workspace");
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    current = dirname(current);
+  }
+}
+
 // This mock performs only fixture-local writes: no installs, MSBuild, network or child processes.
 export function runMock(root, cwd, args) {
   root = realpathSync(root);
+  // Copied mocks share the enclosing fixture's stream, never a per-copy audit.
+  let auditRoot = root;
+  while (!existsSync(join(auditRoot, "original/aspire.config.json")) || !existsSync(join(auditRoot, "legacy/.aspire/settings.json"))) {
+    assert.notEqual(auditRoot, dirname(auditRoot), "No enclosing fixture workspace found");
+    auditRoot = dirname(auditRoot);
+  }
+  const auditPath = join(auditRoot, "mock-audit.jsonl");
+  assertWritePath(auditRoot, auditPath);
+  const record = { id: randomUUID(), command: args[0], args, cwd: relative(auditRoot, resolve(cwd)),
+    inputs: [], writes: [], exitCode: 1 };
+  appendFileSync(auditPath, `${JSON.stringify({ event: "attempt", ...record })}\n`);
+  try {
+    return executeMock(root, auditRoot, cwd, args, record);
+  } finally {
+    appendFileSync(auditPath, `${JSON.stringify({ event: "result", ...record })}\n`);
+  }
+}
+
+function executeMock(root, auditRoot, cwd, args, record) {
   cwd = realpathSync(cwd);
+  record.cwd = relative(auditRoot, cwd);
   assert.ok(inside(root, cwd), "Mock working directory must stay in the fixture workspace");
   const [command] = args;
   assert.ok(["add", "restore"].includes(command), "Only mock add/restore is supported");
-  if (args.includes("--help")) return { exitCode: 0, output: `${command} --apphost <path> --non-interactive --version <version>` };
+  if (args.includes("--help")) {
+    record.exitCode = 0;
+    return { exitCode: 0, output: `${command} --apphost <path> --non-interactive --version <version>` };
+  }
   const targetIndex = args.indexOf("--apphost");
   assert.ok(targetIndex >= 0 && args[targetIndex + 1], "An explicit --apphost is required");
   assert.ok(args.includes("--non-interactive"), "Use --non-interactive");
@@ -29,14 +68,13 @@ export function runMock(root, cwd, args) {
     configDir = dirname(configDir);
   }
   const configPath = join(configDir, "aspire.config.json");
-  const record = { command, args, cwd: relative(root, cwd), apphost: relative(root, apphost),
-    config: relative(root, configPath), inputs: [], writes: [], exitCode: 0 };
+  record.apphost = relative(auditRoot, apphost);
+  record.config = relative(auditRoot, configPath);
   const write = (path, text) => {
+    assertWritePath(root, path);
     mkdirSync(dirname(path), { recursive: true });
-    assert.ok(inside(root, realpathSync(dirname(path))), "Mock write escapes fixture workspace");
-    if (existsSync(path)) assert.ok(inside(root, realpathSync(path)), "Mock write follows external symlink");
     writeFileSync(path, text);
-    record.writes.push(relative(root, path));
+    record.writes.push(relative(auditRoot, path));
   };
   let config;
   if (existsSync(configPath)) config = readJson(configPath);
@@ -61,7 +99,7 @@ export function runMock(root, cwd, args) {
       assert.ok(inside(root, path), "Mock build input escapes fixture workspace");
       if (visited.has(path)) return;
       visited.add(path);
-      record.inputs.push(relative(root, path));
+      record.inputs.push(relative(auditRoot, path));
       const source = readFileSync(path, "utf8");
       for (const match of source.matchAll(/<(?:ProjectReference|Import)\s+(?:Include|Project)="([^"]+)"/g)) {
         build(resolve(dirname(path), match[1]));
@@ -80,8 +118,8 @@ export function runMock(root, cwd, args) {
       write(join(hostDir, "lifecycle-marker.txt"), "postinstall ran\n");
     }
     if (command === "add") write(configPath, `${JSON.stringify(config, null, 2)}\n`);
+    record.exitCode = 0;
   }
-  appendFileSync(join(root, "mock-audit.jsonl"), `${JSON.stringify(record)}\n`);
   return { exitCode: record.exitCode, output: record.exitCode
     ? "IntegrationRestore.csproj: SourceRoot.RevisionId is not a valid commit hash: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'"
     : "Mock preparation complete; generated declarations are synthetic, not installed-package proof." };

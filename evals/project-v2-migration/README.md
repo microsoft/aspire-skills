@@ -92,13 +92,16 @@ legacy restore that leaves configuration after failure, and a copy-owned probe
 with a transitive local integration closure. Run its lint/eval with the commands
 above, substituting `evals/project-v2-migration/execution/eval.yaml`.
 The hidden program grader inspects the actual workspace, command/cwd/target
-audit, config ownership, protected original files, copied build inputs and
+audit (one workspace-root attempt/result stream, including failed validation),
+config ownership, protected original files, copied build inputs and
 install/script markers. Grading-only hashes/configuration live in
 `bootstrap-baseline.json`, separate from the agent-visible mock and fixture;
 update that manifest when changing fixture/mock inputs (the integrity test
 detects drift, allowing only checkout line-ending normalization).
 Negative controls deliberately execute wrong-target,
-retry, inherited-config and external-build paths and require grading failure.
+retry, restore-before-add across mock locations, inherited-config and
+external-build paths and require grading failure. Write guards check existing
+path components for symlinks/junctions before creating any directories.
 The mock performs no real installs, scripts, MSBuild, network or Aspire execution;
 its generated declarations and diagnostics are synthetic, not package/runtime
 qualification or reproduction of the upstream failure.

@@ -17,5 +17,5 @@
     "channel": "dev",
     "packages": { "Aspire.Hosting.AppHost": "13.6.0-dev", "Example.Hosting": "../integrations/Example/Example.csproj" }
   },
-  "mockSha": "340ddeb1a4d70417f08c688d758ba4f648e61091ff642ec1a5bce45b0bf5bb85"
+  "mockSha": "82a37e3c8fb1468fc6661c608febcd3e77c4cea2bbc48d2b0538ba75c88b5286"
 }

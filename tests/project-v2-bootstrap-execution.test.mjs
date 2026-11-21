@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -60,12 +60,55 @@ test("approved copy owns config, install effects and transitive integration buil
   runMock(root, join(probe, "host"), restore);
   assertExecution(root, baseline, "probe");
 });
-test("probe supports retaining the mock and audit inside the approved copy", t => {
+test("copied mock writes to the shared workspace audit", t => {
   const root = fixture(t);
   const probe = prepareProbe(root);
   runMock(probe, join(probe, "host"), add);
   runMock(probe, join(probe, "host"), restore);
   assertExecution(root, baseline, "probe");
+  assert.ok(existsSync(join(root, "mock-audit.jsonl")));
+  assert.ok(!existsSync(join(probe, "mock-audit.jsonl")));
+});
+test("mixed mock locations preserve invocation order and reject restore before add", t => {
+  const root = fixture(t);
+  const probe = prepareProbe(root);
+  runMock(probe, join(probe, "host"), restore);
+  runMock(root, join(probe, "host"), add);
+  assert.throws(() => assertExecution(root, baseline, "probe"), /add before restore exactly once/);
+  const ordered = fixture(t);
+  const orderedProbe = prepareProbe(ordered);
+  runMock(orderedProbe, join(orderedProbe, "host"), add);
+  runMock(ordered, join(orderedProbe, "host"), restore);
+  assertExecution(ordered, baseline, "probe");
+});
+test("validation failures remain audited and make a subsequent restore a retry", t => {
+  const root = fixture(t);
+  assert.throws(() => runMock(root, join(root, "legacy"), ["restore", "--non-interactive"]), /explicit --apphost/);
+  const events = readFileSync(join(root, "mock-audit.jsonl"), "utf8").trim().split("\n").map(JSON.parse);
+  assert.deepEqual(events.map(record => record.event), ["attempt", "result"]);
+  assert.equal(events[1].exitCode, 1);
+  assert.throws(() => assertExecution(root, baseline, "denied"), /not approved/);
+  runMock(root, join(root, "legacy"), restore);
+  assert.throws(() => assertExecution(root, baseline, "failure"), /exactly once/);
+});
+test("mock checks symlinks and junctions before creating directories or following files", t => {
+  for (const target of [".aspire", "package-lock.json"]) {
+    const root = fixture(t);
+    const probe = prepareProbe(root);
+    const outside = mkdtempSync(join(tmpdir(), "bootstrap-outside-"));
+    t.after(() => rmSync(outside, { recursive: true, force: true }));
+    const link = join(probe, "host", target);
+    rmSync(link, { recursive: true, force: true });
+    if (target === ".aspire") symlinkSync(outside, link, process.platform === "win32" ? "junction" : "dir");
+    else {
+      writeFileSync(join(outside, "lock.json"), "unchanged\n");
+      symlinkSync(join(outside, "lock.json"), link, "file");
+    }
+    const before = snapshot(outside);
+    assert.throws(() => runMock(root, join(probe, "host"), restore), /symlink or junction/);
+    assert.deepEqual(snapshot(outside), before, "No external directory or file may be changed");
+    assert.ok(!existsSync(join(outside, "modules")), "Must reject before mkdir");
+  }
 });
 test("probe graders catch original ancestor config and external integration builds", t => {
   for (const options of [{ ownConfig: false }, { copyClosure: false }]) {
@@ -122,6 +165,19 @@ test("execution stimuli permit controlled commands with actual workspace graders
   assert.ok(pattern.test('gh repo clone spboyer/brain'));
   assert.ok(pattern.test('git fetch origin'));
   assert.ok(pattern.test('curl https://example.com'));
+  for (const command of [
+    "aspire.exe restore --apphost .\\apphost.mts",
+    ".\\aspire.exe restore",
+    "C:\\tools\\aspire.exe restore",
+    "npm.cmd install",
+    "pnpm.cmd install",
+    "yarn.bat install",
+    "dotnet.exe restore",
+    "git.exe fetch origin",
+    ".\\git.exe fetch origin",
+    "C:\\tools\\git.exe fetch origin",
+    "echo preparing; npm.cmd install"
+  ]) assert.ok(pattern.test(command), `Must reject Windows command: ${command}`);
   assert.ok(!pattern.test("node ../mock-aspire.mjs restore --apphost ./apphost.mts --non-interactive"));
 });
 
@@ -138,4 +194,8 @@ test("preparation guidance requires informed side-effect approval and real copy 
   assert.match(reference, /not a\s+symlink to the original/);
   assert.match(reference, /transitive build inputs/);
   assert.match(reference, /separate approval naming the external project\/paths and build effects/);
+  assert.match(reference, /each declared npm integration host directory/);
+  assert.match(reference, /`npm install` in each host/);
+  assert.match(reference, /Copy those hosts and their required inputs\/configuration/);
+  assert.match(reference, /separate approval naming\s+its exact paths and install, lockfile and lifecycle-script effects/);
 });
