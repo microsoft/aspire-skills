@@ -12,6 +12,8 @@ All notable changes to the aspire-skills plugin will be documented in this file.
   Preparation approval includes guest package installs, lockfile/lifecycle-script
   effects and legacy configuration migration; disposable probes must isolate
   effective configuration and local integration builds.
+  Assessments identify metadata overrides and their source paths; approved edits
+  retain existing resource bindings and fluent statements.
 - Kept skill-supplied external APIs, streams, and SDK-owned dependencies visible
   in the Aspireify canvas without treating them as runnable services. Resource
   mappings, not-modeled or deferred reasons, and unassessed items now survive

@@ -165,6 +165,13 @@ Present a table before editing:
 |---|---|---|---|---|---|
 | `api` | `AddProject<Projects.Api>` → resolved path | `AddDotnetProject("api", path)` | args, profiles, endpoints, env, refs, waits, replicas, publishing | add `Aspire.Hosting.Dotnet`; remove only proven-exclusive edge | supported / decision / unsupported |
 
+For each generic `Projects.*` resource, report the metadata-to-path evidence in
+the assessment itself, not only the resolved path. Name any
+`AspireProjectMetadataTypeName` override and the exact `ProjectReference` it
+maps to, or the inspected `IProjectMetadata.ProjectPath` source. An overridden
+metadata type need not match the project name; make that relationship explicit
+before requesting approval.
+
 Explain:
 
 - `ASPIREDOTNETPROJECT001` is an experimental API diagnostic.
@@ -219,8 +226,10 @@ language-specific mappings.
   `addCSharpApp`, or the shared `ProjectResourceOptions` handle.
 - Use the Aspire CLI's normal integration acquisition/regeneration flow when
   available; do not hand-edit generated SDK modules.
-- Preserve fluent configuration and application arguments in their original
-  runtime role.
+- Preserve the original variable binding (or absence of one), fluent chain,
+  and application arguments. Replace the approved creation call in place; do
+  not introduce temporary resource variables or split inline chains solely
+  to place experimental pragmas.
 - Update only straightforward local `IResourceBuilder<ProjectResource>` annotations
   tied to approved resources. Do not broadly rewrite public/custom contracts.
 - C# migrations **must** handle `ASPIREDOTNETPROJECT001` narrowly so the edited
@@ -230,6 +239,9 @@ language-specific mappings.
   Use a project-level `NoWarn` only when repository convention and the approved
   migration scope make that equally narrow. Never suppress unrelated diagnostics
   or leave an unbounded disable.
+  A declaration includes its existing fluent statement. Keep inline registrations
+  inline and preserve existing diagnostic scopes; add the new paired scope
+  around the statement rather than extracting its creation call.
   The `AddEFMigrations` overload selected for `IDotnetProgramResource` also requires
   a paired `ASPIREPROJECTS001` suppression around that EF declaration; the legacy
   overload did not. Include this compilation-required edit in the approval scope.

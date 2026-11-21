@@ -55,6 +55,25 @@ function mutateCsharp(root, subset = false) {
     '<ItemGroup><PackageVersion Version = "$(AspireVersion)" Include = "Aspire.Hosting.Dotnet" /></ItemGroup></Project>'));
 }
 
+function mutateOwnership(root) {
+  const contract = editCases.ownership;
+  edit(root, contract.source, source => source
+    .replaceAll(/AddProject<Projects\.CatalogApi>\("([^"]+)", launchProfileName: null\)/g,
+      'AddDotnetProject("$1", "../Migration.Api/Migration.Api.csproj", options => options.ExcludeLaunchProfile = true)')
+    .replace("#pragma warning disable ASPIREPIPELINES003",
+      "#pragma warning disable ASPIREDOTNETPROJECT001\n#pragma warning disable ASPIREPIPELINES003")
+    .replace("#pragma warning restore ASPIREPIPELINES003",
+      "#pragma warning restore ASPIREPIPELINES003\n#pragma warning restore ASPIREDOTNETPROJECT001")
+    .replace("var prebuilt =", "#pragma warning disable ASPIREDOTNETPROJECT001\nvar prebuilt =")
+    .replace("\nif (builder.ExecutionContext.IsPublishMode)",
+      "\n#pragma warning restore ASPIREDOTNETPROJECT001\n\nif (builder.ExecutionContext.IsPublishMode)"));
+  edit(root, contract.appHost, source => source
+    .replace(/<ProjectReference Include="[^"]*Migration\.Api[^"]*"[^>]*\/>/, "")
+    .replace("</Project>", '<ItemGroup><PackageReference Include="Aspire.Hosting.Dotnet" /></ItemGroup></Project>'));
+  edit(root, "Directory.Packages.props", source => source.replace("</Project>",
+    '<ItemGroup><PackageVersion Include="Aspire.Hosting.Dotnet" Version="$(AspireVersion)" /></ItemGroup></Project>'));
+}
+
 function combineCsharpMigrationPragmas(root, diagnostics) {
   edit(root, editCases.csharp.source, source => source
     .replace(
@@ -127,6 +146,26 @@ test("source mutation controls are not substituted agent outputs", () => {
 test("source mutation controls reject unchanged input", t => {
   const { after } = fixture(t);
   assert.throws(() => edit(after, editCases.csharp.source, source => source), /Test mutation did not change/);
+});
+
+test("assessment reports metadata provenance and mappings preserve original bindings", () => {
+  const skill = readFileSync(new URL("../skills/aspire-project-v2-migration/SKILL.md", import.meta.url), "utf8");
+  const patterns = readFileSync(new URL("../skills/aspire-project-v2-migration/references/migration-patterns.md", import.meta.url), "utf8");
+  assert.match(skill, /report the metadata-to-path evidence in\s+the assessment itself/);
+  assert.match(skill, /`AspireProjectMetadataTypeName` override and the exact `ProjectReference`/);
+  assert.match(skill, /Preserve the original variable binding \(or absence of one\), fluent chain/);
+  assert.match(patterns, /Do not introduce a temporary resource variable or split the fluent statement/);
+});
+
+test("publishing ownership migration keeps inline and bound registrations unchanged", t => {
+  const { before, after } = fixture(t, "ownership");
+  mutateOwnership(after);
+  assert.deepEqual(assertEditedFixture(before, after, "ownership"), editCases.ownership.files.toSorted());
+  edit(after, editCases.ownership.source, source => source.replace(
+    'builder.AddDotnetProject("dockerfile-api", "../Migration.Api/Migration.Api.csproj", options => options.ExcludeLaunchProfile = true)\n    .WithEnvironment',
+    'var dockerfileApi = builder.AddDotnetProject("dockerfile-api", "../Migration.Api/Migration.Api.csproj", options => options.ExcludeLaunchProfile = true);\ndockerfileApi.WithEnvironment'
+  ));
+  assert.throws(() => assertEditedFixture(before, after, "ownership"), /Non-migration code\/fluent behavior changed/);
 });
 
 test("fresh polyglot bootstrap orders preparation, capability proof, and exact edit approval", () => {
