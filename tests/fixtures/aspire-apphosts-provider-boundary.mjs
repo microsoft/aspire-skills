@@ -239,6 +239,7 @@ async function harness(t, {
     workingDirectory = process.cwd(),
     browserCanvases = [{ canvasId: "browser", extensionId: "host:builtins" }],
     browserListAvailable = true, browserListError, browserOpenError, systemBrowserError,
+    sessionId = "foreground-test",
 } = {}) {
     const servers = [];
     const intervals = new Set();
@@ -249,6 +250,7 @@ async function harness(t, {
     const calls = [];
     const controls = { failedHost: null, failPs: false, inputs: baseInputs, state: "Running", loader: null, executor: null };
     let declaration;
+    let hooks;
     let failNextListen = failListen;
     const run = async (args, options) => {
         calls.push({ args: [...args], options });
@@ -318,12 +320,15 @@ async function harness(t, {
         CanvasError: class extends Error { constructor(code, message) { super(message); this.code = code; } },
         joinSession: async (options) => {
             declaration = options.canvases[0];
+            hooks = options.hooks;
+            hooks.onSessionStart({ sessionId, workingDirectory, source: "startup" });
             return {
+                sessionId,
                 log: (message) => logs.push(message),
                 rpc: {
                     extensions: { sendAttachmentsToMessage: async (payload) => {
-                        if (controls.attachError) throw controls.attachError;
                         attachments.push(clone(payload));
+                        throw new Error("Native attachment push must not be used.");
                     } },
                     canvas: {
                         ...(browserListAvailable ? { list: async () => {
@@ -360,8 +365,21 @@ async function harness(t, {
     });
     await module.evaluate();
     const opened = new Set();
+    // Every pending-context reference the harness has observed; the default prompt quotes them all.
+    const references = new Set();
+    const recordReferences = (result) => {
+        for (const item of result?.pendingContext?.items ?? result?.state?.pendingContext?.items ?? []) {
+            if (item.reference) references.add(item.reference);
+        }
+        return result;
+    };
     const h = {
+        references,
         controls, calls, servers, intervals, idleTimers, attachments, canvasOpens, systemBrowserUrls, logs,
+        startSession: (input = {}) => hooks.onSessionStart({ sessionId, workingDirectory, source: "new", ...input }),
+        submit: (input = {}) => hooks.onUserPromptSubmitted({
+            sessionId, workingDirectory, prompt: `Inspect this synthetic snapshot. ${[...references].join(" ")}`, ...input,
+        }),
         fireIdleTimers() {
             const due = [...idleTimers];
             idleTimers.clear();
@@ -381,7 +399,7 @@ async function harness(t, {
                 headers: { "x-aspire-apphosts-token": url.searchParams.get("token"), "content-type": "application/json" },
                 ...(body === undefined ? {} : { body: JSON.stringify(body) }),
             });
-            return { status: response.status, ...await response.json() };
+            return recordReferences({ status: response.status, ...await response.json() });
         },
         commandCalls: () => calls.filter(({ args }) => args[0] === "resource" && !args.includes("--load-arguments")),
     };
@@ -623,7 +641,430 @@ async function sse(h, open) {
     };
 }
 
-test("context is owner-specific, fresh/stale-aware, and carries resource dependencies through HTTP and SDK", async (t) => {
+test("renderer action click through HTTP queue delivers a captured synthetic nonce once through the root submit hook", async (t) => {
+    const nonce = "synthetic-context-166-unique-728cf2";
+    const h = await harness(t, { cliOverride: (args) => {
+        if (args[0] !== "describe") return;
+        const payload = describe(h.controls.inputs, h.controls.state);
+        payload.resources[0].displayName = nonce;
+        return ok(payload);
+    } });
+    const open = await h.open("context-origin");
+    const { state } = await h.request(open, "/api/state");
+    const node = allNodes(state.roots).find((candidate) => candidate.kind === "resource" && candidate.resourceName === "api");
+    await h.request(open, "/api/selection", { nodeId: node.id });
+    const context = clone(await h.action("get_selected_context", {}, "context-origin"));
+    assert.equal(h.submit(), undefined, "selection and explicit context reads never queue");
+    const stream = await sse(h, open);
+    t.after(() => stream.close());
+    const renderer = await readFile(new URL("../../extensions/aspire-apphosts/ui/app.js", import.meta.url), "utf8");
+    const actionSource = renderer.slice(
+        renderer.indexOf("async function executeNodeAction("),
+        renderer.indexOf("\nasync function choosePipelineStep("),
+    );
+    assert.ok(actionSource.startsWith("async function executeNodeAction("));
+    const acknowledged = deferred();
+    let queued;
+    let renderedPending;
+    const contextBridge = createContext({
+        pendingConfirmation: null,
+        api: async (route, { body }) => { queued = await h.request(open, route, body); return queued; },
+        acceptPendingContext: (pending) => { renderedPending = clone(pending); },
+        showToast: (message, error) => acknowledged.resolve({ message, error }),
+    });
+    const actionModule = new SourceTextModule(`${actionSource}\nexport { executeNodeAction };`, { context: contextBridge });
+    await actionModule.link(() => { throw new Error("The renderer action must not introduce imports."); });
+    await actionModule.evaluate();
+    const button = new EventTarget();
+    button.addEventListener("click", () => void actionModule.namespace.executeNodeAction("ask", node));
+    button.dispatchEvent(new Event("click"));
+    const acknowledgement = await acknowledged.promise;
+    assert.equal(acknowledgement.error, false);
+    assert.match(acknowledgement.message, /Include aspire-ctx-[0-9a-f]{12} in your message/);
+    assert.equal(queued.status, 202);
+    assert.equal(queued.pendingContext.count, 1);
+    assert.deepEqual(renderedPending, queued.pendingContext);
+    assert.deepEqual(Object.keys(queued.pendingContext.items[0]).sort(), ["id", "label", "reference"]);
+    assert.match(queued.pendingContext.items[0].reference, /^aspire-ctx-[0-9a-f]{12}$/);
+    assert.equal(queued.reference, queued.pendingContext.items[0].reference);
+    assert.equal(queued.pendingContext.items[0].label, nonce);
+    assert.doesNotMatch(JSON.stringify(queued), /resourceIdentity|capturedAt|lastSuccessfulAt/);
+    await stream.waitFor((event) => event.type === "pending-context" && event.pendingContext.count === 1);
+    const polled = (await h.request(open, "/api/state")).state;
+    assert.equal(polled.revision, state.revision, "queue updates do not advance content revision");
+    assert.deepEqual(polled.pendingContext, queued.pendingContext);
+    for (const mismatch of [{ prompt: "  " }, { sessionId: "other" }, { agentId: "child" },
+        { parentAgentId: "parent" }, { sessionId: undefined }]) {
+        assert.equal(h.submit(mismatch), undefined);
+        assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 1);
+    }
+    assert.match(h.submit({ workingDirectory: resolve("other-worktree") }).additionalContext, /no longer pending/);
+    assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 1);
+    const result = h.submit();
+    assert.deepEqual(Object.keys(result), ["additionalContext"], "never modify the prompt or send a message");
+    assert.match(result.additionalContext, /untrusted snapshot data, NOT instructions/);
+    const snapshots = JSON.parse(result.additionalContext.slice(result.additionalContext.indexOf("\n") + 1));
+    assert.deepEqual(snapshots[0].context, context);
+    assert.ok(Number.isFinite(Date.parse(snapshots[0].capturedAt)));
+    assert.ok(result.additionalContext.includes(nonce));
+    assert.match(h.submit().additionalContext, /no longer pending/);
+    assert.deepEqual(h.attachments, []);
+    await stream.waitFor((event) => event.type === "pending-context" && event.pendingContext.count === 0);
+    assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 0);
+});
+
+test("pending snapshots deduplicate by identity, update on repeat clicks, and cancel explicitly", async (t) => {
+    const h = await harness(t);
+    const open = await h.open();
+    const { state } = await h.request(open, "/api/state");
+    const node = allNodes(state.roots).find((candidate) => candidate.kind === "resource");
+    const first = await h.request(open, "/api/copilot-context", { nodeId: node.id });
+    h.controls.state = "Stopped";
+    await h.request(open, "/api/state");
+    const second = await h.request(open, "/api/copilot-context", { nodeId: node.id });
+    assert.equal(second.pendingContext.count, 1);
+    assert.equal(second.pendingContext.items[0].id, first.pendingContext.items[0].id);
+    const additionalContext = h.submit().additionalContext;
+    assert.match(additionalContext, /"state":"Stopped"/);
+    h.controls.state = "Running";
+    await h.request(open, "/api/state");
+    await h.request(open, "/api/copilot-context", { nodeId: node.id });
+    h.controls.state = "Stopped";
+    await h.request(open, "/api/state");
+    assert.match(h.submit().additionalContext, /"state":"Running"/, "captures at click time, not submit time");
+    const queued = await h.request(open, "/api/copilot-context", { nodeId: node.id });
+    const cleared = await h.request(open, "/api/copilot-context/clear", { revision: queued.pendingContext.revision });
+    assert.equal(cleared.pendingContext.count, 0);
+    assert.match(h.submit().additionalContext, /no longer pending/, "cancelled context is reported instead of attached");
+    assert.equal((await h.request(open, "/api/copilot-context/clear", { revision: cleared.pendingContext.revision })).ok, true);
+    const missing = await h.request(open, "/api/copilot-context", { nodeId: "no-longer-present" });
+    assert.equal(missing.status, 400);
+    assert.equal(missing.error, "The selected canvas item is no longer available.");
+    assert.deepEqual(h.attachments, []);
+});
+
+test("snapshots attach only to prompts that quote their reference, never to unrelated or earlier messages", async (t) => {
+    const h = await harness(t);
+    const open = await h.open();
+    const nodes = allNodes((await h.request(open, "/api/state")).state.roots)
+        .filter((node) => node.kind === "resource");
+    const first = await h.request(open, "/api/copilot-context", { nodeId: nodes[0].id });
+    const second = await h.request(open, "/api/copilot-context", { nodeId: nodes[1].id });
+    assert.notEqual(first.reference, second.reference);
+    assert.equal(h.submit({ prompt: "Rescan this workspace for Aspire integration." }), undefined,
+        "canvas-generated or unrelated root prompts cannot consume pending context");
+    assert.match(h.submit({ prompt: `Queued before Add: aspire-ctx-${"0".repeat(12)}` }).additionalContext,
+        /no longer pending/, "a message written before Add cannot know its fresh reference");
+    assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 2);
+    assert.equal(h.submit({ prompt: `x${second.reference}` }), undefined, "references match only as standalone tokens");
+    assert.equal(h.submit({ prompt: `${second.reference}0` }), undefined);
+    const delivered = h.submit({ prompt: `Explain (${second.reference}).` }).additionalContext;
+    const snapshots = JSON.parse(delivered.slice(delivered.indexOf("\n") + 1));
+    assert.deepEqual(snapshots.map((snapshot) => snapshot.reference), [second.reference]);
+    const remaining = (await h.request(open, "/api/state")).state.pendingContext;
+    assert.deepEqual(remaining.items.map((item) => item.reference), [first.reference],
+        "unreferenced snapshots remain visible and clearable");
+    const updated = await h.request(open, "/api/copilot-context", { nodeId: nodes[0].id });
+    assert.notEqual(updated.reference, first.reference, "re-adding rotates the reference");
+    assert.match(h.submit({ prompt: `Written before the update: ${first.reference}` }).additionalContext,
+        /no longer pending/, "a message quoting the old reference cannot receive the newer snapshot");
+    assert.ok(h.submit({ prompt: updated.reference }).additionalContext);
+    assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 0);
+});
+
+test("unmatched references are reported alongside valid snapshots without consuming unreferenced context", async (t) => {
+    const h = await harness(t);
+    const open = await h.open();
+    const nodes = allNodes((await h.request(open, "/api/state")).state.roots).filter((node) => node.kind === "resource");
+    const stale = await h.request(open, "/api/copilot-context", { nodeId: nodes[0].id });
+    const valid = await h.request(open, "/api/copilot-context", { nodeId: nodes[0].id });
+    const unreferenced = await h.request(open, "/api/copilot-context", { nodeId: nodes[1].id });
+    const context = h.submit({ prompt: `${stale.reference} ${valid.reference} ${stale.reference}` }).additionalContext;
+    assert.match(context, /Tell the user.*ask them to re-add/);
+    assert.equal(context.split(stale.reference).length, 2, "duplicate missing references are reported once");
+    const snapshots = JSON.parse(context.slice(context.indexOf("\n") + 1));
+    assert.deepEqual(snapshots.map((snapshot) => snapshot.reference), [valid.reference]);
+    const pending = (await h.request(open, "/api/state")).state.pendingContext;
+    assert.deepEqual(pending.items.map((item) => item.reference), [unreferenced.reference]);
+    await h.request(open, "/api/copilot-context/clear", { revision: pending.revision });
+    const cleared = h.submit({ prompt: unreferenced.reference }).additionalContext;
+    assert.match(cleared, /no longer pending/);
+    assert.doesNotMatch(cleared, /capturedAt|resourceIdentity/);
+    h.startSession({ sessionId: "new-foreground" });
+    assert.match(h.submit({ sessionId: "new-foreground", prompt: valid.reference }).additionalContext, /no longer pending/);
+});
+
+for (const [label, input, fenced] of [
+    ["foreground prompt", {}, true],
+    ["unmatched reference", { prompt: "aspire-ctx-000000000000" }, true],
+    ["subagent prompt", { agentId: "child" }, false],
+    ["other session prompt", { sessionId: "other" }, false],
+]) {
+test(`an in-flight Add is fenced only by a current ${label}`, async (t) => {
+    const h = await harness(t);
+    const open = await h.open();
+    const node = allNodes((await h.request(open, "/api/state")).state.roots)
+        .find((candidate) => candidate.kind === "resource");
+    const entered = deferred();
+    h.servers[0].once("request", () => entered.resolve());
+    let request;
+    const pending = new Promise((done, reject) => {
+        request = http.request(new URL("/api/copilot-context", open.url), {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-aspire-apphosts-token": new URL(open.url).searchParams.get("token") },
+        }, (response) => {
+            const chunks = [];
+            response.on("data", (chunk) => chunks.push(chunk));
+            response.once("end", () => done({ status: response.statusCode, ...JSON.parse(Buffer.concat(chunks).toString("utf8")) }));
+        });
+        request.once("error", reject);
+        request.write('{"nodeId":');
+    });
+    await entered.promise;
+    h.submit({ prompt: "Submitted while Add was in flight.", ...input });
+    request.end(`${JSON.stringify(node.id)}}`);
+    const added = await pending;
+    if (fenced) {
+        assert.equal(added.status, 409);
+        assert.match(added.error, /Add the item again/);
+        assert.equal(added.reference, undefined);
+        assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 0);
+        const retry = await h.request(open, "/api/copilot-context", { nodeId: node.id });
+        assert.equal(retry.status, 202);
+        assert.ok(h.submit({ prompt: retry.reference }).additionalContext);
+        return;
+    }
+    assert.equal(added.status, 202);
+    assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 1);
+    assert.ok(h.submit({ prompt: added.reference }).additionalContext);
+});
+}
+
+test("pending context clears on close and root session changes, never on a subagent start", async (t) => {
+    const h = await harness(t);
+    const open = await h.open();
+    const { state } = await h.request(open, "/api/state");
+    const node = allNodes(state.roots).find((candidate) => candidate.kind === "resource");
+    await h.request(open, "/api/copilot-context", { nodeId: node.id });
+    h.startSession({ agentId: "child", sessionId: "child-session" });
+    assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 1);
+    h.startSession({ sessionId: "new-foreground" });
+    assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 0);
+    assert.equal(h.submit(), undefined);
+    assert.match(h.submit({ sessionId: "new-foreground" }).additionalContext, /no longer pending/);
+    assert.equal((await h.request(open, "/api/copilot-context", { nodeId: node.id })).status, 409);
+    await h.open();
+    assert.equal((await h.request(open, "/api/copilot-context", { nodeId: node.id })).ok, true);
+    assert.equal(h.submit(), undefined, "old-session prompts cannot consume new-session context");
+    assert.ok(h.submit({ sessionId: "new-foreground" }).additionalContext);
+    await h.request(open, "/api/copilot-context", { nodeId: node.id });
+    await h.close();
+    assert.match(h.submit({ sessionId: "new-foreground" }).additionalContext, /no longer pending/);
+    const reopened = await h.open();
+    assert.equal((await h.request(reopened, "/api/state")).state.pendingContext.count, 0);
+});
+
+test("an in-flight Add to chat request cannot cross a foreground session change", async (t) => {
+    const h = await harness(t);
+    const open = await h.open();
+    const { state } = await h.request(open, "/api/state");
+    const node = allNodes(state.roots).find((candidate) => candidate.kind === "resource");
+    const url = new URL("/api/copilot-context", open.url);
+    const entered = deferred();
+    h.servers[0].once("request", () => entered.resolve());
+    let request;
+    const pending = new Promise((done, reject) => {
+        request = http.request(url, {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-aspire-apphosts-token": new URL(open.url).searchParams.get("token") },
+        }, (response) => {
+            const chunks = [];
+            response.on("data", (chunk) => chunks.push(chunk));
+            response.once("end", () => done({ status: response.statusCode, ...JSON.parse(Buffer.concat(chunks).toString("utf8")) }));
+        });
+        request.once("error", reject);
+        request.write('{"nodeId":');
+    });
+    await entered.promise;
+    h.startSession({ sessionId: "replacement-foreground" });
+    await h.open();
+    request.end(`${JSON.stringify(node.id)}}`);
+    const result = await pending;
+    assert.equal(result.status, 409);
+    assert.match(result.error, /foreground context changed/);
+    assert.equal(h.submit({ sessionId: "replacement-foreground" }), undefined);
+    assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 0);
+});
+
+test("an in-flight Clear cannot delete replacement-session context queued after reopening", async (t) => {
+    const nonce = "synthetic-replacement-context-166-841f7d";
+    const h = await harness(t, { cliOverride: (args) => {
+        if (args[0] !== "describe") return;
+        const payload = describe(h.controls.inputs, h.controls.state);
+        payload.resources[0].displayName = nonce;
+        return ok(payload);
+    } });
+    const open = await h.open();
+    const { state } = await h.request(open, "/api/state");
+    const node = allNodes(state.roots).find((candidate) => candidate.kind === "resource" && candidate.resourceName === "api");
+    await h.request(open, "/api/copilot-context", { nodeId: node.id });
+    const entered = deferred();
+    h.servers[0].once("request", () => entered.resolve());
+    let request;
+    const pending = new Promise((done, reject) => {
+        request = http.request(new URL("/api/copilot-context/clear", open.url), {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-aspire-apphosts-token": new URL(open.url).searchParams.get("token") },
+        }, (response) => {
+            const chunks = [];
+            response.on("data", (chunk) => chunks.push(chunk));
+            response.once("end", () => done({ status: response.statusCode, ...JSON.parse(Buffer.concat(chunks).toString("utf8")) }));
+        });
+        request.once("error", reject);
+        request.write("{");
+    });
+    await entered.promise;
+    h.startSession({ sessionId: "replacement-foreground" });
+    h.controls.state = "Stopped";
+    await h.open();
+    await h.request(open, "/api/state");
+    const queued = await h.request(open, "/api/copilot-context", { nodeId: node.id });
+    assert.equal(queued.pendingContext.count, 1);
+    request.end("}");
+    const result = await pending;
+    assert.equal(result.status, 409);
+    assert.match(result.error, /foreground context changed/);
+    assert.deepEqual((await h.request(open, "/api/state")).state.pendingContext, queued.pendingContext,
+        "the old Clear must not mutate the replacement session's queue or revision");
+    assert.equal(h.submit(), undefined, "the old session cannot consume replacement context");
+    const delivered = h.submit({ sessionId: "replacement-foreground" }).additionalContext;
+    assert.ok(delivered.includes(nonce));
+    assert.match(delivered, /"state":"Stopped"/);
+    assert.match(h.submit({ sessionId: "replacement-foreground" }).additionalContext, /no longer pending/);
+    assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 0);
+});
+
+test("pending context bounds reject overflow and oversized replacements without dropping queued snapshots", async (t) => {
+    let urlCount = 0;
+    const h = await harness(t, { cliOverride: (args) => args[0] === "describe" ? ok({
+        resources: Array.from({ length: 20 }, (_, i) => ({
+            name: `synthetic-${i}`, resourceType: "Project", state: "Running",
+            urls: Array.from({ length: urlCount }, (_, j) => ({
+                name: `endpoint-${j}`, url: `http://localhost:7001/${"x".repeat(900)}/${j}`,
+            })),
+        })),
+    }) : undefined });
+    const open = await h.open();
+    const state = (await h.request(open, "/api/state")).state;
+    const resources = allNodes(state.roots).filter((node) => node.kind === "resource");
+    for (const resource of resources.slice(0, 16)) {
+        assert.equal((await h.request(open, "/api/copilot-context", { nodeId: resource.id })).ok, true);
+    }
+    const full = await h.request(open, "/api/copilot-context", { nodeId: resources[16].id });
+    assert.equal(full.status, 409);
+    assert.match(full.error, /Pending context is full/);
+    assert.equal((await h.request(open, "/api/state")).state.pendingContext.count, 16);
+    assert.equal((await h.request(open, "/api/copilot-context", { nodeId: resources[0].id })).ok, true,
+        "deduplicated replacement remains possible at the count limit");
+    urlCount = 30;
+    await h.request(open, "/api/state");
+    const oversized = await h.request(open, "/api/copilot-context", { nodeId: resources[0].id });
+    assert.equal(oversized.status, 413);
+    assert.match(oversized.error, /16 KiB/);
+    const retained = h.submit().additionalContext;
+    const retainedSnapshots = JSON.parse(retained.slice(retained.indexOf("\n") + 1));
+    assert.equal(retainedSnapshots.length, 16);
+    assert.equal(retainedSnapshots[0].context.resource.urls.length, 0, "oversize replacement preserves old snapshot");
+    urlCount = 12;
+    await h.request(open, "/api/state");
+    let accepted = 0;
+    for (const resource of resources) {
+        const result = await h.request(open, "/api/copilot-context", { nodeId: resource.id });
+        if (!result.ok) {
+            assert.equal(result.status, 409);
+            assert.match(result.error, /64 KiB/);
+            break;
+        }
+        accepted += 1;
+    }
+    assert.ok(accepted > 0 && accepted < 16, "byte bound is enforced independently of the count bound");
+    const pending = (await h.request(open, "/api/state")).state.pendingContext;
+    assert.equal(pending.count, accepted);
+    const delivered = h.submit().additionalContext;
+    const snapshots = JSON.parse(delivered.slice(delivered.indexOf("\n") + 1));
+    assert.equal(snapshots.length, accepted);
+    assert.ok(Buffer.byteLength(JSON.stringify(snapshots)) <= 64 * 1024);
+});
+
+test("deduplication moves a snapshot between canvas owners without duplicate delivery", async (t) => {
+    const h = await harness(t);
+    const one = await h.open("one");
+    const two = await h.open("two");
+    const { state } = await h.request(one, "/api/state");
+    const node = allNodes(state.roots).find((candidate) => candidate.kind === "resource");
+    await h.request(one, "/api/copilot-context", { nodeId: node.id });
+    await h.request(two, "/api/copilot-context", { nodeId: node.id });
+    assert.equal((await h.request(one, "/api/state")).state.pendingContext.count, 1);
+    assert.equal((await h.request(two, "/api/state")).state.pendingContext.count, 1);
+    await h.close("one");
+    const delivered = h.submit().additionalContext;
+    assert.equal(JSON.parse(delivered.slice(delivered.indexOf("\n") + 1)).length, 1);
+});
+
+test("all canvases show the shared context list and either can clear the displayed revision", async (t) => {
+    const h = await harness(t);
+    const one = await h.open("one");
+    const two = await h.open("two");
+    const nodes = allNodes((await h.request(one, "/api/state")).state.roots)
+        .filter((node) => node.kind === "resource");
+    await h.request(one, "/api/copilot-context", { nodeId: nodes[0].id });
+    const queued = await h.request(two, "/api/copilot-context", { nodeId: nodes[1].id });
+    assert.equal(queued.pendingContext.count, 2);
+    assert.deepEqual((await h.request(one, "/api/state")).state.pendingContext, queued.pendingContext);
+    assert.deepEqual((await h.request(two, "/api/state")).state.pendingContext, queued.pendingContext);
+    const cleared = await h.request(one, "/api/copilot-context/clear", { revision: queued.pendingContext.revision });
+    assert.equal(cleared.ok, true);
+    assert.equal(cleared.pendingContext.count, 0);
+    assert.deepEqual((await h.request(two, "/api/state")).state.pendingContext, cleared.pendingContext);
+    assert.match(h.submit().additionalContext, /no longer pending/);
+});
+
+test("a delayed Clear rejects its old revision without deleting an updated snapshot", async (t) => {
+    const h = await harness(t);
+    const open = await h.open();
+    const node = allNodes((await h.request(open, "/api/state")).state.roots)
+        .find((candidate) => candidate.kind === "resource");
+    const first = await h.request(open, "/api/copilot-context", { nodeId: node.id });
+    const entered = deferred();
+    h.servers[0].once("request", () => entered.resolve());
+    let request;
+    const pending = new Promise((done, reject) => {
+        request = http.request(new URL("/api/copilot-context/clear", open.url), {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-aspire-apphosts-token": new URL(open.url).searchParams.get("token") },
+        }, (response) => {
+            const chunks = [];
+            response.on("data", (chunk) => chunks.push(chunk));
+            response.once("end", () => done({ status: response.statusCode, ...JSON.parse(Buffer.concat(chunks).toString("utf8")) }));
+        });
+        request.once("error", reject);
+        request.write('{"revision":');
+    });
+    await entered.promise;
+    const updated = await h.request(open, "/api/copilot-context", { nodeId: node.id });
+    request.end(`${first.pendingContext.revision}}`);
+    const result = await pending;
+    assert.equal(result.status, 409);
+    assert.match(result.error, /Pending context changed/);
+    assert.deepEqual((await h.request(open, "/api/state")).state.pendingContext, updated.pendingContext);
+    for (const revision of [undefined, -1, "1", 1.5]) {
+        const invalid = await h.request(open, "/api/copilot-context/clear", { revision });
+        assert.equal(invalid.status, 400);
+    }
+    assert.ok(h.submit().additionalContext);
+});
+
+test("context is owner-specific, fresh/stale-aware, and carries resource dependencies through HTTP and hook", async (t) => {
     const h = await harness(t);
     const open = await h.open();
     const { state } = await h.request(open, "/api/state");
@@ -648,21 +1089,19 @@ test("context is owner-specific, fresh/stale-aware, and carries resource depende
             assert.equal(context.resourceIdentity.name, "api");
             assert.equal(context.resourceIdentity.id, `apphost:${root.appHostId}:resource:api`);
             await h.request(open, "/api/copilot-context", { nodeId: node.id });
-            assert.deepEqual(h.attachments.at(-1).attachments[0].payload, context);
+            const delivered = h.submit().additionalContext;
+            const snapshots = JSON.parse(delivered.slice(delivered.indexOf("\n") + 1));
+            assert.deepEqual(snapshots[0].context, context);
+            assert.doesNotMatch(delivered, /not-for-composer|dummy-dashboard-token|private-host-token|private-endpoint-token|appHostPath|"environment":\{/);
+            for (const path of paths) assert.ok(!delivered.includes(path));
             if (kind === "resource") contexts.push(context);
         }
         const api = nodes.find((node) => node.kind === "resource" && node.resourceName === "api");
         assert.deepEqual(clone(api.dependsOn), [{ resourceName: "db", types: ["Reference", "WaitFor"] }]);
         assert.equal(root.graph, undefined);
     }
-    h.controls.attachError = new Error("Composer unavailable");
-    const failedAttach = await h.request(open, "/api/copilot-context", { nodeId: contexts[0].nodeId });
-    assert.equal(failedAttach.status, 400);
-    assert.equal(failedAttach.error, "Could not add to chat: Composer unavailable");
-    h.controls.attachError = null;
     assert.notDeepEqual(contexts[0], contexts[1], "identical APIs under distinct AppHosts retain owner identity");
-    assert.doesNotMatch(JSON.stringify(h.attachments), /not-for-composer|dummy-dashboard-token|private-host-token|private-endpoint-token|appHostPath|"environment":\{/);
-    for (const path of paths) assert.ok(!JSON.stringify(h.attachments).includes(path));
+    assert.deepEqual(h.attachments, []);
 
     h.controls.failedHost = paths[0];
     await h.request(open, "/api/state");
@@ -672,6 +1111,10 @@ test("context is owner-specific, fresh/stale-aware, and carries resource depende
     assert.equal(stale.resource.state, "Running");
     assert.equal(stale.appHost.stale, true);
     assert.equal(stale.appHost.lastSuccessfulAt, contexts[0].appHost.lastSuccessfulAt);
+    await h.request(open, "/api/copilot-context", { nodeId: resourceId });
+    const delivered = h.submit().additionalContext;
+    const snapshot = JSON.parse(delivered.slice(delivered.indexOf("\n") + 1))[0];
+    assert.equal(snapshot.context.appHost.stale, true);
     await h.request(open, "/api/selection", { nodeId: contexts[1].nodeId });
     assert.equal((await h.action("get_selected_context")).appHost.stale, false);
     h.controls.failPs = true;

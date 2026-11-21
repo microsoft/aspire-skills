@@ -5,6 +5,22 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [0.0.7](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.7)
 
 ### Changed
+- AppHosts **Add to chat** now queues bounded, visible, clearable snapshots in
+  memory instead of relying on the native attachment push acknowledgement. Each
+  snapshot shows a fresh, copyable `aspire-ctx-…` reference; the submit hook attaches it
+  only to a root message that contains that reference. This is explicit
+  reference matching only, not authenticated authorship or submission-order
+  protection: any root prompt that contains a known reference, including
+  canvas-generated or relayed text, receives the snapshot. Add requests still in
+  flight when the foreground prompt hook executes fail visibly and must be
+  retried; this is a hook-time fence, not a submission-time guarantee. Unmatched
+  references produce a note asking Copilot to report missing context and request
+  a fresh Add. Nothing sends automatically or creates a native
+  composer pill;
+  snapshots are consumed once at the hook boundary and cleared on canvas close
+  or foreground session start. All open
+  AppHosts canvases show the shared pending list; Clear targets the displayed
+  revision and rejects stale requests without deleting newer selections.
 - Kept skill-supplied external APIs, streams, and SDK-owned dependencies visible
   in the Aspireify canvas without treating them as runnable services. Resource
   mappings, not-modeled or deferred reasons, and unassessed items now survive

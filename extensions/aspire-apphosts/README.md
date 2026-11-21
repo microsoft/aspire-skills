@@ -104,8 +104,38 @@ bounded request bodies.
   structured logs, traces, and metrics.
 - Resources that explicitly advertise terminal support can open an attached
   terminal canvas.
-- Sanitized AppHost or resource context can be added to the Copilot composer as
-  an attachment; the user writes and sends the actual question.
+- **Add to chat** captures a sanitized snapshot in memory. A visible **Pending
+  selected context** area lists the snapshots; **Clear pending context** cancels
+  them across all open AppHosts canvases. Every canvas shows the shared list,
+  and Clear targets its displayed revision: if the list changed, the request
+  fails without deleting newer snapshots. Merely selecting an item never queues
+  context. Nothing is sent automatically, and no native composer attachment pill
+  is created.
+  Each snapshot shows a fresh, prominent `aspire-ctx-…` reference with a **Copy
+  reference** control, focused when Add confirms the snapshot is pending (not
+  delivered). Copy and paste it into your message; an ordinary next message
+  without a reference attaches nothing. A root message in the
+  same foreground session that contains a snapshot's reference consumes that
+  snapshot once through the supported `onUserPromptSubmitted.additionalContext`
+  hook, framed as untrusted data; snapshots it does not reference stay pending.
+  The hook input carries no message identity, provenance, or submission time,
+  so only explicit reference matching is enforced. It is not authenticated
+  authorship or submission-order protection: any root
+  prompt that contains a known reference, including canvas-generated
+  `session.send()` messages or relayed text, receives the snapshot. An Add that
+  is still in flight when the foreground prompt hook executes is rejected with
+  a visible retry error and cannot enqueue a snapshot. This fences hook execution,
+  not the unavailable original submission time.
+  Consumption means handoff to that runtime hook, not proof of model
+  delivery: if another hook blocks the turn, re-add the context.
+  Repeated clicks update the snapshot for that item and rotate its reference, so
+  a message quoting an old, cleared, consumed, or out-of-session/workspace
+  reference receives a note asking Copilot to tell the user it was not attached
+  and request a fresh Add. Limits are 16 snapshots,
+  16 KiB per snapshot, and 64 KiB total across open AppHosts canvases; rejected
+  additions never discard existing snapshots. Only queue metadata reaches the UI.
+  Closing the owning canvas or starting a foreground session clears its pending
+  context; nothing is persisted to disk. Subagent hooks cannot consume it.
 - AppHost-defined command forms with validation and command-result feedback.
 - Live refreshes preserve the focused command input and cursor. Typed secret
   dependencies stay in the form until you leave the field or run the command;
