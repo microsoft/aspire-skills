@@ -290,6 +290,7 @@ catalog.
 | Rule | Why |
 |------|-----|
 | Use **unified `withEnvironment(name, value)`** in TS — never the deprecated per-kind helpers (`withEnvironmentEndpoint`, `withEnvironmentParameter`, etc.) | Single API handles all value kinds; per-kind helpers are deprecated |
+| Don't wrap `await builder.add*(...)` in parentheses to keep chaining in TS; either chain without `await` or `await` the whole chain | `*ResourcePromise` exposes the fluent API directly. Awaiting the whole chain works on every SDK; un-awaited chains need Aspire 13.3+. See [TypeScript authoring](references/typescript-authoring.md#promise-fluent-return-types) |
 | Use `AddNextJsApp` / `AddViteApp` over hand-rolled Dockerfiles for JS frontends | First-class lifecycle + `PublishAs*` integration |
 | Use `PublishAsStaticWebsite` / `PublishAsNodeServer` / `PublishAsPackageScript` for JS publish | Replaces hand-rolled Dockerfiles; SPA → static, SSR Node → NodeServer, package-script SSR → PackageScript |
 | Add `WithBrowserLogs()` to frontend resources for browser console + screenshots in dashboard | `Aspire.Hosting.Browsers` surfaces browser telemetry in the dashboard |

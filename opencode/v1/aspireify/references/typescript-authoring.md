@@ -73,6 +73,42 @@ await builder.addNextJsApp('web', '../web')
 await builder.build().run();
 ```
 
+## Promise-fluent return types
+
+Generated `*ResourcePromise` types (such as `ProjectResourcePromise` and
+`ViteAppResourcePromise`) are both `PromiseLike<Resource>` and fluent builders, so
+`with*`, `waitFor`, and `getEndpoint` can be chained directly on `builder.add*(...)`.
+Two declaration forms are valid:
+
+| Form | Example | When |
+|------|---------|------|
+| **Await the whole chain (default)** | `const api = await builder.addProject(...).withReference(db);` | Every SDK version. Each declaration completes, and errors surface, at that line |
+| Chain without `await` | `const api = builder.addProject(...).withReference(db);` | Aspire 13.3+ generated SDKs only |
+
+Default to awaiting the whole chain, as in the skeleton above. Never parenthesize an
+`await` to keep chaining — `(await builder.addViteApp(...)).withReference(api)` is
+always unnecessary. Either put `await` in front of the complete chain or omit it.
+
+The un-awaited form relies on SDK support added in Aspire 13.3: generated code tracks
+each pending call (`trackPromise`) and resolves promise-valued arguments. Its costs:
+
+- `build()` implicitly flushes pending calls (`flushPendingPromises`) and logs
+  `Consider awaiting fluent calls to avoid implicit flushing.` when any remain.
+- Failures from un-awaited calls are reported together at `build()` as an
+  `AggregateError` (`One or more unawaited fluent calls failed`), not at the line that
+  declared the resource.
+
+Generated SDKs before 13.3 have neither mechanism: they reject promise-like arguments
+with `AppHostUsageError` ("Did you forget 'await'…"), and methods such as
+`withReference` take a resolved `ResourceBuilderBase`. On those SDKs, await every
+resource declaration and endpoint (`await api.getEndpoint('http')`) before passing it.
+Check the AppHost's Aspire package versions before using the un-awaited form.
+
+Regardless of form, always write `await createBuilder()` and
+`await builder.build().run()`, and keep `await` inside asynchronous callbacks: command
+arguments, Interaction Service calls, endpoint setters, Dockerfile builder operations,
+and infrastructure configuration, as shown below.
+
 ## AppHost APIs
 
 TypeScript AppHosts are generally available; remove stale `ASPIREATS001` suppressions.
@@ -390,6 +426,7 @@ await builder.addViteApp('frontend', '../frontend')
 | Rule | Why |
 |------|-----|
 | **Never edit `.aspire/modules/`** | Generated; edits are clobbered. Edit current `apphost.mts` (or configured legacy `apphost.ts`) |
+| Don't wrap `await builder.add*(...)` in parentheses to keep chaining | Either chain without `await` (Aspire 13.3+) or `await` the whole chain |
 | Use unified `withEnvironment(name, value)` | Per-kind helpers are deprecated |
 | Use `addNextJsApp` / `addViteApp` over hand-rolled Dockerfiles | First-class lifecycle + publish helpers |
 | Use `publishAs*` for JS publish — never raw Dockerfile when a helper fits | Maintained, tested, and works with `aspire deploy` |
