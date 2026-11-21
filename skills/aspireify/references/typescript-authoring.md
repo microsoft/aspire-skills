@@ -105,9 +105,9 @@ resource declaration and endpoint (`await api.getEndpoint('http')`) before passi
 Check the AppHost's Aspire package versions before using the un-awaited form.
 
 Regardless of form, always write `await createBuilder()` and
-`await builder.build().run()`, and keep `await` inside asynchronous callbacks: command arguments, Interaction Service calls,
-endpoint setters, Dockerfile builder operations, and infrastructure configuration, as
-shown below.
+`await builder.build().run()`, and keep `await` inside asynchronous callbacks: command
+arguments, Interaction Service calls, endpoint setters, Dockerfile builder operations,
+and infrastructure configuration, as shown below.
 
 ## AppHost APIs
 
