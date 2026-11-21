@@ -58,7 +58,7 @@
     },
     {
       "name": "aspire-project-v2-migration",
-      "version": "sha512-3ceb47d33cd5e22dcce95b34b542bcb8e0a55f617975d2283acfa6958c130408bc4dd51c8efc84d7ed6cfe8b388c88d10281a74794bfb54d092bc6adb0903f2f",
+      "version": "sha512-44a037e1475575e9ce8ae3792f9e23d13db41e42c6254307735fbda101ae3f3734db9dff3e6d23d701d312f639b22f1dd169daf5ec2d5fad043628d0e3515d71",
       "files": [
         "aspire-project-v2-migration.md",
         "references/compatibility-and-validation.md",

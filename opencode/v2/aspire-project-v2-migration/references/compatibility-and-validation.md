@@ -44,7 +44,8 @@ addition or execution of a disposable probe.
 
 - Preserve the pinned SDK, integrations, channel and feeds, including effective
   `global.json`, NuGet and package-manager configuration and relevant ancestor
-  settings. A copy outside those settings must carry equivalent configuration;
+  settings. Name these invariants explicitly in the approval request, not merely
+  the copied configuration. A copy outside those settings must carry equivalent configuration;
   otherwise it is not evidence for this app. Do not switch to latest/stable or
   use another SDK merely to make the probe pass.
 - Before add/restore, resolve and verify a **copy-owned effective config**:

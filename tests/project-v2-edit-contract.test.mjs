@@ -157,16 +157,18 @@ test("assessment reports metadata provenance and mappings preserve original bind
   assert.match(patterns, /Do not introduce a temporary resource variable or split the fluent statement/);
 });
 
-test("publishing ownership migration keeps inline and bound registrations unchanged", t => {
-  const { before, after } = fixture(t, "ownership");
-  mutateOwnership(after);
-  assert.deepEqual(assertEditedFixture(before, after, "ownership"), editCases.ownership.files.toSorted());
-  edit(after, editCases.ownership.source, source => source.replace(
-    'builder.AddDotnetProject("dockerfile-api", "../Migration.Api/Migration.Api.csproj", options => options.ExcludeLaunchProfile = true)\n    .WithEnvironment',
-    'var dockerfileApi = builder.AddDotnetProject("dockerfile-api", "../Migration.Api/Migration.Api.csproj", options => options.ExcludeLaunchProfile = true);\ndockerfileApi.WithEnvironment'
-  ));
-  assert.throws(() => assertEditedFixture(before, after, "ownership"), /Non-migration code\/fluent behavior changed/);
-});
+for (const lineEnding of ["\n", "\r\n"]) {
+  test(`publishing ownership preserves registration bindings with ${lineEnding === "\n" ? "LF" : "CRLF"} line endings`, t => {
+    const { before, after } = fixture(t, "ownership", lineEnding);
+    mutateOwnership(after);
+    assert.deepEqual(assertEditedFixture(before, after, "ownership"), editCases.ownership.files.toSorted());
+    edit(after, editCases.ownership.source, source => source.replace(
+      /(builder\.AddDotnetProject\("dockerfile-api"[^\r\n]+)\r?\n[ \t]+\.WithEnvironment/,
+      'var dockerfileApi = $1;\ndockerfileApi.WithEnvironment'
+    ));
+    assert.throws(() => assertEditedFixture(before, after, "ownership"), /Non-migration code\/fluent behavior changed/);
+  });
+}
 
 test("fresh polyglot bootstrap orders preparation, capability proof, and exact edit approval", () => {
   const skill = readFileSync(new URL("../skills/aspire-project-v2-migration/SKILL.md", import.meta.url), "utf8");
@@ -197,6 +199,7 @@ test("fresh polyglot bootstrap orders preparation, capability proof, and exact e
   assert.match(bootstrap, /unchanged exact AppHost once/);
   assert.match(bootstrap, /Preparation approval is not migration-edit, runtime, or publish approval/);
   assert.match(bootstrap, /never hand-edit generated modules or upgrade implicitly/);
+  assert.match(bootstrap, /approval request must explicitly preserve the exact AppHost, SDK\/integration\s+pins, channel and package feeds/);
 });
 
 test("capability probe preserves pinned inputs and restore failures stay diagnostic", () => {

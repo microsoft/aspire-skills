@@ -142,6 +142,9 @@ label as proof of the installed API.
    `Aspire.Hosting.Dotnet` is not referenced. That is not yet a handle-only API
    failure. Request a separately approved capability probe using the supported
    add/restore flow in a disposable copy, preserving the app's pins and channel.
+   The approval request must explicitly preserve the exact AppHost, SDK/integration
+   pins, channel and package feeds; do not merely imply these invariants by
+   saying configuration will be copied.
    Follow the [bounded probe and failure rules](references/compatibility-and-validation.md#bounded-polyglot-capability-probe).
 4. Require the resolved `addDotnetProject(name, path, options?)` with flat `DotnetProjectOptions`
    and every other needed capability. Missing/older APIs remain a capability stop.
