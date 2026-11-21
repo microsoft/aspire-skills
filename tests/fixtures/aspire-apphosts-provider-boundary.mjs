@@ -235,7 +235,7 @@ function describe(inputs = baseInputs, state = "Running") {
 }
 
 async function harness(t, {
-    listenGate, failListen = false, cliOverride, stream, tmpDirectory,
+    listenGate, failListen = false, cliOverride, stream, tmpDirectory, clock,
     workingDirectory = process.cwd(),
     browserCanvases = [{ canvasId: "browser", extensionId: "host:builtins" }],
     browserListAvailable = true, browserListError, browserOpenError, systemBrowserError,
@@ -299,6 +299,7 @@ async function harness(t, {
     const idleTimers = new Set();
     const context = createContext({
         URL, Buffer, process, console,
+        ...(clock ? { Date: class extends Date { static now() { return clock.now; } } } : {}),
         setTimeout(callback, delay, ...args) {
             if (delay !== 10_000) return setTimeout(callback, delay, ...args);
             const timer = { callback, unref() {} };
@@ -425,6 +426,193 @@ async function requestFor(h, open) {
     const { state } = await h.request(open, "/api/state");
     return { appHostId: state.roots[0].appHostId, resourceName: "api", commandName: "deploy" };
 }
+
+test("agent command listing exposes only visible commands and sanitized metadata", async (t) => {
+    const h = await harness(t, {
+        cliOverride: (args) => {
+            if (args[0] !== "describe") return undefined;
+            const data = describe([{ name: "target", inputType: "Choice", options: ["prod", "dev"] }]);
+            data.resources[0].commands.deploy.description = `password=private-value ${paths[0]}`;
+            data.resources[0].commands.hidden = { displayName: "Hidden", visibility: "dashboard", state: "Enabled" };
+            data.resources[0].commands.disabled = { displayName: "Disabled", state: "Disabled" };
+            return ok(data);
+        },
+    });
+    const opened = await h.open();
+    const request = await requestFor(h, opened);
+    const result = clone(await h.action("list_resource_commands", { appHostId: request.appHostId }));
+    assert.deepEqual(result.commands.map((item) => item.commandName).sort(), ["deploy", "disabled"]);
+    assert.equal(result.commands.find((item) => item.commandName === "disabled").agentRunnable, false);
+    const deploy = result.commands.find((item) => item.commandName === "deploy");
+    assert.equal(deploy.agentRunnable, true);
+    assert.equal(deploy.requiresConfirmation, true);
+    assert.deepEqual(deploy.arguments[0].options.map((option) => option.value), ["prod", "dev"]);
+    assert.doesNotMatch(JSON.stringify(result), /private-value|private-host-token|not-for-composer/);
+    assert.equal((await h.action("list_resource_commands", { resourceName: "missing" })).commands.length, 0);
+    assert.equal((await h.action("run_resource_command", { ...request, commandName: "hidden" })).ok, false);
+    assert.equal((await h.action("run_resource_command", { ...request, commandName: "disabled" })).ok, false);
+});
+
+test("agent commands bind confirmation to the target, normalized values and current schema", async (t) => {
+    const h = await harness(t);
+    h.controls.inputs = [{ name: "environment", inputType: "Choice", required: true, options: ["prod", "dev"] }];
+    const opened = await h.open();
+    const request = { ...await requestFor(h, opened), arguments: { environment: " prod " } };
+    const prepare = () => h.action("run_resource_command", request);
+    const first = await prepare();
+    assert.equal(first.requiresConfirmation, true);
+    assert.equal(h.commandCalls().length, 0);
+    const changed = await h.action("run_resource_command", {
+        ...request, arguments: { environment: "dev" }, confirmationToken: first.confirmationToken,
+    });
+    assert.equal(changed.ok, false);
+    assert.equal((await h.action("run_resource_command", { ...request, confirmationToken: first.confirmationToken })).ok, false);
+    const second = await prepare();
+    const executed = await h.action("run_resource_command", {
+        ...request, arguments: { environment: "prod" }, confirmationToken: second.confirmationToken,
+    });
+    assert.equal(executed.ok, true);
+    assert.equal(h.commandCalls().length, 1);
+    assert.ok(h.commandCalls()[0].args.includes("--environment=prod"));
+    const events = await sse(h, opened);
+    t.after(() => events.close());
+    const snapshot = await events.waitFor((event) => event.type === "command-log-snapshot");
+    assert.ok(snapshot.commands.some((item) => item.label.startsWith("Agent: ")));
+    assert.equal((await h.action("run_resource_command", { ...request, confirmationToken: second.confirmationToken })).ok, false);
+    const third = await prepare();
+    h.controls.inputs = [{ name: "environment", inputType: "Choice", required: true, options: ["prod"] }];
+    await h.action("refresh_model");
+    assert.equal((await h.action("run_resource_command", { ...request, confirmationToken: third.confirmationToken })).ok, false);
+    const fourth = await prepare();
+    h.startSession({ sessionId: "another-session" });
+    assert.equal((await h.action("run_resource_command", { ...request, confirmationToken: fourth.confirmationToken })).ok, false);
+    assert.equal(h.commandCalls().length, 1);
+});
+
+test("agent commands refuse secrets, dynamic inputs, invalid targets, arguments and stale models", async (t) => {
+    const h = await harness(t);
+    const opened = await h.open();
+    const request = await requestFor(h, opened);
+    const secretListing = await h.action("list_resource_commands", { appHostId: request.appHostId });
+    assert.equal(secretListing.commands[0].agentRunnable, false);
+    assert.doesNotMatch(JSON.stringify(secretListing), /"name":"key"/);
+    assert.equal((await h.action("run_resource_command", { ...request, arguments: { environment: "prod", key: "secret" } })).ok, false);
+    h.controls.inputs = [{ name: "target", inputType: "Text", dynamicLoading: { alwaysLoadOnStart: true } }];
+    await h.action("refresh_model");
+    assert.equal((await h.action("run_resource_command", request)).ok, false);
+    h.controls.inputs = [{ name: "target", inputType: "Text", required: true }];
+    await h.action("refresh_model");
+    assert.equal((await h.action("run_resource_command", request)).status, 400);
+    assert.equal((await h.action("run_resource_command", { ...request, resourceName: "missing" })).ok, false);
+    assert.equal((await h.action("run_resource_command", { ...request, arguments: { target: "x", unexpected: "y" } })).status, 400);
+    h.controls.failPs = true;
+    await h.action("refresh_model");
+    assert.equal((await h.action("run_resource_command", { ...request, arguments: { target: "x" } })).ok, false);
+    assert.equal(h.commandCalls().length, 0);
+});
+
+test("confirmation cannot authorize another AppHost or a restarted runtime", async (t) => {
+    let pid = 123;
+    const h = await harness(t, {
+        cliOverride: (args) => args[0] === "ps"
+            ? ok(paths.map((appHostPath) => ({ appHostPath, appHostPid: pid, status: "running" })))
+            : undefined,
+    });
+    h.controls.inputs = [];
+    const opened = await h.open();
+    const { state } = await h.request(opened, "/api/state");
+    const request = { appHostId: state.roots[0].appHostId, resourceName: "api", commandName: "deploy" };
+    const token = (await h.action("run_resource_command", request)).confirmationToken;
+    assert.equal((await h.action("run_resource_command", {
+        ...request, appHostId: state.roots[1].appHostId, confirmationToken: token,
+    })).ok, false);
+    const restartToken = (await h.action("run_resource_command", request)).confirmationToken;
+    pid = 456;
+    await h.action("refresh_model");
+    assert.equal((await h.action("run_resource_command", { ...request, confirmationToken: restartToken })).ok, false);
+    assert.equal(h.commandCalls().length, 0);
+});
+
+test("a command disabled after confirmation cannot execute", async (t) => {
+    let enabled = true;
+    const h = await harness(t, {
+        cliOverride: (args) => {
+            if (args[0] !== "describe") return undefined;
+            const data = describe([]);
+            data.resources[0].commands.deploy.state = enabled ? "Enabled" : "Disabled";
+            return ok(data);
+        },
+    });
+    const opened = await h.open();
+    const request = await requestFor(h, opened);
+    const token = (await h.action("run_resource_command", request)).confirmationToken;
+    enabled = false;
+    await h.action("refresh_model");
+    assert.equal((await h.action("run_resource_command", { ...request, confirmationToken: token })).ok, false);
+    enabled = true;
+    await h.action("refresh_model");
+    assert.equal((await h.action("run_resource_command", { ...request, confirmationToken: token })).ok, false);
+    assert.equal(h.commandCalls().length, 0);
+});
+
+test("pending confirmations are bounded and expire without executing", async (t) => {
+    const clock = { now: Date.now() };
+    const h = await harness(t, { clock });
+    h.controls.inputs = [];
+    const opened = await h.open();
+    const request = await requestFor(h, opened);
+    const tokens = [];
+    for (let index = 0; index < 16; index += 1) {
+        tokens.push((await h.action("run_resource_command", request)).confirmationToken);
+    }
+    assert.ok(tokens.every(Boolean));
+    assert.equal((await h.action("run_resource_command", request)).status, 409);
+    clock.now += 5 * 60_000;
+    assert.equal((await h.action("run_resource_command", { ...request, confirmationToken: tokens[0] })).ok, false);
+    assert.ok((await h.action("run_resource_command", request)).confirmationToken);
+    assert.equal(h.commandCalls().length, 0);
+});
+
+test("start runs directly while failures remain visible and private paths are removed", async (t) => {
+    const h = await harness(t, {
+        cliOverride: (args) => {
+            if (args[0] !== "describe") return undefined;
+            const data = describe([]);
+            data.resources[0].commands = { "resource-start": { displayName: "Start", state: "Enabled" } };
+            return ok(data);
+        },
+    });
+    h.controls.executor = () => fail(`Failure in ${paths[0]} password=private-value`);
+    const opened = await h.open();
+    const request = { ...await requestFor(h, opened), commandName: "resource-start" };
+    const listed = await h.action("list_resource_commands", { appHostId: request.appHostId });
+    assert.equal(listed.commands[0].requiresConfirmation, false);
+    const result = await h.action("run_resource_command", request);
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 500);
+    assert.doesNotMatch(JSON.stringify(result), /private-value|Demo\.AppHost\.csproj/);
+    assert.equal(h.commandCalls().length, 1);
+});
+
+test("agent results never expose arbitrary command output on success or failure", async (t) => {
+    const h = await harness(t);
+    h.controls.inputs = [];
+    const opened = await h.open();
+    const request = await requestFor(h, opened);
+    const privateOutput = "private-connection-value \\\\server\\share\\secret https://internal.example/path";
+    h.controls.executor = () => ({ ok: true, code: 0, stdout: privateOutput, stderr: privateOutput });
+    const successToken = (await h.action("run_resource_command", request)).confirmationToken;
+    const success = await h.action("run_resource_command", { ...request, confirmationToken: successToken });
+    assert.equal(success.ok, true);
+    assert.doesNotMatch(JSON.stringify(success), /private-connection-value|server|internal\.example/);
+    assert.equal(success.output, undefined);
+    h.controls.executor = () => ({ ok: false, code: 1, stdout: privateOutput, stderr: privateOutput, error: privateOutput });
+    const failureToken = (await h.action("run_resource_command", request)).confirmationToken;
+    const failure = await h.action("run_resource_command", { ...request, confirmationToken: failureToken });
+    assert.equal(failure.ok, false);
+    assert.doesNotMatch(JSON.stringify(failure), /private-connection-value|server|internal\.example/);
+    assert.equal(failure.output, undefined);
+});
 
 test("dot-prefixed workspace AppHosts remain visible and open source without admitting outside hosts", async (t) => {
     const root = await mkdtemp(join(tmpdir(), "aspire-workspace-path-"));
