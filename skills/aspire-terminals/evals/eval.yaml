@@ -238,6 +238,31 @@ stimuli:
         config: { scoring: binary }
       - type: diff-empty
 
+  - name: terminal-dashboard-discoverability
+    prompt: >
+      Before answering, invoke the matching available Aspire skill or skills; do
+      not answer from general knowledge. In an Aspire 13.6.5 app, my interactive
+      worker uses WithTerminal and my Redis resource uses WithRepl. Where do I
+      see and switch between the worker's terminal and its startup console logs?
+      Where do I open the Redis client? I also want a separate shell inside a
+      running container: can I assume the dashboard provides that action, or
+      does it need configuration? Explain how these experiences differ. Give
+      read-only guidance; do not run commands or edit.
+    tags: { priority: p0, area: discoverability }
+    rubric:
+      - Identifies the worker's own interactive process on the Console logs page and the Settings menu for switching between Terminal and Console logs, without treating console logs as an interactive terminal.
+      - Opens the opt-in Redis REPL resource action from the Resources page in a separate docked client; it does not require WithTerminal on the Redis server or provide a general shell.
+      - Explains that a separate container shell requires an explicitly configured command and available shell/runtime, rather than inventing a built-in dashboard action or confusing a local AppHost shell with container exec.
+      - Preserves the resource process when switching views and distinguishes console log output from the terminal screen.
+    graders:
+      - type: skill-invocation
+        name: terminal-discoverability-activation
+        config: { required: [aspire-terminals] }
+      - type: prompt
+        name: terminal-discoverability-outcome
+        config: { scoring: binary }
+      - type: diff-empty
+
   - name: terminal-tape-subset-and-formats
     prompt: >
       Before answering, invoke the matching available Aspire skill or skills; do
