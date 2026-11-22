@@ -5,6 +5,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ## [0.0.7](https://github.com/microsoft/aspire-skills/releases/tag/v0.0.7)
 
 ### Changed
+- Clarified where to find resource terminal output and console logs, and how
+  separate container shells and integration REPLs differ from a resource's own
+  interactive process.
 - Kept skill-supplied external APIs, streams, and SDK-owned dependencies visible
   in the Aspireify canvas without treating them as runnable services. Resource
   mappings, not-modeled or deferred reasons, and unassessed items now survive

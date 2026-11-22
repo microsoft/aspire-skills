@@ -56,9 +56,32 @@ opts them into diagnostic telemetry. Use it for investigation, not by default.
 
 ## Dashboard behavior
 
+The dashboard's **Console logs** page contains two different views for a
+terminal-enabled resource. Select the resource, then use the page toolbar's
+**Settings** menu to choose **Terminal** for the interactive process or
+**Console logs** for its log stream, including startup and exit messages.
+`aspire logs <resource>` also reads console logs; it is not an interactive
+terminal or a substitute for the terminal screen.
+
 For a selected running terminal resource, the dashboard defaults to Terminal;
 non-running resources default to Console. Ordinary refresh preserves the user's
-chosen view. Console logging remains available.
+chosen view. Switching views does not stop the resource.
+
+The Terminal view connects to the resource's own process; it does not open a
+new shell in an existing container. A separate resource shell needs an
+explicitly configured command that launches an available shell inside the
+running container. Do not assume a generic shell action exists in the dashboard.
+The [container-exec example](https://aspire.dev/dashboard/ephemeral-terminals/#open-a-container-exec-session)
+shows the custom command pattern and its runtime, container ID, permissions and
+cleanup requirements. A local shell launched by `TerminalService` instead runs
+on the AppHost machine unless explicitly configured for container exec.
+
+For a supported database or cache integration, `WithRepl()` adds a **REPL**
+resource action instead: on the **Resources** page, open the resource's
+**Actions** menu and choose **REPL**. It starts a separate authenticated client
+in the terminal dock, not a general shell or the resource's Terminal view.
+The action is opt-in and available only when that integration and running
+resource support it.
 
 Resource and dock terminals support separate browser windows without creating
 another workload, shared viewers, reconnect/state replay, scrollback/reflow,
@@ -69,7 +92,7 @@ rendering. These display capabilities do not imply screenshot/video tape outputs
 
 ## Prefer built-in client commands
 
-The inspected 13.6 integrations expose opt-in `WithRepl()` / `withRepl()`:
+The Aspire 13.6.5 source exposes opt-in `WithRepl()` / `withRepl()` for:
 
 | Integration | Client | Package |
 |-------------|--------|---------|
@@ -109,7 +132,9 @@ terminating the local container-exec process need not stop the remote client.
 ## Source evidence
 
 - [Resource extensions and TS export](https://github.com/microsoft/aspire/blob/34db30a7d3733229da64a403dfc4e4e4d7a1a43b/src/Aspire.Hosting/TerminalResourceBuilderExtensions.cs)
+- [13.6.5 dashboard Console logs view](https://github.com/microsoft/aspire/blob/v13.6.5/src/Aspire.Dashboard/Components/Pages/ConsoleLogs.razor)
+- [13.6.5 REPL resource command](https://github.com/microsoft/aspire/blob/v13.6.5/src/Shared/ContainerReplCommand.cs)
 - [REPL feature and integration changes](https://github.com/microsoft/aspire/pull/20231)
 - [13.6 REPL backport](https://github.com/microsoft/aspire/pull/20419)
 
-These links describe the researched source, not every preview package.
+These links describe the researched source, not every installed package.

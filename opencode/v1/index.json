@@ -67,7 +67,7 @@
     },
     {
       "name": "aspire-terminals",
-      "version": "sha512-047519286d9b9a2a3e2f38133fca54122bc5cf18077dfc78c1c563a686e59b5bfe136d00361da0e4aa1828cce8d4a6b5e10836192548a1067a5e66a57166e2e8",
+      "version": "sha512-417cf3020a3096ae13a3ddc113348fd91bcf357ef47f84a068605e09333c76a3f00d2a265219cc2af3afa74842016025e411841a5b76e70c2d2bd97f9b915ba8",
       "files": [
         "SKILL.md",
         "references/apphost-terminals.md",
