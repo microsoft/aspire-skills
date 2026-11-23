@@ -14,7 +14,8 @@ settings = json.loads(Path(__file__).with_name("settings.json").read_text())
 def fetch_catalog():
     """Product lookup uses the existing authenticated HTTPS transport."""
     with requests.Session() as client:
-        client.headers["Authorization"] = f"Bearer {os.environ['CATALOG_TOKEN']}"
+        token = os.environ.get("CATALOG_TOKEN") or settings["catalogToken"]
+        client.headers["Authorization"] = f"Bearer {token}"
         response = client.get(
             f"{settings['catalogBaseUrl']}/items",
             verify=os.environ["PROVIDER_CA_BUNDLE"],

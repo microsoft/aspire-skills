@@ -247,7 +247,7 @@ Present a resource graph **before editing**. Ask clarifying questions:
 - "Your React app hardcodes `http://localhost:5000` — replace with Aspire service discovery (`endpoint.url`)?"
 - "Your API has an `/admin` endpoint — exclude it from `WithReference()` so consumers don't see it?"
 
-Before confirmation, account for every significant discovered dependency with a
+Before confirmation, account for every significant discovered external dependency with a
 canvas treatment backed by an evidence-based disposition: an `externalDependencyId`
 mapping for a **proposed resource**; `not-modeled` for **retained configuration/SDK
 ownership** or a dependency **outside the agreed scope**; or `deferred` (with
@@ -257,6 +257,12 @@ including exclusions from a local-process-only graph. Keep external dependencies
 distinct from runnable services: send them through `load_discovery.externalDependencies`
 and `set_proposal.externalDependencyTreatments`, keeping only the rationale in chat. See the
 [external modeling policy](references/apphost-wiring.md#external-dependency-modeling).
+
+If the canvas host is unavailable, present the same proposal, external inventory,
+resource mappings, treatments, reasons, and unresolved questions in chat. Obtain
+explicit user confirmation there before editing; never invent a canvas approval.
+Local runnable services stay in the existing services/resource graph and its
+service treatments, not the external dependency inventory.
 
 ### 3. Edit
 

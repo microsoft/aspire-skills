@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { parse } from "yaml";
+import { assertCredentialFreeHandoff } from "../../evals/grade-external-handoff.mjs";
 
 const root = new URL("../../", import.meta.url);
 const read = path => readFileSync(new URL(path, root), "utf8").replace(/\r\n/g, "\n");
@@ -11,6 +12,74 @@ const skill = read("skills/aspireify/SKILL.md");
 const scan = read("skills/aspireify/references/scan-and-propose.md");
 const wiring = read("skills/aspireify/references/apphost-wiring.md");
 const modeling = wiring.split("## External dependency modeling\n")[1]?.split("\n## Endpoints and ports")[0];
+
+test("credential handoff grader rejects leaks in captured tool arguments, including incomplete calls", () => {
+    const { catalogToken } = JSON.parse(read("evals/external-dependencies-python/settings.json"));
+    const trajectory = args => ({ trajectory: { events: [
+        { type: "tool_call", data: { toolName: "invoke_canvas_action", arguments: args } },
+    ] } });
+    for (const args of [
+        { input: { externalDependencies: [{ evidence: { credential: catalogToken } }] } },
+        { input: { externalDependencyTreatments: [{ reason: catalogToken }] } },
+        { input: JSON.stringify({ externalDependencies: [{ credential: catalogToken }] }) },
+    ]) {
+        assert.throws(() => assertCredentialFreeHandoff(trajectory(args), catalogToken), /leaked/);
+    }
+    assert.doesNotThrow(() => assertCredentialFreeHandoff(trajectory({
+        input: { externalDependencies: [{ configurationKeys: ["catalogToken"], evidence: "settings.json" }] },
+    }), catalogToken));
+    assert.doesNotThrow(() => assertCredentialFreeHandoff({ trajectory: { events: [
+        { type: "tool_result", data: { result: catalogToken } },
+    ] } }, catalogToken));
+    assert.throws(() => assertCredentialFreeHandoff({}, catalogToken), /Missing captured/);
+    assert.throws(() => assertCredentialFreeHandoff(trajectory({}), ""), /Missing credential/);
+    for (const args of [undefined, null, 42]) {
+        assert.throws(() => assertCredentialFreeHandoff(trajectory(args), catalogToken), /Missing captured tool-call arguments/);
+    }
+});
+
+test("hosts without a canvas confirm equivalent external accounting in chat", () => {
+    for (const document of [skill, scan]) {
+        const fallback = document.split("\n\n").find(paragraph => /canvas host is unavailable/.test(paragraph));
+        assert.ok(fallback, "Missing canvas-unavailable fallback");
+        for (const concept of [/inventory/, /mappings/, /treatments/, /reasons/, /unresolved/, /chat/, /explicit user confirmation/]) {
+            assert.match(fallback, concept);
+        }
+    }
+    assert.match(skill, /never invent a canvas approval/);
+    assert.match(scan, /do not fabricate[\s\S]*`get_confirmation`/);
+});
+
+test("local runnable services retain service accounting, not external treatments", () => {
+    const inventory = scan.split("### Significant dependency inventory\n")[1].split("\n### ")[0];
+    for (const field of ["services", "serviceId", "serviceTreatments"]) {
+        assert.ok(inventory.includes(`\`${field}\``), `Missing local service field: ${field}`);
+    }
+    assert.match(inventory, /only[\s\S]*separately operated or provider-managed/);
+    assert.match(inventory, /not AppHost-launched local services/);
+    assert.match(skill, /Local runnable services[\s\S]*not the external dependency inventory/);
+});
+
+test("validation inspects external resources without requiring default health waits", () => {
+    const validation = read("skills/aspireify/references/validation.md");
+    const flow = validation.split("## Flow\n")[1].split("\n## ")[0];
+    assert.match(flow, /aspire describe --format Json --include-hidden/);
+    assert.match(flow, /aspire wait[^\n]*per local runnable resource/);
+    assert.match(flow, /external-service resources[\s\S]*exclude[\s\S]*default validation waits/);
+    assert.match(flow, /explicit[\s\S]*user agreement/);
+    const handoff = validation.split("## Hand-off Criteria\n")[1].split("\n## ")[0];
+    assert.match(handoff, /every[\s\S]*local runnable resource/);
+    assert.match(handoff, /explicitly agreed external readiness checks/);
+    assert.doesNotMatch(validation, /every resource reaches a healthy state|All resources reached healthy state/);
+});
+
+test("the extension README points to an existing canvas payload heading", () => {
+    const readme = read("extensions/aspireify/README.md");
+    const anchor = readme.match(/scan-and-propose\.md#([a-z-]+)/)?.[1];
+    assert.ok(anchor);
+    const headings = [...scan.matchAll(/^#+ (.+)$/gm)].map(match => match[1].toLowerCase().replaceAll(" ", "-"));
+    assert.ok(headings.includes(anchor), `Broken scan guidance anchor: ${anchor}`);
+});
 
 test("the skill inventories remote dependencies and requires canvas treatments before confirmation", () => {
     for (const concept of [/HTTPS/, /WebSocket/, /SDK-selected/, /configuration/, /lifecycle ownership/, /dynamic endpoint/]) {
@@ -124,6 +193,20 @@ test("external modeling evals use generic read-only source evidence and focused 
     assert.match(discovery.prompt, /outside the agreed scope/);
     assert.ok(discovery.rubric.some(item => /out-of-scope[\s\S]*not-modeled/.test(item)));
     const settings = JSON.parse(read("evals/external-dependencies-python/settings.json"));
+    assert.match(settings.catalogToken, /^SYNTHETIC_ONLY_NOT_A_CREDENTIAL_/);
+    for (const name of ["aspireify-external-discovery-001", "aspireify-external-visibility-001"]) {
+        const stimulus = evaluation.stimuli.find(entry => entry.name === name);
+        assert.ok(stimulus.graders.some(grader => grader.type === "output-not-contains"
+            && grader.config.substring === settings.catalogToken), `${name}: missing synthetic credential leak guard`);
+        assert.ok(stimulus.graders.some(grader => grader.type === "program"
+            && grader.config.args[0] === ".grader/grade-external-handoff.mjs"
+            && grader.config.args[1] === settings.catalogToken), `${name}: missing captured tool-argument leak guard`);
+        const handoff = stimulus.graders.find(grader => grader.name.startsWith("redacts-credentials-in-external-handoff"));
+        assert.ok(handoff);
+        assert.match(handoff.config.prompt, /canvas handoff/);
+    }
+    assert.match(discovery.prompt, /no canvas/);
+    assert.ok(discovery.graders.some(grader => grader.name === "supports-chat-fallback-without-fabricated-approval"));
     for (const key of ["catalogBaseUrl", "streamUrl"]) {
         const url = new URL(settings[key]);
         assert.ok(url.hostname.endsWith(".example.invalid"));

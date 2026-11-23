@@ -23,7 +23,11 @@ Heuristics for the **scan** and **propose** phases of `aspireify`.
 Inventory application-level dependencies that materially affect features, data,
 authentication, messaging, or streaming, whether local or remote. Do not enumerate
 every request, SDK-internal endpoint, or transitive package. Package presence alone
-does not prove an active dependency; find its consumer.
+does not prove an active dependency; find its consumer. Keep local runnable services
+in the existing `services`/resource graph, using `serviceId` mappings and
+`serviceTreatments` for unmapped services. The external dependency disposition and
+payload flow below applies only to separately operated or provider-managed
+dependencies, not AppHost-launched local services.
 
 For each significant dependency, record:
 
@@ -60,7 +64,7 @@ rationale, not a separate status.
 | **Agreed deferred investigation** | `deferred`; `reason` plus `unresolved` (the missing evidence or open question) | State the missing evidence, the question to resolve, and the user's agreement to defer. |
 | (none supplied) | `not-assessed` | Shown by the canvas when no mapping or treatment exists; it must not remain at confirmation. |
 
-Before confirmation, every significant discovered dependency needs a mapping or a
+Before confirmation, every significant discovered external dependency needs a mapping or a
 treatment with a rationale tied to evidence; out-of-scope dependencies are
 `not-modeled`, never left `not-assessed`. Resolve material scope and behavior
 questions in chat first (including whether a resource is descriptive-only, whether
@@ -70,6 +74,10 @@ configuration moves, and whether diagnostics or startup behavior changes).
 
 Keep this accounting separate from the runnable resource graph:
 
+- If the canvas host is unavailable, present the same external inventory, resource
+  mappings, treatments, reasons, and unresolved questions with the proposal in chat.
+  Obtain explicit user confirmation before implementation; do not fabricate a
+  `get_confirmation` result or bypass an available canvas's approval boundary.
 - Send discovered external APIs, WebSocket streams, and SDK-selected endpoints through
   `load_discovery.externalDependencies`. Do not put external dependencies in runnable
   `services` or fabricate resource types/edges to make the accounting fit. Use the
@@ -211,6 +219,6 @@ QUESTIONS BEFORE I EDIT
      be deferred with SDK ownership unchanged, or should we resolve it before approval?
 ```
 
-Resolve these questions and complete the dependency dispositions and canvas
-treatments, then wait for confirmation before editing. The external dependencies
+Resolve these questions and complete the external dependency dispositions and
+treatments in the canvas (or chat fallback), then wait for confirmation before editing. The external dependencies
 above are not runnable services.
