@@ -32,6 +32,12 @@ supported VHS syntax and plain-text output formats, not all upstream VHS feature
 | `aspireify` | Presents Aspireify findings and the proposed resource plan for confirmation before AppHost edits |
 | `aspire-apphosts` | Workspace and Global AppHost workbench |
 
+In Aspireify's Step 3 review, one keyboard-accessible topology shows each
+included resource once, nests children, and draws references and waits with
+distinct lines. Select a resource to highlight its connections and edit them in
+the inspector. Connections that cannot be placed are listed below the map for
+review and remain visible after confirmation.
+
 ## Install
 
 Choose the path that matches your agent host.

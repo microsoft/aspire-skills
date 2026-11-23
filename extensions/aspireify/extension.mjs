@@ -982,6 +982,8 @@ function proposalForClient(proposal) {
                 ...edge
             }) => ({
                 ...edge,
+                fromId,
+                toId,
                 origin: userAdded ? "user" : "generated",
                 edited: edgeDiffersFromGenerated({
                     ...edge,
@@ -2358,7 +2360,7 @@ async function handleRequest(entry, request, response) {
     }
     if (
         request.method === "GET" &&
-        ["/app.js", "/styles.css", "/canvas-theme.css", "/canvas-icons.svg", "/resource-types.js", "/interaction-model.js"].includes(
+        ["/app.js", "/styles.css", "/canvas-theme.css", "/canvas-icons.svg", "/resource-types.js", "/interaction-model.js", "/connections-tree.js"].includes(
             url.pathname,
         )
     ) {

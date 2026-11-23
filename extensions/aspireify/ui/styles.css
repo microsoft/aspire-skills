@@ -1,5 +1,5 @@
 body {
-    --review-max-width: 960px;
+    --review-max-width: 1280px;
     --resource-detail-max-width: 780px;
     --text-resource-title: var(--text-heading);
     --leading-resource-title: var(--leading-heading);
@@ -355,6 +355,54 @@ body.is-loading .progress > span {
     color: var(--text);
 }
 
+.connection-unplaced-edit {
+    flex: 0 0 auto;
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--accent);
+    font: inherit;
+    font-size: var(--text-meta);
+    cursor: pointer;
+}
+
+.connection-unplaced-edit:hover {
+    border-color: var(--relationship-color, var(--accent));
+}
+
+.connections-unplaced {
+    margin-top: 12px;
+}
+
+.connections-unplaced > ul {
+    display: grid;
+    gap: 4px;
+    margin: 6px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.connections-unplaced-item {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    align-items: center;
+    padding: 4px 8px;
+}
+
+.connections-unplaced-item::before {
+    content: "";
+    flex: 0 0 10px;
+    height: 10px;
+    border-radius: 2px;
+    background: var(--relationship-color, var(--muted));
+}
+
+.connections-unplaced-item > .muted {
+    font-size: var(--text-meta);
+}
+
 .is-confirmed .editing-guidance {
     display: none;
 }
@@ -559,13 +607,14 @@ body.is-loading .progress > span {
 
 .relationship-workspace {
     display: grid;
-    grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.45fr);
+    grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.9fr);
     gap: 16px;
     align-items: start;
 }
 
-.relationship-guide {
+.connection-legend {
     display: flex;
+    flex-wrap: wrap;
     align-items: baseline;
     gap: 6px 10px;
     margin-bottom: 10px;
@@ -578,13 +627,49 @@ body.is-loading .progress > span {
     line-height: var(--leading-meta);
 }
 
-.relationship-guide strong {
+.connection-legend strong {
     flex: 0 0 auto;
     color: var(--text);
 }
 
-.relationship-workspace.is-confirmed {
-    grid-template-columns: minmax(0, 1fr);
+.connection-legend-kinds {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.connection-legend-kinds li {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.connection-line {
+    width: 22px;
+    border-top: 2px solid var(--relationship-color);
+}
+
+.connection-wait .connection-line {
+    border-top-style: dashed;
+}
+
+.connection-nesting {
+    display: inline-block;
+    width: 18px;
+    height: 12px;
+    padding: 3px 2px 1px 5px;
+    border: 1px solid var(--relationship-color);
+    border-radius: 2px;
+}
+
+.connection-nesting::after {
+    display: block;
+    height: 100%;
+    border: 1px solid var(--relationship-color);
+    content: "";
 }
 
 .plan-overview {
@@ -592,6 +677,145 @@ body.is-loading .progress > span {
     min-width: 0;
     flex-direction: column;
     gap: 12px;
+}
+
+.plan-overview > h2 {
+    margin: 0;
+    font-size: var(--text-heading);
+}
+
+.topology-scroll {
+    min-width: 0;
+    max-height: 70vh;
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background-color: var(--surface-inset);
+    background-image: radial-gradient(var(--border) 0.8px, transparent 0.8px);
+    background-size: 16px 16px;
+}
+
+.topology-surface {
+    position: relative;
+    width: max-content;
+    min-width: 100%;
+}
+
+.topology-lines {
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+}
+
+.topology-edge {
+    fill: none;
+    stroke: var(--relation-reference);
+    stroke-width: 2;
+}
+
+.topology-edge-wait {
+    stroke: var(--relation-wait);
+    stroke-dasharray: 7 4;
+}
+
+.topology-edge.is-highlighted {
+    stroke-width: 3;
+}
+
+.topology-edge.is-muted {
+    opacity: 0.3;
+}
+
+.topology-nodes,
+.topology-children {
+    margin: 0;
+    list-style: none;
+}
+
+.topology-nodes {
+    position: relative;
+    display: grid;
+    width: max-content;
+    min-width: 100%;
+    gap: 28px 64px;
+    align-items: start;
+    padding: 24px 60px 24px 24px;
+}
+
+.topology-branch {
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
+}
+
+.topology-branch.has-children {
+    background: var(--surface-inset);
+}
+
+.topology-children {
+    display: grid;
+    gap: 8px;
+    padding: 20px 8px 8px 18px;
+}
+
+.topology-node {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    min-height: 56px;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    background: var(--surface-raised);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.topology-node:hover {
+    background: var(--surface-inset);
+}
+
+.topology-node.is-selected {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised));
+}
+
+.topology-node.is-connected {
+    border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+}
+
+.topology-node.has-issues {
+    border-color: var(--danger);
+}
+
+.topology-node:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+}
+
+.topology-node-copy {
+    display: grid;
+    min-width: 0;
+    gap: 3px;
+    overflow-wrap: anywhere;
+}
+
+.topology-node-copy > .muted,
+.topology-node-copy > .overview-invalid,
+.topology-node-copy > .overview-edited {
+    font-size: var(--text-meta);
+    line-height: var(--leading-meta);
 }
 
 .overview-role {
@@ -796,20 +1020,6 @@ button.overview-node:hover {
     width: auto;
 }
 
-.relationship-list-disclosure {
-    margin-top: 16px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-}
-
-.relationship-list-disclosure > summary {
-    padding: 10px 12px;
-    font-size: var(--text-detail);
-    font-weight: var(--weight-semibold);
-    cursor: pointer;
-}
-
 .relationship-help {
     max-width: 72ch;
     margin: 0;
@@ -923,44 +1133,6 @@ button.overview-node:hover {
     .external-dependency-details > summary {
         min-height: 44px;
     }
-}
-
-.relationship-list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 0 8px 8px;
-}
-
-.relationship-row {
-    --relationship-color: var(--relation-reference);
-    display: grid;
-    width: 100%;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    gap: 10px;
-    align-items: center;
-    padding: 8px 10px;
-    border: 1px solid transparent;
-    border-radius: var(--radius);
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    text-align: left;
-}
-
-button.relationship-row {
-    cursor: pointer;
-}
-
-button.relationship-row:hover {
-    border-color: color-mix(in srgb, var(--relationship-color) 32%, var(--border-soft));
-    background: color-mix(in srgb, var(--relationship-color) 6%, var(--surface-raised));
-}
-
-.relationship-kind {
-    color: var(--muted);
-    font-size: var(--text-meta);
-    line-height: var(--leading-meta);
 }
 
 .resource-mapping {
@@ -1689,7 +1861,7 @@ dialog form {
         margin: -6px 0 -4px;
     }
 
-    .relationship-guide {
+    .connection-legend {
         align-items: flex-start;
         flex-direction: column;
         margin-bottom: 12px;
@@ -1724,13 +1896,9 @@ dialog form {
     }
 
     .connection-chip,
-    button.relationship-row,
+    .connection-unplaced-edit,
     .proposal-diagnostics > summary {
         min-height: 44px;
-    }
-
-    .relationship-list-disclosure {
-        margin-top: 12px;
     }
 }
 
@@ -1862,11 +2030,6 @@ dialog form {
 
     .resource-inspector {
         padding: 12px;
-    }
-
-    .relationship-row {
-        grid-template-columns: minmax(0, 1fr);
-        gap: 2px;
     }
 }
 
