@@ -138,51 +138,52 @@
                                     Add resource
                                 </button>
                             </div>
-                            <div class="proposal-view-switch" role="group" aria-label="Proposal view">
-                                <button class="btn btn-outline btn-sm" id="resources-view" type="button" aria-pressed="true" aria-controls="resource-details-view">Resources</button>
-                                <button class="btn btn-outline btn-sm" id="connections-tree-view" type="button" aria-pressed="false" aria-controls="connections-tree-panel">Connections tree</button>
-                            </div>
                             <div class="connection-legend" id="connection-legend">
                                 <strong>Connections</strong>
-                                <span>→ outgoing (source → target); ← incoming.</span>
+                                <span>Arrows point from source to target.</span>
                                 <ul class="connection-legend-kinds">
-                                    <li class="connection-reference"><span class="connection-swatch" aria-hidden="true"></span>References pass connection information</li>
-                                    <li class="connection-wait"><span class="connection-swatch" aria-hidden="true"></span>Waits for controls startup order</li>
-                                    <li class="connection-parent"><span class="connection-swatch" aria-hidden="true"></span>Child of models ownership</li>
+                                    <li class="connection-reference"><span class="connection-line" aria-hidden="true"></span>References: solid</li>
+                                    <li class="connection-wait"><span class="connection-line" aria-hidden="true"></span>Waits for: dashed</li>
+                                    <li class="connection-parent"><span class="connection-nesting" aria-hidden="true"></span>Child of: nested</li>
                                 </ul>
                             </div>
-                            <section id="connections-tree-panel" aria-label="Resource connections" hidden>
-                                <p id="connections-tree-help" class="relationship-help muted">
-                                    Each connection appears once; connections whose endpoints
-                                    cannot be placed are listed below the tree. Each resource expands once;
-                                    shared and cycle references point to that same resource, not
-                                    a copy. Keys: ↑/↓ move, →/← expand or collapse, Home/End go to
-                                    the first or last item, and typing a letter finds a resource.
-                                    Enter or Space toggles a branch or follows a reference. Select
-                                    Edit or press F2 on a connection to edit it.
-                                </p>
-                                <p id="connections-tree-state" class="muted" hidden></p>
-                                <ul id="connections-tree" class="connections-tree" role="tree" aria-label="Proposed resource connections" aria-describedby="connection-legend connections-tree-help"></ul>
-                                <div id="connections-unplaced" class="connections-unplaced" hidden>
-                                    <p id="connections-unplaced-summary" class="muted"></p>
-                                    <ul id="connections-unplaced-list" aria-labelledby="connections-unplaced-summary"></ul>
-                                </div>
-                            </section>
-                            <div id="resource-details-view">
-                            <div class="compact-resources" id="compact-resources" hidden></div>
-                            <div class="relationship-workspace" id="relationship-workspace" hidden>
-                                <nav
+                            <div class="relationship-workspace" id="relationship-workspace">
+                                <section
                                     class="plan-overview"
                                     id="plan-overview"
-                                    aria-label="Proposed AppHost resources"
-                                ></nav>
+                                    aria-labelledby="topology-title"
+                                >
+                                    <h2 id="topology-title">Resource topology</h2>
+                                    <p id="topology-help" class="relationship-help muted">
+                                        Select a resource to highlight its connections and edit it
+                                        in the inspector. Use ↑/↓, Home/End, or a letter to move;
+                                        →/← move to a child or parent. Enter or Space selects.
+                                        F2 focuses a connection action in the inspector.
+                                    </p>
+                                    <p id="topology-state" class="muted" hidden></p>
+                                    <div class="topology-scroll">
+                                        <div class="topology-surface" id="topology-surface">
+                                            <svg id="topology-lines" class="topology-lines" aria-hidden="true" focusable="false">
+                                                <defs>
+                                                    <marker id="topology-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                                                        <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"></path>
+                                                    </marker>
+                                                </defs>
+                                            </svg>
+                                            <ul id="topology-nodes" class="topology-nodes" aria-label="Proposed resources" aria-describedby="connection-legend topology-help"></ul>
+                                        </div>
+                                    </div>
+                                    <div id="connections-unplaced" class="connections-unplaced" hidden>
+                                        <p id="connections-unplaced-summary" class="muted"></p>
+                                        <ul id="connections-unplaced-list" aria-labelledby="connections-unplaced-summary"></ul>
+                                    </div>
+                                </section>
                                 <section
                                     class="plan-inspector"
                                     id="plan-inspector"
                                     aria-label="Selected resource"
                                     aria-live="polite"
                                 ></section>
-                            </div>
                             </div>
                         </section>
                     </div>
@@ -337,7 +338,7 @@
             </form>
         </dialog>
 
-        <dialog id="connection-dialog" aria-labelledby="connection-dialog-title">
+        <dialog id="connection-dialog" aria-labelledby="connection-dialog-title" aria-describedby="connection-placement-help">
             <form method="dialog" id="connection-form">
                 <div class="dialog-head">
                     <div>
@@ -354,9 +355,10 @@
                     </button>
                 </div>
                 <input id="connection-id" name="connectionId" type="hidden" />
+                <p class="muted" id="connection-placement-help" hidden></p>
                 <label class="field">
                     <span>From</span>
-                    <select id="connection-from" name="connectionFrom"></select>
+                    <select id="connection-from" name="connectionFrom" required></select>
                 </label>
                 <label class="field">
                     <span>Relationship</span>
@@ -368,7 +370,7 @@
                 </label>
                 <label class="field">
                     <span>To</span>
-                    <select id="connection-to" name="connectionTo"></select>
+                    <select id="connection-to" name="connectionTo" required></select>
                 </label>
                 <p
                     class="dialog-error"

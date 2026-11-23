@@ -31,6 +31,7 @@ export function createCanvasTestDom(html) {
         setAttribute(name, value) {
             this.attributes.set(name, String(value));
             if (name === "id") this.id = String(value);
+            if (name === "class") this.className = String(value);
             if (name === "tabindex") this.tabIndex = Number(value);
             if (name.startsWith("data-")) {
                 this.dataset[name.slice(5).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())] = String(value);
@@ -94,6 +95,9 @@ export function createCanvasTestDom(html) {
         }
         focus() { document.activeElement = this; this.listeners.get("focus")?.({ target: this }); }
         scrollIntoView() {}
+        getBoundingClientRect() {
+            return this.bounds ?? { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 };
+        }
         setCustomValidity(message) { this.validationMessage = message; }
         setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; }
         showModal() { this.open = true; }

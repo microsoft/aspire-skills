@@ -32,13 +32,11 @@ supported VHS syntax and plain-text output formats, not all upstream VHS feature
 | `aspireify` | Presents Aspireify findings and the proposed resource plan for confirmation before AppHost edits |
 | `aspire-apphosts` | Workspace and Global AppHost workbench |
 
-In Aspireify's Step 3 review, **Resources / Connections tree** switches between
-the existing resource cards or overview/inspector and an expandable connections
-tree. Both show the same proposal; shared dependencies and cycles are explicit
-references, and switching views preserves confirmation. The tree lists every
-connection once (any it cannot place are listed below it), color-coded by kind with one
-shared legend, and opens the connection editor from **Edit** or F2. It supports keyboard navigation and
-remains available after confirmation.
+In Aspireify's Step 3 review, one keyboard-accessible topology shows each
+included resource once, nests children, and draws references and waits with
+distinct lines. Select a resource to highlight its connections and edit them in
+the inspector. Connections that cannot be placed are listed below the map for
+review and remain visible after confirmation.
 
 ## Install
 

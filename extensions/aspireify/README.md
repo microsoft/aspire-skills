@@ -23,16 +23,15 @@ The canvas only:
    remains unresolved); every other unmapped service shows as **Not assessed**.
    External dependencies have equivalent accounting without becoming fake
    runnable services or artificial graph nodes;
-5. uses a compact mapping-first review for one or two resources and a role-grouped
-   overview with one focused inspector for larger plans;
+5. shows a topology of the included resources with one focused inspector;
 6. lets the user add or remove plan resources, add their initial connections
-   atomically, rename or retype resources within their section, enable Service
+   atomically, rename or retype resources in the inspector, enable Service
    Defaults on any .NET project, and manage connections from each resource
    editor using constrained Aspire-aware resource-type selectors;
 7. tracks up to 50 saved proposal edits per AppHost so users can undo and redo
    resource and connection changes, reset all generated resource fields together,
    or reset an edited generated connection;
-8. identifies every invalid or duplicate resource name on its card, explains the
+8. identifies every invalid or duplicate resource name on the map and in the inspector, explains the
    violated naming rule, and prevents invalid edits from being saved;
 9. keeps unresolved implementation tradeoffs in chat rather than inventing new
    canvas data; and
@@ -69,39 +68,30 @@ Explicit UNC/network paths are rejected before filesystem access. Mapped drives,
 mounted shares, and local aliases to remote storage are not detected.
 
 Connections are directed: `from` references, waits for, or is a child of `to`.
-Each selected resource shows both outgoing and incoming relationships, and the
-connections tree is the single surface listing every connection once. One
-legend, shared by both views, explains direction and the color of each
-connection kind.
+The topology shows each included resource once. Child resources are nested;
+solid arrows represent references and dashed arrows represent waits. Shared
+dependencies and cycles connect the same nodes without duplicating resources.
+Roots and children retain proposal order within their layout positions; up to
+three columns group sources and dependencies, with cycles sharing a column.
+Selecting a node highlights its connections and opens its inspector, where
+incoming and outgoing connections can be edited.
 
-Use **Resources / Connections tree** to switch between the existing compact
-cards or overview/inspector and an expandable projection of the same proposal.
-The tree starts with resources that have no incoming connections,
-including disconnected resources, in proposal order. It then adds roots for
-remaining unreachable components, including cycles.
-It follows outgoing connections and shows their source, target, and relationship
-type. Each resource expands once; **Shared reference** and **Cycle reference**
-entries point to that same resource rather than duplicating it or expanding
-indefinitely. Endpoint IDs keep connections attached to the correct resource
-even while names collide. Legacy name-only connections with ambiguous endpoints,
-and connections whose endpoint ID no longer matches a resource, are not attached; affected
-resources are marked as ambiguous, and those connections are listed below the
-tree (with **Edit** before confirmation). No resources or
-connections are inferred.
+Endpoint IDs keep connections attached to the correct resource even while names
+collide. Ambiguous name-only endpoints, missing or excluded endpoints, and
+conflicting or cyclic parent relationships are listed below the map rather than
+attributed or nested speculatively. Before confirmation, **Edit** lets you choose
+both endpoints explicitly or remove the connection; duplicate names must first
+be made unique. Missing or excluded endpoints are omitted from the confirmed
+plan unless repaired. The list remains visible but read-only after confirmation.
 
-In the tree, use Up/Down, Home/End, and first-letter navigation to move focus;
-Right expands or enters a branch, Left collapses or moves to its parent, and
-Enter/Space toggles a branch or follows a reference to the original resource.
-Before confirmation, select a connection's **Edit** button or press F2 on it to
-open the same connection editor used by the resource view.
-The view and expanded branches survive normal snapshot updates; changing the
-AppHost resets them. Tree focus carries into the selected resource when switching
-to **Resources** for editing; the selected resource is revealed when returning
-to the tree. Switching itself does not edit the proposal or saved confirmation,
-but leaving an edited field saves it through the usual change event, creating
-a revision and undo step. Pending saves still block confirmation as usual.
-The same confirmation and chat-handoff controls
-apply in both views, including when exploring an already-confirmed snapshot.
+Use Up/Down, Home/End, or a first letter to select a resource in the listed
+order; Right moves to its first child and Left moves to its parent. Enter or
+Space activates a node, and F2 focuses a connection action in the inspector.
+On narrow screens activation moves focus to the inspector; **Back to topology**
+returns it to the selected node. Selection survives normal snapshot updates and
+resets when changing AppHosts. Selecting a node does not itself edit the plan,
+but leaving a changed field can trigger its usual change event, creating a
+revision and undo step. Pending saves still block confirmation.
 
 The AppHost style is read-only in this surface. Loading only indicates that the
 generated proposal snapshot is being received. Scanning, clarification, proposal

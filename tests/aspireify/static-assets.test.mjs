@@ -5,30 +5,27 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { createCanvasTestDom } from "../fixtures/canvas-test-dom.mjs";
 
-test("proposal view markup preserves tree semantics, help associations and panel nesting", async () => {
+test("topology markup keeps the map and inspector together with accessible descriptions", async () => {
     const html = await readFile(new URL("../../extensions/aspireify/ui/index.html", import.meta.url), "utf8");
     const { document } = createCanvasTestDom(html);
     const node = (id) => document.getElementById(id);
-    assert.equal(node("connections-tree").getAttribute("role"), "tree");
-    assert.equal(node("connections-tree").getAttribute("aria-describedby"), "connection-legend connections-tree-help");
+    assert.equal(node("topology-nodes").tagName, "ul");
+    assert.equal(node("topology-nodes").getAttribute("aria-describedby"), "connection-legend topology-help");
+    assert.equal(node("topology-lines").getAttribute("aria-hidden"), "true");
+    assert.equal(node("topology-lines").getAttribute("focusable"), "false");
     assert.equal(node("connection-legend").parentElement, node("resource-plan-panel"));
     assert.equal(node("relationship-guide"), null);
     assert.equal(node("relationship-list-disclosure"), null);
+    assert.equal(node("connections-tree-panel"), null);
+    assert.equal(node("resources-view"), null);
     assert.equal(node("connections-unplaced").hidden, true);
     assert.equal(node("connections-unplaced-list").getAttribute("aria-labelledby"), "connections-unplaced-summary");
-    assert.equal(node("connections-tree-help").parentElement, node("connections-tree-panel"));
-    assert.equal(node("connections-tree").parentElement, node("connections-tree-panel"));
-    assert.equal(node("connections-tree-panel").parentElement, node("resource-plan-panel"));
-    assert.equal(node("resource-details-view").parentElement, node("resource-plan-panel"));
-    for (const id of ["compact-resources", "relationship-workspace"]) {
-        assert.equal(node(id).parentElement, node("resource-details-view"));
-    }
-    assert.equal(node("resources-view").getAttribute("aria-controls"), "resource-details-view");
-    assert.equal(node("connections-tree-view").getAttribute("aria-controls"), "connections-tree-panel");
-    assert.equal(node("resources-view").parentElement.getAttribute("role"), "group");
-    assert.equal(node("resources-view").getAttribute("aria-pressed"), "true");
-    assert.equal(node("connections-tree-view").getAttribute("aria-pressed"), "false");
-    assert.equal(node("connections-tree-panel").hidden, true);
+    assert.equal(node("topology-help").parentElement, node("plan-overview"));
+    assert.equal(node("topology-nodes").parentElement, node("topology-surface"));
+    assert.equal(node("topology-lines").parentElement, node("topology-surface"));
+    assert.equal(node("plan-overview").parentElement, node("relationship-workspace"));
+    assert.equal(node("plan-inspector").parentElement, node("relationship-workspace"));
+    assert.equal(node("relationship-workspace").parentElement, node("resource-plan-panel"));
 });
 
 test("the provider serves and publishes every local module imported by the canvas entry point", async () => {

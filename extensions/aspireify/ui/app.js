@@ -14,10 +14,7 @@ import {
     operationFailureChannel,
     selectionFocusTarget,
 } from "./interaction-model.js";
-import {
-    projectConnectionsTree,
-    visibleConnectionTreeNodes,
-} from "./connections-tree.js";
+import { projectTopology } from "./connections-tree.js";
 
 const apiToken = new URLSearchParams(window.location.search).get("token") || "";
 let expandedExternalDetails = new Set();
@@ -73,18 +70,14 @@ const elements = {
     snapshot: document.getElementById("snapshot"),
     planContent: document.getElementById("plan-content"),
     resourcePlanPanel: document.getElementById("resource-plan-panel"),
-    resourcesView: document.getElementById("resources-view"),
-    connectionsTreeView: document.getElementById("connections-tree-view"),
-    resourceDetailsView: document.getElementById("resource-details-view"),
-    connectionsTreePanel: document.getElementById("connections-tree-panel"),
-    connectionsTree: document.getElementById("connections-tree"),
-    connectionsTreeState: document.getElementById("connections-tree-state"),
+    topologyNodes: document.getElementById("topology-nodes"),
+    topologyLines: document.getElementById("topology-lines"),
+    topologySurface: document.getElementById("topology-surface"),
+    topologyState: document.getElementById("topology-state"),
     connectionsUnplaced: document.getElementById("connections-unplaced"),
     connectionsUnplacedSummary: document.getElementById("connections-unplaced-summary"),
     connectionsUnplacedList: document.getElementById("connections-unplaced-list"),
-    compactResources: document.getElementById("compact-resources"),
     compactAddResource: document.getElementById("compact-add-resource"),
-    relationshipWorkspace: document.getElementById("relationship-workspace"),
     planOverview: document.getElementById("plan-overview"),
     planInspector: document.getElementById("plan-inspector"),
     proposalStateCopy: document.getElementById("proposal-state-copy"),
@@ -122,6 +115,7 @@ const elements = {
     addResourceConnectionRow: document.getElementById("add-resource-connection-row"),
     connectionDialog: document.getElementById("connection-dialog"),
     connectionDialogError: document.getElementById("connection-dialog-error"),
+    connectionPlacementHelp: document.getElementById("connection-placement-help"),
     connectionForm: document.getElementById("connection-form"),
     connectionDialogTitle: document.getElementById("connection-dialog-title"),
     connectionId: document.getElementById("connection-id"),
@@ -130,6 +124,7 @@ const elements = {
     connectionTo: document.getElementById("connection-to"),
     resetConnection: document.getElementById("reset-connection"),
     deleteConnection: document.getElementById("delete-connection"),
+    saveConnection: document.getElementById("save-connection"),
     removeDialog: document.getElementById("remove-dialog"),
     removeForm: document.getElementById("remove-form"),
     removeDialogTitle: document.getElementById("remove-dialog-title"),
@@ -150,10 +145,10 @@ let restartSnapshot;
 let eventsConnected = false;
 let activeViewTransition;
 let selectedResourceId = "";
-let proposalView = "resources";
-let connectionsTree;
-let focusedTreeKey = "";
-const expandedTreeKeys = new Set();
+let topology;
+let topologyDrawState;
+let topologyResizeObserver;
+let connectionRequiresExplicitEndpoints = false;
 const fieldDrafts = new Map();
 const fieldOperations = createFieldOperationCoordinator();
 const detailTextareaWidths = new WeakMap();
@@ -194,9 +189,7 @@ document.addEventListener("DOMContentLoaded", () => {
     elements.undo.addEventListener("click", () => void applyHistoryChange("undo", elements.undo));
     elements.redo.addEventListener("click", () => void applyHistoryChange("redo", elements.redo));
     elements.compactAddResource.addEventListener("click", () => openAddResourceDialog("all"));
-    elements.resourcesView.addEventListener("click", () => switchProposalView("resources"));
-    elements.connectionsTreeView.addEventListener("click", () => switchProposalView("tree"));
-    elements.connectionsTree.addEventListener("keydown", handleConnectionsTreeKeydown);
+    elements.topologyNodes.addEventListener("keydown", handleTopologyKeydown);
     elements.addResourceForm.addEventListener("submit", addResource);
     elements.addResourceType.addEventListener("change", () => {
         elements.addResourceType.setCustomValidity("");
@@ -230,7 +223,10 @@ document.addEventListener("DOMContentLoaded", () => {
     for (const button of document.querySelectorAll("[data-close-dialog]")) {
         button.addEventListener("click", () => button.closest("dialog")?.close());
     }
-    window.addEventListener("resize", () => resizeVisibleDetailTextareas());
+    window.addEventListener("resize", () => {
+        resizeVisibleDetailTextareas();
+        requestAnimationFrame(drawTopologyConnections);
+    });
     window.addEventListener("keydown", handleHistoryShortcut);
     void loadSnapshot();
     connectEvents();
@@ -471,11 +467,13 @@ async function confirmSnapshot() {
     if (pendingMutations > 0) {
         return;
     }
+    const requestSnapshot = snapshot;
     const originalLabel = elements.confirm.textContent;
     await runBusy(elements.confirm, async () => {
         elements.confirm.textContent = snapshot.confirmed ? "Notifying…" : "Confirming…";
         try {
-            const result = await post("/api/confirm", {});
+            const result = await post("/api/confirm", {}, requestSnapshot);
+            if (snapshot.appHostPath !== requestSnapshot.appHostPath) return;
             if (result.confirmed) {
                 snapshot = {
                     ...snapshot,
@@ -486,11 +484,15 @@ async function confirmSnapshot() {
                     ? ""
                     : result.error || "Chat could not be notified yet.";
                 elements.actionFooter.hidden = snapshot.confirmationDelivered;
+                elements.body.classList.add("is-confirmed");
                 renderProposalIdentity();
+                renderResourcePlan();
+                renderNotProposedItems();
                 renderStatus();
                 renderConfirmation();
             }
         } catch (error) {
+            if (snapshot.appHostPath !== requestSnapshot.appHostPath) return;
             elements.confirm.textContent = originalLabel;
             throw error;
         }
@@ -548,9 +550,6 @@ function render(nextSnapshot) {
             fieldDrafts.clear();
             fieldOperations.clear();
             selectedResourceId = "";
-            proposalView = "resources";
-            focusedTreeKey = "";
-            expandedTreeKeys.clear();
             pendingRemoval = undefined;
             connectionRowSequence = 0;
             for (const dialog of [
@@ -620,209 +619,261 @@ function render(nextSnapshot) {
 function renderResourcePlan() {
     const proposal = snapshot.proposal;
     const resources = proposal.resources.filter((resource) => resource.include);
-    const names = new Set(resources.map((resource) => resource.name));
-    const edges = proposal.edges.filter((edge) => names.has(edge.from) && names.has(edge.to));
+    const edges = proposal.edges;
     const resourceIssues = proposalValidation().resourceIssues;
     elements.resourcePlanPanel.hidden = false;
-    const treeView = proposalView === "tree";
-    elements.resourcesView.setAttribute("aria-pressed", String(!treeView));
-    elements.connectionsTreeView.setAttribute("aria-pressed", String(treeView));
-    elements.resourceDetailsView.hidden = treeView;
-    elements.connectionsTreePanel.hidden = !treeView;
-    elements.compactAddResource.hidden = snapshot.confirmed || treeView;
-    if (treeView) {
-        renderConnectionsTree(resources, edges);
-        return;
-    }
-    elements.compactResources.replaceChildren();
-    elements.planOverview.replaceChildren();
+    const hadTopologyFocus = elements.topologyNodes.contains(document.activeElement);
+    const previousSelection = selectedResourceId;
+    unobserveDetailTextareas();
     elements.planInspector.replaceChildren();
-    elements.relationshipWorkspace.classList.toggle("is-confirmed", snapshot.confirmed);
-    const compact = (snapshot.presentationMode ?? (resources.length <= 2 ? "compact" : "relationship")) ===
-        "compact";
-    elements.compactResources.hidden = !compact || snapshot.confirmed;
-    elements.relationshipWorkspace.hidden = compact && !snapshot.confirmed;
-    if (snapshot.confirmed) {
-        selectedResourceId = "";
-        renderOverview(resources, edges, resourceIssues, true);
-        elements.planInspector.hidden = true;
-        return;
-    }
-    if (compact) {
-        elements.relationshipWorkspace.hidden = true;
-        if (resources.length === 0) {
-            const empty = createElement("div", {
-                className: "empty-proposal",
-                attrs: { role: "status" },
-            });
-            empty.append(
-                createElement("strong", { text: "No resources are included" }),
-                createElement("span", {
-                    className: "muted",
-                    text: "Add a resource to make this proposal confirmable.",
-                }),
-            );
-            elements.compactResources.append(empty);
-        }
-        for (const resource of resources) {
-            elements.compactResources.append(
-                renderCompactResource(resource, edges, resourceIssues[resource.id] ?? []),
-            );
-        }
-        return;
-    }
-
-    elements.relationshipWorkspace.hidden = false;
+    elements.compactAddResource.hidden = snapshot.confirmed;
     elements.planInspector.hidden = false;
     const orderedResources = resourcesInOverviewOrder(resources);
     if (!orderedResources.some((resource) => resource.id === selectedResourceId)) {
         selectedResourceId = orderedResources[0]?.id ?? "";
     }
-    renderOverview(resources, edges, resourceIssues, false);
+    renderTopology(resources, edges, resourceIssues);
     renderInspector(
         orderedResources.find((resource) => resource.id === selectedResourceId),
-        edges,
+        topology.connections,
         resourceIssues,
     );
-}
-
-function switchProposalView(view) {
-    if (proposalView === view) return;
-    const resourceId = selectedResourceId;
-    unobserveDetailTextareas();
-    proposalView = view;
-    renderResourcePlan();
-    if (view === "tree") {
-        const node = connectionsTree.nodes.get(JSON.stringify(["resource", resourceId]));
-        if (node) {
-            revealTreeNode(node.key);
-            renderResourcePlan();
-        }
-    }
-}
-
-function treeNodeId(key) {
-    return `connection-tree-${domIdToken(key)}`;
-}
-
-function renderConnectionsTree(resources, edges) {
-    const hadFocus = elements.connectionsTree.contains(document.activeElement);
-    connectionsTree = projectConnectionsTree(resources, edges);
-    for (const key of expandedTreeKeys) {
-        if (!connectionsTree.nodes.has(key)) expandedTreeKeys.delete(key);
-    }
-    const visible = visibleConnectionTreeNodes(connectionsTree, expandedTreeKeys);
-    if (!visible.some((node) => node.key === focusedTreeKey)) {
-        focusedTreeKey = visible[0]?.key ?? "";
-    }
-    selectedResourceId = connectionsTree.nodes.get(focusedTreeKey)?.resource.id ?? "";
-    elements.connectionsTree.replaceChildren();
-    elements.connectionsTree.hidden = resources.length === 0;
-    elements.connectionsTreeState.hidden = resources.length > 0 && edges.length > 0;
-    elements.connectionsTreeState.textContent = resources.length === 0
-        ? "No resources are included in this proposal. Switch to Resources to add one."
-        : "No connections in this proposal. All resources are listed below.";
-    const groups = new Map();
-    for (const node of visible) {
-        const expanded = node.children.length > 0 && expandedTreeKeys.has(node.key);
-        const relationship = node.edge
-            ? `${node.edge.from} → ${relationshipText({ edge: node.edge, direction: "outgoing", peer: node.edge.to })}`
-            : "";
-        const state = node.reference === "cycle"
-            ? "Cycle reference · same resource; Enter to follow original"
-            : node.reference === "shared"
-              ? "Shared reference · same resource; Enter to follow original"
-              : node.ambiguous
-                ? "Ambiguous connection endpoints; resource names must be unique"
-                : node.disconnected
-                ? "No connections"
-                : !node.children.length ? "No outgoing connections" : "";
-        const editable = Boolean(node.edge) && !snapshot.confirmed;
-        const tone = node.edge ? ` connection-${EDGE_LABELS[node.edge.kind]?.tone ?? "reference"}` : "";
-        const item = createElement("li", {
-            className: `connection-tree-item resource-${resourceKind(node.resource)}${tone}`,
-            attrs: {
-                id: treeNodeId(node.key),
-                role: "treeitem",
-                tabindex: node.key === focusedTreeKey ? "0" : "-1",
-                "data-tree-key": node.key,
-                "data-resource-id": node.resource.id,
-                "aria-label": [
-                    relationship,
-                    `${node.resource.name}, ${node.resource.type}`,
-                    state,
-                    editable ? "Press F2 to edit this connection" : "",
-                ].filter(Boolean).join(". "),
-                ...(node.children.length ? { "aria-expanded": String(expanded) } : {}),
-                ...(editable ? { "aria-keyshortcuts": "F2" } : {}),
-            },
-        });
-        const row = createElement("div", { className: "connection-tree-row" });
-        row.append(createElement("span", {
-            className: "connection-tree-toggle",
-            text: node.children.length ? expanded ? "▾" : "▸" : "·",
-            attrs: { "aria-hidden": "true" },
-        }));
-        const copy = createElement("div", { className: "connection-tree-copy" });
-        if (relationship) {
-            copy.append(createElement("span", {
-                className: "connection-tree-relationship muted",
-                text: relationship,
-            }));
-        }
-        copy.append(createResourceTitleLine(node.resource));
-        if (state) copy.append(createElement("span", { className: "muted", text: state }));
-        row.append(copy);
-        if (editable) {
-            // Pointer affordance only; keyboard and screen reader users edit with F2 so the
-            // treeitem stays the single focus stop.
-            const edit = createElement("button", {
-                className: "connection-tree-edit",
-                text: "Edit",
-                title: `Edit ${connectionKindName(node.edge.kind)} connection from ${node.edge.from} to ${node.edge.to}`,
-                attrs: { type: "button", tabindex: "-1", "aria-hidden": "true" },
-            });
-            edit.addEventListener("click", (event) => {
-                event.stopPropagation();
-                focusedTreeKey = node.key;
-                openConnectionDialog(node.edge.id);
-            });
-            row.append(edit);
-        }
-        item.append(row);
-        row.addEventListener("click", () => {
-            focusedTreeKey = node.key;
-            activateTreeNode(node);
-        });
-        item.addEventListener("focus", () => {
-            focusedTreeKey = node.key;
-            selectedResourceId = node.resource.id;
-            for (const peer of elements.connectionsTree.querySelectorAll("[role='treeitem']")) {
-                peer.tabIndex = peer === item ? 0 : -1;
+    if (hadTopologyFocus && previousSelection !== selectedResourceId) {
+        requestAnimationFrame(() => {
+            if (selectedResourceId) {
+                document.getElementById(overviewNodeId(selectedResourceId))?.focus();
+            } else if (!snapshot.confirmed) {
+                elements.compactAddResource.focus();
             }
         });
-        (groups.get(node.parentKey) ?? elements.connectionsTree).append(item);
-        if (expanded) {
-            const group = createElement("ul", { attrs: { role: "group" } });
-            item.append(group);
-            groups.set(node.key, group);
-        }
     }
-    renderUnplacedConnections(connectionsTree.unplaced);
-    if (hadFocus) focusTreeNode(focusedTreeKey);
 }
 
-function renderUnplacedConnections(unplaced) {
+function renderTopology(resources, edges, resourceIssues) {
+    topology = projectTopology(resources, edges);
+    elements.topologyNodes.replaceChildren();
+    elements.topologySurface.hidden = resources.length === 0;
+    elements.topologyNodes.style.gridTemplateColumns =
+        topology.columnWidths.map((width) => `${width}px`).join(" ");
+    elements.topologyState.hidden = resources.length > 0 && edges.length > 0;
+    elements.topologyState.textContent = resources.length === 0
+        ? "No resources are included. Add a resource to make this proposal confirmable."
+        : "No connections in this proposal.";
+    const peers = new Set();
+    const counts = new Map(resources.map((resource) => [resource.id, { outgoing: 0, incoming: 0 }]));
+    for (const connection of topology.connections) {
+        counts.get(connection.fromId).outgoing++;
+        counts.get(connection.toId).incoming++;
+        if (connection.fromId === selectedResourceId) peers.add(connection.toId);
+        if (connection.toId === selectedResourceId) peers.add(connection.fromId);
+    }
+    const buttons = new Map();
+    const groups = new Map();
+    const stack = [...topology.roots].reverse();
+    while (stack.length) {
+        const node = topology.nodes.get(stack.pop());
+        const resource = node.resource;
+        const selected = resource.id === selectedResourceId;
+        const count = counts.get(resource.id);
+        const drafts = [...fieldDrafts.values()].filter((draft) => draft.resourceId === resource.id);
+        const invalidDraft = drafts.some((draft) => draft.status === "invalid" || draft.status === "error");
+        const issues = resourceIssues[resource.id] ?? [];
+        const item = createElement("li", {
+            className: `topology-branch${node.children.length ? " has-children" : ""}`,
+        });
+        if (node.parentId === null) {
+            item.style.gridColumn = String(node.column + 1);
+            item.style.gridRow = String(node.row + 1);
+        }
+        const button = createElement("button", {
+            className: `topology-node resource-${resourceKind(resource)}${selected ? " is-selected" : ""}${
+                !selected && peers.has(resource.id) ? " is-connected" : ""
+            }${issues.length || invalidDraft ? " has-issues" : ""}`,
+            attrs: {
+                id: overviewNodeId(resource.id),
+                type: "button",
+                "data-resource-id": resource.id,
+                tabindex: selected ? "0" : "-1",
+                "aria-pressed": String(selected),
+                "aria-controls": "plan-inspector",
+                "aria-describedby": "topology-help",
+                ...(!snapshot.confirmed && (topology.connections.length || resources.length > 1)
+                    ? { "aria-keyshortcuts": "F2" } : {}),
+            },
+        });
+        const marker = createElement("span", {
+            className: "overview-kind-marker",
+            attrs: { "aria-hidden": "true" },
+        });
+        const copy = createElement("span", { className: "topology-node-copy" });
+        copy.append(createResourceTitleLine(resource));
+        if (node.uncertain) {
+            copy.append(createElement("span", { className: "muted", text: "Unplaced connection" }));
+        } else if (node.disconnected) {
+            copy.append(createElement("span", { className: "muted", text: "No connections" }));
+        } else {
+            copy.append(createElement("span", {
+                className: "muted",
+                text: `${count.outgoing} outgoing · ${count.incoming} incoming`,
+            }));
+        }
+        if (drafts.length || issues.length || resource.edited) {
+            copy.append(createElement("span", {
+                className: invalidDraft || issues.length ? "overview-invalid" : "overview-edited",
+                text: invalidDraft || issues.length ? "Needs attention" : drafts.length ? "Unsaved" : "Edited",
+            }));
+        }
+        button.append(marker, copy);
+        button.addEventListener("click", () => selectResource(resource.id, "activate"));
+        buttons.set(resource.id, button);
+        item.append(button);
+        (node.parentId === null ? elements.topologyNodes : groups.get(node.parentId)).append(item);
+        if (node.children.length) {
+            const group = createElement("ul", {
+                className: "topology-children",
+                attrs: { "aria-label": `Children of ${resource.name}` },
+            });
+            item.append(group);
+            groups.set(resource.id, group);
+            for (let index = node.children.length - 1; index >= 0; index--) {
+                stack.push(node.children[index]);
+            }
+        }
+    }
+    renderTopologyConnections(buttons);
+    renderUnplacedConnections(topology.unplaced, topology.nodes);
+}
+
+function renderTopologyConnections(buttons) {
+    topologyResizeObserver?.disconnect();
+    for (const path of elements.topologyLines.querySelectorAll(".topology-edge")) {
+        path.remove();
+    }
+    const ports = new Map();
+    const entries = [];
+    for (const connection of topology.connections) {
+        if (connection.edge.kind === "parent") continue;
+        const entry = { connection, fromOffset: 0, toOffset: 0 };
+        entries.push(entry);
+        for (const [id, side] of [[connection.fromId, "fromOffset"], [connection.toId, "toOffset"]]) {
+            if (!ports.has(id)) ports.set(id, []);
+            ports.get(id).push({ entry, side });
+        }
+    }
+    for (const attachments of ports.values()) {
+        attachments.forEach(({ entry, side }, index) => {
+            entry[side] = (index - (attachments.length - 1) / 2) * 16;
+        });
+    }
+    const paths = [];
+    for (const { connection, fromOffset, toOffset } of entries) {
+        const highlighted = connection.fromId === selectedResourceId ||
+            connection.toId === selectedResourceId;
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("class", `topology-edge topology-edge-${
+            connection.edge.kind === "waitFor" ? "wait" : "reference"
+        } ${highlighted ? "is-highlighted" : "is-muted"}`);
+        path.setAttribute("marker-end", "url(#topology-arrow)");
+        path.setAttribute("data-edge-id", connection.edge.id);
+        path.setAttribute("data-from-id", connection.fromId);
+        path.setAttribute("data-to-id", connection.toId);
+        elements.topologyLines.append(path);
+        paths.push({
+            path,
+            from: buttons.get(connection.fromId),
+            to: buttons.get(connection.toId),
+            fromOffset,
+            toOffset,
+        });
+    }
+    topologyDrawState = { paths, surface: elements.topologySurface, lines: elements.topologyLines };
+    if (typeof ResizeObserver === "function") {
+        topologyResizeObserver ??= new ResizeObserver(() => requestAnimationFrame(drawTopologyConnections));
+        topologyResizeObserver.observe(elements.topologySurface);
+        for (const button of buttons.values()) topologyResizeObserver.observe(button);
+    }
+    requestAnimationFrame(drawTopologyConnections);
+}
+
+function drawTopologyConnections() {
+    if (!topologyDrawState?.surface.isConnected) return;
+    const { surface, lines, paths } = topologyDrawState;
+    const bounds = surface.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return;
+    lines.setAttribute("viewBox", `0 0 ${bounds.width} ${bounds.height}`);
+    for (const { path, from, to, fromOffset, toOffset } of paths) {
+        const start = from.getBoundingClientRect();
+        const end = to.getBoundingClientRect();
+        if (!start.width || !start.height || !end.width || !end.height) continue;
+        path.setAttribute("d", topologyConnectionPath(start, end, bounds, fromOffset, from === to, toOffset));
+    }
+}
+
+function topologyConnectionPath(from, to, bounds, offset, sameResource = false, endOffset = offset) {
+    const x = (value) => value - bounds.left;
+    const y = (value) => value - bounds.top;
+    const shift = (size, value) => Math.max(5 - size / 2, Math.min(size / 2 - 5, value));
+    if (sameResource) {
+        const right = x(from.right);
+        const middle = y((from.top + from.bottom) / 2);
+        return `M ${right} ${middle - 5} C ${right + 52} ${y(from.top) - 18}, ${
+            right + 52
+        } ${y(from.bottom) + 18}, ${right} ${middle + 5}`;
+    }
+    if (from.right <= to.left || to.right <= from.left) {
+        const rightward = from.right <= to.left;
+        const startX = x(rightward ? from.right : from.left);
+        const endX = x(rightward ? to.left : to.right);
+        const startY = y((from.top + from.bottom) / 2 + shift(from.height, offset));
+        const endY = y((to.top + to.bottom) / 2 + shift(to.height, endOffset));
+        const bend = Math.max(8, Math.abs(endX - startX) / 2) * (rightward ? 1 : -1);
+        return `M ${startX} ${startY} C ${startX + bend} ${startY}, ${
+            endX - bend
+        } ${endY}, ${endX} ${endY}`;
+    }
+    const downward = from.bottom <= to.top;
+    const startY = y(downward ? from.bottom : from.top);
+    const endY = y(downward ? to.top : to.bottom);
+    const startX = x((from.left + from.right) / 2 + shift(from.width, offset));
+    const endX = x((to.left + to.right) / 2 + shift(to.width, endOffset));
+    const bend = Math.max(8, Math.abs(endY - startY) / 2) * (downward ? 1 : -1);
+    return `M ${startX} ${startY} C ${startX} ${startY + bend}, ${
+        endX
+    } ${endY - bend}, ${endX} ${endY}`;
+}
+
+function unplacedEndpointLabel(edge, side, nodes) {
+    const id = edge[`${side}Id`];
+    if (id) {
+        return nodes.get(id)?.resource.name ?? `${edge[side] || "(unnamed)"} (not found)`;
+    }
+    const found = [...nodes.values()].some(({ resource }) => resource.name === edge[side]);
+    return found ? edge[side] : `${edge[side] || "(unnamed)"} (not found)`;
+}
+
+function renderUnplacedConnections(unplaced, nodes) {
     elements.connectionsUnplaced.hidden = unplaced.length === 0;
     elements.connectionsUnplacedList.replaceChildren();
     elements.connectionsUnplacedSummary.textContent = unplaced.length
-        ? `Not placed in the tree (${unplaced.length}): endpoints are ambiguous or missing.`
+        ? `Not placed on the map (${unplaced.length}): review these connections.`
         : "";
     for (const { edge, reason } of unplaced) {
-        const relationship = `${edge.from} → ${relationshipText({ edge, direction: "outgoing", peer: edge.to })}`;
-        const status = reason === "ambiguous"
-            ? "Ambiguous endpoint; resource names must be unique"
-            : "Endpoint resource not found";
+        const relationship = `${unplacedEndpointLabel(edge, "from", nodes)} → ${relationshipText({
+            edge,
+            direction: "outgoing",
+            peer: unplacedEndpointLabel(edge, "to", nodes),
+        })}`;
+        let status = {
+            ambiguous: "Ambiguous endpoint; resource names must be unique",
+            missing: "Endpoint resource not found or excluded",
+            "multiple-parents": "Resource has multiple parents; nesting is ambiguous",
+            "parent-cycle": "Parent relationships form a cycle; nesting is not possible",
+        }[reason];
+        if (reason === "missing") {
+            status += snapshot.confirmed
+                ? "; not included in the confirmed proposal"
+                : "; omitted on confirmation unless repaired";
+        }
         const item = createElement("li", {
             className: `connections-unplaced-item connection-${EDGE_LABELS[edge.kind]?.tone ?? "reference"}`,
         });
@@ -832,7 +883,7 @@ function renderUnplacedConnections(unplaced) {
         );
         if (!snapshot.confirmed) {
             const edit = createElement("button", {
-                className: "connection-tree-edit",
+                className: "connection-unplaced-edit",
                 text: "Edit",
                 attrs: {
                     id: `connections-unplaced-edit-${domIdToken(edge.id)}`,
@@ -847,75 +898,40 @@ function renderUnplacedConnections(unplaced) {
     }
 }
 
-function focusTreeNode(key) {
-    focusedTreeKey = key;
-    document.getElementById(treeNodeId(key))?.focus();
-}
-
-function redrawConnectionsTree() {
-    renderResourcePlan();
-    focusTreeNode(focusedTreeKey);
-}
-
-function activateTreeNode(node) {
-    if (node.reference) {
-        revealTreeNode(node.targetKey);
-    } else if (node.children.length) {
-        if (expandedTreeKeys.has(node.key)) expandedTreeKeys.delete(node.key);
-        else expandedTreeKeys.add(node.key);
-    }
-    redrawConnectionsTree();
-}
-
-function revealTreeNode(key) {
-    let target = connectionsTree.nodes.get(key);
-    focusedTreeKey = target.key;
-    while (target.parentKey) {
-        expandedTreeKeys.add(target.parentKey);
-        target = connectionsTree.nodes.get(target.parentKey);
-    }
-}
-
-function handleConnectionsTreeKeydown(event) {
-    if (event.altKey || event.ctrlKey || event.metaKey) return;
-    const key = event.target.closest("[role='treeitem']")?.dataset.treeKey;
-    const node = connectionsTree?.nodes.get(key);
+function handleTopologyKeydown(event) {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    const resourceId = event.target.closest(".topology-node")?.dataset.resourceId;
+    const node = topology?.nodes.get(resourceId);
     if (!node) return;
-    const visible = visibleConnectionTreeNodes(connectionsTree, expandedTreeKeys);
-    const index = visible.indexOf(node);
-    let targetKey;
+    const buttons = [...elements.topologyNodes.querySelectorAll(".topology-node")];
+    const index = buttons.findIndex((button) => button.dataset.resourceId === resourceId);
+    let targetId;
     switch (event.key) {
-        case "ArrowDown": targetKey = visible[Math.min(index + 1, visible.length - 1)].key; break;
-        case "ArrowUp": targetKey = visible[Math.max(index - 1, 0)].key; break;
-        case "Home": targetKey = visible[0].key; break;
-        case "End": targetKey = visible[visible.length - 1].key; break;
-        case "ArrowRight":
-            if (node.children.length && !expandedTreeKeys.has(key)) {
-                activateTreeNode(node);
-            } else if (node.children.length) {
-                targetKey = node.children[0];
-            }
-            break;
-        case "ArrowLeft":
-            if (node.children.length && expandedTreeKeys.has(key)) activateTreeNode(node);
-            else targetKey = node.parentKey;
-            break;
-        case "Enter":
-        case " ":
-            activateTreeNode(node);
-            break;
-        case "F2":
-            if (!node.edge || snapshot.confirmed) return;
-            openConnectionDialog(node.edge.id);
-            break;
+        case "ArrowDown": targetId = buttons[Math.min(index + 1, buttons.length - 1)].dataset.resourceId; break;
+        case "ArrowUp": targetId = buttons[Math.max(index - 1, 0)].dataset.resourceId; break;
+        case "Home": targetId = buttons[0].dataset.resourceId; break;
+        case "End": targetId = buttons[buttons.length - 1].dataset.resourceId; break;
+        case "ArrowRight": targetId = node.children[0]; break;
+        case "ArrowLeft": targetId = node.parentId; break;
+        case "F2": {
+            if (snapshot.confirmed) return;
+            const action = elements.planInspector.querySelector(".connection-chip") ??
+                elements.planInspector.querySelector(".connection-add");
+            if (!action || action.disabled || action.hidden) return;
+            event.preventDefault();
+            action.focus();
+            return;
+        }
         default:
             if (event.key.length !== 1) return;
-            targetKey = [...visible.slice(index + 1), ...visible.slice(0, index + 1)]
-                .find((candidate) => candidate.resource.name.toLowerCase()
-                    .startsWith(event.key.toLowerCase()))?.key;
+            targetId = [...buttons.slice(index + 1), ...buttons.slice(0, index + 1)]
+                .find((button) => topology.nodes.get(button.dataset.resourceId).resource.name
+                    .toLowerCase().startsWith(event.key.toLowerCase()))?.dataset.resourceId;
+            break;
     }
+    if (!targetId) return;
     event.preventDefault();
-    if (targetKey) focusTreeNode(targetKey);
+    selectResource(targetId, "navigate");
 }
 
 const NOT_PROPOSED_TREATMENT_LABELS = {
@@ -1056,186 +1072,8 @@ function resourceRole(resource) {
     return "external";
 }
 
-function renderOverview(resources, edges, resourceIssues, confirmed) {
-    elements.planOverview.classList.toggle("is-confirmed", confirmed);
-    for (const definition of RESOURCE_GROUPS) {
-        const groupedResources = resources.filter(
-            (resource) => resourceRole(resource) === definition.id,
-        );
-        if (groupedResources.length === 0) {
-            continue;
-        }
-        const section = createElement("section", {
-            className: `overview-role overview-role-${definition.id}`,
-        });
-        const heading = createElement("div", { className: "overview-role-heading" });
-        const headingCopy = createElement("div");
-        headingCopy.append(
-            createElement("h2", { text: definition.title }),
-            createElement("p", {
-                className: "muted",
-                text: definition.description,
-            }),
-        );
-        heading.append(
-            headingCopy,
-            createElement("span", {
-                className: "overview-role-count",
-                text: String(groupedResources.length),
-                title: `${groupedResources.length} resource${
-                    groupedResources.length === 1 ? "" : "s"
-                }`,
-            }),
-        );
-        const list = createElement("div", {
-            className: "overview-node-list",
-        });
-        for (const resource of groupedResources) {
-            list.append(
-                renderOverviewNode(
-                    resource,
-                    edges,
-                    resourceIssues[resource.id] ?? [],
-                    confirmed,
-                ),
-            );
-        }
-        section.append(heading, list);
-        elements.planOverview.append(section);
-    }
-}
-
-function renderOverviewNode(resource, edges, issues, confirmed) {
-    const service = serviceForResource(resource);
-    const externalDependency = externalDependencyForResource(resource);
-    const selected = resource.id === selectedResourceId;
-    const drafts = [...fieldDrafts.values()].filter(
-        (draft) => draft.resourceId === resource.id,
-    );
-    const invalidDraft = drafts.some(
-        (draft) => draft.status === "invalid" || draft.status === "error",
-    );
-    const tag = confirmed ? "div" : "button";
-    const node = createElement(tag, {
-        className: `overview-node resource-${resourceKind(resource)}${
-            selected ? " is-selected" : ""
-        }${issues.length || invalidDraft ? " has-issues" : ""}`,
-        attrs: {
-            id: overviewNodeId(resource.id),
-            "data-resource-id": resource.id,
-            ...(confirmed
-                ? {}
-                : {
-                      type: "button",
-                      "aria-pressed": String(selected),
-                      tabindex: selected ? "0" : "-1",
-                  }),
-        },
-    });
-    const marker = createElement("span", {
-        className: "overview-kind-marker",
-        attrs: { "aria-hidden": "true" },
-    });
-    const copy = createElement(confirmed ? "div" : "span", { className: "overview-node-copy" });
-    copy.append(createResourceTitleLine(resource));
-    if (service || externalDependency) {
-        copy.append(
-            createElement("span", {
-                className: `overview-source muted${externalDependency ? " external-dependency-mapping" : ""}`,
-                text: service
-                    ? `${service.name} → ${resource.name}`
-                    : `External: ${externalDependency.name} (${externalDependency.type}) → ${resource.name}`,
-            }),
-        );
-    }
-    if (confirmed && externalDependency) {
-        const details = renderExternalDependencyDetails(externalDependency, resource.id);
-        if (details) {
-            copy.append(details);
-        }
-    }
-    const relationships = relationshipsFor(resource, edges);
-    const meta = createElement("span", { className: "overview-node-meta" });
-    meta.append(renderConnectionCounts(relationships));
-    if (drafts.length) {
-        meta.append(
-            createElement("span", {
-                className: invalidDraft ? "overview-invalid" : "overview-edited",
-                text: invalidDraft ? "Needs attention" : "Unsaved",
-            }),
-        );
-    } else if (resource.edited) {
-        meta.append(createElement("span", { className: "overview-edited", text: "Edited" }));
-    }
-    if (issues.length && !invalidDraft) {
-        meta.append(createElement("span", { className: "overview-invalid", text: "Needs attention" }));
-    }
-    node.append(marker, copy, meta);
-    if (!confirmed) {
-        node.addEventListener("click", () => selectResource(resource.id, "activate"));
-        node.addEventListener("keydown", handleOverviewKeydown);
-    }
-    return node;
-}
-
 function overviewNodeId(resourceId) {
     return `overview-node-${domIdToken(resourceId)}`;
-}
-
-function renderConnectionCounts(relationships) {
-    const wrap = createElement("span", { className: "connection-counts" });
-    const outgoing = relationships.filter((relationship) => relationship.direction === "outgoing").length;
-    const incoming = relationships.filter((relationship) => relationship.direction === "incoming").length;
-    if (!outgoing && !incoming) {
-        wrap.append(createElement("span", { text: "No connections" }));
-        return wrap;
-    }
-    if (outgoing) {
-        wrap.append(
-            createElement("span", {
-                className: "connection-count connection-count-out",
-                text: `${outgoing} \u2192`,
-                title: `${outgoing} outgoing connection${outgoing === 1 ? "" : "s"}`,
-                attrs: {
-                    "aria-label": `${outgoing} outgoing connection${outgoing === 1 ? "" : "s"}`,
-                },
-            }),
-        );
-    }
-    if (incoming) {
-        wrap.append(
-            createElement("span", {
-                className: "connection-count connection-count-in",
-                text: `${incoming} \u2190`,
-                title: `${incoming} incoming connection${incoming === 1 ? "" : "s"}`,
-                attrs: {
-                    "aria-label": `${incoming} incoming connection${incoming === 1 ? "" : "s"}`,
-                },
-            }),
-        );
-    }
-    return wrap;
-}
-
-function handleOverviewKeydown(event) {
-    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
-        return;
-    }
-    event.preventDefault();
-    const nodes = [...elements.planOverview.querySelectorAll(".overview-node[type='button']")];
-    const currentIndex = nodes.indexOf(event.currentTarget);
-    const nextIndex =
-        event.key === "Home"
-            ? 0
-            : event.key === "End"
-              ? nodes.length - 1
-              : event.key === "ArrowDown"
-                ? (currentIndex + 1) % nodes.length
-                : (currentIndex - 1 + nodes.length) % nodes.length;
-    const resourceId = nodes[nextIndex]?.dataset.resourceId;
-    if (resourceId) {
-        selectResource(resourceId, "navigate");
-    }
 }
 
 function selectResource(resourceId, activation = "activate") {
@@ -1258,9 +1096,7 @@ function selectResource(resourceId, activation = "activate") {
         }
         const node = document.getElementById(overviewNodeId(resourceId));
         node?.focus({ preventScroll: true });
-        if (narrow) {
-            node?.scrollIntoView({ block: "nearest" });
-        }
+        node?.scrollIntoView({ block: "nearest", inline: "nearest" });
     });
 }
 
@@ -1280,7 +1116,7 @@ function renderInspector(resource, edges, resourceIssues) {
     });
     const back = createElement("button", {
         className: "btn btn-quiet btn-sm inspector-back",
-        text: "← Back to resources",
+        text: "← Back to topology",
         attrs: {
             type: "button",
             "aria-controls": "plan-overview",
@@ -1309,7 +1145,8 @@ function renderInspector(resource, edges, resourceIssues) {
     if (mapping) {
         identity.append(mapping);
     }
-    header.append(identity, createResourceActions(resource));
+    header.append(identity);
+    if (!snapshot.confirmed) header.append(createResourceActions(resource));
     inspector.append(header);
     const issues = resourceIssues[resource.id] ?? [];
     if (issues.length) {
@@ -1373,33 +1210,6 @@ function restoreFocusToken(token) {
             target.setSelectionRange(token.start, token.end);
         }
     });
-}
-
-function renderCompactResource(resource, edges, issues = []) {
-    const service = serviceForResource(resource);
-    const item = createElement("article", {
-        className: `compact-resource review-item resource-${resourceKind(resource)}`,
-    });
-    const header = createElement("div", { className: "compact-resource-header" });
-    const identity = createElement("div", { className: "compact-resource-identity" });
-    const title = createElement("h2");
-    title.append(createResourceTitleLine(resource));
-    identity.append(title);
-    const mapping = renderSourceMapping(resource, service);
-    if (mapping) {
-        identity.append(mapping);
-    }
-    const actions = createElement("div", { className: "compact-resource-actions" });
-    actions.append(...createResourceActionButtons(resource));
-    header.append(identity, actions);
-    item.append(header);
-
-    if (issues.length > 0) {
-        item.append(renderResourceValidation(issues));
-    }
-    item.append(renderResourceFacts(resource, service));
-    item.append(renderCompactConnections(resource, edges));
-    return item;
 }
 
 function createResourceActions(resource) {
@@ -2067,22 +1877,6 @@ function createCopyPathButton(resource, path) {
     return button;
 }
 
-function renderCompactConnections(resource, edges) {
-    const section = createElement("div", { className: "compact-connections" });
-    const relationships = relationshipsFor(resource, edges);
-    section.append(createConnectionHeading(resource));
-    if (!relationships.length) {
-        section.append(createElement("span", { className: "muted", text: "No direct connections" }));
-        return section;
-    }
-    const chips = createElement("div", { className: "connection-chips" });
-    for (const relationship of relationships) {
-        chips.append(createConnectionChip(relationship));
-    }
-    section.append(chips);
-    return section;
-}
-
 function createConnectionHeading(resource, labeled = false) {
     const heading = createElement("div", { className: "connection-heading" });
     const add = createElement("button", {
@@ -2126,13 +1920,15 @@ function servicePathForDisplay(path) {
     return displayPath;
 }
 
-function relationshipsFor(resource, edges = snapshot.proposal.edges) {
-    return edges.flatMap((edge) => {
-        if (edge.fromId !== undefined ? edge.fromId === resource.id : edge.from === resource.name) {
-            return [{ edge, direction: "outgoing", peer: edge.to }];
+function relationshipsFor(resource, connections) {
+    return connections.flatMap(({ edge, fromId, toId }) => {
+        const from = topology.nodes.get(fromId).resource.name;
+        const to = topology.nodes.get(toId).resource.name;
+        if (fromId === resource.id) {
+            return [{ edge, from, to, direction: "outgoing", peer: to }];
         }
-        if (edge.toId !== undefined ? edge.toId === resource.id : edge.to === resource.name) {
-            return [{ edge, direction: "incoming", peer: edge.from }];
+        if (toId === resource.id) {
+            return [{ edge, from, to, direction: "incoming", peer: from }];
         }
         return [];
     });
@@ -2162,27 +1958,27 @@ function connectionKindName(kind) {
 }
 
 function createConnectionChip(relationship) {
-    const accessibleLabel = `Edit ${connectionKindName(
+    const editable = !snapshot.confirmed;
+    const accessibleLabel = `${editable ? "Edit " : ""}${connectionKindName(
         relationship.edge.kind,
-    )} connection from ${relationship.edge.from} to ${relationship.edge.to}`;
-    const chip = createElement("button", {
+    )} connection from ${relationship.from} to ${relationship.to}`;
+    const chip = createElement(editable ? "button" : "span", {
         className: relationshipClassName(relationship),
         title: accessibleLabel,
         attrs: {
-            type: "button",
+            ...(editable ? { type: "button" } : {}),
             "aria-label": accessibleLabel,
         },
     });
-    chip.append(
-        createElement("span", { text: relationshipText(relationship) }),
-        createElement("span", {
+    chip.append(createElement("span", { text: relationshipText(relationship) }));
+    if (editable) {
+        chip.append(createElement("span", {
             className: "connection-chip-affordance",
             text: "Edit",
             attrs: { "aria-hidden": "true" },
-        }),
-    );
-    chip.disabled = snapshot.confirmed;
-    chip.addEventListener("click", () => openConnectionDialog(relationship.edge.id));
+        }));
+        chip.addEventListener("click", () => openConnectionDialog(relationship.edge.id));
+    }
     return chip;
 }
 
@@ -2221,10 +2017,7 @@ function shortHash(hash) {
 function renderStatus() {
     const resources = snapshot.proposal.resources ?? [];
     const includedResources = resources.filter((resource) => resource.include);
-    const includedNames = new Set(includedResources.map((resource) => resource.name));
-    const activeEdges = snapshot.proposal.edges.filter(
-        (edge) => includedNames.has(edge.from) && includedNames.has(edge.to),
-    ).length;
+    const activeEdges = includedConnections(includedResources).length;
     if (snapshot.proposalError) {
         setStatusLine(snapshot.proposalError);
     } else if (snapshot.confirmed) {
@@ -2287,15 +2080,22 @@ function renderConfirmation() {
 
 function confirmationSummaryText() {
     const resources = snapshot.proposal.resources.filter((resource) => resource.include);
-    const names = new Set(resources.map((resource) => resource.name));
-    const connections = snapshot.proposal.edges.filter(
-        (edge) => names.has(edge.from) && names.has(edge.to),
-    );
+    const connections = includedConnections(resources);
     return `Confirm ${resources.length} resource${
         resources.length === 1 ? "" : "s"
     } and ${connections.length} connection${
         connections.length === 1 ? "" : "s"
     } for ${appHostPathForDisplay(snapshot.appHostPath)}. Wiring continues in chat; nothing starts here.`;
+}
+
+function includedConnections(resources) {
+    const ids = new Set(resources.map((resource) => resource.id));
+    const names = new Set(resources.map((resource) => resource.name));
+    return snapshot.proposal.edges.filter(
+        (edge) =>
+            (edge.fromId ? ids.has(edge.fromId) : names.has(edge.from)) &&
+            (edge.toId ? ids.has(edge.toId) : names.has(edge.to)),
+    );
 }
 
 function renderHistoryControls() {
@@ -2581,28 +2381,36 @@ function openConnectionDialog(edgeId = "", initialFrom = "") {
     }
     const edge = snapshot.proposal.edges.find((candidate) => candidate.id === edgeId);
     const resources = snapshot.proposal.resources.filter((resource) => resource.include);
-    if (resources.length < 2) {
+    if (!edge && resources.length < 2) {
         showInlineError(new Error("Include at least two resources before adding a connection."));
         return;
     }
-    const resourceNames = new Set(resources.map((resource) => resource.name));
-    if (edge && (!resourceNames.has(edge.from) || !resourceNames.has(edge.to))) {
-        showInlineError(new Error("Include both resources before editing this connection."));
-        return;
-    }
+    connectionRequiresExplicitEndpoints = Boolean(
+        edge && topology?.unplaced.some((entry) => entry.edge.id === edge.id),
+    );
+    const placed = edge && topology?.connections.find((entry) => entry.edge.id === edge.id);
+    const from = placed ? topology.nodes.get(placed.fromId).resource.name : edge?.from;
+    const to = placed ? topology.nodes.get(placed.toId).resource.name : edge?.to;
+    const choices = connectionResources();
     clearDialogError(elements.connectionDialogError);
-    fillResourceSelect(elements.connectionFrom, resources);
+    fillResourceSelect(elements.connectionFrom, choices, connectionRequiresExplicitEndpoints);
     elements.connectionId.value = edge?.id ?? "";
     elements.connectionDialogTitle.textContent = edge ? "Edit connection" : "Add connection";
-    elements.connectionFrom.value =
-        edge?.from ??
-        (resources.some((resource) => resource.name === initialFrom)
-            ? initialFrom
-            : resources[0].name);
-    syncConnectionTargets(edge?.to ?? resources[1].name);
+    elements.connectionFrom.value = connectionRequiresExplicitEndpoints
+        ? ""
+        : from ??
+          (resources.some((resource) => resource.name === initialFrom)
+              ? initialFrom
+              : resources[0].name);
+    syncConnectionTargets(connectionRequiresExplicitEndpoints ? "" : to ?? resources[1]?.name ?? "");
     elements.connectionKind.value = edge?.kind ?? "reference";
     elements.resetConnection.hidden = !edge?.generated || !edge.edited;
     elements.deleteConnection.hidden = !edge;
+    elements.saveConnection.disabled = connectionRequiresExplicitEndpoints && choices.length < 2;
+    elements.connectionPlacementHelp.hidden = !connectionRequiresExplicitEndpoints;
+    elements.connectionPlacementHelp.textContent = connectionRequiresExplicitEndpoints
+        ? "Choose both endpoints explicitly, or remove this connection. Include two resources with unique names before saving."
+        : "";
     elements.connectionDialog.showModal();
     elements.connectionFrom.focus();
 }
@@ -2622,6 +2430,10 @@ async function resetConnection() {
 
 async function saveConnection(event) {
     event.preventDefault();
+    if (!elements.connectionFrom.value || !elements.connectionTo.value) {
+        showInlineError(new Error("Choose both connection endpoints before saving."));
+        return;
+    }
     if (elements.connectionFrom.value === elements.connectionTo.value) {
         elements.connectionTo.setCustomValidity("Choose a different target resource.");
         elements.connectionTo.reportValidity();
@@ -2641,16 +2453,24 @@ async function saveConnection(event) {
     });
 }
 
+function connectionResources() {
+    const resources = snapshot.proposal.resources.filter((resource) => resource.include);
+    if (!connectionRequiresExplicitEndpoints) return resources;
+    const counts = new Map();
+    for (const resource of resources) {
+        counts.set(resource.name, (counts.get(resource.name) ?? 0) + 1);
+    }
+    return resources.filter((resource) => counts.get(resource.name) === 1);
+}
+
 function syncConnectionTargets(preferredTarget = elements.connectionTo.value) {
-    const targets = snapshot.proposal.resources.filter(
-        (resource) =>
-            resource.include &&
-            resource.name !== elements.connectionFrom.value,
+    const targets = connectionResources().filter(
+        (resource) => resource.name !== elements.connectionFrom.value,
     );
-    fillResourceSelect(elements.connectionTo, targets);
+    fillResourceSelect(elements.connectionTo, targets, connectionRequiresExplicitEndpoints);
     elements.connectionTo.value = targets.some((resource) => resource.name === preferredTarget)
         ? preferredTarget
-        : (targets[0]?.name ?? "");
+        : connectionRequiresExplicitEndpoints ? "" : (targets[0]?.name ?? "");
     elements.connectionTo.setCustomValidity("");
 }
 
@@ -2676,8 +2496,14 @@ function requestDeleteConnection() {
     });
 }
 
-function fillResourceSelect(select, resources) {
+function fillResourceSelect(select, resources, requireChoice = false) {
     select.replaceChildren();
+    if (requireChoice) {
+        select.append(createElement("option", {
+            text: "Choose a resource",
+            attrs: { value: "", disabled: "" },
+        }));
+    }
     for (const resource of resources) {
         select.append(
             createElement("option", { text: resource.name, attrs: { value: resource.name } }),

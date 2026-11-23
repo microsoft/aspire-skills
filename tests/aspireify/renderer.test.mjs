@@ -37,7 +37,7 @@ function review(appHostPath, revision, overrides = {}) {
     };
 }
 
-async function createRenderer(initialSnapshot, { renderPlan = false } = {}) {
+async function createRenderer(initialSnapshot, { renderPlan = false, narrow = false } = {}) {
     const dom = createCanvasTestDom(indexSource);
     const documentListeners = dom.listeners;
     const requests = [];
@@ -60,7 +60,7 @@ async function createRenderer(initialSnapshot, { renderPlan = false } = {}) {
         window: {
             location: { search: "?token=renderer-test" },
             addEventListener() {},
-            matchMedia: () => ({ matches: true }),
+            matchMedia: (query) => ({ matches: query.includes("max-width") ? narrow : true }),
         },
         EventSource: class {
             constructor() { events = this; }
@@ -76,7 +76,6 @@ async function createRenderer(initialSnapshot, { renderPlan = false } = {}) {
     });
     runInContext(rendererSource, context, { filename: "aspireify/ui/app.js" });
     if (!renderPlan) {
-        // Restart-only tests do not need the resource graph DOM.
         runInContext("renderResourcePlan = () => {}; renderNotProposedItems = () => {};", context);
     }
     documentListeners.get("DOMContentLoaded")();
@@ -90,13 +89,16 @@ async function createRenderer(initialSnapshot, { renderPlan = false } = {}) {
         requests,
         document: dom.document,
         evaluate: (source) => runInContext(source, context),
-        switchView(view) {
-            node(view === "tree" ? "connections-tree-view" : "resources-view").listeners.get("click")();
+        nodes() { return node("topology-nodes").querySelectorAll(".topology-node"); },
+        paths() { return node("topology-lines").querySelectorAll(".topology-edge"); },
+        select(id) {
+            const button = this.nodes().find((candidate) => candidate.dataset.resourceId === id);
+            assert.ok(button, `Resource ${id} is present on the map`);
+            button.listeners.get("click")();
         },
-        treeItems() { return node("connections-tree").querySelectorAll("[role='treeitem']"); },
         press(key, target = dom.document.activeElement, { prevented: expected = true, ...modifiers } = {}) {
             let prevented = false;
-            node("connections-tree").listeners.get("keydown")({
+            node("topology-nodes").listeners.get("keydown")({
                 key, target, ...modifiers, preventDefault() { prevented = true; },
             });
             assert.equal(prevented, expected);
@@ -190,226 +192,164 @@ function graphReview(names = ["api", "worker", "db", "isolated"], edges = [
     });
 }
 
-test("the view switch preserves the existing overview, inspector, and snapshot", async () => {
-    const renderer = await createRenderer(graphReview(), { renderPlan: true });
+test("one topology contains each resource once, nests children, and shows shared connections beside the inspector", async () => {
+    const renderer = await createRenderer(graphReview(
+        ["web", "worker", "api", "postgres", "catalog", "queue"],
+        [
+            { id: "web-api", from: "web", to: "api", kind: "reference" },
+            { id: "api-catalog", from: "api", to: "catalog", kind: "reference" },
+            { id: "worker-catalog", from: "worker", to: "catalog", kind: "waitFor" },
+            { id: "worker-queue", from: "worker", to: "queue", kind: "reference" },
+            { id: "catalog-postgres", from: "catalog", to: "postgres", kind: "parent" },
+        ],
+    ), { renderPlan: true });
     const before = renderer.evaluate("JSON.stringify(snapshot)");
-    const confirmation = renderer.node("confirm").disabled;
-    assert.equal(renderer.node("plan-overview").querySelectorAll(".overview-node").length, 4);
-    assert.match(renderer.node("plan-inspector").textContent, /api/);
-    assert.equal(renderer.node("connection-legend").hidden, false);
-
-    renderer.switchView("tree");
-    assert.equal(renderer.node("resource-details-view").hidden, true);
-    assert.equal(renderer.node("connections-tree-panel").hidden, false);
-    assert.equal(renderer.node("connections-tree-view").getAttribute("aria-pressed"), "true");
-    assert.deepEqual(renderer.treeItems().map((item) => item.dataset.resourceId), ["api", "worker", "isolated"]);
-    assert.match(renderer.treeItems()[2].textContent, /No connections/);
-    assert.match(renderer.treeItems()[0].textContent, /apiContainer/);
-    renderer.switchView("resources");
-
-    assert.equal(renderer.node("connections-tree-panel").hidden, true);
-    assert.equal(renderer.node("resource-details-view").hidden, false);
-    assert.equal(renderer.node("resources-view").getAttribute("aria-pressed"), "true");
-    assert.equal(renderer.node("plan-overview").querySelectorAll(".overview-node").length, 4);
-    assert.equal(renderer.node("confirm").disabled, confirmation);
+    const nodes = renderer.nodes();
+    assert.equal(nodes.length, 6);
+    assert.equal(new Set(nodes.map((node) => node.dataset.resourceId)).size, 6);
+    const child = nodes.find((node) => node.dataset.resourceId === "catalog");
+    const group = child.parentElement.parentElement;
+    assert.equal(group.tagName, "ul");
+    assert.equal(group.getAttribute("aria-label"), "Children of postgres");
+    assert.equal(group.parentElement.children[0].dataset.resourceId, "postgres");
+    assert.equal(renderer.paths().length, 4);
+    assert.equal(renderer.paths().filter((path) => path.matches(".topology-edge-reference")).length, 3);
+    assert.equal(renderer.paths().filter((path) => path.matches(".topology-edge-wait")).length, 1);
+    assert.equal(renderer.node("topology-lines").getAttribute("aria-hidden"), "true");
+    assert.match(renderer.node("plan-inspector").textContent, /web/);
+    assert.equal(renderer.node("plan-inspector").hidden, false);
+    assert.equal(renderer.node("relationship-workspace").contains(renderer.node("plan-overview")), true);
+    assert.equal(renderer.node("relationship-workspace").contains(renderer.node("plan-inspector")), true);
     assert.equal(renderer.evaluate("JSON.stringify(snapshot)"), before);
     assert.equal(renderer.requests.length, 0);
 });
 
-test("tree keyboard navigation expands, collapses, follows shared references, and maintains one tab stop", async () => {
+test("selecting a resource highlights its exact connections and the inspector edits them", async () => {
     const renderer = await createRenderer(graphReview(), { renderPlan: true });
-    renderer.switchView("tree");
-    const first = renderer.treeItems()[0];
-    first.focus();
-    assert.equal(first.getAttribute("aria-expanded"), "false");
+    renderer.select("worker");
+    const nodes = renderer.nodes();
+    assert.equal(nodes.find((node) => node.dataset.resourceId === "worker").getAttribute("aria-pressed"), "true");
+    assert.equal(nodes.find((node) => node.dataset.resourceId === "db").matches(".is-connected"), true);
+    assert.equal(nodes.find((node) => node.dataset.resourceId === "api").matches(".is-connected"), false);
+    assert.equal(renderer.paths().find((path) => path.dataset.edgeId === "worker-db").matches(".is-highlighted"), true);
+    assert.equal(renderer.paths().find((path) => path.dataset.edgeId === "api-db").matches(".is-muted"), true);
+    assert.match(renderer.node("plan-inspector").textContent, /worker.*waits for db/);
+    const chip = renderer.node("plan-inspector").querySelector(".connection-chip");
+    assert.equal(chip.getAttribute("aria-label"), "Edit wait-for connection from worker to db");
+    chip.listeners.get("click")();
+    assert.equal(renderer.node("connection-dialog").open, true);
+    assert.equal(renderer.node("connection-id").value, "worker-db");
+    assert.equal(renderer.requests.length, 0);
+});
+
+test("keyboard selection follows nested resources, has one tab stop, and leaves browser shortcuts alone", async () => {
+    const renderer = await createRenderer(graphReview(["api", "postgres", "catalog"], [
+        { id: "api-catalog", from: "api", to: "catalog", kind: "reference" },
+        { id: "catalog-postgres", from: "catalog", to: "postgres", kind: "parent" },
+    ]), { renderPlan: true });
+    renderer.select("postgres");
+    assert.equal(renderer.document.activeElement.dataset.resourceId, "postgres");
     renderer.press("ArrowRight");
-    assert.equal(renderer.treeItems()[0].getAttribute("aria-expanded"), "true");
-    assert.equal(renderer.treeItems().length, 4);
-    const child = renderer.treeItems()[1];
-    assert.equal(child.parentElement.getAttribute("role"), "group");
-    assert.equal(child.parentElement.closest("[role='treeitem']"), renderer.treeItems()[0]);
-    assert.equal(renderer.treeItems()[0].parentElement, renderer.node("connections-tree"));
-    renderer.press("ArrowRight");
-    assert.equal(renderer.document.activeElement.dataset.resourceId, "db");
-    assert.match(renderer.document.activeElement.getAttribute("aria-label"), /api → references db/);
-    assert.equal(renderer.document.activeElement.getAttribute("aria-expanded"), null);
+    assert.equal(renderer.document.activeElement.dataset.resourceId, "catalog");
+    assert.match(renderer.node("plan-inspector").textContent, /catalog/);
     renderer.press("ArrowLeft");
-    assert.equal(renderer.document.activeElement.dataset.resourceId, "api");
-    renderer.press("ArrowLeft");
-    assert.equal(renderer.treeItems().length, 3);
-    renderer.press(" ");
-    renderer.press("ArrowDown");
-    assert.equal(renderer.document.activeElement.dataset.resourceId, "db");
-    renderer.press("ArrowUp");
+    assert.equal(renderer.document.activeElement.dataset.resourceId, "postgres");
+    renderer.press("Home");
     assert.equal(renderer.document.activeElement.dataset.resourceId, "api");
     renderer.press("End");
-    assert.equal(renderer.document.activeElement.dataset.resourceId, "isolated");
-    renderer.press("ArrowDown");
-    assert.equal(renderer.document.activeElement.dataset.resourceId, "isolated");
-    renderer.press("Home");
-    renderer.press("ArrowUp");
+    assert.equal(renderer.document.activeElement.dataset.resourceId, "catalog");
+    renderer.press("a");
     assert.equal(renderer.document.activeElement.dataset.resourceId, "api");
-    renderer.press("ArrowLeft");
-    renderer.press("w");
-    assert.equal(renderer.document.activeElement.dataset.resourceId, "worker");
-    renderer.press("Enter");
-    renderer.press("ArrowRight");
-    assert.match(renderer.document.activeElement.getAttribute("aria-label"), /worker → waits for db.*Shared reference/);
-    assert.equal(renderer.document.activeElement.getAttribute("aria-expanded"), null);
-    renderer.press("Enter");
-    assert.match(renderer.document.activeElement.getAttribute("aria-label"), /api → references db/);
-    assert.equal(renderer.treeItems()[0].getAttribute("aria-expanded"), "true");
-    assert.equal(renderer.treeItems().filter((item) => item.tabIndex === 0).length, 1);
-    assert.equal(renderer.requests.length, 0);
-});
-
-test("cycle references are terminal and pointer activation uses the same expand and follow behavior", async () => {
-    const renderer = await createRenderer(graphReview(["api", "db"], [
-        { id: "api-db", from: "api", to: "db", kind: "reference" },
-        { id: "db-api", from: "db", to: "api", kind: "parent" },
-    ]), { renderPlan: true });
-    assert.equal(renderer.node("compact-resources").children.length, 2);
-    renderer.switchView("tree");
-    const clickRow = (item) => item.querySelector(".connection-tree-row").listeners.get("click")();
-    clickRow(renderer.treeItems()[0]);
-    clickRow(renderer.treeItems()[1]);
-    const cycle = renderer.treeItems()[2];
-    assert.match(cycle.getAttribute("aria-label"), /db → child of api.*Cycle reference/);
-    assert.equal(cycle.getAttribute("aria-expanded"), null);
-    assert.equal(cycle.querySelectorAll("[role='group']").length, 0);
-    cycle.focus();
-    renderer.press("ArrowRight");
-    assert.equal(renderer.treeItems().length, 3);
-    clickRow(cycle);
-    assert.equal(renderer.document.activeElement, renderer.treeItems()[0]);
-    assert.equal(renderer.requests.length, 0);
-});
-
-test("view, expansion, and stable resource focus survive snapshot rerenders and resource renames", async () => {
-    const initial = graphReview();
-    const renderer = await createRenderer(initial, { renderPlan: true });
-    renderer.switchView("tree");
-    renderer.treeItems()[0].focus();
-    renderer.press("ArrowRight");
-    renderer.press("ArrowRight");
-    const next = structuredClone(initial);
-    next.revision++;
-    next.proposal.resources.find((resource) => resource.id === "db").name = "storage";
-    next.proposal.edges.forEach((edge) => { edge.to = "storage"; });
-    renderer.pushSnapshot(next);
-    assert.equal(renderer.node("connections-tree-panel").hidden, false);
-    assert.equal(renderer.treeItems()[0].getAttribute("aria-expanded"), "true");
-    assert.equal(renderer.document.activeElement.dataset.resourceId, "db");
-    assert.match(renderer.document.activeElement.getAttribute("aria-label"), /storage/);
-    renderer.switchView("resources");
-    renderer.switchView("tree");
-    assert.equal(renderer.treeItems()[0].getAttribute("aria-expanded"), "true");
-    renderer.pushSnapshot({ ...next, appHostPath: targetB, revision: 1 });
-    assert.equal(renderer.node("resource-details-view").hidden, false);
-    renderer.switchView("tree");
-    assert.equal(renderer.treeItems()[0].getAttribute("aria-expanded"), "false");
-    assert.equal(renderer.requests.length, 0);
-});
-
-test("switching views alone keeps field drafts and confirmation eligibility unchanged", async () => {
-    const renderer = await createRenderer(graphReview(["api"], []), { renderPlan: true });
-    const nameInput = renderer.document.querySelectorAll("input")
-        .find((input) => input.getAttribute("aria-label") === "Resource name for api");
-    nameInput.value = "invalid name";
-    nameInput.listeners.get("input")();
-    assert.equal(renderer.node("confirm").disabled, true);
-    const note = renderer.node("footer-note").textContent;
-    renderer.switchView("tree");
-    assert.equal(renderer.node("confirm").disabled, true);
-    assert.equal(renderer.node("footer-note").textContent, note);
-    renderer.switchView("resources");
-    assert.equal(renderer.document.querySelectorAll("input")
-        .find((input) => input.getAttribute("aria-label") === "Resource name for api").value, "invalid name");
-    assert.equal(renderer.evaluate("snapshot.proposal.resources[0].name"), "api");
-    assert.equal(renderer.requests.length, 0);
-});
-
-test("tree focus and Resources selection stay synchronized in both directions", async () => {
-    const renderer = await createRenderer(graphReview(), { renderPlan: true });
-    renderer.switchView("tree");
-    renderer.treeItems()[0].focus();
-    renderer.press("ArrowRight");
-    renderer.press("ArrowRight");
-    renderer.switchView("resources");
-    assert.equal(renderer.evaluate("selectedResourceId"), "db");
-    assert.match(renderer.node("plan-inspector").textContent, /db/);
-    renderer.evaluate('selectResource("worker", "navigate")');
-    renderer.switchView("tree");
-    assert.equal(renderer.treeItems().find((item) => item.tabIndex === 0).dataset.resourceId, "worker");
-    renderer.switchView("resources");
-    renderer.evaluate('selectResource("db", "navigate")');
-    renderer.evaluate("expandedTreeKeys.clear()");
-    renderer.switchView("tree");
-    assert.equal(renderer.treeItems()[0].getAttribute("aria-expanded"), "true");
-    assert.equal(renderer.treeItems().find((item) => item.tabIndex === 0).dataset.resourceId, "db");
-    assert.equal(renderer.requests.length, 0);
-});
-
-test("removing the focused resource restores focus to the first tree item with one tab stop", async () => {
-    const initial = graphReview();
-    const renderer = await createRenderer(initial, { renderPlan: true });
-    renderer.switchView("tree");
-    renderer.treeItems()[0].focus();
-    renderer.press("ArrowRight");
-    renderer.press("ArrowRight");
-    const next = structuredClone(initial);
-    next.revision++;
-    next.proposal.resources = next.proposal.resources.filter((resource) => resource.id !== "db");
-    next.proposal.edges = [];
-    renderer.pushSnapshot(next);
-    assert.equal(renderer.document.activeElement, renderer.treeItems()[0]);
-    assert.equal(renderer.treeItems().filter((item) => item.tabIndex === 0).length, 1);
-    assert.equal(renderer.evaluate("selectedResourceId"), "api");
-});
-
-test("Tab and modified keys pass through the tree without preventing browser shortcuts", async () => {
-    const renderer = await createRenderer(graphReview(), { renderPlan: true });
-    renderer.switchView("tree");
-    renderer.treeItems()[0].focus();
-    const first = renderer.document.activeElement;
-    renderer.press("Tab", first, { prevented: false });
-    renderer.press("Tab", first, { prevented: false, shiftKey: true });
-    for (const modifier of ["ctrlKey", "altKey", "metaKey"]) {
-        renderer.press("ArrowDown", first, { prevented: false, [modifier]: true });
-        renderer.press("w", first, { prevented: false, [modifier]: true });
+    assert.equal(renderer.nodes().filter((node) => node.tabIndex === 0).length, 1);
+    const current = renderer.document.activeElement;
+    renderer.press("Tab", current, { prevented: false });
+    renderer.press("Tab", current, { prevented: false, shiftKey: true });
+    for (const modifier of ["ctrlKey", "altKey", "metaKey", "shiftKey"]) {
+        renderer.press("ArrowDown", current, { prevented: false, [modifier]: true });
     }
-    assert.equal(renderer.document.activeElement, first);
-    assert.equal(renderer.treeItems()[0].getAttribute("aria-expanded"), "false");
+    assert.equal(renderer.document.activeElement, current);
+    renderer.press("F2", current);
+    assert.equal(renderer.document.activeElement.matches(".connection-chip"), true);
 });
 
-test("resource connections and tree targets use endpoint IDs when names collide", async () => {
-    const initial = graphReview(["api", "cache-a", "cache-b"], [
-        { id: "api-cache", from: "api", to: "cache", fromId: "api", toId: "cache-a", kind: "reference" },
-    ]);
-    initial.proposal.resources.slice(1).forEach((resource) => { resource.name = "cache"; });
+test("selection and focus survive renames, fall back after removal, and reset for a different AppHost", async () => {
+    const initial = graphReview();
     const renderer = await createRenderer(initial, { renderPlan: true });
-    renderer.evaluate('selectResource("cache-b", "navigate")');
-    assert.equal(renderer.node("plan-inspector").querySelectorAll(".connection-chip").length, 0);
-    renderer.evaluate('selectResource("cache-a", "navigate")');
-    assert.equal(renderer.node("plan-inspector").querySelectorAll(".connection-chip").length, 1);
-    renderer.switchView("tree");
-    assert.equal(renderer.treeItems()[1].dataset.resourceId, "cache-a");
-    assert.match(renderer.treeItems()[2].textContent, /No connections/);
+    renderer.select("db");
+    const renamed = structuredClone(initial);
+    renamed.revision++;
+    renamed.proposal.resources.find((resource) => resource.id === "db").name = "storage";
+    renamed.proposal.edges.forEach((edge) => { edge.to = "storage"; });
+    renderer.pushSnapshot(renamed);
+    assert.equal(renderer.document.activeElement.dataset.resourceId, "db");
+    assert.match(renderer.node("plan-inspector").textContent, /storage/);
+    const removed = structuredClone(renamed);
+    removed.revision++;
+    removed.proposal.resources = removed.proposal.resources.filter((resource) => resource.id !== "db");
+    removed.proposal.edges = [];
+    renderer.pushSnapshot(removed);
+    assert.equal(renderer.document.activeElement.dataset.resourceId, "api");
+    assert.equal(renderer.nodes().filter((node) => node.tabIndex === 0).length, 1);
+    renderer.select("worker");
+    renderer.pushSnapshot({ ...removed, appHostPath: targetB, revision: 1 });
+    assert.equal(renderer.evaluate("selectedResourceId"), "api");
+    assert.equal(renderer.requests.length, 0);
 });
 
-test("switching during a pending resource save does not unblock confirmation or submit another mutation", async () => {
+test("removing the final focused resource moves focus to Add resource", async () => {
     const initial = graphReview(["api"], []);
     const renderer = await createRenderer(initial, { renderPlan: true });
-    const nameInput = renderer.document.querySelectorAll("input")
-        .find((input) => input.getAttribute("aria-label") === "Resource name for api");
-    nameInput.value = "renamed-api";
-    nameInput.listeners.get("input")();
-    nameInput.listeners.get("change")();
+    renderer.select("api");
+    renderer.pushSnapshot({
+        ...initial,
+        revision: 5,
+        proposal: { ...initial.proposal, resources: [] },
+    });
+    assert.equal(renderer.document.activeElement, renderer.node("compact-add-resource"));
+    assert.equal(renderer.node("topology-surface").hidden, true);
+});
+
+test("narrow-screen activation focuses the inspector and Back returns to the selected node", async () => {
+    const renderer = await createRenderer(graphReview(), { renderPlan: true, narrow: true });
+    renderer.select("worker");
+    const back = renderer.node("plan-inspector").querySelector(".inspector-back");
+    assert.equal(renderer.document.activeElement, back);
+    back.listeners.get("click")();
+    assert.equal(renderer.document.activeElement.dataset.resourceId, "worker");
+    renderer.press("ArrowUp");
+    assert.equal(renderer.document.activeElement.dataset.resourceId, "api");
+});
+
+test("changing selection preserves invalid field drafts and blocks confirmation", async () => {
+    const renderer = await createRenderer(graphReview(["api", "worker"], []), { renderPlan: true });
+    const input = renderer.document.querySelectorAll("input")
+        .find((candidate) => candidate.getAttribute("aria-label") === "Resource name for api");
+    input.value = "invalid name";
+    input.listeners.get("input")();
+    assert.equal(renderer.node("confirm").disabled, true);
+    const note = renderer.node("footer-note").textContent;
+    renderer.select("worker");
+    assert.equal(renderer.node("confirm").disabled, true);
+    assert.equal(renderer.node("footer-note").textContent, note);
+    renderer.select("api");
+    assert.equal(renderer.document.querySelectorAll("input")
+        .find((candidate) => candidate.getAttribute("aria-label") === "Resource name for api").value, "invalid name");
+    assert.equal(renderer.evaluate("snapshot.proposal.resources[0].name"), "api");
+    assert.equal(renderer.requests.length, 0);
+});
+
+test("selecting another node during a pending save keeps confirmation blocked without a second mutation", async () => {
+    const initial = graphReview(["api", "worker"], []);
+    const renderer = await createRenderer(initial, { renderPlan: true });
+    const input = renderer.document.querySelectorAll("input")
+        .find((candidate) => candidate.getAttribute("aria-label") === "Resource name for api");
+    input.value = "renamed-api";
+    input.listeners.get("input")();
+    input.listeners.get("change")();
     assert.equal(renderer.requests.length, 1);
-    renderer.switchView("tree");
+    renderer.select("worker");
     assert.equal(renderer.node("confirm").disabled, true);
     assert.equal(renderer.requests.length, 1);
-    assert.equal(renderer.evaluate("snapshot.proposal.resources[0].name"), "api");
     const next = structuredClone(initial);
     next.revision++;
     next.proposal.resources[0].name = "renamed-api";
@@ -417,64 +357,87 @@ test("switching during a pending resource save does not unblock confirmation or 
     renderer.respond(renderer.requests[0], { ok: true });
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(renderer.node("confirm").disabled, false);
-    assert.match(renderer.treeItems()[0].getAttribute("aria-label"), /renamed-api/);
+    assert.match(renderer.nodes().find((node) => node.dataset.resourceId === "api").textContent, /renamed-api/);
 });
 
-test("a failed confirmation remains retryable with the same error after switching views", async () => {
+test("confirmation preserves snapshot identity and leaves the topology and inspector read-only", async () => {
+    const initial = graphReview();
+    const renderer = await createRenderer(initial, { renderPlan: true });
+    renderer.select("worker");
+    const proposal = renderer.evaluate("JSON.stringify(snapshot.proposal)");
+    renderer.node("confirm").listeners.get("click")();
+    assert.deepEqual(renderer.requests[0].body, {
+        expectedAppHostPath: targetA,
+        expectedRevision: initial.revision,
+        expectedProposalGeneration: initial.proposalGeneration,
+        expectedProposalHash: initial.proposalHash,
+    });
+    assert.equal(renderer.requests[0].path, "/api/confirm");
+    renderer.pushSnapshot({
+        ...initial, revision: 5, confirmed: true, confirmationDelivered: true, confirmedGeneration: 1,
+    });
+    renderer.respond(renderer.requests[0], { confirmed: true, delivered: true });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(renderer.node("compact-add-resource").hidden, true);
+    assert.equal(renderer.node("action-footer").hidden, true);
+    assert.equal(renderer.node("plan-inspector").hidden, false);
+    assert.equal(renderer.node("plan-inspector").querySelector(".connection-chip").tagName, "span");
+    assert.equal(renderer.node("plan-inspector").querySelector(".resource-remove"), null);
+    assert.ok(renderer.node("plan-inspector").querySelectorAll("input").every((input) => input.disabled));
+    renderer.select("api");
+    renderer.press("F2", renderer.document.activeElement, { prevented: false });
+    assert.equal(renderer.node("connection-dialog").open, false);
+    assert.equal(renderer.evaluate("JSON.stringify(snapshot.proposal)"), proposal);
+    assert.equal(renderer.requests.length, 1);
+});
+
+test("a successful confirmation response makes the inspector read-only without waiting for a snapshot event", async () => {
+    const renderer = await createRenderer(graphReview(), { renderPlan: true });
+    renderer.select("worker");
+    const confirming = renderer.evaluate("confirmSnapshot()");
+    renderer.respond(renderer.requests[0], { confirmed: true, delivered: true });
+    await confirming;
+    assert.equal(renderer.node("action-footer").hidden, true);
+    assert.equal(renderer.node("plan-inspector").querySelector(".connection-chip").tagName, "span");
+    assert.ok(renderer.node("plan-inspector").querySelectorAll("input").every((input) => input.disabled));
+    assert.equal(renderer.node("plan-inspector").querySelector(".resource-remove"), null);
+});
+
+for (const status of [200, 403]) {
+    test(`a ${status} confirmation response for a previous AppHost does not affect the new target`, async () => {
+        const renderer = await createRenderer(graphReview(), { renderPlan: true });
+        const confirming = renderer.evaluate("confirmSnapshot()");
+        renderer.pushSnapshot({ ...graphReview(), appHostPath: targetB, revision: 5 });
+        renderer.respond(renderer.requests[0], status === 200
+            ? { confirmed: true, delivered: true }
+            : { error: "Previous target was declined." }, status);
+        await confirming;
+        assert.equal(renderer.evaluate("snapshot.appHostPath"), targetB);
+        assert.equal(renderer.evaluate("snapshot.confirmed"), false);
+        assert.equal(renderer.node("confirm").disabled, false);
+        assert.equal(renderer.node("action-footer").hidden, false);
+        assert.doesNotMatch(renderer.node("footer-note").textContent, /Previous target/);
+    });
+}
+
+test("failed confirmation remains retryable after selecting another node", async () => {
     const renderer = await createRenderer(graphReview(), { renderPlan: true });
     renderer.node("confirm").listeners.get("click")();
     renderer.respond(renderer.requests[0], { error: "Host approval was declined." }, 403);
     await new Promise((resolve) => setImmediate(resolve));
+    renderer.select("worker");
     assert.equal(renderer.node("footer-note").textContent, "Host approval was declined.");
     assert.equal(renderer.node("confirm").disabled, false);
-    renderer.switchView("tree");
-    assert.equal(renderer.node("footer-note").textContent, "Host approval was declined.");
-    assert.equal(renderer.node("confirm").disabled, false);
-    assert.equal(renderer.evaluate("snapshot.confirmed"), false);
     assert.equal(renderer.requests.length, 1);
 });
 
-for (const view of ["resources", "tree"]) {
-    test(`confirmation from ${view} sends the unchanged snapshot identity and stays immutable`, async () => {
-        const initial = graphReview();
-        const renderer = await createRenderer(initial, { renderPlan: true });
-        renderer.switchView(view);
-        const proposal = renderer.evaluate("JSON.stringify(snapshot.proposal)");
-        renderer.node("confirm").listeners.get("click")();
-        assert.deepEqual(renderer.requests[0].body, {
-            expectedAppHostPath: targetA,
-            expectedRevision: initial.revision,
-            expectedProposalGeneration: initial.proposalGeneration,
-            expectedProposalHash: initial.proposalHash,
-        });
-        assert.equal(renderer.requests[0].path, "/api/confirm");
-        renderer.pushSnapshot({
-            ...initial, revision: 5, confirmed: true, confirmationDelivered: true, confirmedGeneration: 1,
-        });
-        renderer.respond(renderer.requests[0], { confirmed: true, delivered: true });
-        await new Promise((resolve) => setImmediate(resolve));
-        renderer.switchView("tree");
-        renderer.treeItems()[0].focus();
-        renderer.press("ArrowRight");
-        renderer.switchView("resources");
-        assert.equal(renderer.node("plan-inspector").hidden, true);
-        assert.equal(renderer.node("compact-add-resource").hidden, true);
-        assert.ok(renderer.node("plan-overview").querySelectorAll(".overview-node")
-            .every((node) => node.tagName === "div"));
-        assert.equal(renderer.node("confirm").disabled, true);
-        assert.equal(renderer.node("action-footer").hidden, true);
-        assert.equal(renderer.evaluate("JSON.stringify(snapshot.proposal)"), proposal);
-        assert.equal(renderer.requests.length, 1);
-    });
-}
-
-test("an already-confirmed snapshot can be explored in the tree and retry the same chat handoff", async () => {
-    const initial = graphReview(["api"], [], { confirmed: true, confirmedGeneration: 1 });
+test("an already-confirmed proposal remains explorable and can retry the same chat handoff", async () => {
+    const initial = graphReview(["api", "db"], [
+        { id: "api-db", from: "api", to: "db", kind: "reference" },
+    ], { confirmed: true, confirmedGeneration: 1 });
     const renderer = await createRenderer(initial, { renderPlan: true });
-    renderer.switchView("tree");
     const before = renderer.evaluate("JSON.stringify(snapshot)");
-    renderer.treeItems()[0].focus();
-    renderer.press("Enter");
+    renderer.select("db");
     assert.equal(renderer.node("confirm").textContent, "Notify chat");
     assert.equal(renderer.node("confirm").disabled, false);
     assert.equal(renderer.evaluate("JSON.stringify(snapshot)"), before);
@@ -484,125 +447,217 @@ test("an already-confirmed snapshot can be explored in the tree and retry the sa
     renderer.pushSnapshot({ ...initial, revision: 5, confirmationDelivered: true });
     renderer.respond(renderer.requests[0], { confirmed: true, delivered: true });
     await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(renderer.node("connections-tree-panel").hidden, false);
-    assert.equal(renderer.node("confirm").disabled, true);
-});
-
-test("a delivered immutable confirmation stays delivered when opened and explored in either view", async () => {
-    const renderer = await createRenderer(graphReview(undefined, undefined, {
-        confirmed: true, confirmedGeneration: 1, confirmationDelivered: true,
-    }), { renderPlan: true });
-    const before = renderer.evaluate("JSON.stringify(snapshot)");
-    renderer.switchView("tree");
-    renderer.treeItems()[0].focus();
-    renderer.press("Enter");
-    renderer.press("ArrowRight");
-    renderer.switchView("resources");
-    renderer.switchView("tree");
     assert.equal(renderer.node("confirm").disabled, true);
     assert.equal(renderer.node("action-footer").hidden, true);
+});
+
+test("exploring a delivered confirmation does not change it or send another request", async () => {
+    const initial = graphReview(["api", "db"], [
+        { id: "api-db", from: "api", to: "db", kind: "reference" },
+    ], { confirmed: true, confirmationDelivered: true, confirmedGeneration: 1 });
+    const renderer = await createRenderer(initial, { renderPlan: true });
+    const before = renderer.evaluate("JSON.stringify(snapshot)");
+    renderer.select("db");
+    assert.equal(renderer.node("action-footer").hidden, true);
+    assert.equal(renderer.node("plan-inspector").querySelector(".connection-chip").tagName, "span");
     assert.equal(renderer.evaluate("JSON.stringify(snapshot)"), before);
     assert.equal(renderer.requests.length, 0);
 });
 
-test("empty and no-connection trees are clear and excluded resources or dangling edges are not inferred", async () => {
-    const empty = await createRenderer(graphReview([], [], {
-        validation: { issues: ["Include at least one resource."], resourceIssues: {} },
-    }), { renderPlan: true });
-    empty.switchView("tree");
-    assert.equal(empty.treeItems().length, 0);
-    assert.match(empty.node("connections-tree-state").textContent, /No resources/);
-    assert.equal(empty.node("connections-tree").hidden, true);
-    assert.equal(empty.node("confirm").disabled, true);
-
-    const initial = graphReview(["api"], [{ id: "unknown", from: "api", to: "missing", kind: "reference" }]);
-    initial.proposal.resources.push({ id: "missing", name: "missing", type: "Container", include: false });
-    const disconnected = await createRenderer(initial, { renderPlan: true });
-    disconnected.switchView("tree");
-    assert.equal(disconnected.treeItems().length, 1);
-    assert.match(disconnected.node("connections-tree-state").textContent, /No connections/);
-    assert.match(disconnected.treeItems()[0].textContent, /No connections/);
-    assert.equal(disconnected.requests.length, 0);
-});
-
-test("tree connections carry kind colors and open the connection editor from Edit or F2", async () => {
-    const renderer = await createRenderer(graphReview(), { renderPlan: true });
-    renderer.switchView("tree");
-    const root = renderer.treeItems()[0];
-    root.focus();
-    assert.equal(root.querySelector(".connection-tree-edit"), null);
-    assert.equal(root.getAttribute("aria-keyshortcuts"), null);
-    renderer.press("F2", root, { prevented: false });
-    assert.equal(renderer.node("connection-dialog").open, false);
-    renderer.press("ArrowRight");
-    const reference = renderer.treeItems()[1];
-    assert.equal(reference.matches(".connection-reference"), true);
-    assert.equal(reference.getAttribute("aria-keyshortcuts"), "F2");
-    assert.match(reference.getAttribute("aria-label"), /Press F2 to edit/);
-    const edit = reference.querySelector(".connection-tree-edit");
-    assert.equal(edit.getAttribute("tabindex"), "-1");
-    assert.equal(edit.getAttribute("aria-hidden"), "true");
-    edit.listeners.get("click")({ stopPropagation() {} });
-    assert.equal(renderer.node("connection-dialog").open, true);
-    assert.equal(renderer.node("connection-id").value, "api-db");
-    renderer.node("connection-dialog").close();
-    renderer.node("connection-id").value = "";
-    reference.focus();
-    renderer.press("F2");
-    assert.equal(renderer.node("connection-dialog").open, true);
-    assert.equal(renderer.node("connection-id").value, "api-db");
-    assert.equal(renderer.requests.length, 0);
-});
-
-test("confirmed trees omit connection editing affordances", async () => {
-    const renderer = await createRenderer(graphReview(undefined, undefined, { confirmed: true }), { renderPlan: true });
-    renderer.switchView("tree");
-    renderer.treeItems()[0].focus();
-    renderer.press("ArrowRight");
-    const reference = renderer.treeItems()[1];
-    assert.equal(reference.matches(".connection-reference"), true);
-    assert.equal(reference.querySelector(".connection-tree-edit"), null);
-    assert.equal(reference.getAttribute("aria-keyshortcuts"), null);
-    reference.focus();
-    renderer.press("F2", reference, { prevented: false });
-    assert.equal(renderer.node("connection-dialog").open, false);
-});
-
-test("connections the tree cannot place stay listed and editable until confirmation", async () => {
+test("ambiguous and stale endpoints stay visible without attaching to the wrong resource", async () => {
     const edges = [
-        { id: "api-cache", from: "api", to: "cache", kind: "waitFor" },
-        { id: "api-stale", from: "api", to: "cache", fromId: "api", toId: "gone", kind: "reference" },
+        { id: "valid", from: "api", to: "cache", fromId: "api", toId: "cache-a", kind: "reference" },
+        { id: "ambiguous", from: "api", to: "cache", kind: "waitFor" },
+        { id: "stale", from: "api", to: "cache", fromId: "api", toId: "gone", kind: "reference" },
     ];
     const initial = graphReview(["api", "cache-a", "cache-b"], edges);
     initial.proposal.resources.slice(1).forEach((resource) => { resource.name = "cache"; });
     const renderer = await createRenderer(initial, { renderPlan: true });
-    renderer.switchView("tree");
-    assert.ok(renderer.treeItems().every((item) => !item.getAttribute("aria-keyshortcuts")));
+    assert.equal(renderer.paths().length, 1);
+    assert.equal(renderer.paths()[0].dataset.toId, "cache-a");
     assert.equal(renderer.node("connections-unplaced").hidden, false);
-    assert.match(renderer.node("connections-unplaced-summary").textContent, /Not placed in the tree \(2\)/);
+    assert.match(renderer.node("connections-unplaced-summary").textContent, /Not placed on the map \(2\)/);
     const rows = renderer.node("connections-unplaced-list").querySelectorAll("li");
-    assert.equal(rows.length, 2);
-    assert.equal(rows[0].matches(".connection-wait"), true);
-    assert.match(rows[0].textContent, /api → waits for cache.*Ambiguous endpoint/);
-    assert.match(rows[1].textContent, /api → references cache.*Endpoint resource not found/);
+    assert.match(rows[0].textContent, /waits for cache.*Ambiguous endpoint/);
+    assert.match(rows[1].textContent, /references cache \(not found\).*Endpoint resource not found/);
+    renderer.select("cache-b");
+    assert.equal(renderer.node("plan-inspector").querySelectorAll(".connection-chip").length, 0);
+    renderer.select("cache-a");
+    assert.equal(renderer.node("plan-inspector").querySelectorAll(".connection-chip").length, 1);
     const edit = rows[0].querySelector("button");
-    assert.equal(edit.getAttribute("tabindex"), null);
     assert.equal(edit.getAttribute("aria-label"), "Edit connection: api → waits for cache");
     edit.listeners.get("click")();
     assert.equal(renderer.node("connection-dialog").open, true);
-    assert.equal(renderer.node("connection-id").value, "api-cache");
+    assert.equal(renderer.node("connection-id").value, "ambiguous");
+    assert.equal(renderer.node("connection-from").value, "");
+    assert.equal(renderer.node("connection-to").value, "");
+    assert.equal(renderer.node("save-connection").disabled, true);
+    assert.match(renderer.node("connection-placement-help").textContent, /unique names/);
+    assert.equal(renderer.node("delete-connection").hidden, false);
     assert.equal(renderer.requests.length, 0);
 
-    const confirmed = graphReview(["api", "cache-a", "cache-b"], edges, { confirmed: true });
-    confirmed.proposal.resources.slice(1).forEach((resource) => { resource.name = "cache"; });
+    const confirmed = structuredClone(initial);
+    confirmed.confirmed = true;
     const readOnly = await createRenderer(confirmed, { renderPlan: true });
-    readOnly.switchView("tree");
-    const confirmedRows = readOnly.node("connections-unplaced-list").querySelectorAll("li");
-    assert.equal(confirmedRows.length, 2);
+    assert.equal(readOnly.node("connections-unplaced-list").querySelectorAll("li").length, 2);
     assert.equal(readOnly.node("connections-unplaced-list").querySelector("button"), null);
+});
 
-    const placed = await createRenderer(graphReview(), { renderPlan: true });
-    placed.switchView("tree");
-    assert.equal(placed.node("connections-unplaced").hidden, true);
-    assert.equal(placed.node("connections-unplaced-list").querySelectorAll("li").length, 0);
+test("ID-resolved connections use current resource names in the inspector and editor", async () => {
+    const renderer = await createRenderer(graphReview(["api", "db"], [
+        { id: "resolved", from: "old-api", to: "old-db", fromId: "api", toId: "db", kind: "reference" },
+    ]), { renderPlan: true });
+    const chip = renderer.node("plan-inspector").querySelector(".connection-chip");
+    assert.equal(chip.getAttribute("aria-label"), "Edit reference connection from api to db");
+    assert.match(chip.textContent, /references db/);
+    chip.listeners.get("click")();
+    assert.equal(renderer.node("connection-from").value, "api");
+    assert.equal(renderer.node("connection-to").value, "db");
+    assert.equal(renderer.requests.length, 0);
+});
+
+test("ambiguous ownership and parent cycles are listed rather than shown as invented nesting", async () => {
+    const renderer = await createRenderer(graphReview(["a", "b", "c"], [
+        { id: "a-b", from: "a", to: "b", kind: "parent" },
+        { id: "a-c", from: "a", to: "c", kind: "parent" },
+        { id: "b-c", from: "b", to: "c", kind: "parent" },
+        { id: "c-b", from: "c", to: "b", kind: "parent" },
+    ]), { renderPlan: true });
+    assert.equal(renderer.nodes().length, 3);
+    assert.equal(renderer.node("topology-nodes").querySelectorAll(".topology-children").length, 0);
+    assert.equal(renderer.paths().length, 0);
+    const rows = renderer.node("connections-unplaced-list").querySelectorAll("li");
+    assert.equal(rows.length, 4);
+    assert.match(rows[0].textContent, /multiple parents/);
+    assert.match(rows[2].textContent, /form a cycle/);
+    assert.equal(rows[2].querySelector("button").getAttribute("aria-label"), "Edit connection: b → child of c");
+});
+
+test("missing and excluded endpoints remain visible and require explicit repair", async () => {
+    const initial = graphReview(["api", "queue"], [
+        { id: "missing", from: "api", to: "gone", kind: "reference" },
+        { id: "excluded", from: "api", to: "excluded", kind: "waitFor" },
+    ]);
+    initial.proposal.resources.push({ id: "excluded", name: "excluded", type: "Container", include: false });
+    const renderer = await createRenderer(initial, { renderPlan: true });
+    assert.equal(renderer.nodes().length, 2);
+    assert.equal(renderer.paths().length, 0);
+    const rows = renderer.node("connections-unplaced-list").querySelectorAll("li");
+    assert.equal(rows.length, 2);
+    assert.match(rows[1].textContent, /excluded/);
+    rows[0].querySelector("button").listeners.get("click")();
+    assert.equal(renderer.node("connection-dialog").open, true);
+    assert.equal(renderer.node("connection-from").value, "");
+    assert.equal(renderer.node("connection-to").value, "");
+    const submit = () => renderer.node("connection-form").listeners.get("submit")({
+        preventDefault() {}, submitter: renderer.node("save-connection"),
+    });
+    await submit();
+    assert.match(renderer.node("connection-dialog-error").textContent, /Choose both/);
+    assert.equal(renderer.requests.length, 0);
+    renderer.node("connection-from").value = "api";
+    renderer.node("connection-from").listeners.get("change")();
+    assert.equal(renderer.node("connection-to").value, "");
+    renderer.node("connection-to").value = "queue";
+    const saving = submit();
+    assert.equal(renderer.requests[0].path, "/api/proposal/edge");
+    assert.equal(renderer.requests[0].body.id, "missing");
+    assert.equal(renderer.requests[0].body.from, "api");
+    assert.equal(renderer.requests[0].body.to, "queue");
+    renderer.respond(renderer.requests[0], { ok: true });
+    await saving;
+    assert.equal(renderer.node("connection-dialog").open, false);
+
+    const confirmed = await createRenderer({ ...initial, confirmed: true }, { renderPlan: true });
+    assert.equal(confirmed.node("connections-unplaced-list").querySelectorAll("li").length, 2);
+    assert.equal(confirmed.node("connections-unplaced-list").querySelector("button"), null);
+    assert.match(confirmed.node("connections-unplaced-list").textContent, /not included in the confirmed proposal/);
+});
+
+test("confirmation counts exclude stale endpoint IDs even when their old names still exist", async () => {
+    const renderer = await createRenderer(graphReview(["api", "cache"], [
+        { id: "stale", from: "api", to: "cache", fromId: "api", toId: "gone", kind: "reference" },
+    ]), { renderPlan: true });
+    assert.match(renderer.node("status-line").textContent, /0 connections/);
+    assert.match(renderer.evaluate("confirmationSummaryText()"), /0 connections/);
+    assert.match(renderer.node("connections-unplaced-list").textContent, /omitted on confirmation unless repaired/);
+});
+
+test("an unplaced connection can be removed even when too few resources are included to repair it", async () => {
+    const renderer = await createRenderer(graphReview(["api"], [
+        { id: "missing", from: "api", to: "gone", kind: "reference" },
+    ]), { renderPlan: true });
+    renderer.node("connections-unplaced-list").querySelector("button").listeners.get("click")();
+    assert.equal(renderer.node("connection-dialog").open, true);
+    assert.equal(renderer.node("save-connection").disabled, true);
+    renderer.node("delete-connection").listeners.get("click")();
+    assert.equal(renderer.node("remove-dialog").open, true);
+    const removing = renderer.node("remove-form").listeners.get("submit")({ preventDefault() {} });
+    assert.equal(renderer.requests[0].path, "/api/proposal/edge/delete");
+    assert.equal(renderer.requests[0].body.id, "missing");
+    renderer.respond(renderer.requests[0], { ok: true });
+    await removing;
+    assert.equal(renderer.node("connection-dialog").open, false);
+    assert.equal(renderer.node("remove-dialog").open, false);
+});
+
+test("empty, disconnected, and excluded resources do not invent nodes or connections", async () => {
+    const empty = await createRenderer(graphReview([], [], {
+        validation: { issues: ["Include at least one resource."], resourceIssues: {} },
+    }), { renderPlan: true });
+    assert.equal(empty.nodes().length, 0);
+    assert.match(empty.node("topology-state").textContent, /No resources/);
+    assert.equal(empty.node("topology-surface").hidden, true);
+    assert.equal(empty.node("confirm").disabled, true);
+    assert.equal(empty.node("compact-add-resource").hidden, false);
+
+    const initial = graphReview(["api"], [{ id: "unknown", from: "api", to: "missing", kind: "reference" }]);
+    initial.proposal.resources.push({ id: "missing", name: "missing", type: "Container", include: false });
+    const disconnected = await createRenderer(initial, { renderPlan: true });
+    assert.equal(disconnected.nodes().length, 1);
+    assert.match(disconnected.nodes()[0].textContent, /Unplaced connection/);
+    assert.match(disconnected.node("connections-unplaced-list").textContent, /not found or excluded/);
+    assert.equal(disconnected.paths().length, 0);
+    assert.equal(disconnected.requests.length, 0);
+});
+
+test("connection paths preserve direction and separate parallel links", async () => {
+    const renderer = await createRenderer(graphReview(), { renderPlan: true });
+    const horizontal = renderer.evaluate(`topologyConnectionPath(
+        {left:0, top:0, right:100, bottom:50, width:100, height:50},
+        {left:200, top:0, right:300, bottom:50, width:100, height:50},
+        {left:0, top:0}, 0)`);
+    assert.equal(horizontal, "M 100 25 C 150 25, 150 25, 200 25");
+    const parallel = renderer.evaluate(`topologyConnectionPath(
+        {left:0, top:0, right:100, bottom:50, width:100, height:50},
+        {left:200, top:0, right:300, bottom:50, width:100, height:50},
+        {left:0, top:0}, 5)`);
+    assert.notEqual(parallel, horizontal);
+    const reverse = renderer.evaluate(`topologyConnectionPath(
+        {left:200, top:0, right:300, bottom:50, width:100, height:50},
+        {left:0, top:0, right:100, bottom:50, width:100, height:50},
+        {left:0, top:0}, 0)`);
+    assert.equal(reverse, "M 200 25 C 150 25, 150 25, 100 25");
+    const self = renderer.evaluate(`topologyConnectionPath(
+        {left:0, top:0, right:100, bottom:50, width:100, height:50},
+        {left:0, top:0, right:100, bottom:50, width:100, height:50},
+        {left:0, top:0}, 0, true)`);
+    assert.match(self, /^M 100 20 C 152 /);
+});
+
+test("connections sharing an endpoint use distinct attachment positions", async () => {
+    const renderer = await createRenderer(graphReview(["api", "worker", "db"], [
+        { id: "api-db", from: "api", to: "db", kind: "reference" },
+        { id: "worker-db", from: "worker", to: "db", kind: "waitFor" },
+    ]), { renderPlan: true });
+    renderer.node("topology-surface").bounds = { left: 0, top: 0, width: 400, height: 300 };
+    const bounds = {
+        api: { left: 0, right: 100, top: 0, bottom: 50, width: 100, height: 50 },
+        worker: { left: 0, right: 100, top: 100, bottom: 150, width: 100, height: 50 },
+        db: { left: 200, right: 300, top: 50, bottom: 100, width: 100, height: 50 },
+    };
+    for (const node of renderer.nodes()) node.bounds = bounds[node.dataset.resourceId];
+    renderer.evaluate("drawTopologyConnections()");
+    const endpoints = renderer.paths().map((path) => path.getAttribute("d").match(/, (\d+) (\d+)$/)[2]);
+    assert.equal(new Set(endpoints).size, 2);
 });
