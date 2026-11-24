@@ -214,7 +214,7 @@ stimuli:
     tags: { priority: p0, area: capability-bootstrap, phase: restore-scope }
     environment: { files: *fresh_polyglot }
     rubric:
-      - The response gives aspire restore --apphost .\apphost.mts --non-interactive (or the shell-equivalent ./apphost.mts path) from app/Migration.TypeScriptAppHost, once, without changing its inputs.
+      - The response gives aspire restore --apphost apphost.mts --non-interactive (or the shell-equivalent .\apphost.mts or ./apphost.mts path) from app/Migration.TypeScriptAppHost, once, without changing its inputs.
       - >
         The response plans both outcomes: report the actual restore failure and
         stop without retrying, or perform the authorized read-only capability
@@ -232,8 +232,8 @@ stimuli:
           scoring: binary
           prompt: >
             Does the assistant's response give the exact once-approved restore
-            command and directory (accept shell-appropriate .\apphost.mts and
-            ./apphost.mts as equivalent paths to the same selected AppHost), then
+            command and directory (accept apphost.mts, shell-appropriate
+            .\apphost.mts and ./apphost.mts as equivalent paths to the same selected AppHost), then
             explicitly plan both conditional outcomes: report the actual failure
             and stop without retrying, or on success perform the authorized
             read-only inspection of the resolved integration graph and generated
@@ -261,7 +261,7 @@ stimuli:
     tags: { priority: p0, area: capability-bootstrap, phase: restore-only }
     environment: { files: *fresh_polyglot }
     rubric:
-      - The response gives aspire restore --apphost .\apphost.mts --non-interactive (or the shell-equivalent ./apphost.mts path) from app/Migration.TypeScriptAppHost, once, without changing its inputs.
+      - The response gives aspire restore --apphost apphost.mts --non-interactive (or the shell-equivalent .\apphost.mts or ./apphost.mts path) from app/Migration.TypeScriptAppHost, once, without changing its inputs.
       - The response stops after that one restore on success or failure, reports any actual failure without retrying, and explicitly leaves resolved capability inspection pending for separate approval.
       - The response neither plans nor performs capability inspection or disposable probing under restore-only permission; it makes no capability claim, executes no command and changes no file.
     graders:
@@ -275,8 +275,8 @@ stimuli:
           scoring: binary
           prompt: >
             Does the response give the exact once-approved restore command and
-            directory (accept shell-appropriate .\apphost.mts and ./apphost.mts
-            as equivalent paths to the same selected AppHost), then stop on
+            directory (accept apphost.mts, shell-appropriate .\apphost.mts and
+            ./apphost.mts as equivalent paths to the same selected AppHost), then stop on
             either success or failure and explicitly leave capability inspection
             pending for separate approval? Failures must be reported without
             retrying. It must not plan or perform resolved integration graph or

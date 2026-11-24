@@ -53,6 +53,12 @@ test("approved exact restore failure leaves config and rejects retries or wrong 
   runMock(wrong, join(wrong, "legacy"), ["restore", "--apphost", "../original/host/apphost.mts", "--non-interactive"]);
   assert.throws(() => assertExecution(wrong, baseline, "failure"));
 });
+test("portable restore example targets the approved fixture AppHost", t => {
+  const root = fixture(t);
+  const result = runMock(root, join(root, "legacy"), ["restore", "--apphost", "apphost.mts", "--non-interactive"]);
+  assert.equal(result.exitCode, 6);
+  assertExecution(root, baseline, "failure");
+});
 test("approved copy owns config, install effects and transitive integration builds", t => {
   const root = fixture(t);
   const probe = prepareProbe(root);
@@ -183,13 +189,25 @@ test("execution stimuli permit controlled commands with actual workspace graders
 
 test("preparation guidance requires informed side-effect approval and real copy ownership", () => {
   const skill = readFileSync(new URL("../skills/aspire-project-v2-migration/SKILL.md", import.meta.url), "utf8");
-  assert.match(skill, /package-manager installs, update lockfiles and execute lifecycle scripts/);
-  assert.match(skill, /obtain explicit approval before restoring/);
-  assert.match(skill, /legacy\s+`\.aspire\/settings\.json` but no `aspire\.config\.json`/);
-  assert.match(skill, /even if restore later fails/);
-  assert.match(skill, /obtain approval for its creation/);
-  assert.match(skill, /including changes left by failure/);
   const reference = readFileSync(new URL("../skills/aspire-project-v2-migration/references/compatibility-and-validation.md", import.meta.url), "utf8");
+  assert.match(skill, /references\/compatibility-and-validation\.md#bounded-unchanged-apphost-restore\)\s+before requesting restore approval/);
+  const start = reference.indexOf("### Bounded unchanged-AppHost restore");
+  const end = reference.indexOf("### Bounded polyglot capability probe");
+  assert.ok(start > 0 && end > start);
+  const restore = reference.slice(start, end);
+  assert.match(restore, /package-manager configuration, npm integration hosts, and lifecycle scripts\s+read-only/);
+  assert.match(restore, /package-manager installs, update lockfiles and\s+execute lifecycle\s+scripts/);
+  assert.match(restore, /Name the affected host paths/);
+  assert.match(restore, /obtain explicit approval before restoring/);
+  assert.match(restore, /If any required effect lies\s+outside approval, stop and request the missing permission/);
+  assert.match(restore, /Resolve the effective config root, including ancestor settings/);
+  assert.match(restore, /legacy\s+`\.aspire\/settings\.json` but no `aspire\.config\.json`/);
+  assert.match(restore, /even if restore later fails/);
+  assert.match(restore, /Name that exact configuration path and obtain explicit approval for its\s+creation/);
+  assert.match(restore, /including changes left by failure/);
+  assert.match(restore, /run only the selected unchanged AppHost's restore once/);
+  assert.match(restore, /aspire restore --apphost apphost\.mts --non-interactive/);
+  assert.match(restore, /local integration builds and their MSBuild targets/);
   assert.match(reference, /copy-owned effective config/);
   assert.match(reference, /not a\s+symlink to the original/);
   assert.match(reference, /transitive build inputs/);

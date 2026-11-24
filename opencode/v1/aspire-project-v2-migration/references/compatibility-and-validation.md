@@ -26,21 +26,57 @@ earlier 13.6 development builds can lack either capability. Verify the resolved
 package/generated API or a known matching build; edit approval and package
 declarations alone are not capability evidence.
 
+### Bounded unchanged-AppHost restore
+
+Before requesting preparation approval, keep the assessment read-only. Name the
+exact AppHost, working directory, command, existing SDK/integration pins and
+channel, and expected downloads, cache and generated-file writes. Inspect
+package-manager configuration, npm integration hosts, and lifecycle scripts
+read-only. Guest restore can run package-manager installs, update lockfiles and
+execute lifecycle scripts with side effects. Name the affected host paths,
+disclose these effects and local integration builds and their MSBuild targets,
+and obtain explicit approval before restoring. If any required effect lies
+outside approval, stop and request the missing permission.
+
+Resolve the effective config root, including ancestor settings. If it has legacy
+`.aspire/settings.json` but no `aspire.config.json`, restore can create
+`aspire.config.json` there before SDK generation, even if restore later fails.
+Name that exact configuration path and obtain explicit approval for its
+creation; generic cache/generated-file approval is insufficient.
+
+After approval, run only the selected unchanged AppHost's restore once; no
+integration additions or migration edits are included. For a selected
+`apphost.mts`, from its directory:
+
+```text
+aspire restore --apphost apphost.mts --non-interactive
+```
+
+After either outcome, inspect and report actual config, lockfile, script and
+build effects within the approved scope, including changes left by failure. Do
+not silently undo them or claim the workspace is unchanged.
+
+For an offline restore plan, describe both conditional outcomes without executing
+either or claiming they happened: report failure and stop, or on success inspect
+resolved capabilities read-only within the user's permitted scope, with separately
+approved disposable probing if Dotnet is absent. If the user permits restore only,
+leave capability inspection pending. Neither outcome authorizes an in-place
+integration addition or execution of a disposable probe.
+
 ### Bounded polyglot capability probe
 
-If an approved unchanged-AppHost restore succeeds but the Dotnet integration is
-absent, request separate approval for a disposable-copy probe, not package changes
-in the application. Identify the copy location, exact AppHost, integration/version
-to add, commands, expected downloads/generated writes, and cleanup scope.
-Disclose package-manager installs, possible lockfile updates and lifecycle-script
-effects, legacy configuration creation and local integration/MSBuild execution.
-Obtain approval for those effects, not only cache and generated SDK writes.
-
-For a restore-only command plan, describe the failure stop and the conditional
-read-only success handoff; do not claim the restore or inspection ran. Inspect
-resolved capabilities only within the user's permitted scope, otherwise report
-that inspection as pending. Neither outcome authorizes an in-place integration
-addition or execution of a disposable probe.
+Restoring existing integrations may not expose `addDotnetProject` when
+`Aspire.Hosting.Dotnet` is absent; that alone does not establish a handle-only
+API. If an approved unchanged-AppHost restore succeeds but the Dotnet integration
+is absent, request separate approval for a disposable-copy probe, not package
+changes in the application. Identify the copy location, exact AppHost,
+integration/version to add, commands, expected downloads/generated writes, and
+cleanup scope. The approval request must explicitly preserve the exact AppHost,
+SDK/integration pins, channel and package feeds; merely saying configuration will
+be copied is insufficient. Disclose package-manager installs, possible lockfile updates and
+lifecycle-script effects, legacy configuration creation and local
+integration/MSBuild execution. Obtain approval for those effects, not only cache
+and generated SDK writes.
 
 - Preserve the pinned SDK, integrations, channel and feeds, including effective
   `global.json`, NuGet and package-manager configuration and relevant ancestor

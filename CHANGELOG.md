@@ -7,8 +7,9 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 ### Changed
 - Project v2 migration now explains fresh polyglot generated-state absence and
   guides separately approved restore/capability preparation before exact migration
-  edits, preserving pinned toolchains, reporting exact upstream restore failures,
-  and explaining the conditional read-only capability handoff within user scope.
+  edits, with a portable restore example and detailed approval safeguards in the
+  linked reference, preserving pinned toolchains, reporting exact upstream restore
+  failures, and explaining the conditional read-only capability handoff within user scope.
   Preparation approval includes guest package installs, lockfile/lifecycle-script
   effects and legacy configuration migration; disposable probes must isolate
   effective configuration and local integration builds.

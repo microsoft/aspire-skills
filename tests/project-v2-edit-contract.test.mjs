@@ -179,13 +179,14 @@ test("fresh polyglot bootstrap orders preparation, capability proof, and exact e
   assert.match(skill.slice(0, start), /do not restore, build, run, or regenerate SDK files\s+before approval/);
   const steps = [
     /git-ignored generated state/,
+    /Read and follow the\s+\[restore preparation, probe, and failure rules\]\(references\/compatibility-and-validation\.md#bounded-unchanged-apphost-restore\)\s+before requesting restore approval/,
     /Request bounded preparation approval/,
-    /Only after that approval/,
-    /aspire restore --apphost \.\\apphost\.mts --non-interactive/,
-    /If restore fails, stop/,
+    /unchanged exact AppHost once/,
+    /After approval, run that exact restore once/,
+    /If it fails, stop and include\s+the exact command, working directory, exit code, and actual diagnostic in\s+your response/,
+    /On success, inspect/,
     /Aspire\.Hosting\.Dotnet/,
-    /separately approved capability probe/,
-    /disposable copy/,
+    /separately approved capability probe in a disposable copy/,
     /flat `DotnetProjectOptions`/,
     /return to \*\*Classify and propose\*\* \(workflow step 2\)/,
     /request migration-edit approval/
@@ -196,10 +197,9 @@ test("fresh polyglot bootstrap orders preparation, capability proof, and exact e
     assert.ok(match, `Missing or misordered bootstrap gate: ${step}`);
     offset += match.index + match[0].length;
   }
-  assert.match(bootstrap, /unchanged exact AppHost once/);
   assert.match(bootstrap, /Preparation approval is not migration-edit, runtime, or publish approval/);
   assert.match(bootstrap, /never hand-edit generated modules or upgrade implicitly/);
-  assert.match(bootstrap, /approval request must explicitly preserve the exact AppHost, SDK\/integration\s+pins, channel and package feeds/);
+  assert.doesNotMatch(bootstrap, /IntegrationRestore\.csproj|SourceRoot\.RevisionId|\.aspire\/settings\.json/);
 });
 
 test("capability probe preserves pinned inputs and restore failures stay diagnostic", () => {
@@ -209,6 +209,8 @@ test("capability probe preserves pinned inputs and restore failures stay diagnos
   assert.ok(start > 0 && end > start);
   const probe = reference.slice(start, end);
   assert.match(probe, /separate approval/);
+  assert.match(probe, /does not establish a handle-only\s+API/);
+  assert.match(probe, /explicitly preserve the exact AppHost,\s+SDK\/integration pins, channel and package feeds/);
   assert.match(probe, /pinned SDK, integrations, channel and feeds/);
   assert.match(probe, /aspire add --help/);
   assert.match(probe, /aspire add Aspire\.Hosting\.Dotnet --version <compatible-pinned-version> --apphost <copied-apphost-path> --non-interactive/);
@@ -227,18 +229,18 @@ test("restore answers include actual failure evidence and a scope-bounded succes
     skill.indexOf("### 1a. Fresh polyglot worktree / capability bootstrap"),
     skill.indexOf("### 2. Classify and propose")
   );
-  assert.match(bootstrap, /exact failed command, working directory, exit code and actual\s+diagnostic \*\*in the answer\*\*/);
-  assert.match(bootstrap, /not merely a promise to report/);
-  assert.match(bootstrap, /IntegrationRestore\.csproj[\s\S]*SourceRoot\.RevisionId/);
-  assert.match(bootstrap, /64-character SHA-256[\s\S]*microsoft\/aspire\/issues\/21735/);
-  assert.match(bootstrap, /capability verification remains blocked/);
-  assert.match(bootstrap, /no retries, generated-target edits, SourceLink suppression or toolchain changes/);
+  assert.match(bootstrap, /include\s+the exact command, working directory, exit code, and actual diagnostic in\s+your response/);
   assert.match(bootstrap, /On success,[\s\S]*read-only\s+within the user's permitted scope/);
   assert.match(bootstrap, /successful restore is not capability proof/);
-  assert.match(bootstrap, /offline restore plan, describe both conditional outcomes without executing/);
-  assert.match(bootstrap, /separately\s+approved disposable probing if Dotnet is absent/);
   assert.match(bootstrap, /user limits the task to\s+the restore alone, leave capability inspection pending/);
   const reference = readFileSync(new URL("../skills/aspire-project-v2-migration/references/compatibility-and-validation.md", import.meta.url), "utf8");
+  assert.match(reference, /offline restore plan, describe both conditional outcomes without executing/);
+  assert.match(reference, /separately\s+approved disposable probing if Dotnet is absent/);
+  assert.match(reference, /IntegrationRestore\.csproj[\s\S]*SourceRoot\.RevisionId/);
+  assert.match(reference, /64-character SHA-256[\s\S]*microsoft\/aspire\/issues\/21735/);
+  assert.match(reference, /capability verification is\s+blocked/);
+  assert.match(reference, /do not retry unchanged commands or edit generated targets/);
+  assert.match(reference, /Never add blanket SourceLink suppression/);
   assert.match(reference, /Quote the actual diagnostic rather than only telling the user to report it/);
   assert.match(reference, /user-supplied offline result from a command you executed/);
   assert.match(reference, /Explicitly state that toolchains remain unchanged/);
@@ -250,6 +252,8 @@ test("restore scope grading accepts equivalent shell paths without relaxing beha
   const grader = stimulus.graders.find(item => item.name === "polyglot-restore-scope-stays-bounded");
   assert.equal(spec.scoring.threshold, 1);
   assert.equal(grader.config.scoring, "binary");
+  assert.match(stimulus.rubric[0], /aspire restore --apphost apphost\.mts --non-interactive/);
+  assert.match(grader.config.prompt, /accept apphost\.mts, shell-appropriate/);
   for (const path of [".\\apphost.mts", "./apphost.mts"]) {
     assert.ok(stimulus.rubric[0].includes(path));
     assert.ok(grader.config.prompt.includes(path));
@@ -287,6 +291,8 @@ test("paired restore plans require inspection only with explicit permission", ()
     assert.ok(stimulus.graders.some(grader => grader.type === "tool-calls"));
     const grader = stimulus.graders.find(item => item.type === "prompt");
     assert.equal(grader.config.scoring, "binary");
+    assert.match(stimulus.rubric[0], /aspire restore --apphost apphost\.mts --non-interactive/);
+    assert.match(grader.config.prompt, /accept apphost\.mts, shell-appropriate/);
     for (const path of [".\\apphost.mts", "./apphost.mts"]) {
       assert.ok(stimulus.rubric[0].includes(path));
       assert.ok(grader.config.prompt.includes(path));
