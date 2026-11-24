@@ -11,7 +11,8 @@ import {
     isAppHostDiscoveryInput,
 } from "../extensions/aspire-apphosts/lib/workspace-discovery.mjs";
 
-// Real-watch tests need recursive fs.watch, which some platforms and older Node versions lack.
+// Real-watch tests change only workspace-root entries, so they also cover platforms where the
+// cache watches just the root. They skip on runtimes without recursive fs.watch.
 const recursiveWatchSkip = (() => {
     try {
         watch(tmpdir(), { recursive: true, persistent: false }).close();
@@ -36,6 +37,8 @@ function fakeWatch() {
     };
     return { watch, watchers };
 }
+
+const missing = async () => { throw Object.assign(new Error("not found"), { code: "ENOENT" }); };
 
 function counter(value = { candidates: [] }, cacheable = true) {
     const load = async () => {
@@ -149,6 +152,188 @@ test("changes during an in-flight ls queue one replacement instead of a concurre
     assert.equal(maxRunning, 1);
 });
 
+test("a queued ls loads the cached workspace even after the owner that queued it moves", async () => {
+    const { watch, watchers } = fakeWatch();
+    const cache = createWorkspaceDiscoveryCache({ recursiveWatch: true, watch, debounceMs: 0 });
+    const changes = [];
+    cache.acquire("a", "/one", () => changes.push("a"));
+    cache.acquire("b", "/one", () => changes.push("b"));
+    const one = watchers.find((watcher) => watcher.directory === "/one");
+    const releases = [];
+    const directories = [];
+    const load = (directory) => {
+        directories.push(directory);
+        return new Promise((resolveLoad) => {
+            releases.push(() => resolveLoad({ value: directory, cacheable: true, paths: [] }));
+        });
+    };
+
+    const first = cache.get("b", load);
+    one.listener("change", "apphost.ts");
+    const queued = cache.get("a", load);
+    cache.acquire("a", "/two", () => changes.push("a"));
+    const two = watchers.find((watcher) => watcher.directory === "/two");
+    assert.ok(two, "the moved owner watches its new workspace");
+    assert.equal(one.closed, false, "the remaining owner keeps the old workspace watched");
+
+    releases[0]();
+    assert.equal(await first, "/one");
+    await delay(5);
+    releases[1]();
+    assert.equal(await queued, "/one");
+    assert.deepEqual(directories, ["/one", "/one"]);
+    assert.equal(await cache.get("b", load), "/one", "the queued result is cached for its own workspace");
+    const moved = cache.get("a", load);
+    releases[2]();
+    assert.equal(await moved, "/two");
+
+    await delay(5);
+    changes.length = 0;
+    one.listener("change", "apphost.ts");
+    await delay(5);
+    assert.deepEqual(changes, ["b"], "only owners still on the workspace are notified");
+    cache.release("b");
+    assert.equal(one.closed, true);
+    assert.equal(two.closed, false);
+    cache.release("a");
+    assert.equal(cache.size, 0);
+});
+
+test("removing a path invalidates discovery only when the cached result depends on it", async () => {
+    const { watch, watchers } = fakeWatch();
+    const cache = createWorkspaceDiscoveryCache({ recursiveWatch: true, watch, stat: missing });
+    cache.acquire("a", "/repo", () => {});
+    let calls = 0;
+    const load = async () => {
+        calls += 1;
+        return { value: calls, cacheable: true, paths: [join("/repo", "src", "AppHost", "AppHost.csproj")] };
+    };
+    await cache.get("a", load);
+    for (const name of ["docs", join("src", "App"), join("src", "AppHost", "obsolete")]) {
+        watchers[0].listener("rename", name);
+        await delay(0);
+        await cache.get("a", load);
+        assert.equal(calls, 1, `removing ${name} must not rerun ls`);
+    }
+    watchers[0].listener("rename", "src");
+    await delay(0);
+    await cache.get("a", load);
+    assert.equal(calls, 2, "removing a directory that contains a discovered AppHost reruns ls");
+    cache.release("a");
+});
+
+test("removing a path while ls runs discards a result that depends on it", async () => {
+    const { watch, watchers } = fakeWatch();
+    const cache = createWorkspaceDiscoveryCache({ recursiveWatch: true, watch, stat: missing, debounceMs: 0 });
+    let changes = 0;
+    cache.acquire("a", "/repo", () => { changes++; });
+    const releases = [];
+    const load = () => new Promise((resolveLoad) => {
+        const value = releases.length + 1;
+        releases.push(() => resolveLoad({ value, cacheable: true, paths: [join("/repo", "src", "AppHost.cs")] }));
+    });
+
+    const first = cache.get("a", load);
+    watchers[0].listener("rename", "docs");
+    await delay(0);
+    releases[0]();
+    assert.equal(await first, 1);
+    assert.equal(await cache.get("a", load), 1, "an unrelated removal keeps the result cacheable");
+
+    const second = cache.get("a", load, { force: true });
+    watchers[0].listener("rename", "src");
+    await delay(0);
+    releases[1]();
+    assert.equal(await second, 2);
+    await delay(5);
+    assert.equal(changes, 1, "owners refresh after a dependent removal");
+    const third = cache.get("a", load);
+    assert.equal(releases.length, 3, "the discarded result is not reused");
+    releases[2]();
+    assert.equal(await third, 3);
+    cache.release("a");
+});
+
+test("changes inside ignored directories never invalidate discovery", async () => {
+    const { watch, watchers } = fakeWatch();
+    let stats = 0;
+    const cache = createWorkspaceDiscoveryCache({
+        recursiveWatch: true,
+        watch,
+        ignoredDirectories: [join("/repo", "logs")],
+        stat: async (path) => { stats++; return missing(path); },
+    });
+    cache.acquire("a", "/repo", () => {});
+    const load = counter();
+    await cache.get("a", load);
+    watchers[0].listener("rename", "logs");
+    watchers[0].listener("rename", join("logs", "run.log"));
+    watchers[0].listener("change", join("logs", "nested", "apphost.ts"));
+    await delay(0);
+    await cache.get("a", load);
+    assert.equal(load.calls, 1);
+    assert.equal(stats, 0);
+    watchers[0].listener("rename", "logs-old");
+    await delay(0);
+    await cache.get("a", load);
+    assert.equal(load.calls, 2, "a sibling of an ignored directory is still watched");
+    cache.release("a");
+});
+
+test("unexpected stat failures refresh discovery and warn once per workspace", async () => {
+    const { watch, watchers } = fakeWatch();
+    const logs = [];
+    const cache = createWorkspaceDiscoveryCache({
+        recursiveWatch: true,
+        watch,
+        log: (message) => logs.push(message),
+        stat: async () => { throw Object.assign(new Error("access denied"), { code: "EACCES" }); },
+    });
+    cache.acquire("a", "/repo", () => {});
+    const load = counter();
+    for (let i = 0; i < 2; i++) {
+        await cache.get("a", load);
+        watchers[0].listener("rename", `entry-${i}`);
+        await delay(0);
+    }
+    await cache.get("a", load);
+    assert.equal(load.calls, 3);
+    assert.equal(logs.filter((message) => /Unable to inspect/.test(message)).length, 1);
+    cache.release("a");
+});
+
+test("an unwatchable parent directory keeps the workspace watcher but expires results", async () => {
+    const watchers = [];
+    const logs = [];
+    let time = 0;
+    const cache = createWorkspaceDiscoveryCache({
+        recursiveWatch: true,
+        fallbackTtlMs: 100,
+        maxAgeMs: 1_000,
+        now: () => time,
+        log: (message) => logs.push(message),
+        watch: (directory, options, listener) => {
+            if (!options.recursive) throw new Error("denied");
+            const watcher = Object.assign(new EventEmitter(), { directory, options, listener, closed: false, close() { this.closed = true; } });
+            watchers.push(watcher);
+            return watcher;
+        },
+    });
+    cache.acquire("a", join(tmpdir(), "outer", "repo"), () => {});
+    assert.equal(watchers.length, 1);
+    assert.equal(logs.filter((message) => /Parent aspire\.config\.json/.test(message)).length, 1);
+    const load = counter();
+    await cache.get("a", load);
+    watchers[0].listener("change", "apphost.ts");
+    await cache.get("a", load);
+    assert.equal(load.calls, 2, "the workspace watcher still reports changes");
+    time = 150;
+    await cache.get("a", load);
+    assert.equal(load.calls, 3, "results expire on the fallback ttl");
+    cache.release("a");
+    assert.equal(watchers[0].closed, true);
+});
+
 test("directory renames invalidate discovery without treating existing unrelated files as directories", async () => {
     const { watch, watchers } = fakeWatch();
     const cache = createWorkspaceDiscoveryCache({
@@ -201,6 +386,8 @@ test("ancestor aspire.config.json changes invalidate discovery and ancestor watc
 
     ancestors[1].emit("error", new Error("gone"));
     assert.ok(watchers.every((watcher) => watcher.closed));
+    await cache.get("a", load);
+    assert.equal(load.calls, 3, "a watcher error discards the cached result");
     cache.release("a");
     assert.equal(cache.size, 0);
 });
@@ -301,7 +488,11 @@ test("real file watching invalidates when a directory containing an AppHost is m
     let changes = 0;
     cache.acquire("a", workspace, () => { changes++; });
     t.after(async () => { cache.release("a"); await rm(root, { recursive: true, force: true }); });
-    const load = counter();
+    let loads = 0;
+    const load = async () => {
+        loads += 1;
+        return { value: loads, cacheable: true, paths: [join(workspace, "incoming", "AppHost.cs")] };
+    };
     await cache.get("a", load);
     await rename(incoming, join(workspace, "incoming"));
     const deadline = Date.now() + 5_000;
@@ -310,12 +501,12 @@ test("real file watching invalidates when a directory containing an AppHost is m
         await delay(20);
     }
     await cache.get("a", load);
-    assert.equal(load.calls, 2);
+    assert.equal(loads, 2);
     await rename(join(workspace, "incoming"), join(root, "outgoing"));
     while (changes < 2) {
         assert.ok(Date.now() < deadline, "timed out waiting for the directory removal");
         await delay(20);
     }
     await cache.get("a", load);
-    assert.equal(load.calls, 3);
+    assert.equal(loads, 3);
 });

@@ -28,9 +28,11 @@ AppHost; Run, Stop, Deploy, Publish, and pipeline-step operations are explicit
 and serialized per AppHost.
 
 Workspace `aspire ls` results are cached per workspace. They refresh when AppHost
-files change, when you select Refresh, and on a slow fallback timer. Platforms
-without recursive file watching, such as Linux, watch only the workspace root and
-rely more on the fallback timer.
+files change, when you select Refresh, and after at most 15 minutes. On platforms
+other than Windows and macOS, where Node has no native recursive watching, the
+canvas watches only the workspace root and parent `aspire.config.json` files.
+AppHosts added or changed in subfolders there appear within about 5 minutes, or
+when you select Refresh.
 
 When no canvas view is connected for about 10 seconds, the panel pauses polling
 and resource streams. It resumes and refreshes when a view reconnects.
