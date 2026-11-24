@@ -6,6 +6,8 @@ All notable changes to the aspire-skills plugin will be documented in this file.
 
 ### Changed
 - Reduced repeated `aspire ls` calls from the AppHosts canvas.
+- Shared `aspire ps` and `aspire describe` streams across AppHosts canvas panels
+  and Copilot sessions, reducing Aspire CLI processes and log files.
 - Kept skill-supplied external APIs, streams, and SDK-owned dependencies visible
   in the Aspireify canvas without treating them as runnable services. Resource
   mappings, not-modeled or deferred reasons, and unassessed items now survive

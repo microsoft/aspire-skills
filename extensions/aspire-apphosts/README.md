@@ -13,17 +13,19 @@ with `open_canvas`.
 The extension uses the Aspire CLI's public surfaces:
 
 - `aspire ls --format Json` discovers workspace AppHost candidates.
-- `aspire ps --format Json` discovers running AppHosts for Workspace and Global
-  modes.
-- `aspire describe --format Json --apphost <path>` retrieves the evaluated
-  resource model and current state.
+- `aspire ps --follow --format Json` streams running AppHost changes for Workspace
+  and Global modes, seeded by `aspire ps --format Json`.
+- `aspire describe --follow --format Json --apphost <path>` streams resource
+  changes, seeded by a one-shot describe.
 - `aspire resource <resource> <command> --apphost <path>` invokes commands that
   the AppHost exposes through its API command surface.
 - `aspire terminal attach <resource> --apphost <path>` opens an integrated
   terminal only when the resource advertises terminal support.
 
-The canvas polls the public snapshots in place so discovery, model, and state
-changes appear without reopening the panel. Opening the canvas never starts an
+Panels and Copilot sessions on the same machine share one `ps --follow` stream
+and one `describe --follow` stream per AppHost through a local broker. The
+canvas periodically reconciles running hosts with a one-shot `aspire ps`, and
+older CLIs without `--follow` fall back to polling. Opening the canvas never starts an
 AppHost; Run, Stop, Deploy, Publish, and pipeline-step operations are explicit
 and serialized per AppHost.
 
@@ -35,8 +37,9 @@ rely more on the fallback timer.
 When no canvas view is connected for about 10 seconds, the panel pauses polling
 and resource streams. It resumes and refreshes when a view reconnects.
 
-Closing the canvas stops polling and closes its listener after in-flight
-requests finish. It does not cancel an operation that has already started.
+Closing the canvas stops polling, releases its shared stream subscriptions, and
+closes its listener after in-flight requests finish. It does not cancel an
+operation that has already started.
 
 Snapshots carry a monotonic content revision across HTTP and server-sent events.
 An older response cannot replace a newer model, and freshness updates apply only
@@ -78,6 +81,9 @@ before reaching the renderer or provider log.
 Each canvas instance serves its renderer from a random loopback port protected by
 a per-instance token, host/origin checks, a strict Content Security Policy, and
 bounded request bodies.
+
+Shared streams use authenticated local connections between providers. Raw CLI
+data stays provider-side and is never exposed by the renderer's HTTP server.
 
 ## Experience
 
