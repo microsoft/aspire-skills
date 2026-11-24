@@ -97,6 +97,35 @@ Inspect the selected AppHost and every legacy candidate:
 
 An already migrated app or an app with no matching resources is a no-op.
 
+### 1a. Fresh polyglot worktree / capability bootstrap
+
+Missing `.aspire/modules/` and resolved integration metadata in a fresh TypeScript
+or other polyglot worktree is normal, git-ignored generated state, not missing
+application source or an Aspire defect. Do not treat online docs or a version
+label as proof of the installed API.
+
+Read and follow the
+[restore preparation, probe, and failure rules](references/compatibility-and-validation.md#bounded-unchanged-apphost-restore)
+before requesting restore approval.
+
+1. Request bounded preparation approval for restoring the **unchanged exact AppHost once**.
+   Keep the assessment read-only while waiting.
+2. After approval, run that exact restore once. If it fails, stop and include
+   the exact command, working directory, exit code, and actual diagnostic in
+   your response.
+3. On success, inspect the resolved integration graph and generated API read-only
+   within the user's permitted scope. A successful restore is not capability proof.
+   If `Aspire.Hosting.Dotnet` is absent, request a
+   separately approved capability probe in a disposable copy.
+4. Require the resolved `addDotnetProject(name, path, options?)` with flat `DotnetProjectOptions`
+   and every other needed capability. Missing/older APIs remain a capability stop.
+   Once verified, return to **Classify and propose** (workflow step 2) for the exact
+   per-resource/per-file plan and request migration-edit approval.
+
+Preparation approval is not migration-edit, runtime, or publish approval. Run only
+the approved preparation; never hand-edit generated modules or upgrade implicitly.
+If the user limits the task to the restore alone, leave capability inspection pending.
+
 ### 2. Classify and propose
 
 Present a table before editing:
@@ -104,6 +133,13 @@ Present a table before editing:
 | Resource | Current API and source | Proposed replacement | Behavior retained / intentional change | Package and reference edits | Classification |
 |---|---|---|---|---|---|
 | `api` | `AddProject<Projects.Api>` → resolved path | `AddDotnetProject("api", path)` | args, profiles, endpoints, env, refs, waits, replicas, publishing | add `Aspire.Hosting.Dotnet`; remove only proven-exclusive edge | supported / decision / unsupported |
+
+For each generic `Projects.*` resource, report the metadata-to-path evidence in
+the assessment itself, not only the resolved path. Name any
+`AspireProjectMetadataTypeName` override and the exact `ProjectReference` it
+maps to, or the inspected `IProjectMetadata.ProjectPath` source. An overridden
+metadata type need not match the project name; make that relationship explicit
+before requesting approval.
 
 Explain:
 
@@ -159,8 +195,10 @@ language-specific mappings.
   `addCSharpApp`, or the shared `ProjectResourceOptions` handle.
 - Use the Aspire CLI's normal integration acquisition/regeneration flow when
   available; do not hand-edit generated SDK modules.
-- Preserve fluent configuration and application arguments in their original
-  runtime role.
+- Preserve the original variable binding (or absence of one), fluent chain,
+  and application arguments. Replace the approved creation call in place; do
+  not introduce temporary resource variables or split inline chains solely
+  to place experimental pragmas.
 - Update only straightforward local `IResourceBuilder<ProjectResource>` annotations
   tied to approved resources. Do not broadly rewrite public/custom contracts.
 - C# migrations **must** handle `ASPIREDOTNETPROJECT001` narrowly so the edited
@@ -170,6 +208,9 @@ language-specific mappings.
   Use a project-level `NoWarn` only when repository convention and the approved
   migration scope make that equally narrow. Never suppress unrelated diagnostics
   or leave an unbounded disable.
+  A declaration includes its existing fluent statement. Keep inline registrations
+  inline and preserve existing diagnostic scopes; add the new paired scope
+  around the statement rather than extracting its creation call.
   The `AddEFMigrations` overload selected for `IDotnetProgramResource` also requires
   a paired `ASPIREPROJECTS001` suppression around that EF declaration; the legacy
   overload did not. Include this compilation-required edit in the approval scope.

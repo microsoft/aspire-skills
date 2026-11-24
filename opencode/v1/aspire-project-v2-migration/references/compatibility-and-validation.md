@@ -26,6 +26,121 @@ earlier 13.6 development builds can lack either capability. Verify the resolved
 package/generated API or a known matching build; edit approval and package
 declarations alone are not capability evidence.
 
+### Bounded unchanged-AppHost restore
+
+Before requesting preparation approval, keep the assessment read-only. Name the
+exact AppHost, working directory, command, existing SDK/integration pins and
+channel, and expected downloads, cache and generated-file writes. Inspect
+package-manager configuration, npm integration hosts, and lifecycle scripts
+read-only. Guest restore can run package-manager installs, update lockfiles and
+execute lifecycle scripts with side effects. Name the affected host paths,
+disclose these effects and local integration builds and their MSBuild targets,
+and obtain explicit approval before restoring. If any required effect lies
+outside approval, stop and request the missing permission.
+
+Resolve the effective config root, including ancestor settings. If it has legacy
+`.aspire/settings.json` but no `aspire.config.json`, restore can create
+`aspire.config.json` there before SDK generation, even if restore later fails.
+Name that exact configuration path and obtain explicit approval for its
+creation; generic cache/generated-file approval is insufficient.
+
+After approval, run only the selected unchanged AppHost's restore once; no
+integration additions or migration edits are included. For a selected
+`apphost.mts`, from its directory:
+
+```text
+aspire restore --apphost apphost.mts --non-interactive
+```
+
+After either outcome, inspect and report actual config, lockfile, script and
+build effects within the approved scope, including changes left by failure. Do
+not silently undo them or claim the workspace is unchanged.
+
+For an offline restore plan, describe both conditional outcomes without executing
+either or claiming they happened: report failure and stop, or on success inspect
+resolved capabilities read-only within the user's permitted scope, with separately
+approved disposable probing if Dotnet is absent. If the user permits restore only,
+leave capability inspection pending. Neither outcome authorizes an in-place
+integration addition or execution of a disposable probe.
+
+### Bounded polyglot capability probe
+
+Restoring existing integrations may not expose `addDotnetProject` when
+`Aspire.Hosting.Dotnet` is absent; that alone does not establish a handle-only
+API. If an approved unchanged-AppHost restore succeeds but the Dotnet integration
+is absent, request separate approval for a disposable-copy probe, not package
+changes in the application. Identify the copy location, exact AppHost,
+integration/version to add, commands, expected downloads/generated writes, and
+cleanup scope. The approval request must explicitly preserve the exact AppHost,
+SDK/integration pins, channel and package feeds; merely saying configuration will
+be copied is insufficient. Disclose package-manager installs, possible lockfile updates and
+lifecycle-script effects, legacy configuration creation and local
+integration/MSBuild execution. Obtain approval for those effects, not only cache
+and generated SDK writes.
+
+- Preserve the pinned SDK, integrations, channel and feeds, including effective
+  `global.json`, NuGet and package-manager configuration and relevant ancestor
+  settings. Name these invariants explicitly in the approval request, not merely
+  the copied configuration. A copy outside those settings must carry equivalent configuration;
+  otherwise it is not evidence for this app. Do not switch to latest/stable or
+  use another SDK merely to make the probe pass.
+- Before add/restore, resolve and verify a **copy-owned effective config**:
+  place equivalent `aspire.config.json` inside the approved copy, preserve all
+  pins/channel/settings and rebase relative paths to the copied inputs. Do not
+  rely on an original ancestor config: `aspire add` can save the package to that
+  ancestor even when the AppHost itself was copied. Resolve upward from the
+  copied entry point and verify the config's real path is inside the copy, not a
+  symlink to the original. Legacy settings migration must likewise write only
+  to an explicitly approved copy-owned config path.
+- Resolve every local integration project path and its transitive build inputs
+  (project references, imported props/targets and relevant ancestor settings).
+  Include that local integration closure in the approved copy with equivalent
+  path relationships. Verify real paths, including symlink targets, before
+  execution: a relative reference can still reach an original project and run
+  its MSBuild targets. If any build input remains outside the copy, stop for
+  separate approval naming the external project/paths and build effects, or
+  expand the approved copy; disposable-probe approval alone does not permit
+  external builds. Do not drop integrations or rewrite their behavior to pass.
+- Resolve each declared npm integration host directory too: restore runs
+  `npm install` in each host, which can update lockfiles and run lifecycle
+  scripts. Copy those hosts and their required inputs/configuration into the
+  approved copy, rebase references and verify real paths before execution.
+  If any npm host remains outside the copy, stop for separate approval naming
+  its exact paths and install, lockfile and lifecycle-script effects, or expand
+  the approved copy. Probe approval does not authorize effects in original hosts.
+- Confirm targeting/version/source flags with the selected CLI's `aspire add --help`
+  and `aspire restore --help`. Use its supported add/restore flow **only in the
+  approved copy**: for example, where supported,
+  `aspire add Aspire.Hosting.Dotnet --version <compatible-pinned-version> --apphost <copied-apphost-path> --non-interactive`,
+  then restore the copy's exact AppHost. Keep existing integration pins unchanged;
+  if a matching package cannot be resolved without upgrades, stop for a decision.
+- Inspect the resulting package graph and generated declarations for the flat
+  `addDotnetProject(name, path, options?: DotnetProjectOptions)` contract and the
+  other APIs required by the selected resources. A successful restore alone is
+  not capability proof. Record the resolved versions and declaration evidence.
+- Do not copy probe changes back. Clean up only the task-owned copy as approved,
+  then present the exact application resource/file/package plan for migration-edit
+  approval. Preparation never authorizes starting resources or publishing.
+
+At either restore failure, report the command, exit code and actual diagnostic,
+including the working directory and exact failed command in the final answer.
+Quote the actual diagnostic rather than only telling the user to report it;
+distinguish a user-supplied offline result from a command you executed.
+Preserve application source and integration pins. Report any approved
+configuration migration, lockfile updates, script or build effects that already
+occurred, including on failure; do not claim source/configuration stayed unchanged
+merely because restore failed, and do not silently revert those effects.
+In particular,
+`IntegrationRestore.csproj` can fail with a SourceLink `SourceRoot.RevisionId`
+invalid-commit-hash error for a valid 64-character SHA-256 Git revision. This is
+the upstream failure tracked by [microsoft/aspire#21735](https://github.com/microsoft/aspire/issues/21735),
+not proof that application source or the generated SDK is missing. Preserve that
+diagnostic and stop; do not retry unchanged commands or edit generated targets.
+Never add blanket SourceLink suppression or silently change toolchains to bypass it.
+Explicitly state that toolchains remain unchanged and capability verification is
+blocked; restore approval does not authorize package/migration edits or runtime
+and publish actions.
+
 ## Unsupported and decision-required patterns
 
 | Pattern | Required response |

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -53,6 +53,25 @@ function mutateCsharp(root, subset = false) {
   });
   edit(root, "Directory.Packages.props", source => source.replace("</Project>",
     '<ItemGroup><PackageVersion Version = "$(AspireVersion)" Include = "Aspire.Hosting.Dotnet" /></ItemGroup></Project>'));
+}
+
+function mutateOwnership(root) {
+  const contract = editCases.ownership;
+  edit(root, contract.source, source => source
+    .replaceAll(/AddProject<Projects\.CatalogApi>\("([^"]+)", launchProfileName: null\)/g,
+      'AddDotnetProject("$1", "../Migration.Api/Migration.Api.csproj", options => options.ExcludeLaunchProfile = true)')
+    .replace("#pragma warning disable ASPIREPIPELINES003",
+      "#pragma warning disable ASPIREDOTNETPROJECT001\n#pragma warning disable ASPIREPIPELINES003")
+    .replace("#pragma warning restore ASPIREPIPELINES003",
+      "#pragma warning restore ASPIREPIPELINES003\n#pragma warning restore ASPIREDOTNETPROJECT001")
+    .replace("var prebuilt =", "#pragma warning disable ASPIREDOTNETPROJECT001\nvar prebuilt =")
+    .replace("\nif (builder.ExecutionContext.IsPublishMode)",
+      "\n#pragma warning restore ASPIREDOTNETPROJECT001\n\nif (builder.ExecutionContext.IsPublishMode)"));
+  edit(root, contract.appHost, source => source
+    .replace(/<ProjectReference Include="[^"]*Migration\.Api[^"]*"[^>]*\/>/, "")
+    .replace("</Project>", '<ItemGroup><PackageReference Include="Aspire.Hosting.Dotnet" /></ItemGroup></Project>'));
+  edit(root, "Directory.Packages.props", source => source.replace("</Project>",
+    '<ItemGroup><PackageVersion Include="Aspire.Hosting.Dotnet" Version="$(AspireVersion)" /></ItemGroup></Project>'));
 }
 
 function combineCsharpMigrationPragmas(root, diagnostics) {
@@ -127,6 +146,212 @@ test("source mutation controls are not substituted agent outputs", () => {
 test("source mutation controls reject unchanged input", t => {
   const { after } = fixture(t);
   assert.throws(() => edit(after, editCases.csharp.source, source => source), /Test mutation did not change/);
+});
+
+test("assessment reports metadata provenance and mappings preserve original bindings", () => {
+  const skill = readFileSync(new URL("../skills/aspire-project-v2-migration/SKILL.md", import.meta.url), "utf8");
+  const patterns = readFileSync(new URL("../skills/aspire-project-v2-migration/references/migration-patterns.md", import.meta.url), "utf8");
+  assert.match(skill, /report the metadata-to-path evidence in\s+the assessment itself/);
+  assert.match(skill, /`AspireProjectMetadataTypeName` override and the exact `ProjectReference`/);
+  assert.match(skill, /Preserve the original variable binding \(or absence of one\), fluent chain/);
+  assert.match(patterns, /Do not introduce a temporary resource variable or split the fluent statement/);
+});
+
+for (const lineEnding of ["\n", "\r\n"]) {
+  test(`publishing ownership preserves registration bindings with ${lineEnding === "\n" ? "LF" : "CRLF"} line endings`, t => {
+    const { before, after } = fixture(t, "ownership", lineEnding);
+    mutateOwnership(after);
+    assert.deepEqual(assertEditedFixture(before, after, "ownership"), editCases.ownership.files.toSorted());
+    edit(after, editCases.ownership.source, source => source.replace(
+      /(builder\.AddDotnetProject\("dockerfile-api"[^\r\n]+)\r?\n[ \t]+\.WithEnvironment/,
+      'var dockerfileApi = $1;\ndockerfileApi.WithEnvironment'
+    ));
+    assert.throws(() => assertEditedFixture(before, after, "ownership"), /Non-migration code\/fluent behavior changed/);
+  });
+}
+
+test("fresh polyglot bootstrap orders preparation, capability proof, and exact edit approval", () => {
+  const skill = readFileSync(new URL("../skills/aspire-project-v2-migration/SKILL.md", import.meta.url), "utf8");
+  const start = skill.indexOf("### 1a. Fresh polyglot worktree / capability bootstrap");
+  const end = skill.indexOf("### 2. Classify and propose");
+  assert.ok(start > 0 && end > start, "Bootstrap belongs between read-only inventory and the exact edit plan");
+  const bootstrap = skill.slice(start, end);
+  assert.match(skill.slice(0, start), /do not restore, build, run, or regenerate SDK files\s+before approval/);
+  const steps = [
+    /git-ignored generated state/,
+    /Read and follow the\s+\[restore preparation, probe, and failure rules\]\(references\/compatibility-and-validation\.md#bounded-unchanged-apphost-restore\)\s+before requesting restore approval/,
+    /Request bounded preparation approval/,
+    /unchanged exact AppHost once/,
+    /After approval, run that exact restore once/,
+    /If it fails, stop and include\s+the exact command, working directory, exit code, and actual diagnostic in\s+your response/,
+    /On success, inspect/,
+    /Aspire\.Hosting\.Dotnet/,
+    /separately approved capability probe in a disposable copy/,
+    /flat `DotnetProjectOptions`/,
+    /return to \*\*Classify and propose\*\* \(workflow step 2\)/,
+    /request migration-edit approval/
+  ];
+  let offset = 0;
+  for (const step of steps) {
+    const match = step.exec(bootstrap.slice(offset));
+    assert.ok(match, `Missing or misordered bootstrap gate: ${step}`);
+    offset += match.index + match[0].length;
+  }
+  assert.match(bootstrap, /Preparation approval is not migration-edit, runtime, or publish approval/);
+  assert.match(bootstrap, /never hand-edit generated modules or upgrade implicitly/);
+  assert.doesNotMatch(bootstrap, /IntegrationRestore\.csproj|SourceRoot\.RevisionId|\.aspire\/settings\.json/);
+});
+
+test("capability probe preserves pinned inputs and restore failures stay diagnostic", () => {
+  const reference = readFileSync(new URL("../skills/aspire-project-v2-migration/references/compatibility-and-validation.md", import.meta.url), "utf8");
+  const start = reference.indexOf("### Bounded polyglot capability probe");
+  const end = reference.indexOf("## Unsupported and decision-required patterns");
+  assert.ok(start > 0 && end > start);
+  const probe = reference.slice(start, end);
+  assert.match(probe, /separate approval/);
+  assert.match(probe, /does not establish a handle-only\s+API/);
+  assert.match(probe, /explicitly preserve the exact AppHost,\s+SDK\/integration pins, channel and package feeds/);
+  assert.match(probe, /pinned SDK, integrations, channel and feeds/);
+  assert.match(probe, /aspire add --help/);
+  assert.match(probe, /aspire add Aspire\.Hosting\.Dotnet --version <compatible-pinned-version> --apphost <copied-apphost-path> --non-interactive/);
+  assert.match(probe, /supported add\/restore flow/);
+  assert.match(probe, /Do not copy probe changes back/);
+  assert.match(probe, /report the command, exit code and actual diagnostic/);
+  assert.match(probe, /IntegrationRestore\.csproj/);
+  assert.match(probe, /SourceRoot\.RevisionId/);
+  assert.match(probe, /microsoft\/aspire\/issues\/21735/);
+  assert.match(probe, /Never add blanket SourceLink suppression/);
+});
+
+test("restore answers include actual failure evidence and a scope-bounded success handoff", () => {
+  const skill = readFileSync(new URL("../skills/aspire-project-v2-migration/SKILL.md", import.meta.url), "utf8");
+  const bootstrap = skill.slice(
+    skill.indexOf("### 1a. Fresh polyglot worktree / capability bootstrap"),
+    skill.indexOf("### 2. Classify and propose")
+  );
+  assert.match(bootstrap, /include\s+the exact command, working directory, exit code, and actual diagnostic in\s+your response/);
+  assert.match(bootstrap, /On success,[\s\S]*read-only\s+within the user's permitted scope/);
+  assert.match(bootstrap, /successful restore is not capability proof/);
+  assert.match(bootstrap, /user limits the task to\s+the restore alone, leave capability inspection pending/);
+  const reference = readFileSync(new URL("../skills/aspire-project-v2-migration/references/compatibility-and-validation.md", import.meta.url), "utf8");
+  assert.match(reference, /offline restore plan, describe both conditional outcomes without executing/);
+  assert.match(reference, /separately\s+approved disposable probing if Dotnet is absent/);
+  assert.match(reference, /IntegrationRestore\.csproj[\s\S]*SourceRoot\.RevisionId/);
+  assert.match(reference, /64-character SHA-256[\s\S]*microsoft\/aspire\/issues\/21735/);
+  assert.match(reference, /capability verification is\s+blocked/);
+  assert.match(reference, /do not retry unchanged commands or edit generated targets/);
+  assert.match(reference, /Never add blanket SourceLink suppression/);
+  assert.match(reference, /Quote the actual diagnostic rather than only telling the user to report it/);
+  assert.match(reference, /user-supplied offline result from a command you executed/);
+  assert.match(reference, /Explicitly state that toolchains remain unchanged/);
+});
+
+test("restore scope grading accepts equivalent shell paths without relaxing behavioral gates", () => {
+  const spec = parse(readFileSync(new URL("../skills/aspire-project-v2-migration/evals/eval.yaml", import.meta.url), "utf8"));
+  const stimulus = spec.stimuli.find(item => item.name === "project-v2-polyglot-restore-scope");
+  const grader = stimulus.graders.find(item => item.name === "polyglot-restore-scope-stays-bounded");
+  assert.equal(spec.scoring.threshold, 1);
+  assert.equal(grader.config.scoring, "binary");
+  assert.match(stimulus.rubric[0], /aspire restore --apphost apphost\.mts --non-interactive/);
+  assert.match(grader.config.prompt, /accept apphost\.mts, shell-appropriate/);
+  for (const path of [".\\apphost.mts", "./apphost.mts"]) {
+    assert.ok(stimulus.rubric[0].includes(path));
+    assert.ok(grader.config.prompt.includes(path));
+  }
+  assert.match(grader.config.prompt, /shell-appropriate/);
+  assert.match(grader.config.prompt, /equivalent paths to the same selected AppHost/);
+  assert.match(grader.config.prompt, /once-approved restore/);
+  assert.match(grader.config.prompt, /both conditional outcomes/);
+  assert.match(grader.config.prompt, /report the actual failure and stop without retrying/);
+  assert.match(grader.config.prompt, /read-only inspection of the resolved integration graph and generated API/);
+  assert.match(grader.config.prompt, /separately approved disposable probe, not an in-place package addition/);
+  assert.match(grader.config.prompt, /migration edits and runtime\/publish also require separate approval/);
+  assert.match(stimulus.rubric[1], /separately approved disposable probing, not an in-place package addition/);
+  assert.match(stimulus.prompt, /do not execute it here/);
+});
+
+test("paired restore plans require inspection only with explicit permission", () => {
+  const spec = parse(readFileSync(new URL("../skills/aspire-project-v2-migration/evals/eval.yaml", import.meta.url), "utf8"));
+  const inspection = spec.stimuli.find(item => item.name === "project-v2-polyglot-restore-scope");
+  const restoreOnly = spec.stimuli.find(item => item.name === "project-v2-polyglot-restore-only");
+  assert.ok(inspection);
+  assert.ok(restoreOnly);
+  assert.equal(spec.scoring.threshold, 1);
+  assert.deepEqual(inspection.environment, restoreOnly.environment);
+  assert.match(inspection.prompt, /plus read-only capability inspection of\s+its resolved integration graph and generated API if that restore succeeds/);
+  assert.match(inspection.prompt, /both conditional outcomes and the capability handback/);
+  assert.match(restoreOnly.prompt, /expressly forbid post-restore\s+capability inspection/);
+  assert.match(restoreOnly.prompt, /even if restore succeeds, stop before inspecting/);
+  assert.match(restoreOnly.prompt, /Leave that inspection\s+pending until I separately approve it/);
+  assert.match(restoreOnly.prompt, /not generated bindings or resolved metadata/);
+  for (const stimulus of [inspection, restoreOnly]) {
+    assert.equal(stimulus.tags.priority, "p0");
+    assert.ok(stimulus.rubric.every(criterion => typeof criterion === "string" && criterion.length > 0));
+    assert.ok(stimulus.graders.some(grader => grader.type === "diff-empty"));
+    assert.ok(stimulus.graders.some(grader => grader.type === "tool-calls"));
+    const grader = stimulus.graders.find(item => item.type === "prompt");
+    assert.equal(grader.config.scoring, "binary");
+    assert.match(stimulus.rubric[0], /aspire restore --apphost apphost\.mts --non-interactive/);
+    assert.match(grader.config.prompt, /accept apphost\.mts, shell-appropriate/);
+    for (const path of [".\\apphost.mts", "./apphost.mts"]) {
+      assert.ok(stimulus.rubric[0].includes(path));
+      assert.ok(grader.config.prompt.includes(path));
+    }
+    assert.match(grader.config.prompt, /not an executed restore or inspection/);
+  }
+  const successGrader = inspection.graders.find(item => item.type === "prompt");
+  assert.match(successGrader.config.prompt, /Stopping before that authorized inspection on success is incomplete/);
+  assert.match(successGrader.config.prompt, /report capability evidence\/status/);
+  const stopGrader = restoreOnly.graders.find(item => item.type === "prompt");
+  assert.match(stopGrader.config.prompt, /either success or failure/);
+  assert.match(stopGrader.config.prompt, /leave capability inspection pending for separate approval/);
+  assert.match(stopGrader.config.prompt, /must not plan or perform resolved integration graph or generated API inspection/);
+});
+
+test("bootstrap evals guard every approval phase against edits and command execution", () => {
+  const spec = parse(readFileSync(new URL("../skills/aspire-project-v2-migration/evals/eval.yaml", import.meta.url), "utf8"));
+  const phases = ["fresh", "restore-scope", "restore-only", "missing-integration", "resume", "failure"];
+  const stimuli = spec.stimuli.filter(stimulus => stimulus.tags?.area === "capability-bootstrap");
+  const byPhase = Object.fromEntries(stimuli.map(stimulus => [stimulus.tags.phase, stimulus]));
+  assert.deepEqual(stimuli.map(stimulus => stimulus.tags.phase), phases);
+  for (const stimulus of stimuli) {
+    assert.equal(stimulus.tags.priority, "p0");
+    assert.ok(stimulus.graders.some(grader => grader.type === "diff-empty"));
+    assert.ok(stimulus.graders.some(grader => grader.type === "prompt" && grader.config.scoring === "binary"));
+    assert.ok(stimulus.rubric.length >= 2);
+    const guard = stimulus.graders.find(grader => grader.type === "tool-calls");
+    assert.ok(guard, `${stimulus.name} needs a trace guard, not just an empty diff`);
+    const disallowed = (name, args = {}) => guard.config.disallowed.some(entry =>
+      new RegExp(entry.name).test(name)
+      && Object.entries(entry.args ?? {}).every(([key, pattern]) =>
+        typeof args[key] === "string" && new RegExp(pattern).test(args[key])));
+    for (const name of ["bash", "powershell", "functions.powershell", "shell", "terminal", "run_command"]) {
+      assert.ok(disallowed(name), `${stimulus.name} must not execute ${name}`);
+    }
+    for (const command of [
+      "aspire restore --apphost .\\apphost.mts --non-interactive",
+      "aspire add Aspire.Hosting.Dotnet",
+      "aspire start --apphost .\\apphost.mts",
+      "aspire publish --apphost .\\apphost.mts",
+      "echo preparing\naspire restore"
+    ]) {
+      assert.ok(disallowed("custom_runner", { command }), `${stimulus.name} must reject ${command}`);
+    }
+    for (const name of ["skill", "view", "glob", "rg"]) {
+      assert.ok(!disallowed(name), `${stimulus.name} must permit ${name}`);
+    }
+  }
+  for (const phase of ["restore-scope", "restore-only"]) {
+    assert.match(byPhase[phase].prompt, /offline command-planning exercise/);
+  }
+  assert.match(byPhase["missing-integration"].prompt, /not approved adding integrations or making migration edits/);
+  assert.match(byPhase.resume.prompt, /not approved any application edits or runtime\/publish validation/);
+  assert.match(byPhase.failure.prompt, /exited 6/);
+  const config = JSON.parse(readFileSync(join(fixturesRoot, "runnable-csharp/Migration.TypeScriptAppHost/aspire.config.json"), "utf8"));
+  assert.equal(config.sdk.version, config.packages["Aspire.Hosting.AppHost"]);
+  assert.equal(config.packages["Aspire.Hosting.Dotnet"], undefined);
+  assert.ok(!existsSync(join(fixturesRoot, "runnable-csharp/Migration.TypeScriptAppHost/.aspire/modules")));
+  assert.ok(!byPhase.fresh.environment.files.some(file => file.src.endsWith("capability-evidence.json")));
 });
 
 test("gateway image decisions have read-only controls and a separately approved edit case", () => {

@@ -8,7 +8,8 @@ available, and the exact resource/file changes are approved.
 ### Generic metadata resource
 
 Resolve the real `IProjectMetadata.ProjectPath`, including any
-`AspireProjectMetadataTypeName` override.
+`AspireProjectMetadataTypeName` override. Report the override and its exact
+project-reference path in the assessment, not just the resulting resource path.
 
 ```csharp
 // Before
@@ -67,6 +68,34 @@ var api = builder.AddDotnetProject("api", "../Api/Api.csproj");
 ```
 
 Do not add an unbounded file-wide disable or suppress unrelated diagnostics.
+
+### Inline fluent registrations
+
+Preserve the original variable binding, including an unassigned builder call.
+Do not introduce a temporary resource variable or split the fluent statement
+just to narrow a pragma. Preserve any existing diagnostic scope and wrap the
+same resource statement with the new migration scope:
+
+```csharp
+// Before
+#pragma warning disable ASPIREPIPELINES003
+builder.AddProject<Projects.Api>("api", launchProfileName: null)
+    .PublishAsDockerFile(container => container
+        .WithDockerfile("..", "Api/Dockerfile.custom"));
+#pragma warning restore ASPIREPIPELINES003
+
+// After
+#pragma warning disable ASPIREDOTNETPROJECT001
+#pragma warning disable ASPIREPIPELINES003
+builder.AddDotnetProject("api", "../Api/Api.csproj",
+    options => options.ExcludeLaunchProfile = true)
+    .PublishAsDockerFile(container => container
+        .WithDockerfile("..", "Api/Dockerfile.custom"));
+#pragma warning restore ASPIREPIPELINES003
+#pragma warning restore ASPIREDOTNETPROJECT001
+```
+
+Keep the existing publishing callback, image settings, and ownership unchanged.
 
 ## TypeScript AppHosts
 

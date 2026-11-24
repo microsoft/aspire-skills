@@ -1,0 +1,21 @@
+{
+  "files": {
+    "integrations/Build.props": "50a3e0f065f032cc5e0dce65d2f6b1686e30e3d798ab24fbba0907662dd8500c",
+    "integrations/Example/Example.csproj": "1f03fca62b573bfcff943f2eab47b2be108c11ad7545426a7b431ce600d45271",
+    "integrations/Shared/Shared.csproj": "8d654c44b7bebb6b31a9f2f606927f45b5072193adc4eef8cce3f3cf3b278df3",
+    "legacy/.aspire/settings.json": "71c9f3e1fb996c7ce59f7bae5b7e727a4ce6d24eb7b2cc33d100de3ec89a2ee2",
+    "legacy/apphost.mts": "3d3fabe1f46cbf53901c2b87de8de4bc8e99f5d38f36f2a8c489414222398b10",
+    "original/aspire.config.json": "60d5ea2d5f642e72afb0cda214491c6889702d9ab730b22d8070de3f57a435b3",
+    "original/host/apphost.mts": "0580eed98bcc9c2befb0eaf42a4f4060eb7be57318734c454314a4ed324ba7ce",
+    "original/host/package-lock.json": "17e522195fb02c5d7afbb0fe071db68804c514703727cd53d2e6032a38ee246e",
+    "original/host/package.json": "d28f3412d9e72e3950deaba51ca1f8b0a38698f47f1affa7997f8f16c5de8481",
+    "original/host/postinstall.mjs": "f8221d3e1224aed503137cacd3162ddb8470801380f912cdb045fd8e51938710",
+    "other/apphost.mts": "8bc5c3d0f20cdf7b2532b330ae3ddfd0e8c06705753b8750f15881368e2a58c4"
+  },
+  "config": {
+    "sdk": { "version": "13.6.0-dev" },
+    "channel": "dev",
+    "packages": { "Aspire.Hosting.AppHost": "13.6.0-dev", "Example.Hosting": "../integrations/Example/Example.csproj" }
+  },
+  "mockSha": "82a37e3c8fb1468fc6661c608febcd3e77c4cea2bbc48d2b0538ba75c88b5286"
+}
