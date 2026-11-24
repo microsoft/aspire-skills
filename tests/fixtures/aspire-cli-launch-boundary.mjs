@@ -36,6 +36,10 @@ async function load(url, {
     const entries = new Map(files.map(([path, kind]) => [path.toLowerCase(), kind]));
     const spawns = [];
     let registration;
+    const fileEntry = (path) => {
+        const absolute = platform === "win32" ? isFullyQualified(path) : path.startsWith("/");
+        return absolute ? entries.get(path.toLowerCase()) : "file";
+    };
     const context = createContext({
         Buffer, URL,
         setTimeout: clock?.setTimeout ?? setTimeout,
@@ -51,7 +55,8 @@ async function load(url, {
                 child.stdout = new PassThrough();
                 child.stderr = new PassThrough();
                 child.killed = false;
-                child.kill = () => { child.killed = true; };
+                child.signals = [];
+                child.kill = (signal) => { child.killed = true; child.signals.push(signal); };
                 child.unref = () => {};
                 onSpawn?.(child);
                 if (closeOnSpawn) {
@@ -69,10 +74,15 @@ async function load(url, {
             async stat(path) {
                 if (lookup) await lookup(path);
                 // A relative lookup resolves against the working directory, so it always finds a binary.
-                const entry = isFullyQualified(path) ? entries.get(path.toLowerCase()) : "file";
+                const entry = fileEntry(path);
                 if (entry instanceof Error) throw entry;
                 if (!entry) throw Object.assign(new Error(`File not found: ${path}`), { code: "ENOENT" });
                 return { isFile: () => entry === "file" };
+            },
+            async access(path) {
+                const entry = fileEntry(path);
+                if (entry instanceof Error) throw entry;
+                if (entry !== "file") throw Object.assign(new Error(`Cannot execute: ${path}`), { code: "EACCES" });
             },
         },
         "@github/copilot-sdk/extension": {
@@ -232,6 +242,20 @@ for (const provider of providers) {
     }
 }
 
+test("AppHosts resolves Unix stream executables using PATH and the child working directory", async () => {
+    const { module } = await load(appHosts, {
+        platform: "linux",
+        files: file("/opt/one/aspire", "/opt/two/aspire", "/work/one/bin/aspire"),
+    });
+    const sharing = (cwd) => ({ cwd, forSharing: true });
+    assert.equal(await module.resolveCliExecutable("aspire", { PATH: "/opt/one" }, sharing("/work/one")), "/opt/one/aspire");
+    assert.equal(await module.resolveCliExecutable("aspire", { PATH: "/opt/one" }, sharing("/work/two")), "/opt/one/aspire");
+    assert.equal(await module.resolveCliExecutable("aspire", { PATH: "/opt/two" }, sharing("/work/one")), "/opt/two/aspire");
+    assert.equal(await module.resolveCliExecutable("aspire", { PATH: "bin" }, sharing("/work/one")), "/work/one/bin/aspire");
+    assert.equal(await module.resolveCliExecutable("./bin/aspire", {}, sharing("/work/one")), "/work/one/bin/aspire");
+    await assert.rejects(module.resolveCliExecutable("aspire", { PATH: "/missing" }, sharing("/work/one")), /Could not find/);
+});
+
 function deferred() {
     let resolve;
     let reject;
@@ -313,9 +337,10 @@ for (const provider of providers) {
             assert.equal(result.ok, false);
             assert.match(result.error, /timed out/);
             assert.equal(child.killed, true);
-            assert.equal(clock.timers.size, 0);
+            assert.equal(clock.timers.size, provider.name === "AppHosts" ? 1 : 0);
             child.stdout.end(JSON.stringify({ checks: [] }));
             child.emit("close", 0);
+            assert.equal(clock.timers.size, 0, "closing the child cancels the escalation timer");
             assert.equal(await pending, result);
         });
     });
@@ -365,6 +390,22 @@ for (const provider of providers) {
         });
     });
 }
+
+test("AppHosts escalates termination when a timed-out child does not close", async () => {
+    const clock = createClock();
+    await providers[0].withRunner({ clock, closeOnSpawn: false }, async ({ run, spawns }) => {
+        const pending = run();
+        await nextTurn();
+        const [{ child }] = spawns;
+        clock.advance(providers[0].timeoutMs);
+        assert.equal((await pending).ok, false);
+        assert.deepEqual(child.signals, [undefined]);
+        clock.advance(1_000);
+        assert.deepEqual(child.signals, [undefined, "SIGKILL"]);
+        child.emit("close", null);
+        assert.equal(clock.timers.size, 0);
+    });
+});
 
 test("AppHosts spawns the resolved executable with the caller's cwd and child environment, and no shell", async () => {
     const executable = "C:\\Child Tools\\aspire.exe";

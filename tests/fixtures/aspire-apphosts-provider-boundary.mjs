@@ -32,6 +32,19 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
 const backgroundLogDirectory = (root) => join(root, process.platform === "win32"
     ? "aspire-apphosts-logs"
     : `aspire-apphosts-logs-${process.getuid()}`);
+// Each loaded provider registers shutdown handlers; keep them off the test runner's process.
+const ignoredProcessEvents = new Set(["SIGTERM", "SIGINT", "disconnect"]);
+const isolatedProcess = new Proxy(process, {
+    get(target, key) {
+        if (key === "once" || key === "on") {
+            return (event, listener) => {
+                if (!ignoredProcessEvents.has(event)) target[key](event, listener);
+                return isolatedProcess;
+            };
+        }
+        return Reflect.get(target, key);
+    },
+});
 const waitUntil = async (predicate, timeoutMs = 2000) => {
     const deadline = Date.now() + timeoutMs;
     while (!(await predicate())) {
@@ -226,6 +239,34 @@ test("switching a workspace panel to an explicit AppHost releases its workspace 
     assert.equal(lsCount(), 1);
 });
 
+test("shared ps startup seeds once and accepts any status casing", async (t) => {
+    let watcher;
+    const h = await harness(t, {
+        cliOverride: (args) => args[0] === "ps"
+            ? ok([{ appHostPath: paths[0], appHostPid: 10, status: "Running" }]) : undefined,
+        stream: () => ({ kill() {} }),
+        psStream: (_args, options) => { watcher = options; return { kill() {} }; },
+    });
+    const opened = await h.open();
+    await waitUntil(async () => (await h.request(opened, "/api/state")).state.status === "ready");
+    // Negative check: no observable event marks "no duplicate startup work", so allow a short window for one.
+    await new Promise((done) => setTimeout(done, 100));
+    const count = (command) => h.calls.filter(({ args }) => args[0] === command).length;
+    assert.equal(count("ps"), 1, "startup must not run a second ps seed");
+    assert.equal(count("describe"), 1, "startup must not duplicate describe");
+    assert.equal((await h.request(opened, "/api/state")).state.summary.running, 1);
+
+    watcher.onLine(JSON.stringify({ appHostPath: paths[1], appHostPid: 20, status: "RUNNING" }));
+    await waitUntil(async () => (await h.request(opened, "/api/state")).state.summary.running === 2);
+    watcher.onLine(JSON.stringify({ appHostPath: paths[1], appHostPid: 21 }));
+    // A later running host proves the status-less update above was published without stopping paths[1].
+    const sentinel = resolve("tests", "fixtures", "checkouts-three", "Demo.AppHost", "Demo.AppHost.csproj");
+    watcher.onLine(JSON.stringify({ appHostPath: sentinel, appHostPid: 30, status: "running" }));
+    await waitUntil(async () => (await h.request(opened, "/api/state")).state.summary.running === 3);
+    watcher.onLine(JSON.stringify({ appHostPath: paths[1], appHostPid: 21, status: "Stopped" }));
+    await waitUntil(async () => (await h.request(opened, "/api/state")).state.summary.running === 2);
+});
+
 test("malformed ls output is reported and retried on the next poll", async (t) => {
     let calls = 0;
     const h = await harness(t, {
@@ -253,6 +294,7 @@ test("AppHosts rejects network targets before stat, readdir, or target-file read
     await module.link(async (specifier) => {
         const exports = specifier === "node:fs/promises"
             ? {
+                access: async () => { filesystemCalls.push("access"); throw new Error("unexpected access"); },
                 open: async () => { filesystemCalls.push("open"); throw new Error("unexpected open"); },
                 stat: async () => { filesystemCalls.push("stat"); throw new Error("unexpected stat"); },
                 readdir: async () => { filesystemCalls.push("readdir"); throw new Error("unexpected readdir"); },
@@ -297,7 +339,8 @@ function describe(inputs = baseInputs, state = "Running") {
 }
 
 async function harness(t, {
-    listenGate, failListen = false, cliOverride, stream, tmpDirectory,
+    listenGate, failListen = false, cliOverride, stream, psStream, psReadyGate, tmpDirectory,
+    clock,
     workingDirectory = process.cwd(),
     browserCanvases = [{ canvasId: "browser", extensionId: "host:builtins" }],
     browserListAvailable = true, browserListError, browserOpenError, systemBrowserError,
@@ -357,16 +400,20 @@ async function harness(t, {
         return server;
     };
     const idleTimers = new Set();
+    // Long timers never fire in real time during a test; hold them so tests can inspect and fire them.
+    const heldTimers = new Set();
+    const idleDelay = Number(source.match(/const VIEWER_IDLE_GRACE_MS = ([\d_]+);/)[1].replaceAll("_", ""));
     const context = createContext({
-        URL, Buffer, process, console,
+        URL, Buffer, process: isolatedProcess, console,
+        Date: clock ? class extends Date { static now() { return clock.now; } } : Date,
         setTimeout(callback, delay, ...args) {
-            if (delay !== 10_000) return setTimeout(callback, delay, ...args);
-            const timer = { callback, unref() {} };
-            idleTimers.add(timer);
+            if (delay < 5_000) return setTimeout(callback, delay, ...args);
+            const timer = { callback, delay, unref() {} };
+            (delay === idleDelay ? idleTimers : heldTimers).add(timer);
             return timer;
         },
         clearTimeout(timer) {
-            if (!idleTimers.delete(timer)) clearTimeout(timer);
+            if (!idleTimers.delete(timer) && !heldTimers.delete(timer)) clearTimeout(timer);
         },
         setInterval(callback) {
             const timer = { callback, unref() {} };
@@ -408,7 +455,24 @@ async function harness(t, {
     await module.link(async (specifier) => {
         const exports = specifier === "@github/copilot-sdk/extension" ? sdk
             : specifier === "./lib/app-model.mjs" ? { ...model, createAspireCliRunner: () => (stream ? { run, stream } : { run }) }
+                : specifier === "./lib/shared-stream.mjs" ? { createSharedCliRunner: (runner) => ({
+                    ...runner,
+                    ...(stream ? { stream: (args, options) => {
+                        if (args[0] !== "ps") return stream(args, options);
+                        if (psStream) {
+                            const handle = psStream(args, options);
+                            if (psReadyGate) psReadyGate.promise.then(() => options.onReady?.());
+                            else queueMicrotask(() => options.onReady?.());
+                            return handle;
+                        }
+                        queueMicrotask(() => options.onExit({
+                            code: 1, stderrTail: "Unrecognized command or argument '--follow'.",
+                        }));
+                        return { kill() {} };
+                    } } : {}),
+                }) }
                 : specifier === "./lib/workspace-discovery.mjs" ? (() => {
+                    // Tests drive AppHost file changes through controls.changeWorkspaceFiles().
                     const watchers = new Set();
                     controls.changeWorkspaceFiles = (filename = "apphost.ts") => {
                         for (const listener of [...watchers]) listener("change", filename);
@@ -438,12 +502,20 @@ async function harness(t, {
     await module.evaluate();
     const opened = new Set();
     const h = {
-        controls, calls, servers, intervals, idleTimers, attachments, canvasOpens, systemBrowserUrls, logs,
+        controls, calls, servers, intervals, idleTimers, heldTimers, attachments, canvasOpens, systemBrowserUrls, logs,
         fireIdleTimers() {
             const due = [...idleTimers];
             idleTimers.clear();
             for (const timer of due) timer.callback();
         },
+        fireHeldTimer(delay) {
+            const timer = [...heldTimers, ...idleTimers].find((candidate) => candidate.delay === delay);
+            assert.ok(timer, `expected a pending ${delay}ms timer`);
+            heldTimers.delete(timer);
+            idleTimers.delete(timer);
+            timer.callback();
+        },
+        // Runs one poll tick and waits for every resulting refresh to finish.
         tick: () => Promise.all([...intervals].map((timer) => timer.callback())),
         async open(instanceId = "test", input = { viewMode: "global" }) {
             opened.add(instanceId);
@@ -1314,6 +1386,247 @@ test("initial describe stream reconciliation removes resources missing from a fr
     assert.equal(allNodes(state.roots).filter((node) => node.resourceName === "db").length, paths.length - 1);
 });
 
+test("ps follow replaces polling snapshots, applies start/stop events, and is shared by panels", async (t) => {
+    const watchers = [];
+    let killed = 0;
+    const h = await harness(t, {
+        cliOverride: (args) => args[0] === "ps" ? ok(paths.map((appHostPath, index) => ({
+            appHostPath, appHostPid: index + 10, status: "running",
+        }))) : undefined,
+        stream: () => ({ kill() {} }),
+        psStream: (args, options) => {
+            watchers.push({ args, ...options });
+            return { kill() { killed++; } };
+        },
+    });
+    const first = await h.open("first");
+    await waitUntil(async () => (await h.request(first, "/api/state")).state.status === "ready");
+    const second = await h.open("second");
+    await waitUntil(async () => (await h.request(second, "/api/state")).state.status === "ready");
+    assert.equal(watchers.length, 1);
+    assert.ok(watchers[0].args.includes("--follow"));
+    const psCalls = () => h.calls.filter(({ args }) => args[0] === "ps").length;
+    const beforePoll = psCalls();
+    for (const interval of h.intervals) interval.callback();
+    await nextTurn();
+    assert.equal(psCalls(), beforePoll, "stable polls consume the live running-host snapshot");
+
+    watchers[0].onLine(JSON.stringify({ appHostPath: paths[0], appHostPid: 30, status: "running" }));
+    await delayForStream();
+    assert.equal((await h.request(first, "/api/state")).state.summary.running, 2, "a new PID replaces the previous run");
+    watchers[0].onLine(JSON.stringify({ appHostPath: paths[0], appHostPid: 30, status: "stopped" }));
+    await waitUntil(async () => (await h.request(first, "/api/state")).state.summary.running === 1);
+    await waitUntil(async () => (await h.request(second, "/api/state")).state.summary.running === 1);
+    watchers[0].onLine(JSON.stringify({ appHostPath: paths[0], appHostPid: 40, status: "running" }));
+    await waitUntil(async () => (await h.request(first, "/api/state")).state.summary.running === 2);
+    watchers[0].onLine(JSON.stringify({ appHostPath: paths[0], appHostPid: 10, status: "stopped" }));
+    await delayForStream();
+    assert.equal((await h.request(first, "/api/state")).state.summary.running, 2, "an old PID cannot remove a new run");
+
+    await h.action("refresh_model", {}, "first");
+    assert.ok(psCalls() > beforePoll, "explicit refresh still requests an authoritative snapshot");
+    await h.close("first");
+    assert.equal(killed, 0, "another panel still needs discovery");
+    await h.close("second");
+    assert.equal(killed, 1, "the final panel releases discovery");
+});
+
+const delayForStream = () => new Promise((done) => setTimeout(done, 250));
+
+test("ps follow replays events received during initial snapshot discovery", async (t) => {
+    const held = deferred();
+    const started = deferred();
+    let watcher;
+    const h = await harness(t, {
+        cliOverride: async (args) => {
+            if (args[0] !== "ps") return undefined;
+            started.resolve();
+            await held.promise;
+            return ok([{ appHostPath: paths[0], appHostPid: 10, status: "running" }]);
+        },
+        stream: () => ({ kill() {} }),
+        psStream: (args, options) => { watcher = options; return { kill() {} }; },
+    });
+    const opened = await h.open();
+    await started.promise;
+    await waitUntil(() => watcher);
+    watcher.onLine(JSON.stringify({ appHostPath: paths[0], appHostPid: 10, status: "stopped" }));
+    watcher.onLine(JSON.stringify({ appHostPath: paths[1], appHostPid: 20, status: "running" }));
+    held.resolve();
+    await waitUntil(async () => (await h.request(opened, "/api/state")).state.status === "ready");
+    const state = (await h.request(opened, "/api/state")).state;
+    assert.equal(state.summary.running, 1);
+    assert.match(state.roots[0].identityHint, /checkouts-two/);
+});
+
+test("periodic reconciliation removes a host missed before the follow watcher attached", async (t) => {
+    const clock = { now: Date.now() };
+    const held = deferred();
+    let running = true;
+    let hold = false;
+    let psCalls = 0;
+    const h = await harness(t, {
+        clock,
+        cliOverride: async (args) => {
+            if (args[0] !== "ps") return undefined;
+            psCalls++;
+            if (hold) await held.promise;
+            return ok(running ? [{ appHostPath: paths[0], appHostPid: 10, status: "running" }] : []);
+        },
+        stream: () => ({ kill() {} }),
+        psStream: () => ({ kill() {} }),
+    });
+    const first = await h.open("first");
+    const second = await h.open("second");
+    await waitUntil(async () => (await h.request(first, "/api/state")).state.summary.running === 1
+        && (await h.request(second, "/api/state")).state.summary.running === 1);
+    const before = psCalls;
+    running = false;
+    hold = true;
+    clock.now += 30_000;
+    for (const interval of h.intervals) interval.callback();
+    await waitUntil(() => psCalls === before + 1);
+    held.resolve();
+    await waitUntil(async () => (await h.request(first, "/api/state")).state.summary.running === 0
+        && (await h.request(second, "/api/state")).state.summary.running === 0);
+    assert.equal(psCalls, before + 1, "panels share the reconciliation snapshot");
+});
+
+test("a surviving provider reconnects and receives live ps changes after its stream owner exits", async (t) => {
+    const watchers = [];
+    let psCalls = 0;
+    const h = await harness(t, {
+        cliOverride: (args) => {
+            if (args[0] !== "ps") return undefined;
+            psCalls++;
+            return ok([{ appHostPath: paths[0], appHostPid: 10, status: "running" }]);
+        },
+        stream: () => ({ kill() {} }),
+        psStream: (_args, options) => {
+            watchers.push(options);
+            return { kill() {} };
+        },
+    });
+    const opened = await h.open();
+    const events = await sse(h, opened);
+    t.after(() => events.close());
+    await waitUntil(async () => watchers.length === 1
+        && (await h.request(opened, "/api/state")).state.summary.running === 1);
+    const before = psCalls;
+    watchers[0].onExit({ code: null, error: "The shared Aspire stream owner disconnected." });
+    await waitUntil(() => [...h.idleTimers, ...h.heldTimers].some((timer) => timer.delay === 10_000));
+    h.fireHeldTimer(10_000);
+    await waitUntil(async () => watchers.length === 2 && psCalls > before
+        && (await h.request(opened, "/api/state")).state.summary.running === 1);
+    watchers[1].onLine(JSON.stringify({ appHostPath: paths[1], appHostPid: 20, status: "running" }));
+    await waitUntil(async () => (await h.request(opened, "/api/state")).state.summary.running === 2);
+});
+
+test("closing before shared ps attachment does not launch a new discovery command", async (t) => {
+    const ready = deferred();
+    let watcher;
+    let kills = 0;
+    const h = await harness(t, {
+        stream: () => ({ kill() {} }),
+        psReadyGate: ready,
+        psStream: (args, options) => {
+            watcher = options;
+            return { kill() { kills++; } };
+        },
+    });
+    await h.open();
+    await waitUntil(() => watcher);
+    assert.equal(h.calls.length, 0, "the seed waits until the shared subscription is attached");
+    await h.close();
+    ready.resolve();
+    await nextTurn();
+    assert.equal(kills, 1);
+    assert.equal(h.calls.length, 0, "closed views must not start a delayed ps or describe");
+});
+
+test("unsupported ps follow falls back once, and idle views release the watcher", async (t) => {
+    let watcher;
+    let starts = 0;
+    let kills = 0;
+    const h = await harness(t, {
+        stream: () => ({ kill() {} }),
+        psStream: (args, options) => {
+            starts++;
+            watcher = options;
+            return { kill() { kills++; } };
+        },
+    });
+    const opened = await h.open();
+    await waitUntil(() => watcher);
+    await waitUntil(async () => (await h.request(opened, "/api/state")).state.status === "ready");
+    watcher.onExit({ code: 1, stderrTail: "Unrecognized command or argument '--follow'." });
+    const callsBefore = h.calls.filter(({ args }) => args[0] === "ps").length;
+    for (const interval of h.intervals) interval.callback();
+    await waitUntil(() => h.calls.filter(({ args }) => args[0] === "ps").length > callsBefore);
+    assert.equal(starts, 1);
+    assert.ok(h.logs.some((message) => /ps --follow is unavailable/.test(message)));
+    assert.equal(kills, 0, "an exited watcher is not killed again");
+
+    const active = await harness(t, {
+        stream: () => ({ kill() {} }),
+        psStream: () => ({ kill() { kills++; } }),
+    });
+    const activeOpen = await active.open();
+    await waitUntil(async () => (await active.request(activeOpen, "/api/state")).state.status === "ready");
+    active.fireIdleTimers();
+    assert.equal(kills, 1, "an idle canvas releases its running-host subscription");
+});
+
+test("ps follow retries without optional flags an older CLI rejects", async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "aspire-logs-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const watchers = [];
+    const h = await harness(t, {
+        tmpDirectory: root,
+        stream: () => ({ kill() {} }),
+        psStream: (args, options) => { watchers.push({ args, ...options }); return { kill() {} }; },
+    });
+    await h.open();
+    await waitUntil(() => watchers.length === 1);
+    assert.ok(watchers[0].args.includes("--nologo") && watchers[0].args.includes("--log-file"));
+    watchers[0].onExit({ code: 1, stderrTail: "Unrecognized command or argument '--nologo'." });
+    await waitUntil(() => watchers.length === 2);
+    assert.ok(!watchers[1].args.includes("--nologo"));
+    assert.ok(watchers[1].args.includes("--log-file"), "only the rejected flag is dropped");
+    watchers[1].onExit({ code: 1, stderrTail: "Unrecognized command or argument '--log-file'." });
+    await waitUntil(() => watchers.length === 3);
+    assert.ok(!watchers[2].args.includes("--log-file"));
+    assert.equal(h.heldTimers.size, 0, "flag fallbacks retry immediately instead of backing off");
+});
+
+test("ps follow restarts back off exponentially, cap at one minute, and reset after a healthy run", async (t) => {
+    const clock = { now: Date.now() };
+    const watchers = [];
+    const h = await harness(t, {
+        clock,
+        stream: () => ({ kill() {} }),
+        psStream: (_args, options) => { watchers.push(options); return { kill() {} }; },
+    });
+    const opened = await h.open();
+    const events = await sse(h, opened);
+    t.after(() => events.close());
+    await waitUntil(() => watchers.length === 1 && h.idleTimers.size === 0);
+    for (const expected of [10_000, 20_000, 40_000, 60_000, 60_000]) {
+        const count = watchers.length;
+        watchers.at(-1).onExit({ code: 1, error: "synthetic failure" });
+        h.fireHeldTimer(expected);
+        await waitUntil(() => watchers.length === count + 1);
+    }
+    assert.ok(h.logs.some((message) => /running-host stream disconnected \(synthetic failure\)/.test(message)));
+
+    watchers.at(-1).onLine(JSON.stringify({ appHostPath: paths[0], status: "running" }));
+    clock.now += 5_000;
+    const count = watchers.length;
+    watchers.at(-1).onExit({ code: 1, error: "synthetic failure" });
+    h.fireHeldTimer(5_000);
+    await waitUntil(() => watchers.length === count + 1);
+});
+
 test("an idle workspace panel releases its workspace watcher until a view reconnects", async (t) => {
     const h = await harness(t, {
         cliOverride: (args) => args[0] === "ls" ? ok([{ path: paths[0], status: "buildable" }]) : undefined,
@@ -1357,6 +1670,34 @@ test("explicit refresh removes resources that a live describe stream never repor
         return allNodes(state.roots).some((node) => node.resourceName === "api" && node.resource?.state === "Starting");
     });
     assert.equal(dbCount(state), paths.length - 1, "later stream upserts must not resurrect removed resources");
+});
+
+test("explicit refresh publishes its authoritative describe snapshot to the shared stream", async (t) => {
+    const streams = [];
+    let shrunkPath = null;
+    const h = await harness(t, {
+        cliOverride: (args) => {
+            if (args[0] === "describe" && args[args.indexOf("--apphost") + 1] === shrunkPath) {
+                return ok({ resources: [describe().resources[0]] });
+            }
+            return undefined;
+        },
+        stream: (args, options) => {
+            const stream = { args, ...options, reconciled: [] };
+            streams.push(stream);
+            return { kill() {}, mark: () => 7, reconcile: (since, resources) => stream.reconciled.push({ since, resources }) };
+        },
+    });
+    const open = await h.open();
+    await waitUntil(() => streams.length > 0);
+    const [stream] = streams;
+    stream.onLine(JSON.stringify(describe()));
+    shrunkPath = stream.args[stream.args.indexOf("--apphost") + 1];
+    await h.request(open, "/api/refresh", {});
+    const last = stream.reconciled.at(-1);
+    assert.equal(last?.since, 7, "the mark is taken before the snapshot is requested");
+    assert.deepEqual(last.resources.map(({ name }) => name), [describe().resources[0].name],
+        "other subscribers and later replays must drop resources the snapshot no longer reports");
 });
 
 test("explicit refresh keeps stream updates that arrive while other hosts reconcile", async (t) => {

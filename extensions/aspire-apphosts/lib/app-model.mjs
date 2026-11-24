@@ -1,14 +1,41 @@
 import { spawn } from "node:child_process";
 import { createHash, createHmac, randomBytes } from "node:crypto";
-import { open, readFile, readdir, stat } from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
+import { access, open, readFile, readdir, stat } from "node:fs/promises";
 import { StringDecoder } from "node:string_decoder";
 import { homedir } from "node:os";
-import { basename, dirname, extname, isAbsolute, join, normalize, relative, resolve, sep, win32 } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, normalize, posix, relative, resolve, sep, win32 } from "node:path";
 import { performance } from "node:perf_hooks";
 
 const SINGLE_FILE_APPHOST_NAMES = ["apphost.cs", "apphost.ts", "apphost.mts", "apphost.go"];
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
+const managedChildren = new Set();
+let childCleanupRegistered = false;
+
+function trackChild(child) {
+    managedChildren.add(child);
+    child.once("close", () => managedChildren.delete(child));
+    if (childCleanupRegistered || !process.once) return;
+    childCleanupRegistered = true;
+    process.once("exit", () => {
+        for (const active of managedChildren) {
+            try { active.kill("SIGKILL"); } catch { /* already exited */ }
+        }
+    });
+}
+
+function stopChild(child) {
+    if (!child || !managedChildren.has(child)) return;
+    try { child.kill(); } catch { /* already exited */ }
+    const timer = setTimeout(() => {
+        if (managedChildren.has(child)) {
+            try { child.kill("SIGKILL"); } catch { /* already exited */ }
+        }
+    }, 1_000);
+    timer.unref?.();
+    child.once("close", () => clearTimeout(timer));
+}
 const ALLOWED_STATE_STYLES = new Set(["success", "warning", "error", "info"]);
 const ALLOWED_RELATIONSHIP_TYPES = new Set(["Reference", "WaitFor", "Parent"]);
 const ALLOWED_URL_PROTOCOLS = new Set(["http:", "https:"]);
@@ -177,6 +204,15 @@ function normalizePathKey(value) {
 export function pathKey(value) {
     const normalized = normalize(resolve(value));
     return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
+// Classifies one `aspire ps` record as normalizePsPayload does: a record needs an AppHost path,
+// and a missing or unrecognized status means running.
+export function psRecordStatus(record) {
+    if (!record || typeof record !== "object" || typeof record.appHostPath !== "string" || !record.appHostPath.trim()) {
+        return null;
+    }
+    return typeof record.status === "string" && record.status.trim().toLowerCase() === "stopped" ? "stopped" : "running";
 }
 
 export function stableId(value) {
@@ -1907,8 +1943,27 @@ export async function discoverConfiguredAppHosts(workingDirectory) {
 }
 
 // Doctor keeps the same policy in its helpers because extensions install independently.
-export async function resolveCliExecutable(command, env = process.env) {
+export async function resolveCliExecutable(command, env = process.env, { cwd, forSharing = false } = {}) {
     if (process.platform !== "win32") {
+        if (forSharing) {
+            cwd ??= process.cwd();
+            if (command.includes("/")) return posix.resolve(cwd, command);
+            let denied = false;
+            for (const directory of String(env.PATH ?? "/usr/bin:/bin").split(":")) {
+                const candidate = posix.resolve(cwd, directory || ".", command);
+                try {
+                    if (!(await stat(candidate)).isFile()) continue;
+                    await access(candidate, fsConstants.X_OK);
+                    return candidate;
+                } catch (error) {
+                    if (error.code === "EACCES") denied = true;
+                    else if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error;
+                }
+            }
+            throw new Error(denied
+                ? `Permission denied resolving Aspire CLI '${command}' on PATH.`
+                : `Could not find Aspire CLI '${command}' on PATH.`);
+        }
         return command;
     }
 
@@ -2065,11 +2120,7 @@ export async function runProcess(command, args, {
             }
             const next = current + chunk.toString();
             if (Buffer.byteLength(next, "utf8") > maxOutputBytes) {
-                try {
-                    child?.kill();
-                } catch {
-                    // The process may already have exited.
-                }
+                stopChild(child);
                 finish({
                     ok: false,
                     code: null,
@@ -2084,11 +2135,7 @@ export async function runProcess(command, args, {
 
         const deadline = performance.now() + timeoutMs;
         const onTimeout = () => {
-            try {
-                child?.kill();
-            } catch {
-                // The process may already have exited.
-            }
+            stopChild(child);
             finish({
                 ok: false,
                 code: null,
@@ -2110,6 +2157,7 @@ export async function runProcess(command, args, {
             }
             try {
                 child = spawn(executable, args, { cwd, env, shell: false, windowsHide: true });
+                trackChild(child);
             } catch (error) {
                 finish({ ok: false, code: null, stdout, stderr, error: `Failed to launch Aspire CLI: ${error.message}` });
                 return;
@@ -2179,7 +2227,7 @@ export function streamProcess(command, args, {
     const rejectLine = () => {
         pending = "";
         rejectedLine = true;
-        try { child.kill(); } catch { /* already exited */ }
+        stopChild(child);
     };
     const exit = (result) => {
         if (exited) return;
@@ -2206,6 +2254,7 @@ export function streamProcess(command, args, {
         }
         try {
             child = spawn(executable, args, { cwd, env, shell: false, windowsHide: true });
+            trackChild(child);
         } catch (error) {
             exit({ code: null, error: redactText(`Failed to launch Aspire CLI: ${error.message}`, 8000) });
             return;
@@ -2251,22 +2300,27 @@ export function streamProcess(command, args, {
         kill() {
             if (killed) return;
             killed = true;
-            try { child?.kill(); } catch { /* already exited */ }
+            stopChild(child);
         },
     };
 }
 
+export function defaultAspireCliCommand() {
+    return process.env.ASPIRE_CLI?.trim() || (process.platform === "win32" ? "aspire.exe" : "aspire");
+}
+
 export function createAspireCliRunner({
-    command = process.env.ASPIRE_CLI?.trim() || (process.platform === "win32" ? "aspire.exe" : "aspire"),
+    command = defaultAspireCliCommand(),
     run = runProcess,
     stream = streamProcess,
 } = {}) {
     return {
+        command,
         async run(args, options = {}) {
             return run(command, args, options);
         },
-        stream(args, options = {}) {
-            return stream(command, args, options);
+        stream(args, { executable = command, ...options } = {}) {
+            return stream(executable, args, options);
         },
         async runJson(args, options = {}) {
             const result = await run(command, args, options);

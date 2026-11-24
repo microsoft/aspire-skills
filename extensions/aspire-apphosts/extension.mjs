@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { basename, dirname, extname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
 import { joinSession, createCanvas, CanvasError } from "@github/copilot-sdk/extension";
 import { openSystemBrowser } from "./lib/browser.mjs";
+import { createSharedCliRunner } from "./lib/shared-stream.mjs";
 import { createWorkspaceDiscoveryCache } from "./lib/workspace-discovery.mjs";
 import {
     AppHostOperationCoordinator,
@@ -39,12 +40,14 @@ import {
     optionalFlagIsUnsupported,
     parseLegacyPipelineSteps,
     pathKey,
+    psRecordStatus,
     projectDescribePayload,
     redactAbsolutePaths,
     redactKnownPaths,
     redactText,
     relativizeWorkspacePaths,
     resolveRequestedAppHostPath,
+    resolveCliExecutable,
     runWithOptionalFlagFallback,
     sanitizeCommandArgumentInputs,
     stableId,
@@ -84,7 +87,7 @@ const CONTENT_TYPES = {
 
 const instances = new Map();
 const pendingOpens = new Map();
-const cli = createAspireCliRunner();
+const cli = createSharedCliRunner(createAspireCliRunner(), { resolveExecutable: resolveCliExecutable });
 const workspaceDiscovery = createWorkspaceDiscoveryCache({ log: (message, level) => log(message, level) });
 const appHostOperations = new AppHostOperationCoordinator();
 const activeStreams = new Set();
@@ -101,6 +104,12 @@ function log(message, level = "info") {
     } catch {
         // Logging must never disrupt the provider.
     }
+}
+
+function streamExitReason(code, error) {
+    const message = typeof error === "string" ? error : error?.message;
+    if (message) return clampText(message, 300);
+    return code ?? "no exit code";
 }
 
 function clampText(value, max = 1000) {
@@ -251,7 +260,7 @@ function addSseClient(entry, req, res) {
 // Background polling and describe streams only run while a canvas view is connected.
 function startPolling(entry) {
     if (entry.timer || entry.closed) return;
-    entry.timer = setInterval(() => void requestRefresh(entry), POLL_INTERVAL_MS);
+    entry.timer = setInterval(() => requestRefresh(entry), POLL_INTERVAL_MS);
     entry.timer.unref?.();
 }
 
@@ -266,6 +275,7 @@ function scheduleIdlePause(entry) {
             entry.timer = null;
         }
         stopDescribeStreams(entry);
+        releasePsStream(entry);
         workspaceDiscovery.release(entry);
         log(`Aspire AppHosts canvas paused background work (instance '${entry.instanceId}').`);
     }, VIEWER_IDLE_GRACE_MS);
@@ -280,7 +290,8 @@ function resumeBackgroundWork(entry) {
     if (!entry.paused || entry.closed) return;
     entry.paused = false;
     startPolling(entry);
-    // A refresh still in flight from the paused period skipped the discovery watcher, so queue another.
+    // A refresh still in flight from the paused period skipped work that runs only while
+    // active (shared streams, discovery watchers), so queue another.
     if (entry.refreshPromise) entry.refreshQueued = true;
     else void requestRefresh(entry);
 }
@@ -589,6 +600,11 @@ function withLogFile(args, logFile) {
 async function discardBackgroundLogFile(logFile) {
     if (!logFile) return;
     await rm(logFile, { force: true }).catch(() => {});
+}
+
+// A shared stream owner can fail after its panel released it; that log is the only diagnostic.
+function settleReleasedStreamLog(logFile, afterRelease) {
+    return afterRelease ? keepBackgroundLogFile(logFile) : discardBackgroundLogFile(logFile);
 }
 
 async function keepBackgroundLogFile(logFile) {
@@ -940,6 +956,239 @@ function ensureStreamCleanup() {
     process.once("exit", () => {
         for (const handle of activeStreams) handle.kill();
     });
+    process.once("SIGTERM", () => process.exit(0));
+    process.once("SIGINT", () => process.exit(0));
+    process.once("disconnect", () => process.exit(0));
+}
+
+const psDiscovery = {
+    entries: new Set(),
+    seeds: new Set(),
+    waiting: new Set(),
+    snapshot: null,
+    snapshotAt: 0,
+    snapshotPromise: null,
+    handle: null,
+    starting: false,
+    run: null,
+    restartTimer: null,
+    publishTimer: null,
+    failures: 0,
+    disabled: false,
+    noLogo: true,
+    readyPromise: null,
+    resolveReady: null,
+};
+
+function mergePsRecord(snapshot, record) {
+    const status = psRecordStatus(record);
+    if (!status) return false;
+    const key = pathKey(record.appHostPath);
+    if (status === "stopped") {
+        return snapshot.get(key)?.appHostPid === record.appHostPid && snapshot.delete(key);
+    }
+    if (JSON.stringify(snapshot.get(key)) === JSON.stringify(record)) return false;
+    snapshot.set(key, record);
+    return true;
+}
+
+function refreshPsSubscribers(skip) {
+    for (const entry of psDiscovery.entries) {
+        if (!entry.closed && !entry.paused && !skip?.has(entry)) requestStreamRefresh(entry);
+    }
+}
+
+async function startPsStream() {
+    if (psDiscovery.handle || psDiscovery.starting || psDiscovery.restartTimer
+        || psDiscovery.disabled || !psDiscovery.entries.size || typeof cli.stream !== "function") return;
+    const run = {};
+    psDiscovery.run = run;
+    psDiscovery.starting = true;
+    psDiscovery.readyPromise = new Promise((resolveReady) => { psDiscovery.resolveReady = resolveReady; });
+    const logFile = await createBackgroundLogFile();
+    psDiscovery.starting = false;
+    if (psDiscovery.run !== run || !psDiscovery.entries.size) {
+        await discardBackgroundLogFile(logFile);
+        if (psDiscovery.entries.size) void startPsStream();
+        return;
+    }
+    const args = ["ps", "--follow", "--format", "Json", "--non-interactive"];
+    if (psDiscovery.noLogo) args.push("--nologo");
+    const startedAt = Date.now();
+    let gotData = false;
+    const handle = cli.stream(withLogFile(args, logFile), {
+        cwd: sessionWorkingDirectory || process.cwd(),
+        onReady() {
+            if (psDiscovery.run === run) psDiscovery.resolveReady?.(true);
+        },
+        onLine(line) {
+            if (psDiscovery.run !== run) return;
+            let record;
+            try { record = JSON.parse(line); } catch { return; }
+            if (!psRecordStatus(record)) return;
+            gotData = true;
+            for (const seed of psDiscovery.seeds) seed.push(record);
+            if (!psDiscovery.snapshot || !mergePsRecord(psDiscovery.snapshot, record)) return;
+            if (psDiscovery.publishTimer) return;
+            psDiscovery.publishTimer = setTimeout(() => {
+                psDiscovery.publishTimer = null;
+                refreshPsSubscribers();
+            }, STREAM_PUBLISH_DEBOUNCE_MS);
+            psDiscovery.publishTimer.unref?.();
+        },
+        onExit({ code, error, stderrTail, afterRelease }) {
+            activeStreams.delete(handle);
+            if (psDiscovery.run !== run) {
+                void settleReleasedStreamLog(logFile, afterRelease);
+                return;
+            }
+            psDiscovery.handle = null;
+            resetPsRun();
+            const result = { error, stderr: stderrTail };
+            const unsupportedLog = logFile && optionalFlagIsUnsupported(result, "--log-file");
+            const unsupportedLogo = psDiscovery.noLogo && isNoLogoUnsupported(result);
+            if (unsupportedLog) backgroundLogFileSupported = false;
+            if (unsupportedLogo) psDiscovery.noLogo = false;
+            if (unsupportedLog || unsupportedLogo) {
+                void discardBackgroundLogFile(logFile);
+                void startPsStream();
+                return;
+            }
+            if (optionalFlagIsUnsupported(result, "--follow")) {
+                psDiscovery.disabled = true;
+                void discardBackgroundLogFile(logFile);
+                log("Aspire ps --follow is unavailable; using periodic discovery.", "warning");
+            } else {
+                psDiscovery.failures = gotData && Date.now() - startedAt >= 5_000 ? 0 : psDiscovery.failures + 1;
+                void keepBackgroundLogFile(logFile);
+                const delay = Math.min(STREAM_MAX_RESTART_DELAY_MS, 5_000 * 2 ** Math.min(psDiscovery.failures, 4));
+                psDiscovery.restartTimer = setTimeout(() => {
+                    psDiscovery.restartTimer = null;
+                    void startPsStream();
+                }, delay);
+                psDiscovery.restartTimer.unref?.();
+                log(`Aspire running-host stream disconnected (${streamExitReason(code, error)}); retrying with backoff.`, "warning");
+            }
+            refreshPsSubscribers();
+        },
+    });
+    if (psDiscovery.run === run) {
+        psDiscovery.handle = handle;
+        activeStreams.add(handle);
+        ensureStreamCleanup();
+        // Seed the new run's snapshot. Subscribers already waiting for this run seed it
+        // after attachment, so refreshing them too would duplicate startup ps and describe work.
+        if (!psDiscovery.snapshot) refreshPsSubscribers(psDiscovery.waiting);
+    } else {
+        handle.kill();
+    }
+}
+
+// Clears per-run state. Callers own the handle and timers.
+function resetPsRun() {
+    psDiscovery.run = null;
+    psDiscovery.resolveReady?.(false);
+    psDiscovery.readyPromise = null;
+    psDiscovery.resolveReady = null;
+    psDiscovery.snapshot = null;
+    psDiscovery.snapshotAt = 0;
+    psDiscovery.snapshotPromise = null;
+}
+
+function releasePsStream(entry) {
+    psDiscovery.entries.delete(entry);
+    if (psDiscovery.entries.size) return;
+    resetPsRun();
+    if (psDiscovery.handle) {
+        activeStreams.delete(psDiscovery.handle);
+        psDiscovery.handle.kill();
+        psDiscovery.handle = null;
+    }
+    if (psDiscovery.restartTimer) clearTimeout(psDiscovery.restartTimer);
+    if (psDiscovery.publishTimer) clearTimeout(psDiscovery.publishTimer);
+    psDiscovery.restartTimer = null;
+    psDiscovery.publishTimer = null;
+}
+
+async function runningAppHosts(entry, authoritative) {
+    if (!entry.paused && !entry.closed && typeof cli.stream === "function") {
+        psDiscovery.entries.add(entry);
+        void startPsStream();
+        // Attach to IPC before seeding, then periodically reconcile because the
+        // CLI does not signal when its underlying watch is ready.
+        psDiscovery.waiting.add(entry);
+        try {
+            while (psDiscovery.readyPromise) {
+                const ready = psDiscovery.readyPromise;
+                await ready;
+                if (ready === psDiscovery.readyPromise) break;
+            }
+        } finally {
+            psDiscovery.waiting.delete(entry);
+        }
+    }
+    if (entry.closed) return { ok: false, error: "AppHost discovery was cancelled because the canvas closed." };
+    // Reuse a recent snapshot for bursts of refreshes. Half the poll interval keeps every
+    // periodic tick reconciling, since the snapshot time is recorded after ps completes.
+    if (!authoritative && psDiscovery.snapshot && psDiscovery.handle
+        && Date.now() - psDiscovery.snapshotAt < POLL_INTERVAL_MS / 2) {
+        return { ok: true, data: [...psDiscovery.snapshot.values()] };
+    }
+    if (psDiscovery.snapshotPromise) {
+        const pending = psDiscovery.snapshotPromise;
+        const result = await pending;
+        if (!authoritative) return result;
+        if (entry.closed) return { ok: false, error: "AppHost discovery was cancelled because the canvas closed." };
+    }
+
+    const pending = loadRunningAppHosts(entry);
+    if (!authoritative && psDiscovery.handle) psDiscovery.snapshotPromise = pending;
+    try {
+        return await pending;
+    } finally {
+        if (psDiscovery.snapshotPromise === pending) psDiscovery.snapshotPromise = null;
+    }
+}
+
+async function loadRunningAppHosts(entry) {
+    const seed = [];
+    const run = psDiscovery.run;
+    psDiscovery.seeds.add(seed);
+    try {
+        const result = await runJsonWithCompatibility(
+            ["ps", "--format", "Json"],
+            {
+                cwd: entry.workingDirectory,
+                timeoutMs: CLI_TIMEOUT_MS,
+                commandLog: {
+                    entry,
+                    source: "background",
+                    label: "List running AppHosts",
+                    projectStdout: sanitizedJsonOutput((payload) => ({
+                        appHosts: normalizePsPayload(payload).map(({ displayName, status, sdkVersion }) => ({
+                            displayName, status, sdkVersion,
+                        })),
+                    })),
+                },
+            },
+        );
+        if (result.ok && Array.isArray(result.data) && psDiscovery.handle
+            && psDiscovery.run === run && psDiscovery.entries.has(entry)) {
+            const snapshot = new Map();
+            for (const record of [...result.data, ...seed]) mergePsRecord(snapshot, record);
+            const previous = psDiscovery.snapshot;
+            psDiscovery.snapshot = snapshot;
+            psDiscovery.snapshotAt = Date.now();
+            if (previous && (previous.size !== snapshot.size
+                || [...snapshot].some(([key, value]) => JSON.stringify(previous.get(key)) !== JSON.stringify(value)))) {
+                refreshPsSubscribers();
+            }
+            return { ...result, data: [...snapshot.values()] };
+        }
+        return result;
+    } finally {
+        psDiscovery.seeds.delete(seed);
+    }
 }
 
 function describeStreamArgs(entry, record) {
@@ -1094,10 +1343,10 @@ async function startDescribeStream(entry, state) {
             }
             publishStreamModel(entry, state);
         },
-        onExit({ code, error, stderrTail }) {
+        onExit({ code, error, stderrTail, afterRelease }) {
             activeStreams.delete(handle);
             if (!isCurrent()) {
-                void discardBackgroundLogFile(logFile);
+                void settleReleasedStreamLog(logFile, afterRelease);
                 return;
             }
             state.handle = null;
@@ -1130,8 +1379,10 @@ async function startDescribeStream(entry, state) {
                 void keepBackgroundLogFile(logFile);
             }
             if (!state.streamed && state.failures >= STREAM_MAX_FAILURES) {
-                // Older CLIs without --follow fall back to the polled one-shot describe.
+                // Older CLIs without --follow, or a broken shared-stream broker, fall back to
+                // the polled one-shot describe.
                 state.disabled = true;
+                log(`Aspire resource stream for '${state.record.appHostPath ?? state.record.id}' failed ${state.failures} times (${streamExitReason(code, error)}); using periodic describe.`, "warning");
                 return;
             }
             const delay = healthy
@@ -1295,25 +1546,7 @@ async function performRefresh(entry, generation, showProgress, authoritative) {
         });
     }
 
-    const psPromise = runJsonWithCompatibility(
-        ["ps", "--format", "Json"],
-        {
-            cwd: entry.workingDirectory,
-            timeoutMs: CLI_TIMEOUT_MS,
-            commandLog: {
-                entry,
-                source: "background",
-                label: "List running AppHosts",
-                projectStdout: sanitizedJsonOutput((payload) => ({
-                    appHosts: normalizePsPayload(payload).map(({ displayName, status, sdkVersion }) => ({
-                        displayName,
-                        status,
-                        sdkVersion,
-                    })),
-                })),
-            },
-        },
-    );
+    const psPromise = runningAppHosts(entry, authoritative);
     if (viewMode !== "workspace") workspaceDiscovery.release(entry);
     const candidatePromise = viewMode === "workspace"
         ? discoverWorkspaceCandidates(entry, { force: authoritative })
@@ -1360,6 +1593,7 @@ async function performRefresh(entry, generation, showProgress, authoritative) {
                 if (streamModel && !authoritative) return [record.id, streamModel];
                 if (streamModel) {
                     stream.reconcileLines = [];
+                    stream.reconcileMark = { handle: stream.handle, since: stream.handle?.mark?.() ?? null };
                     reconciling.set(record.id, stream);
                 }
                 const model = await describeAppHost(
@@ -1377,12 +1611,22 @@ async function performRefresh(entry, generation, showProgress, authoritative) {
         for (const [id, payload] of streamSnapshots) {
             const state = reconciling.get(id);
             if (!state?.model || entry.describeStreams.get(id) !== state) continue;
-            mergeStreamResources(state, Array.isArray(payload) ? payload : payload?.resources ?? [], true);
+            const resources = Array.isArray(payload) ? payload : payload?.resources ?? [];
+            mergeStreamResources(state, resources, true);
             for (const line of state.reconcileLines) mergeStreamLine(state, line);
             state.model = projectStreamModel(state);
+            // Shared streams replay cached resources; reconcile them so other subscribers and
+            // later replays also drop resources this snapshot no longer reports.
+            const { handle, since } = state.reconcileMark ?? {};
+            if (since !== null && since !== undefined && handle && handle === state.handle) {
+                handle.reconcile?.(since, resources);
+            }
         }
     } finally {
-        for (const state of reconciling.values()) state.reconcileLines = null;
+        for (const state of reconciling.values()) {
+            state.reconcileLines = null;
+            state.reconcileMark = null;
+        }
     }
 
     entry.discoveryStale = false;
@@ -2448,6 +2692,7 @@ async function closeEntry(entry) {
         entry.pauseTimer = null;
     }
     stopDescribeStreams(entry);
+    releasePsStream(entry);
     workspaceDiscovery.release(entry);
     for (const item of entry.commandLog) {
         if (item.flushTimer) clearTimeout(item.flushTimer);
