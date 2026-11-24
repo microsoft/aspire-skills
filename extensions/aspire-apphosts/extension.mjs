@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { basename, dirname, extname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
 import { joinSession, createCanvas, CanvasError } from "@github/copilot-sdk/extension";
 import { openSystemBrowser } from "./lib/browser.mjs";
+import { createWorkspaceDiscoveryCache } from "./lib/workspace-discovery.mjs";
 import {
     AppHostOperationCoordinator,
     CommandInputMetadataStore,
@@ -37,6 +38,7 @@ import {
     normalizePsPayload,
     optionalFlagIsUnsupported,
     parseLegacyPipelineSteps,
+    pathKey,
     projectDescribePayload,
     redactAbsolutePaths,
     redactKnownPaths,
@@ -83,6 +85,10 @@ const CONTENT_TYPES = {
 const instances = new Map();
 const pendingOpens = new Map();
 const cli = createAspireCliRunner();
+const workspaceDiscovery = createWorkspaceDiscoveryCache({
+    ignoredDirectories: [BACKGROUND_LOG_DIR],
+    log: (message, level) => log(message, level),
+});
 const appHostOperations = new AppHostOperationCoordinator();
 const activeStreams = new Set();
 let backgroundLogFileSupported = true;
@@ -263,6 +269,7 @@ function scheduleIdlePause(entry) {
             entry.timer = null;
         }
         stopDescribeStreams(entry);
+        workspaceDiscovery.release(entry);
         log(`Aspire AppHosts canvas paused background work (instance '${entry.instanceId}').`);
     }, VIEWER_IDLE_GRACE_MS);
     entry.pauseTimer.unref?.();
@@ -276,7 +283,8 @@ function resumeBackgroundWork(entry) {
     if (!entry.paused || entry.closed) return;
     entry.paused = false;
     startPolling(entry);
-    void requestRefresh(entry);
+    // A refresh still in flight from the paused period skipped the discovery watcher, so queue another.
+    requestStreamRefresh(entry);
 }
 
 function broadcast(entry, payload) {
@@ -713,15 +721,15 @@ function privateError(entry, value, records = []) {
     return message || "The Aspire CLI operation failed.";
 }
 
-function relativeWorkspacePath(entry, appHostPath) {
-    if (!isPathWithin(appHostPath, entry.workingDirectory)) {
+function relativeWorkspacePath(directory, appHostPath) {
+    if (!isPathWithin(appHostPath, directory)) {
         return undefined;
     }
-    const value = relative(entry.workingDirectory, appHostPath);
+    const value = relative(directory, appHostPath);
     return value.split(sep).join("/");
 }
 
-function candidateFromPath(entry, appHostPath, {
+function candidateFromPath(directory, appHostPath, {
     language,
     discoveryStatus = "configured",
     buildable = true,
@@ -731,7 +739,7 @@ function candidateFromPath(entry, appHostPath, {
         language,
         discoveryStatus,
         buildable,
-        relativePath: relativeWorkspacePath(entry, appHostPath),
+        relativePath: relativeWorkspacePath(directory, appHostPath),
     };
 }
 
@@ -757,7 +765,7 @@ function localTargetRecords(payload, pathProperty) {
     };
 }
 
-function projectWorkspaceCandidates(entry, payload) {
+function projectWorkspaceCandidates(directory, payload) {
     const localTargets = localTargetRecords(Array.isArray(payload) ? payload : [], "path");
     return {
         appHosts: normalizeLsPayload(localTargets.records).map((record) => ({
@@ -765,64 +773,78 @@ function projectWorkspaceCandidates(entry, payload) {
             language: record.language,
             discoveryStatus: record.discoveryStatus,
             buildable: record.buildable,
-            workspaceLocation: relativeWorkspacePath(entry, record.appHostPath),
+            workspaceLocation: relativeWorkspacePath(directory, record.appHostPath),
         })),
     };
 }
 
-async function discoverWorkspaceCandidates(entry) {
+async function discoverWorkspaceCandidates(entry, { force = false } = {}) {
     if (entry.requestedAppHostPath) {
+        workspaceDiscovery.release(entry);
         return {
-            candidates: [candidateFromPath(entry, entry.requestedAppHostPath)],
+            candidates: [candidateFromPath(entry.workingDirectory, entry.requestedAppHostPath)],
             warning: null,
         };
     }
+    if (!entry.closed && !entry.paused) {
+        workspaceDiscovery.acquire(entry, entry.workingDirectory, () => requestStreamRefresh(entry));
+    }
+    // The cache passes its own directory so a shared result never reflects another owner's later move.
+    const result = await workspaceDiscovery.get(entry, (directory) => loadWorkspaceCandidates(entry, directory), { force });
+    return { ...result, candidates: result.candidates.map((candidate) => ({ ...candidate })) };
+}
 
+async function loadWorkspaceCandidates(entry, directory = entry.workingDirectory) {
     const result = await runJsonWithCompatibility(
         ["ls", "--format", "Json"],
         {
-            cwd: entry.workingDirectory,
+            cwd: directory,
             timeoutMs: CLI_TIMEOUT_MS,
             commandLog: {
                 entry,
                 source: "background",
                 label: "Find AppHosts",
-                projectStdout: sanitizedJsonOutput((payload) => projectWorkspaceCandidates(entry, payload)),
+                projectStdout: sanitizedJsonOutput((payload) => projectWorkspaceCandidates(directory, payload)),
             },
         },
     );
     if (result.ok && Array.isArray(result.data)) {
         const localTargets = localTargetRecords(result.data, "path");
+        const candidates = normalizeLsPayload(localTargets.records).map((record) => ({
+            ...record,
+            relativePath: relativeWorkspacePath(directory, record.appHostPath),
+        }));
         return {
-            candidates: normalizeLsPayload(localTargets.records).map((record) => ({
-                ...record,
-                relativePath: relativeWorkspacePath(entry, record.appHostPath),
-            })),
-            warning: localTargets.warning,
+            cacheable: true,
+            paths: candidates.map((candidate) => candidate.appHostPath),
+            value: { candidates, warning: localTargets.warning },
         };
     }
 
+    // Only an unsupported `ls` is cached; other failures, including invalid output, are retried on the next poll.
+    const cacheable = isLsUnsupported(result);
     let fallbackPaths;
     try {
-        fallbackPaths = await discoverConfiguredAppHosts(entry.workingDirectory);
+        fallbackPaths = await discoverConfiguredAppHosts(directory);
     } catch (error) {
         if (error.code !== "network_apphost_target") {
             throw error;
         }
-        return { candidates: [], warning: error.message };
+        return { cacheable, paths: [], value: { candidates: [], warning: error.message } };
     }
-    const candidates = fallbackPaths.map((appHostPath) => candidateFromPath(entry, appHostPath));
+    const candidates = fallbackPaths.map((appHostPath) => candidateFromPath(directory, appHostPath));
     return {
-        candidates,
-        warning: candidates.length > 0 || result.ok || isLsUnsupported(result)
-            ? null
-            : privateError(entry, result.error || "Workspace AppHost discovery failed."),
+        cacheable,
+        paths: fallbackPaths,
+        value: {
+            candidates,
+            warning: result.ok
+                ? "The Aspire CLI returned invalid workspace discovery output."
+                : candidates.length > 0 || cacheable
+                    ? null
+                    : privateError(entry, result.error || "Workspace AppHost discovery failed."),
+        },
     };
-}
-
-function pathKey(value) {
-    const normalized = normalize(resolve(value));
-    return process.platform === "win32" ? normalized.toLowerCase() : normalized;
 }
 
 function sameAppHostDirectory(left, right) {
@@ -1295,8 +1317,9 @@ async function performRefresh(entry, generation, showProgress, authoritative) {
             },
         },
     );
+    if (viewMode !== "workspace") workspaceDiscovery.release(entry);
     const candidatePromise = viewMode === "workspace"
-        ? discoverWorkspaceCandidates(entry)
+        ? discoverWorkspaceCandidates(entry, { force: authoritative })
         : Promise.resolve({ candidates: [], warning: null });
     const [psResult, candidateResult] = await Promise.all([psPromise, candidatePromise]);
 
@@ -2288,6 +2311,8 @@ async function applyEntryInput(entry, input, workingDirectory) {
         || nextRequestedAppHostPath !== entry.requestedAppHostPath;
     entry.workingDirectory = nextWorkingDirectory;
     entry.requestedAppHostPath = nextRequestedAppHostPath;
+    // Explicit AppHost panels do not run workspace discovery, so they must not keep its watcher.
+    if (entry.requestedAppHostPath) workspaceDiscovery.release(entry);
     let viewModeChanged = false;
     if (input.viewMode === "workspace" || input.viewMode === "global") {
         viewModeChanged = input.viewMode !== entry.viewMode;
@@ -2426,6 +2451,7 @@ async function closeEntry(entry) {
         entry.pauseTimer = null;
     }
     stopDescribeStreams(entry);
+    workspaceDiscovery.release(entry);
     for (const item of entry.commandLog) {
         if (item.flushTimer) clearTimeout(item.flushTimer);
     }

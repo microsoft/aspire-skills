@@ -1,0 +1,1 @@
+../../../../../../extensions/aspire-apphosts/lib/workspace-discovery.mjs

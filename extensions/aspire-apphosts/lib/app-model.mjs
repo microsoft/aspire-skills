@@ -173,6 +173,11 @@ function normalizePathKey(value) {
     return process.platform === "win32" ? normalized.toLowerCase() : normalized;
 }
 
+/** Absolute, normalized path for identity comparisons; case-insensitive on Windows. */
+export function pathKey(value) {
+    return normalizePathKey(resolve(value));
+}
+
 export function stableId(value) {
     return createHash("sha256").update(String(value ?? "")).digest("hex").slice(0, 16);
 }

@@ -9,6 +9,7 @@ import { SourceTextModule, SyntheticModule, createContext } from "node:vm";
 import { test } from "node:test";
 import * as model from "../../extensions/aspire-apphosts/lib/app-model.mjs";
 import * as browser from "../../extensions/aspire-apphosts/lib/browser.mjs";
+import * as workspaceDiscovery from "../../extensions/aspire-apphosts/lib/workspace-discovery.mjs";
 
 const providerUrl = new URL("../../extensions/aspire-apphosts/extension.mjs", import.meta.url);
 const source = await readFile(providerUrl, "utf8");
@@ -182,6 +183,96 @@ test("workspace discovery rejects explicit network candidates with a visible war
     assert.doesNotMatch(JSON.stringify(state.roots), /server|share/);
 });
 
+test("workspace discovery reuses cached ls until AppHost files change or the user refreshes", async (t) => {
+    const h = await harness(t, {
+        cliOverride: (args) => args[0] === "ls" ? ok([{ path: paths[0], status: "buildable" }]) : undefined,
+    });
+    const lsCount = () => h.calls.filter(({ args }) => args[0] === "ls").length;
+    const opened = await h.open("cached-workspace", { viewMode: "workspace" });
+    await h.request(opened, "/api/state");
+    assert.equal(lsCount(), 1);
+
+    // `/api/state` waits for the tick's refresh and runs discovery again, so both must hit the cache.
+    for (let i = 0; i < 3; i++) {
+        await h.tick();
+        await h.request(opened, "/api/state");
+    }
+    assert.equal(lsCount(), 1, "polling must not rerun ls");
+
+    h.controls.changeWorkspaceFiles("bin/Debug/output.dll");
+    await nextTurn();
+    await h.tick();
+    await h.request(opened, "/api/state");
+    assert.equal(lsCount(), 1, "unrelated file changes must not rerun ls");
+
+    h.controls.changeWorkspaceFiles("src/AppHost/AppHost.csproj");
+    await waitUntil(() => lsCount() === 2);
+
+    await h.request(opened, "/api/refresh", {});
+    assert.equal(lsCount(), 3, "explicit refresh reruns ls");
+});
+
+test("switching a workspace panel to an explicit AppHost releases its workspace watcher", async (t) => {
+    const workspace = await mkdtemp(join(tmpdir(), "aspire-explicit-"));
+    t.after(() => rm(workspace, { recursive: true, force: true }));
+    const target = join(workspace, "AppHost.cs");
+    await writeFile(target, "// Synthetic AppHost fixture.\n");
+    const h = await harness(t, {
+        workingDirectory: workspace,
+        cliOverride: (args) => args[0] === "ls" ? ok([{ path: target, status: "buildable" }])
+            : args[0] === "ps" ? ok([{ appHostPath: target, status: "running" }]) : undefined,
+    });
+    const lsCount = () => h.calls.filter(({ args }) => args[0] === "ls").length;
+    await h.open("test", { viewMode: "workspace" });
+    await waitUntil(() => lsCount() === 1 && h.controls.workspaceWatchers() > 0);
+    await h.open("test", { appHostPath: target });
+    assert.equal(h.controls.workspaceWatchers(), 0, "explicit AppHost panels must not keep the workspace watcher");
+    h.controls.changeWorkspaceFiles("apphost.ts");
+    await nextTurn();
+    assert.equal(lsCount(), 1);
+});
+
+test("switching a workspace panel to Global mode releases its workspace watcher", async (t) => {
+    const h = await harness(t, {
+        cliOverride: (args) => args[0] === "ls" ? ok([{ path: paths[0], status: "buildable" }]) : undefined,
+    });
+    const opened = await h.open("global-switch", { viewMode: "workspace" });
+    await waitUntil(() => h.controls.workspaceWatchers() > 0);
+    await h.request(opened, "/api/mode", { viewMode: "global" });
+    assert.equal(h.controls.workspaceWatchers(), 0, "Global panels must not keep the workspace watcher");
+});
+
+for (const [name, broken] of [
+    ["invalid ls output", { ok: true, code: 0, stdout: "not JSON", stderr: "" }],
+    ["a failed ls", fail("ls unavailable")],
+]) {
+    test(`${name} is reported and retried on the next poll instead of cached`, async (t) => {
+        const workspace = await mkdtemp(join(tmpdir(), "aspire-retry-"));
+        t.after(() => rm(workspace, { recursive: true, force: true }));
+        // Nested two levels so the fallback scan cannot hide the failed ls.
+        const target = join(workspace, "src", "Demo", "AppHost.cs");
+        await mkdir(join(workspace, "src", "Demo"), { recursive: true });
+        await writeFile(target, "// Synthetic AppHost fixture.\n");
+        let healthy = false;
+        const h = await harness(t, {
+            workingDirectory: workspace,
+            cliOverride: (args) => args[0] !== "ls" ? undefined
+                : healthy ? ok([{ path: target, status: "buildable" }]) : clone(broken),
+        });
+        const lsCount = () => h.calls.filter(({ args }) => args[0] === "ls").length;
+        const opened = await h.open("retry-workspace", { viewMode: "workspace" });
+        const failed = (await h.request(opened, "/api/state")).state;
+        assert.ok(failed.error, `${name} must be reported`);
+        const failedCalls = lsCount();
+
+        healthy = true;
+        await h.tick();
+        const { state } = await h.request(opened, "/api/state");
+        assert.ok(lsCount() > failedCalls, `${name} must not be cached`);
+        assert.equal(state.error, null);
+    });
+}
+
 test("AppHosts rejects network targets before stat, readdir, or target-file reads", async () => {
     const url = new URL("../../extensions/aspire-apphosts/lib/app-model.mjs", import.meta.url);
     const context = createContext({ Buffer, process, URL, setTimeout, clearTimeout });
@@ -346,6 +437,21 @@ async function harness(t, {
     await module.link(async (specifier) => {
         const exports = specifier === "@github/copilot-sdk/extension" ? sdk
             : specifier === "./lib/app-model.mjs" ? { ...model, createAspireCliRunner: () => (stream ? { run, stream } : { run }) }
+                : specifier === "./lib/workspace-discovery.mjs" ? (() => {
+                    const watchers = new Set();
+                    controls.changeWorkspaceFiles = (filename = "apphost.ts") => {
+                        for (const listener of [...watchers]) listener("change", filename);
+                    };
+                    controls.workspaceWatchers = () => watchers.size;
+                    return { createWorkspaceDiscoveryCache: (options) => workspaceDiscovery.createWorkspaceDiscoveryCache({
+                        ...options,
+                        debounceMs: 0,
+                        watch: (_directory, _options, listener) => {
+                            watchers.add(listener);
+                            return { close() { watchers.delete(listener); }, on() {} };
+                        },
+                    }) };
+                })()
                 : specifier === "./lib/browser.mjs" ? { ...browser, openSystemBrowser: async (url, options) => {
                     if (systemBrowserError) throw systemBrowserError;
                     systemBrowserUrls.push(url);
@@ -367,6 +473,7 @@ async function harness(t, {
             idleTimers.clear();
             for (const timer of due) timer.callback();
         },
+        tick: () => Promise.all([...intervals].map((timer) => timer.callback())),
         async open(instanceId = "test", input = { viewMode: "global" }) {
             opened.add(instanceId);
             return declaration.open({ instanceId, input, session: { workingDirectory } });
@@ -394,6 +501,7 @@ async function harness(t, {
             if (server.listening) await new Promise((done) => server.close(done));
         }
         assert.equal(intervals.size, 0, "provider timers must be disposed");
+        assert.equal(controls.workspaceWatchers(), 0, "workspace watchers must be released");
         assert.ok(servers.every((server) => !server.listening), "provider listeners must be disposed");
     });
     return h;
@@ -1234,6 +1342,21 @@ test("initial describe stream reconciliation removes resources missing from a fr
             && node.resource?.state === "Starting");
     });
     assert.equal(allNodes(state.roots).filter((node) => node.resourceName === "db").length, paths.length - 1);
+});
+
+test("an idle workspace panel releases its workspace watcher until a view reconnects", async (t) => {
+    const h = await harness(t, {
+        cliOverride: (args) => args[0] === "ls" ? ok([{ path: paths[0], status: "buildable" }]) : undefined,
+    });
+    const opened = await h.open("idle-workspace", { viewMode: "workspace" });
+    await waitUntil(() => h.controls.workspaceWatchers() > 0);
+    h.fireIdleTimers();
+    assert.equal(h.controls.workspaceWatchers(), 0, "an idle panel must not keep watching AppHost files");
+    await h.request(opened, "/api/state");
+    assert.equal(h.controls.workspaceWatchers(), 0, "requests while paused must not reacquire the watcher");
+    const events = await sse(h, opened);
+    t.after(() => events.close());
+    await waitUntil(() => h.controls.workspaceWatchers() > 0);
 });
 
 test("explicit refresh removes resources that a live describe stream never reports as gone", async (t) => {
