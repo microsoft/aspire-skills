@@ -27,6 +27,14 @@ changes appear without reopening the panel. Opening the canvas never starts an
 AppHost; Run, Stop, Deploy, Publish, and pipeline-step operations are explicit
 and serialized per AppHost.
 
+Workspace `aspire ls` results are cached per workspace. They refresh when AppHost
+files change, when you select Refresh, and on a slow fallback timer. Platforms
+without recursive file watching, such as Linux, watch only the workspace root and
+rely more on the fallback timer.
+
+When no canvas view is connected for about 10 seconds, the panel pauses polling
+and resource streams. It resumes and refreshes when a view reconnects.
+
 Closing the canvas stops polling and closes its listener after in-flight
 requests finish. It does not cancel an operation that has already started.
 
