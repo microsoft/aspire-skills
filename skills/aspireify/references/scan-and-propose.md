@@ -62,11 +62,13 @@ rationale, not a separate status.
 | **Retained configuration/SDK ownership** | `not-modeled`; `reason` names what keeps ownership | Explain why existing configuration or SDK-selected endpoints/authentication/transport/recovery are more accurate; an optional URL parameter is still configuration, not a service. |
 | **Outside the agreed scope** | `not-modeled`; `reason` names the agreed scope boundary | Cite the scope decision from chat that excludes it (for example, a separately owned feature or environment). |
 | **Agreed deferred investigation** | `deferred`; `reason` plus `unresolved` (the missing evidence or open question) | State the missing evidence, the question to resolve, and the user's agreement to defer. |
-| (none supplied) | `not-assessed` | Shown by the canvas when no mapping or treatment exists; it must not remain at confirmation. |
+| (none supplied) | `not-assessed` | Shown by the canvas when no mapping or treatment exists. The canvas still allows confirmation; a confirmed `not-assessed` item is unassessed, not approved. |
 
-Before confirmation, every significant discovered external dependency needs a mapping or a
-treatment with a rationale tied to evidence; out-of-scope dependencies are
-`not-modeled`, never left `not-assessed`. Resolve material scope and behavior
+Before asking for confirmation, supply a mapping or a treatment with a rationale tied to
+evidence for every significant discovered external dependency; out-of-scope dependencies
+are `not-modeled`, never left `not-assessed`. If the user confirms while items remain
+`not-assessed` in `get_confirmation.externalDependencies`, carry them forward as
+unassessed, do not model or wire them, and follow up in chat. Resolve material scope and behavior
 questions in chat first (including whether a resource is descriptive-only, whether
 configuration moves, and whether diagnostics or startup behavior changes).
 

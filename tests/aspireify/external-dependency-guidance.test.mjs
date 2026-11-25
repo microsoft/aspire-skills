@@ -90,7 +90,7 @@ test("the skill inventories remote dependencies and requires canvas treatments b
     }
     const confirmation = skill.split("\n\n").find(paragraph => /confirmation/i.test(paragraph) && /`not-assessed`/.test(paragraph));
     assert.ok(confirmation, "Missing pre-confirmation dependency accounting");
-    for (const concept of [/every significant/i, /scope/i, /behavior/i, /chat first/i]) {
+    for (const concept of [/every significant/i, /scope/i, /behavior/i, /chat first/i, /unassessed rather than\s+approved/, /follow up in chat/]) {
         assert.match(confirmation, concept);
     }
     assert.match(skill, /external dependencies[\s\S]*distinct from runnable services/);
@@ -119,7 +119,9 @@ test("scan guidance is one inventory, disposition and canvas payload flow", () =
     assert.match(rows["Retained configuration/SDK ownership"], /`not-modeled`/);
     assert.match(rows["Outside the agreed scope"], /`not-modeled`/);
     assert.match(rows["Agreed deferred investigation"], /`deferred`[\s\S]*`unresolved`/);
-    assert.match(table, /`not-assessed`[\s\S]*must not remain at confirmation/);
+    assert.match(table, /`not-assessed`[\s\S]*allows confirmation[\s\S]*unassessed, not approved/);
+    assert.doesNotMatch(table, /must not remain at confirmation/);
+    assert.match(scan, /confirms while items remain\s+`not-assessed`[\s\S]*carry them forward as\s+unassessed[\s\S]*follow up in chat/);
 
     for (const field of ["load_discovery.externalDependencies", "externalDependencyId", "set_proposal.externalDependencyTreatments", "get_confirmation.externalDependencies"]) {
         assert.ok(scan.includes(`\`${field}\``), `Missing canvas field: ${field}`);

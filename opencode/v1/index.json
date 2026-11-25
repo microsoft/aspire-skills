@@ -78,7 +78,7 @@
     },
     {
       "name": "aspireify",
-      "version": "sha512-2af00e30229c60f7050c78e7893ea78ddd7da0e8ed40d917cd0a0567e1cc356a9f3c4d2c39bfdbc5fbfebf38bdb9893ee599f8810dd5da43d510a8526b3ce868",
+      "version": "sha512-50a1e305971bcbb88221a1ea497ebb3679b87b56275a91cd6b3ecaefa87c163f78f9dc2c3fed8f0cb63bdd83b72eb0090f32d2c7e3011efd0990fb6def2b9e1f",
       "files": [
         "SKILL.md",
         "references/apphost-wiring.md",
