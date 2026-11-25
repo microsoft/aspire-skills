@@ -96,7 +96,7 @@ services, shows their resource mappings or **Not modeled**, **Deferred**, and
 **Not assessed** decisions, and preserves this accounting in immutable
 confirmation and chat handoff. It does not create resources or change
 configuration, authentication, health checks, or startup ordering. See
-[External inventory handoff](../../skills/aspireify/references/scan-and-propose.md#external-inventory-handoff)
+[Send the canvas payload](../../skills/aspireify/references/scan-and-propose.md#send-the-canvas-payload)
 for the skill's handoff guidance.
 
 Excluded and removed resource mappings remain in "Not in the proposed graph"

@@ -1,0 +1,6 @@
+{
+  "catalogBaseUrl": "https://catalog.example.invalid",
+  "catalogToken": "SYNTHETIC_ONLY_NOT_A_CREDENTIAL_catalog_redaction_174",
+  "streamUrl": "wss://events.example.invalid/updates",
+  "storageRegion": "us-west-2"
+}

@@ -1,7 +1,7 @@
 # Validation
 
 End-to-end validation after editing the AppHost. Goal: confirm the wired graph
-starts cleanly, every resource reaches a healthy state, and `aspire describe`
+starts cleanly, every local runnable resource reaches a healthy state, and `aspire describe`
 returns the expected shape. After a clean validation, `aspireify` self-deactivates
 and hands off to `aspire-orchestration`.
 
@@ -11,13 +11,19 @@ and hands off to `aspire-orchestration`.
 # 1. Start the AppHost in the background, JSON output for parsing
 aspire start --non-interactive --format Json
 
-# 2. Inspect the full resource graph and wait for each declared resource
+# 2. Inspect the full graph and wait for each local runnable resource
 aspire describe --format Json --include-hidden
-aspire wait <resource-name>                   # repeat per resource
+aspire wait <resource-name>                   # repeat per local runnable resource
 
 # 3. Stop cleanly
 aspire stop
 ```
+
+Keep external-service resources in the graph inspection, but exclude them from
+default validation waits and healthy-state hand-off criteria. Only add external
+checks or waits after establishing a meaningful readiness contract and explicit
+user agreement under the [external modeling policy](apphost-wiring.md#external-dependency-modeling).
+A descriptive-only external resource does not prove reachability or health.
 
 ## Why `--non-interactive`
 
@@ -60,7 +66,7 @@ container-internal health.
 Aspireify deactivates when **all** of these hold:
 
 1. `aspire start --non-interactive` exits 0 (or stays healthy in background mode)
-2. `aspire wait` returns success for **every** declared, non-hidden resource
+2. `aspire wait` returns success for **every** declared, non-hidden local runnable resource, plus any explicitly agreed external readiness checks
 3. `aspire describe --format Json` shows the proposed graph (resources, references, endpoints)
 4. `aspire stop` cleans up without errors
 
@@ -70,7 +76,8 @@ When done, announce:
 ✅ AppHost wired and validated:
    - Resources: pg, cache, api, worker, web
    - References: api → pg + cache; worker → pg; web → api
-   - All resources reached healthy state.
+   - All local runnable resources reached healthy state.
+   - External resources remain descriptive-only unless checks were explicitly agreed.
 
 Handing off to aspire-orchestration for day-to-day start/stop/wait.
 Aspireify is done.
